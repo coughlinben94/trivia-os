@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { fitToBox, TITLE_CARD_BOX } from '../../../lib/autoFitText.js'
@@ -121,6 +121,17 @@ export default function StateOfUnionSlide({ slide, isPreview }) {
   // call below with real glyph metrics; the value itself is never read.
   const [fontsReady, setFontsReady] = useState(false)
   useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
+
+  // Same measure-once-per-change idea as GradingBreakSlide's messageSize —
+  // fitToBox does canvas text measurement, shouldn't re-run on every
+  // unrelated re-render (this slide also runs a looping video-audio effect
+  // below that can trigger re-renders while on screen).
+  const messageText = slide.data?.message || 'State of the Union'
+  const messageSize = useMemo(
+    () => fitToBox(messageText, { ...TITLE_CARD_BOX, family: theme.fonts.display }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [messageText, theme.fonts.display, fontsReady]
+  )
 
   // Walkout song — a {videoId, start, end} clip, same shape/editor as
   // Pre-Show's. UNLIKE Pre-Show (plays once, fades, auto-advances — that
@@ -249,7 +260,7 @@ export default function StateOfUnionSlide({ slide, isPreview }) {
             style={{
               fontFamily: `'${theme.fonts.display}', sans-serif`,
               fontWeight: 700,
-              fontSize: rt.message?.fontSizePx ?? fitToBox(slide.data?.message || 'State of the Union', { ...TITLE_CARD_BOX, family: theme.fonts.display }),
+              fontSize: rt.message?.fontSizePx ?? messageSize,
               lineHeight: 1.15,
               textAlign: 'center',
               textWrap: 'balance',

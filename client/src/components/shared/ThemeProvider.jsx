@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useRef } from 'react'
+import { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react'
 import { getTheme, DEFAULT_THEME_ID } from '../../themes/index.js'
 import { floorContrast } from '../../lib/contrast.js'
 
@@ -57,7 +57,11 @@ export function ThemeProvider({ showThemeId, overrides, children }) {
     if (showThemeId) setThemeId(showThemeId)
   }, [showThemeId])
 
-  const theme = applyOverrides(getTheme(themeId), overrides)
+  // Memoized: every consumer down the tree reads this context, so recomputing
+  // (and handing out a new object identity) on every unrelated parent render
+  // would re-render the whole display/join tree for nothing. Same output
+  // either way — pure re-render-count win, not a behavior change.
+  const theme = useMemo(() => applyOverrides(getTheme(themeId), overrides), [themeId, overrides])
 
   useEffect(() => {
     const url = theme.fonts.displayUrl
@@ -83,8 +87,10 @@ export function ThemeProvider({ showThemeId, overrides, children }) {
     }
   }, [theme.fonts.displayUrl, theme.fonts.display])
 
+  const value = useMemo(() => ({ theme, themeId, setThemeId }), [theme, themeId])
+
   return (
-    <ThemeContext.Provider value={{ theme, themeId, setThemeId }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   )

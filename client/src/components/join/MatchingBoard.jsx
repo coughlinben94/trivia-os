@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../lib/supabase.js'
 import { seededShuffle, buildMatchAnswer } from '../../lib/matchingScoring.js'
@@ -47,8 +47,15 @@ export default function MatchingBoard({ slide, team, theme, preview = false, onA
   const lockPopTimerRef = useRef(null)
   useEffect(() => () => clearTimeout(lockPopTimerRef.current), [])
 
-  const rightOrder = seededShuffle(pairs, slide.id ?? 'preview')
   const pairIdsKey = pairs.map(p => p.id).join(',')
+  // Memoized on pairIdsKey (not the pairs array reference) — same seed
+  // always reshuffles to the same right-column order, so recomputing it on
+  // every tap/re-render (connections state changes constantly) was waste.
+  const rightOrder = useMemo(
+    () => seededShuffle(pairs, slide.id ?? 'preview'),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pairIdsKey, slide.id]
+  )
 
   // Preview-only: if the host edits pairs (adds/removes one) while the live
   // preview is mounted, clear any in-progress taps rather than carrying

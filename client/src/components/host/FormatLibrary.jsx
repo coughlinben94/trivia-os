@@ -10,6 +10,25 @@ const EMPTY_FORMAT = {
   input_schema: { type: 'image', slots: 1, seriesEnabled: false, labels: [] },
 }
 
+// Shared pill-switch row used by every boolean input_schema toggle below —
+// same markup, five copies, only the label/hint/checked/onChange differed.
+function ToggleRow({ label, hint, checked, onChange }) {
+  return (
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm font-medium text-gray-700">{label}</p>
+        <p className="text-xs text-gray-400">{hint}</p>
+      </div>
+      <button
+        onClick={onChange}
+        className={`shrink-0 w-11 h-6 rounded-full flex items-center transition-colors ${checked ? 'bg-gray-900' : 'bg-gray-200'}`}
+      >
+        <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${checked ? 'translate-x-5' : 'translate-x-0'}`}/>
+      </button>
+    </div>
+  )
+}
+
 export default function FormatLibrary({ onClose, onSelectFormat, formats, loading, loadError, createFormat, updateFormat, deleteFormat }) {
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState(null)
@@ -199,21 +218,15 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                     AddSlideWizard). It no longer nulls the asset count: the
                     count is just a default now, so the two can coexist. */}
                 {['image', 'audio', 'video', 'text'].includes(schema.type) && (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">Default to all at once?</p>
-                      <p className="text-xs text-gray-400">Pre-selects "all at once" in the add popup for text formats — you still choose per question, every time</p>
-                    </div>
-                    <button
-                      onClick={() => setDraft(d => ({
-                        ...d,
-                        input_schema: { ...d.input_schema, concurrent: !d.input_schema.concurrent },
-                      }))}
-                      className={`shrink-0 w-11 h-6 rounded-full flex items-center transition-colors ${schema.concurrent ? 'bg-gray-900' : 'bg-gray-200'}`}
-                    >
-                      <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${schema.concurrent ? 'translate-x-5' : 'translate-x-0'}`}/>
-                    </button>
-                  </div>
+                  <ToggleRow
+                    label="Default to all at once?"
+                    hint={'Pre-selects "all at once" in the add popup for text formats — you still choose per question, every time'}
+                    checked={schema.concurrent}
+                    onChange={() => setDraft(d => ({
+                      ...d,
+                      input_schema: { ...d.input_schema, concurrent: !d.input_schema.concurrent },
+                    }))}
+                  />
                 )}
 
                 {/* Question series — only meaningful once concurrent is on.
@@ -225,52 +238,34 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                     this is the same underlying choice, just made explicit at the
                     point it actually matters instead of a separate switch. */}
                 {schema.concurrent && (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">Question series?</p>
-                      <p className="text-xs text-gray-400">Yes — each asset is its own question with its own answer. No — one shared question/answer for all assets.</p>
-                    </div>
-                    <button
-                      onClick={() => updateSchema('questionSeries', !schema.questionSeries)}
-                      className={`shrink-0 w-11 h-6 rounded-full flex items-center transition-colors ${schema.questionSeries ? 'bg-gray-900' : 'bg-gray-200'}`}
-                    >
-                      <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${schema.questionSeries ? 'translate-x-5' : 'translate-x-0'}`}/>
-                    </button>
-                  </div>
+                  <ToggleRow
+                    label="Question series?"
+                    hint="Yes — each asset is its own question with its own answer. No — one shared question/answer for all assets."
+                    checked={schema.questionSeries}
+                    onChange={() => updateSchema('questionSeries', !schema.questionSeries)}
+                  />
                 )}
 
                 {/* Series enabled — non-concurrent audio only. Concurrent
                     formats use "Question series?" above instead — showing both
                     was two overlapping switches for the same underlying idea. */}
                 {schema.type === 'audio' && !schema.concurrent && (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">Series enabled</p>
-                      <p className="text-xs text-gray-400">Questions share a theme banner (6a, 6b, 6c)</p>
-                    </div>
-                    <button
-                      onClick={() => updateSchema('seriesEnabled', !schema.seriesEnabled)}
-                      className={`shrink-0 w-11 h-6 rounded-full flex items-center transition-colors ${schema.seriesEnabled ? 'bg-gray-900' : 'bg-gray-200'}`}
-                    >
-                      <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${schema.seriesEnabled ? 'translate-x-5' : 'translate-x-0'}`}/>
-                    </button>
-                  </div>
+                  <ToggleRow
+                    label="Series enabled"
+                    hint="Questions share a theme banner (6a, 6b, 6c)"
+                    checked={schema.seriesEnabled}
+                    onChange={() => updateSchema('seriesEnabled', !schema.seriesEnabled)}
+                  />
                 )}
 
                 {/* Grid — column count chosen per-slide in the wizard */}
                 {schema.type === 'grid' && (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">Show column numbers</p>
-                      <p className="text-xs text-gray-400">Number each column 1–N (columns/rows are set per slide)</p>
-                    </div>
-                    <button
-                      onClick={() => updateSchema('columnLabels', schema.columnLabels === false ? true : false)}
-                      className={`shrink-0 w-11 h-6 rounded-full flex items-center transition-colors ${schema.columnLabels !== false ? 'bg-gray-900' : 'bg-gray-200'}`}
-                    >
-                      <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${schema.columnLabels !== false ? 'translate-x-5' : 'translate-x-0'}`}/>
-                    </button>
-                  </div>
+                  <ToggleRow
+                    label="Show column numbers"
+                    hint="Number each column 1–N (columns/rows are set per slide)"
+                    checked={schema.columnLabels !== false}
+                    onChange={() => updateSchema('columnLabels', schema.columnLabels === false ? true : false)}
+                  />
                 )}
 
                 {/* Choice — single (Mandela Effect: pick the real one) vs
@@ -278,18 +273,12 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
                     themselves and which are correct are set per-slide in the
                     editor, same as Order's items/correctOrder. */}
                 {schema.type === 'choice' && (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">Multi-select?</p>
-                      <p className="text-xs text-gray-400">Off — teams tap one option (radio). On — teams tap any number (checkbox).</p>
-                    </div>
-                    <button
-                      onClick={() => updateSchema('multiSelect', !schema.multiSelect)}
-                      className={`shrink-0 w-11 h-6 rounded-full flex items-center transition-colors ${schema.multiSelect ? 'bg-gray-900' : 'bg-gray-200'}`}
-                    >
-                      <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${schema.multiSelect ? 'translate-x-5' : 'translate-x-0'}`}/>
-                    </button>
-                  </div>
+                  <ToggleRow
+                    label="Multi-select?"
+                    hint="Off — teams tap one option (radio). On — teams tap any number (checkbox)."
+                    checked={schema.multiSelect}
+                    onChange={() => updateSchema('multiSelect', !schema.multiSelect)}
+                  />
                 )}
 
                 {/* Save button */}

@@ -44,11 +44,17 @@ export default function LateTeamPopover({ show, onClose }) {
   const [error, setError] = useState(null)
   const ref = useRef(null)
 
+  // Shared by showJoinQr and pickTeam below — same QR options, only the url
+  // and the caller's post-generation state (qrKind) differ.
+  function generateQr(url) {
+    return QRCode.toDataURL(url, { width: 260, margin: 1 })
+  }
+
   async function showJoinQr() {
     setError(null)
     const url = `${window.location.origin}/join?show=${show.id}`
     try {
-      const dataUrl = await QRCode.toDataURL(url, { width: 260, margin: 1 })
+      const dataUrl = await generateQr(url)
       setQrDataUrl(dataUrl)
       setQrKind('join')
       setMode('qr')
@@ -85,7 +91,7 @@ export default function LateTeamPopover({ show, onClose }) {
     if (rpcError || !token) { setError('Couldn’t create a reauth link — try again'); return }
     const url = `${window.location.origin}/join?show=${show.id}&reauth=${encodeURIComponent(token)}`
     try {
-      const dataUrl = await QRCode.toDataURL(url, { width: 260, margin: 1 })
+      const dataUrl = await generateQr(url)
       setQrDataUrl(dataUrl)
       setQrKind('reauth')
       setMode('qr')

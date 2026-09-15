@@ -14,6 +14,12 @@ import { EASE_OUT } from '../lib/easings.js'
 // ─── Show Picker ─────────────────────────────────────────────────────────────
 // Shown when no show is loaded. Clean list — pick one and you're in the builder.
 
+function authErrorMessage(e) {
+  return e.message?.includes('row-level security')
+    ? 'Not authenticated — enter the host PIN at /questions first, then come back.'
+    : e.message
+}
+
 function ShowPicker({ loadShow, listShows, createShow }) {
   const [shows, setShows] = useState(null)
   const [working, setWorking] = useState(null)
@@ -36,7 +42,7 @@ function ShowPicker({ loadShow, listShows, createShow }) {
       await loadShow(id)
       // useShow reacts to the load — Host re-renders into BuildMode automatically
     } catch (e) {
-      setError(e.message?.includes('row-level security') ? 'Not authenticated — enter the host PIN at /questions first, then come back.' : e.message)
+      setError(authErrorMessage(e))
     } finally {
       setWorking(null)
     }
@@ -49,7 +55,7 @@ function ShowPicker({ loadShow, listShows, createShow }) {
     try {
       await createShow('New Show', today, null)
     } catch (e) {
-      setError(e.message?.includes('row-level security') ? 'Not authenticated — enter the host PIN at /questions first, then come back.' : e.message)
+      setError(authErrorMessage(e))
     } finally {
       setWorking(null)
     }
@@ -325,6 +331,10 @@ const SLIDE_ICON = {
   'winner-reveal': '🥇', 'team-preview': '👥', 'team-picker': '🚀', 'shiny-title': '✨', 'flip-em-down': '🃏', 'horse-race': '🏇',
 }
 
+function isSubSlide(slide) {
+  return slide.data?.isSeries && (slide.data?.slotIndex ?? 1) > 1
+}
+
 function slidePickerLabel(slide) {
   const { data, type } = slide
   if (type === 'question' || type === 'pixelate-series') {
@@ -410,8 +420,7 @@ function GoLivePicker({ show, onFromBeginning, onFromSlide, onClose }) {
                 <div key={`g-${i}`} className={borderClass}>
                   {seg.slides.map((slide, si) => {
                     const index = slides.findIndex(s => s.id === slide.id)
-                    const isSubSlide = slide.data?.isSeries && (slide.data?.slotIndex ?? 1) > 1
-                    if (isSubSlide) return null
+                    if (isSubSlide(slide)) return null
                     return (
                       <div key={slide.id} className={si > 0 ? 'border-t border-gray-100' : ''}>
                         <button
@@ -448,8 +457,7 @@ function GoLivePicker({ show, onFromBeginning, onFromSlide, onClose }) {
                 {/* Round slides */}
                 {!collapsed && roundSlides.map(slide => {
                   const index = slides.findIndex(s => s.id === slide.id)
-                  const isSubSlide = slide.data?.isSeries && (slide.data?.slotIndex ?? 1) > 1
-                  if (isSubSlide) return null
+                  if (isSubSlide(slide)) return null
                   return (
                     <button
                       key={slide.id}

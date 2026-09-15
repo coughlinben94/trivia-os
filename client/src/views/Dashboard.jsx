@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabase.js'
+import { getMondayLabel } from '../lib/showGrouping.js'
 
 const BOX_ORDER_KEY = 'trivia-os:dashboard-box-order'
 const DEFAULT_BOX_ORDER = ['winning-scores', 'weekly-players', 'question-breakdown']
@@ -21,15 +22,6 @@ function loadBoxOrder() {
 function avg(arr) {
   if (!arr.length) return 0
   return Math.round(arr.reduce((s, n) => s + n, 0) / arr.length)
-}
-
-function getMondayLabel(dateStr) {
-  const d = new Date(dateStr + 'T12:00:00')
-  const day = d.getDay()
-  const diff = day === 0 ? -6 : 1 - day
-  const monday = new Date(d)
-  monday.setDate(d.getDate() + diff)
-  return monday.toISOString().slice(0, 10)
 }
 
 const ACTIVE_SHOW_KEY = 'trivia-os:activeShowId'
@@ -66,57 +58,68 @@ export default function Dashboard() {
     return () => clearTimeout(t)
   }, [loading])
 
-  // Shows with actual score data
-  const scoredShows = shows.filter(s => (s.final_scores ?? []).length > 0)
+  // All of this derives purely from `shows`/`questions`, which only change on
+  // the initial load — memoized so dragging a box (dragOverId fires on every
+  // pointermove) doesn't re-run 10+ array passes over the full data set on
+  // every frame of the drag.
+  const {
+    scoredShows, winningScores, maxWin, avgWin, avgPlayers,
+    bestScore, bestShow, avgTeamScore, weeklyPlayers, maxWeekPlayers, qByType,
+  } = useMemo(() => {
+    // Shows with actual score data
+    const scoredShows = shows.filter(s => (s.final_scores ?? []).length > 0)
 
-  // Winning scores over time
-  const winningScores = scoredShows.map(s => ({
-    label: s.date
-      ? new Date(s.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      : s.title,
-    score: s.final_scores[0]?.total ?? 0,
-    winner: s.final_scores[0]?.name ?? '—',
-  }))
-  const maxWin = Math.max(...winningScores.map(w => w.score), 1)
+    // Winning scores over time
+    const winningScores = scoredShows.map(s => ({
+      label: s.date
+        ? new Date(s.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        : s.title,
+      score: s.final_scores[0]?.total ?? 0,
+      winner: s.final_scores[0]?.name ?? '—',
+    }))
+    const maxWin = Math.max(...winningScores.map(w => w.score), 1)
 
-  // Average winning score
-  const avgWin = avg(winningScores.map(w => w.score))
+    // Average winning score
+    const avgWin = avg(winningScores.map(w => w.score))
 
-  // Average players per show
-  const showsWithPlayers = shows.filter(s => (s.player_count ?? 0) > 0)
-  const avgPlayers = avg(showsWithPlayers.map(s => s.player_count))
+    // Average players per show
+    const showsWithPlayers = shows.filter(s => (s.player_count ?? 0) > 0)
+    const avgPlayers = avg(showsWithPlayers.map(s => s.player_count))
 
-  // Best score ever
-  const bestScore = winningScores.length ? Math.max(...winningScores.map(w => w.score)) : 0
-  const bestShow = winningScores.find(w => w.score === bestScore)
+    // Best score ever
+    const bestScore = winningScores.length ? Math.max(...winningScores.map(w => w.score)) : 0
+    const bestShow = winningScores.find(w => w.score === bestScore)
 
-  // Average score per team per show (not just winner)
-  const allTeamScores = scoredShows.flatMap(s =>
-    (s.final_scores ?? []).map(t => t.total ?? 0)
-  )
-  const avgTeamScore = avg(allTeamScores)
+    // Average score per team per show (not just winner)
+    const allTeamScores = scoredShows.flatMap(s =>
+      (s.final_scores ?? []).map(t => t.total ?? 0)
+    )
+    const avgTeamScore = avg(allTeamScores)
 
-  // Weekly player count
-  const weekMap = {}
-  shows.forEach(s => {
-    if (!s.date) return
-    const key = getMondayLabel(s.date)
-    if (!weekMap[key]) weekMap[key] = { week: key, players: 0 }
-    weekMap[key].players += s.player_count ?? 0
-  })
-  const weeklyPlayers = Object.values(weekMap).sort((a, b) => a.week.localeCompare(b.week)).slice(-10)
-  const maxWeekPlayers = Math.max(...weeklyPlayers.map(w => w.players), 1)
+    // Weekly player count
+    const weekMap = {}
+    shows.forEach(s => {
+      if (!s.date) return
+      const key = getMondayLabel(s.date)
+      if (!weekMap[key]) weekMap[key] = { week: key, players: 0 }
+      weekMap[key].players += s.player_count ?? 0
+    })
+    const weeklyPlayers = Object.values(weekMap).sort((a, b) => a.week.localeCompare(b.week)).slice(-10)
+    const maxWeekPlayers = Math.max(...weeklyPlayers.map(w => w.players), 1)
 
-  // Question breakdown
-  const qByType = {
-    regular: questions.filter(q => q.type === 'regular' && !q.is_shiny).length,
-    bonus:   questions.filter(q => q.is_bonus).length,
-    shiny:   questions.filter(q => q.is_shiny).length,
-    visual:  questions.filter(q => q.shiny_type === 'visual').length,
-    audio:   questions.filter(q => q.shiny_type === 'audio').length,
-    swing:   questions.filter(q => q.type === 'swing').length,
-    pyl:     questions.filter(q => q.type === 'pyl').length,
-  }
+    // Question breakdown
+    const qByType = {
+      regular: questions.filter(q => q.type === 'regular' && !q.is_shiny).length,
+      bonus:   questions.filter(q => q.is_bonus).length,
+      shiny:   questions.filter(q => q.is_shiny).length,
+      visual:  questions.filter(q => q.shiny_type === 'visual').length,
+      audio:   questions.filter(q => q.shiny_type === 'audio').length,
+      swing:   questions.filter(q => q.type === 'swing').length,
+      pyl:     questions.filter(q => q.type === 'pyl').length,
+    }
+
+    return { scoredShows, winningScores, maxWin, avgWin, avgPlayers, bestScore, bestShow, avgTeamScore, weeklyPlayers, maxWeekPlayers, qByType }
+  }, [shows, questions])
 
   const statCard = (label, value, sub) => (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">

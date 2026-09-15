@@ -133,7 +133,7 @@ export default function Jukebox({ onLogout, initialLib, onExitToShow, ringMode =
     return () => window.removeEventListener(TUNING_EVENT, onTuningChange)
   }, [])
   const [modalTrack, setModalTrack] = useState(null)
-const [newSetName, setNewSetName] = useState('')
+  const [newSetName, setNewSetName] = useState('')
   const [addingSet, setAddingSet] = useState(false)
   const [renamingId, setRenamingId] = useState(null)
   const [renamingVal, setRenamingVal] = useState('')

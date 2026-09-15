@@ -160,7 +160,7 @@ export default function ScorePanel({ open, onClose, show, actions }) {
   function getTotal(teamId) {
     return Object.values(scoreMap[teamId] ?? {}).reduce((a, b) => a + b, 0)
   }
-  const sortedTeams = [...(query.trim() ? filtered : teams)].sort(
+  const sortedTeams = [...filtered].sort(
     (a, b) => getTotal(b.id) - getTotal(a.id)
   )
 

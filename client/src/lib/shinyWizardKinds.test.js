@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { FIXED_SHAPE_KINDS, buildGridSlide, buildVennSlide, buildElimSlide, buildRaceSlide } from './shinyWizardKinds.jsx'
 
 const baseFmt = { id: 'fmt_1', name: 'Test Format', icon: '✨' }

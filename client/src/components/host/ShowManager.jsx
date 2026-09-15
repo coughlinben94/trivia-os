@@ -15,7 +15,11 @@ export default function ShowManager({ onShowReady, listShows, createShow, loadSh
     if (tab === 'load') {
       listShows().then(setShows).catch(() => setShows([]))
     }
-  }, [tab, listShows])
+    // listShows is a plain (non-memoized) function from useShow.js — a new
+    // reference every render. Depending on it would refetch the show list on
+    // every unrelated Host.jsx re-render while sitting on the Load tab.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
 
   const defaultTitle = `Trivia Night — ${new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}`
 
@@ -46,7 +50,7 @@ export default function ShowManager({ onShowReady, listShows, createShow, loadSh
     }
   }
 
-  async function handleDelete(id, e) {
+  function handleDelete(id, e) {
     e.stopPropagation()
     setConfirmDelete(id)
   }

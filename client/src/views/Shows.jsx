@@ -2,21 +2,13 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { THEMES } from '../themes/index.js'
 import { MEDALS } from '../lib/scoreboardMath.js'
+import { getMondayLabel, groupQuestionsByRound } from '../lib/showGrouping.js'
 import { sortSlides } from '../lib/slideStepping.js'
 
 const ACTIVE_SHOW_KEY = 'trivia-os:activeShowId'
 
 function getThemeName(id) {
   return THEMES.find(t => t.id === id)?.name ?? id ?? '—'
-}
-
-function getMondayLabel(dateStr) {
-  const d = new Date(dateStr + 'T12:00:00')
-  const day = d.getDay()
-  const diff = day === 0 ? -6 : 1 - day
-  const monday = new Date(d)
-  monday.setDate(d.getDate() + diff)
-  return monday.toISOString().slice(0, 10)
 }
 
 export default function Shows() {
@@ -239,20 +231,7 @@ export default function Shows() {
                 const rounds = detail.rounds ?? []
                 const slides = detail.slides ?? []
 
-                const roundGroups = rounds
-                  .slice()
-                  .sort((a, b) => (a.roundNumber ?? a.number ?? 0) - (b.roundNumber ?? b.number ?? 0))
-                  .map(r => ({
-                    round: r,
-                    questions: sortSlides(
-                      slides.filter(s => s.roundId === r.id && s.type === 'question')
-                    ),
-                  }))
-                  .filter(g => g.questions.length > 0)
-
-                const orphanQuestions = sortSlides(
-                  slides.filter(s => s.type === 'question' && !rounds.find(r => r.id === s.roundId))
-                )
+                const { roundGroups, orphanQuestions } = groupQuestionsByRound(rounds, slides, sortSlides)
 
                 return (
                   <>

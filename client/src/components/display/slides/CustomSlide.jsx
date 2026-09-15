@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { fitToBox, CUSTOM_BODY_BOX } from '../../../lib/autoFitText.js'
@@ -66,6 +66,15 @@ export default function CustomSlide({ slide }) {
   const images = data.images?.length ? data.images.filter(i => i.url) : (data.mediaUrl ? [{ url: data.mediaUrl }] : [])
   const hasVideo = !!data.video?.videoId
 
+  // Same measure-once-per-change idea as GradingBreakSlide's messageSize —
+  // fitToBox does canvas text measurement + up to 8 binary-search
+  // iterations, so it shouldn't re-run on every unrelated re-render.
+  const bodySize = useMemo(
+    () => fitToBox(data.body, { ...CUSTOM_BODY_BOX, family: theme.fonts.body }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data.body, theme.fonts.body, fontsReady]
+  )
+
   return (
     <div
       className="w-full h-full relative flex flex-col items-center justify-center overflow-hidden px-24 py-20"
@@ -132,7 +141,7 @@ export default function CustomSlide({ slide }) {
             style={{
               fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
               color: theme.colors.text,
-              fontSize: rt.body?.fontSizePx ?? fitToBox(data.body, { ...CUSTOM_BODY_BOX, family: theme.fonts.body }),
+              fontSize: rt.body?.fontSizePx ?? bodySize,
               fontWeight: 400,
             }}
           >

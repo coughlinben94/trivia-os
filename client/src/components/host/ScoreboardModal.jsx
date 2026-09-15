@@ -8,6 +8,17 @@ import CardPick from '../display/slides/CardPick.jsx'
 import BattleshipDuel from '../display/slides/BattleshipDuel.jsx'
 import Abduction from '../display/slides/Abduction.jsx'
 
+// One entry per team-picker animation — button + component share this list
+// instead of 5 hand-copied buttons and 5 hand-copied render branches (same
+// props, same onDone, only the component and label differ).
+const TEAM_PICKER_ANIMS = [
+  { type: 'cards',      icon: '🎴', label: 'Cards',      Component: CardPick },
+  { type: 'boxing',     icon: '🥊', label: 'Boxing',     Component: BoxingRing },
+  { type: 'chest',      icon: '📦', label: 'Chest',      Component: ChestDuel },
+  { type: 'battleship', icon: '🚢', label: 'Battleship', Component: BattleshipDuel },
+  { type: 'abduction',  icon: '👽', label: 'Abduction',  Component: Abduction },
+]
+
 // ─── Quick Entry ──────────────────────────────────────────────────────────────
 function QuickEntry({ teams, cols, onSave, onClose }) {
   const [step, setStep]         = useState('team')
@@ -521,31 +532,14 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
               title="Add any registered /join team not already on this scoreboard, using their exact registered name"
               className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200`}
             >🔄 Sync Teams</button>
-            <button
-              onClick={() => openAnim('cards')}
-              disabled={pickTeams.length < 2}
-              className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed`}
-            >🎴 Cards</button>
-            <button
-              onClick={() => openAnim('boxing')}
-              disabled={pickTeams.length < 2}
-              className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed`}
-            >🥊 Boxing</button>
-            <button
-              onClick={() => openAnim('chest')}
-              disabled={pickTeams.length < 2}
-              className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed`}
-            >📦 Chest</button>
-            <button
-              onClick={() => openAnim('battleship')}
-              disabled={pickTeams.length < 2}
-              className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed`}
-            >🚢 Battleship</button>
-            <button
-              onClick={() => openAnim('abduction')}
-              disabled={pickTeams.length < 2}
-              className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed`}
-            >👽 Abduction</button>
+            {TEAM_PICKER_ANIMS.map(({ type, icon, label }) => (
+              <button
+                key={type}
+                onClick={() => openAnim(type)}
+                disabled={pickTeams.length < 2}
+                className={`${btnBase} bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed`}
+              >{icon} {label}</button>
+            ))}
             {confirmClear ? (
               <div className="flex items-center gap-1.5 ml-1">
                 <span className="text-xs text-red-600 font-semibold">Remove all teams?</span>
@@ -623,46 +617,17 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
             style={{ position: 'relative', width: '100%', height: '100%' }}
             onClick={e => e.stopPropagation()}
           >
-            {activeAnim === 'boxing' && (
-              <BoxingRing
-                candidates={pickTeams}
-                winnerId={animWinnerId}
-                theme={theme}
-                onDone={() => { setHighlightIds([animWinnerId]); setActiveAnim(null) }}
-              />
-            )}
-            {activeAnim === 'chest' && (
-              <ChestDuel
-                candidates={pickTeams}
-                winnerId={animWinnerId}
-                theme={theme}
-                onDone={() => { setHighlightIds([animWinnerId]); setActiveAnim(null) }}
-              />
-            )}
-            {activeAnim === 'cards' && (
-              <CardPick
-                candidates={pickTeams}
-                winnerId={animWinnerId}
-                theme={theme}
-                onDone={() => { setHighlightIds([animWinnerId]); setActiveAnim(null) }}
-              />
-            )}
-            {activeAnim === 'battleship' && (
-              <BattleshipDuel
-                candidates={pickTeams}
-                winnerId={animWinnerId}
-                theme={theme}
-                onDone={() => { setHighlightIds([animWinnerId]); setActiveAnim(null) }}
-              />
-            )}
-            {activeAnim === 'abduction' && (
-              <Abduction
-                candidates={pickTeams}
-                winnerId={animWinnerId}
-                theme={theme}
-                onDone={() => { setHighlightIds([animWinnerId]); setActiveAnim(null) }}
-              />
-            )}
+            {(() => {
+              const Anim = TEAM_PICKER_ANIMS.find(a => a.type === activeAnim)?.Component
+              return Anim && (
+                <Anim
+                  candidates={pickTeams}
+                  winnerId={animWinnerId}
+                  theme={theme}
+                  onDone={() => { setHighlightIds([animWinnerId]); setActiveAnim(null) }}
+                />
+              )
+            })()}
           </div>
         </div>
       )}

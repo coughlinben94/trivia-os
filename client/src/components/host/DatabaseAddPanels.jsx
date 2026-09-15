@@ -8,6 +8,13 @@ import { parseOutlinePaste } from '../../lib/parseOutline.js'
 const BTN = 'host-button'
 const MEDIA_DOT = { image: 'bg-green-400', audio: 'bg-blue-400', text: 'bg-amber-400', video: 'bg-purple-400', list: 'bg-orange-400', grid: 'bg-pink-400' }
 
+// Trim text/answer and drop items with nothing left on trim — shared by
+// every item-list panel below (Question's shiny item list, PYL's theme
+// items, Bulk Paste's boxes).
+function cleanItems(items) {
+  return items.map(it => ({ text: it.text.trim(), answer: it.answer.trim() })).filter(it => it.text || it.answer)
+}
+
 // Searchable format-card grid — the one shiny-format picker, shared by the
 // Question panel and Paste & Organize (was a nice grid in one and a 34-row
 // native <select> in the other). Owns its own search state; onSelect gets the
@@ -201,7 +208,7 @@ export function QuestionInputPanel({ onAdded, mode = 'plain' }) {
   // has nothing distinct to catalog per asset here (this is a pure text
   // archive, no image upload), so it's just one flat question/answer entry.
   const useItemList = isConcurrentFmt && isQuestionSeriesFmt && effectiveAssets > 1
-  const cleanCurrentItems = () => currentItems.map(it => ({ text: it.text.trim(), answer: it.answer.trim() })).filter(it => it.text || it.answer)
+  const cleanCurrentItems = () => cleanItems(currentItems)
   const canAddShiny = useItemList ? cleanCurrentItems().length > 0 : shinyAnswer.trim().length > 0
 
   useUnsavedGuard(!!(questionText.trim() || questionAnswer.trim() || shinyQuestion.trim() || shinySubtitle.trim() || shinyAnswer.trim() || currentItems.some(it => it.text.trim() || it.answer.trim())))
@@ -738,9 +745,7 @@ export function PylInputPanel({ onAdded }) {
   function addItem() { setCurrentItems(prev => [...prev, { text: '', answer: '' }]) }
   function removeItem(idx) { setCurrentItems(prev => prev.filter((_, i) => i !== idx)) }
 
-  const cleanCurrentItems = () => currentItems
-    .map(it => ({ text: it.text.trim(), answer: it.answer.trim() }))
-    .filter(it => it.text || it.answer)
+  const cleanCurrentItems = () => cleanItems(currentItems)
 
   async function commitTheme() {
     if (busy) return
@@ -1011,10 +1016,6 @@ export function BulkPasteInputPanel({ onAdded }) {
     ))
   }
   function startOver() { setBoxes([]); setDetectedTitle(null); setRaw(''); setCategory('') }
-
-  const cleanItems = (items) => items
-    .map(it => ({ text: it.text.trim(), answer: it.answer.trim() }))
-    .filter(it => it.text || it.answer)
 
   // Always takes the EXACT round_type to write — no implicit fallback to
   // the outer `roundType` state. That fallback used to be `forcedRoundType

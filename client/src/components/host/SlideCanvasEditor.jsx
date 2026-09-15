@@ -1286,33 +1286,36 @@ function OverlayHandles({ ov, onResize, onRotate }) {
 // round caps, drawn on a 20-unit grid. Replaces the old grab-bag of unicode
 // arrows and emoji so the strip reads as a single instrument. B / I stay as
 // typographic glyphs (the universal bold/italic controls, not emoji).
+// Path data is static (independent of props) — built once at module scope
+// instead of on every Icon render, since Icon re-renders on every toolbar
+// paint (including every pointermove of an active drag/resize/rotate).
+const ICON_STROKE = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' }
+const iconDot = (cx) => <circle key={cx} cx={cx} cy="10" r="1.35" fill="currentColor" stroke="none" />
+const ICON_PATHS = {
+  undo:        <><path {...ICON_STROKE} d="M4.5 8.5h6.5a3.75 3.75 0 0 1 0 7.5H8" /><path {...ICON_STROKE} d="M7 5.5 4 8.5l3 3" /></>,
+  redo:        <><path {...ICON_STROKE} d="M15.5 8.5H9a3.75 3.75 0 0 0 0 7.5h3" /><path {...ICON_STROKE} d="M13 5.5l3 3-3 3" /></>,
+  text:        <><path {...ICON_STROKE} d="M4.5 5.5h11" /><path {...ICON_STROKE} d="M10 5.5v10.5" /></>,
+  image:       <><rect {...ICON_STROKE} x="3.25" y="4.25" width="13.5" height="11.5" rx="2" /><circle {...ICON_STROKE} cx="7.5" cy="8.25" r="1.25" /><path {...ICON_STROKE} d="M4 13.5l3.4-3.1a1.5 1.5 0 0 1 2 0l6.4 5.3" /></>,
+  photo:       <><circle {...ICON_STROKE} cx="10" cy="7" r="3" /><path {...ICON_STROKE} d="M4.5 16.5a5.5 5.5 0 0 1 11 0" /></>,
+  alignLeft:   <><path {...ICON_STROKE} d="M4 6h12M4 10h8M4 14h11" /></>,
+  alignCenter: <><path {...ICON_STROKE} d="M4 6h12M6 10h8M5 14h10" /></>,
+  alignRight:  <><path {...ICON_STROKE} d="M4 6h12M8 10h8M5 14h11" /></>,
+  shadow:      <><path {...ICON_STROKE} d="M7.5 14 10.5 5l3 9" /><path {...ICON_STROKE} d="M8.7 11.2h3.6" /><path d="M6 16.4h9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeOpacity="0.35" /></>,
+  front:       <><path {...ICON_STROKE} d="M4.25 12.25v-6.5a1.5 1.5 0 0 1 1.5-1.5h6.5" strokeOpacity="0.45" /><rect {...ICON_STROKE} x="7.25" y="7.25" width="8.5" height="8.5" rx="1.75" /></>,
+  back:        <><rect {...ICON_STROKE} x="4.25" y="4.25" width="8.5" height="8.5" rx="1.75" strokeOpacity="0.45" /><rect {...ICON_STROKE} x="7.25" y="7.25" width="8.5" height="8.5" rx="1.75" /></>,
+  duplicate:   <><rect {...ICON_STROKE} x="7.25" y="7.25" width="8.5" height="8.5" rx="1.75" /><path {...ICON_STROKE} d="M12.75 7.25V5.75a1.5 1.5 0 0 0-1.5-1.5h-5.5a1.5 1.5 0 0 0-1.5 1.5v5.5a1.5 1.5 0 0 0 1.5 1.5H7.25" /></>,
+  trash:       <><path {...ICON_STROKE} d="M4.75 6h10.5" /><path {...ICON_STROKE} d="M8 6V4.6h4V6" /><path {...ICON_STROKE} d="M6.1 6l.7 9.4A1.5 1.5 0 0 0 8.3 16.8h3.4a1.5 1.5 0 0 0 1.5-1.4L13.9 6" /></>,
+  centerH:     <><path {...ICON_STROKE} d="M10 3.25v13.5" strokeDasharray="1.6 2.2" strokeOpacity="0.6" /><rect {...ICON_STROKE} x="5" y="7.5" width="10" height="5" rx="1.25" /></>,
+  centerV:     <><path {...ICON_STROKE} d="M3.25 10h13.5" strokeDasharray="1.6 2.2" strokeOpacity="0.6" /><rect {...ICON_STROKE} x="7.5" y="5" width="5" height="10" rx="1.25" /></>,
+  box:         <rect x="5" y="5" width="10" height="10" rx="2.5" fill="currentColor" stroke="none" />,
+  more:        <>{iconDot(5)}{iconDot(10)}{iconDot(15)}</>,
+  chevron:     <path {...ICON_STROKE} d="M6.5 8.5 10 12l3.5-3.5" />,
+  plus:        <path {...ICON_STROKE} d="M10 5.25v9.5M5.25 10h9.5" />,
+  minus:       <path {...ICON_STROKE} d="M5.25 10h9.5" />,
+  design:      <><path {...ICON_STROKE} d="M4 16.25 5 12.5l7.25-7.25 2.5 2.5L7.5 15l-3.5 1.25Z" /><path {...ICON_STROKE} d="M10.75 6.75 12.5 8.5" /></>,
+}
 function Icon({ name, size = 16 }) {
-  const s = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' }
-  const dot = (cx) => <circle cx={cx} cy="10" r="1.35" fill="currentColor" stroke="none" />
-  const paths = {
-    undo:        <><path {...s} d="M4.5 8.5h6.5a3.75 3.75 0 0 1 0 7.5H8" /><path {...s} d="M7 5.5 4 8.5l3 3" /></>,
-    redo:        <><path {...s} d="M15.5 8.5H9a3.75 3.75 0 0 0 0 7.5h3" /><path {...s} d="M13 5.5l3 3-3 3" /></>,
-    text:        <><path {...s} d="M4.5 5.5h11" /><path {...s} d="M10 5.5v10.5" /></>,
-    image:       <><rect {...s} x="3.25" y="4.25" width="13.5" height="11.5" rx="2" /><circle {...s} cx="7.5" cy="8.25" r="1.25" /><path {...s} d="M4 13.5l3.4-3.1a1.5 1.5 0 0 1 2 0l6.4 5.3" /></>,
-    photo:       <><circle {...s} cx="10" cy="7" r="3" /><path {...s} d="M4.5 16.5a5.5 5.5 0 0 1 11 0" /></>,
-    alignLeft:   <><path {...s} d="M4 6h12M4 10h8M4 14h11" /></>,
-    alignCenter: <><path {...s} d="M4 6h12M6 10h8M5 14h10" /></>,
-    alignRight:  <><path {...s} d="M4 6h12M8 10h8M5 14h11" /></>,
-    shadow:      <><path {...s} d="M7.5 14 10.5 5l3 9" /><path {...s} d="M8.7 11.2h3.6" /><path d="M6 16.4h9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeOpacity="0.35" /></>,
-    front:       <><path {...s} d="M4.25 12.25v-6.5a1.5 1.5 0 0 1 1.5-1.5h6.5" strokeOpacity="0.45" /><rect {...s} x="7.25" y="7.25" width="8.5" height="8.5" rx="1.75" /></>,
-    back:        <><rect {...s} x="4.25" y="4.25" width="8.5" height="8.5" rx="1.75" strokeOpacity="0.45" /><rect {...s} x="7.25" y="7.25" width="8.5" height="8.5" rx="1.75" /></>,
-    duplicate:   <><rect {...s} x="7.25" y="7.25" width="8.5" height="8.5" rx="1.75" /><path {...s} d="M12.75 7.25V5.75a1.5 1.5 0 0 0-1.5-1.5h-5.5a1.5 1.5 0 0 0-1.5 1.5v5.5a1.5 1.5 0 0 0 1.5 1.5H7.25" /></>,
-    trash:       <><path {...s} d="M4.75 6h10.5" /><path {...s} d="M8 6V4.6h4V6" /><path {...s} d="M6.1 6l.7 9.4A1.5 1.5 0 0 0 8.3 16.8h3.4a1.5 1.5 0 0 0 1.5-1.4L13.9 6" /></>,
-    centerH:     <><path {...s} d="M10 3.25v13.5" strokeDasharray="1.6 2.2" strokeOpacity="0.6" /><rect {...s} x="5" y="7.5" width="10" height="5" rx="1.25" /></>,
-    centerV:     <><path {...s} d="M3.25 10h13.5" strokeDasharray="1.6 2.2" strokeOpacity="0.6" /><rect {...s} x="7.5" y="5" width="5" height="10" rx="1.25" /></>,
-    box:         <rect x="5" y="5" width="10" height="10" rx="2.5" fill="currentColor" stroke="none" />,
-    more:        <>{dot(5)}{dot(10)}{dot(15)}</>,
-    chevron:     <path {...s} d="M6.5 8.5 10 12l3.5-3.5" />,
-    plus:        <path {...s} d="M10 5.25v9.5M5.25 10h9.5" />,
-    minus:       <path {...s} d="M5.25 10h9.5" />,
-    design:      <><path {...s} d="M4 16.25 5 12.5l7.25-7.25 2.5 2.5L7.5 15l-3.5 1.25Z" /><path {...s} d="M10.75 6.75 12.5 8.5" /></>,
-  }
-  return <svg width={size} height={size} viewBox="0 0 20 20" className="pointer-events-none block">{paths[name]}</svg>
+  return <svg width={size} height={size} viewBox="0 0 20 20" className="pointer-events-none block">{ICON_PATHS[name]}</svg>
 }
 
 // pointerdown focus-steal guard shared by every toolbar button (OV-1).

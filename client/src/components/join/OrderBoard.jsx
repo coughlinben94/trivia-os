@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import { seededShuffle } from '../../lib/orderScoring.js'
 import ShrinkToFit from './ShrinkToFit.jsx'
@@ -28,13 +28,20 @@ export default function OrderBoard({ slide, team, theme, preview = false, onAnsw
   const [committedAnswer, setCommittedAnswer] = useState([])
   const [saving, setSaving] = useState(false)
 
+  const itemsKey = items.map(i => i.id).join(',')
+
   // Passing correctOrder so the phone's shuffle re-roll decision matches
   // the display's exactly — same items + same seed + same correctOrder is
   // required for both to land on the identical visual order (see
   // orderScoring.js's seededShuffle comment for why the re-roll depends on
-  // correctOrder).
-  const shuffled = seededShuffle(items, slide.id ?? 'preview', data.correctOrder)
-  const itemsKey = items.map(i => i.id).join(',')
+  // correctOrder). Memoized on the actual identity of the inputs (itemsKey,
+  // not the items array reference) — same seed always reshuffles to the
+  // same order, so recomputing it on every tap/re-render was pure waste.
+  const shuffled = useMemo(
+    () => seededShuffle(items, slide.id ?? 'preview', data.correctOrder),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [itemsKey, slide.id, data.correctOrder]
+  )
 
   // Preview-only: if the host edits items (adds/removes one) while the live
   // preview is mounted, clear any in-progress taps rather than carrying an

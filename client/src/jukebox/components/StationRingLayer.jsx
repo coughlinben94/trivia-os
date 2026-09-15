@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useRafLoop } from '../hooks/useRafLoop.js'
-import { blendDurationMs } from '../lib/gradientTuning.js'
+import { blendDurationMs, lerp } from '../lib/gradientTuning.js'
 import { lerpOklabPolar, rgbToOklab, oklabToRgb, hexToRgb } from './AlbumGradientMesh.jsx'
 
 // StationRingLayer — "Station Thirteen" ambient layer for the grading-break
@@ -81,7 +81,6 @@ function mulberry(seed) {
   }
 }
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v))
-const lerp = (a, b, t) => a + (b - a) * t
 const mixRgb = (a, b, t) => a.map((v, i) => Math.round(lerp(v, b[i], t)))
 const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`
 

@@ -44,6 +44,21 @@ function normalizeShow(row) {
   }
 }
 
+// Shared by exportShow/exportShowById — both download a show as a JSON file,
+// only the source object (raw local `show` vs. a freshly-fetched/normalized
+// row) differs.
+function downloadShowJson(data, title, date) {
+  const json = JSON.stringify(data, null, 2)
+  const blob = new Blob([json], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  const safeName = (title ?? 'show').replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '')
+  a.download = `${safeName}-${date ?? 'export'}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export function sortedSlides(show) {
   if (!show?.slides) return []
   return sortSlides(show.slides)
@@ -226,15 +241,7 @@ export function useShow() {
     const { data, error } = await supabase.from('shows').select('*').eq('id', id).single()
     if (error || !data) throw new Error('Show not found')
     const normalized = normalizeShow(data)
-    const json = JSON.stringify(normalized, null, 2)
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    const safeName = (normalized.title ?? 'show').replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '')
-    a.download = `${safeName}-${normalized.date ?? 'export'}.json`
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadShowJson(normalized, normalized.title, normalized.date)
   }
 
   async function importShow(json) {
@@ -312,15 +319,7 @@ export function useShow() {
 
   async function exportShow() {
     if (!show) return
-    const json = JSON.stringify(show, null, 2)
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    const safeName = (show.title ?? 'show').replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '')
-    a.download = `${safeName}-${show.date ?? 'export'}.json`
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadShowJson(show, show.title, show.date)
   }
 
   async function updateShowMeta(meta) {
@@ -338,10 +337,11 @@ export function useShow() {
 
   async function addRound(data = {}) {
     if (!show) return
+    const nextNumber = Math.max(0, ...show.rounds.map(r => r.number ?? 0)) + 1
     const round = {
       id: `round_${nanoid(8)}`,
-      number: Math.max(0, ...show.rounds.map(r => r.number ?? 0)) + 1,
-      title: data.title ?? `Round ${Math.max(0, ...show.rounds.map(r => r.number ?? 0)) + 1}`,
+      number: nextNumber,
+      title: data.title ?? `Round ${nextNumber}`,
       subtitle: data.subtitle ?? '',
       type: data.type ?? 'standard',
       roundType: data.roundType ?? 'normal',

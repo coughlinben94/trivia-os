@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { deriveRoundCols, computeTotal, normalizeRoundScore, roundLabel, MEDALS } from '../lib/scoreboardMath.js'
+import { groupQuestionsByRound } from '../lib/showGrouping.js'
 import { sortSlides } from '../lib/slideStepping.js'
 
 export default function ShowDetail() {
@@ -71,21 +72,7 @@ export default function ShowDetail() {
     .sort((a, b) => b.total - a.total)
 
   // Build questions grouped by round
-  const roundGroups = rounds
-    .slice()
-    .sort((a, b) => (a.roundNumber ?? a.number ?? 0) - (b.roundNumber ?? b.number ?? 0))
-    .map(r => ({
-      round: r,
-      questions: sortSlides(
-        slides.filter(s => s.roundId === r.id && s.type === 'question')
-      ),
-    }))
-    .filter(g => g.questions.length > 0)
-
-  // Slides with no roundId (orphans)
-  const orphanQuestions = sortSlides(
-    slides.filter(s => s.type === 'question' && !rounds.find(r => r.id === s.roundId))
-  )
+  const { roundGroups, orphanQuestions } = groupQuestionsByRound(rounds, slides, sortSlides)
 
   const dateLabel = show.date
     ? new Date(show.date + 'T12:00:00').toLocaleDateString('en-US', {

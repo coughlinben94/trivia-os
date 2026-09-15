@@ -86,6 +86,20 @@ function RotateGate() {
   )
 }
 
+// ─── Spinner ──────────────────────────────────────────────────────────────────
+// One CSS spin, parameterized — was four hand-copied variants (loading
+// screen, join button, scores drawer, powerup button) that only ever
+// differed by size/color/duration.
+function Spinner({ size = 24, borderWidth = 2, trackColor = 'rgba(255,255,255,0.3)', headColor = '#fff', duration = '0.7s' }) {
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%',
+      border: `${borderWidth}px solid ${trackColor}`, borderTopColor: headColor,
+      animation: `spin ${duration} linear infinite`, display: 'inline-block', flexShrink: 0,
+    }} />
+  )
+}
+
 // ─── Loading ──────────────────────────────────────────────────────────────────
 function LoadingScreen() {
   return (
@@ -93,12 +107,7 @@ function LoadingScreen() {
       minHeight: '100dvh', background: '#050505',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      <div style={{
-        width: 28, height: 28, borderRadius: '50%',
-        border: '2.5px solid rgba(255,255,255,0.12)',
-        borderTopColor: 'rgba(255,255,255,0.5)',
-        animation: 'spin 0.8s linear infinite',
-      }} />
+      <Spinner size={28} borderWidth={2.5} trackColor="rgba(255,255,255,0.12)" headColor="rgba(255,255,255,0.5)" duration="0.8s" />
     </div>
   )
 }
@@ -348,11 +357,7 @@ function RegistrationScreen({ onRegister, show, theme }) {
             }}
           >
             {submitting
-              ? (<><span style={{
-                    width: 18, height: 18, borderRadius: '50%',
-                    border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff',
-                    animation: 'spin 0.7s linear infinite', display: 'inline-block', flexShrink: 0,
-                  }} />Joining…</>)
+              ? (<><Spinner size={18} />Joining…</>)
               : 'Join the Show'}
           </button>
         </form>
@@ -954,11 +959,7 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
           {loading
             ? (
               <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '2.5rem' }}>
-                <span style={{
-                  width: 24, height: 24, borderRadius: '50%',
-                  border: `2px solid ${accent}30`, borderTopColor: accent,
-                  animation: 'spin 0.8s linear infinite', display: 'inline-block',
-                }} />
+                <Spinner size={24} trackColor={`${accent}30`} headColor={accent} duration="0.8s" />
               </div>
             )
             : teams.length === 0
@@ -1732,7 +1733,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
                       style={{ flex: 1, padding: '0.55rem', borderRadius: 8, background: powerupInvoking ? '#a01010' : '#e02020', border: 'none', color: '#fff', fontSize: '0.8rem', fontWeight: 700, cursor: powerupInvoking ? 'default' : 'pointer', minHeight: 44, fontFamily: 'DM Sans, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
                     >
                       {powerupInvoking
-                        ? (<><span style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 0.7s linear infinite', display: 'inline-block', flexShrink: 0 }} />Using…</>)
+                        ? (<><Spinner size={14} />Using…</>)
                         : <>{powerup.icon} Use it!</>
                       }
                     </button>

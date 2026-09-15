@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-const ACCEPT_IMAGE = '.jpg,.jpeg,.png,.gif,.webp'
+export const ACCEPT_IMAGE = '.jpg,.jpeg,.png,.gif,.webp'
 const ACCEPT_AUDIO = '.mp3,.wav,.m4a,.ogg'
 const ACCEPT_ALL   = `${ACCEPT_IMAGE},${ACCEPT_AUDIO}`
 

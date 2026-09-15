@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { ACCEPT_IMAGE } from './MediaUpload.jsx'
 
 export default function HostPhotoLibrary({ getHostPhotos, uploadMedia, currentPhotoUrl, onSelectPhoto, hasRandomFallback = false, usedPhotoUrls }) {
   const [photos, setPhotos] = useState([])
@@ -13,7 +14,11 @@ export default function HostPhotoLibrary({ getHostPhotos, uploadMedia, currentPh
       setLoading(true)
       getHostPhotos().then(p => { setPhotos(p); setLoading(false) })
     }
-  }, [open, getHostPhotos])
+    // getHostPhotos is a plain (non-memoized) function from useShow.js — a
+    // new reference every render. Depending on it would refetch the photo
+    // list on every unrelated parent re-render while the picker is open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   async function handleUpload(file) {
     if (!file) return
@@ -121,7 +126,7 @@ export default function HostPhotoLibrary({ getHostPhotos, uploadMedia, currentPh
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept=".jpg,.jpeg,.png,.gif,.webp"
+                      accept={ACCEPT_IMAGE}
                       onChange={e => { const f = e.target.files[0]; if (f) handleUpload(f); e.target.value = '' }}
                       className="hidden"
                     />

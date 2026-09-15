@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { fitToBox, LINE_BOX } from '../../../lib/autoFitText.js'
@@ -29,6 +29,15 @@ export default function RoundIntroSlide({ slide, show }) {
   // real glyph metrics; the value itself is never read.
   const [fontsReady, setFontsReady] = useState(false)
   useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
+
+  // Same measure-once-per-change idea as GradingBreakSlide's messageSize —
+  // fitToBox does canvas text measurement, shouldn't re-run on every
+  // unrelated re-render.
+  const subtitleSize = useMemo(
+    () => (data.subtitle ? fitToBox(data.subtitle, { ...LINE_BOX, family: theme.fonts.body }) : 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data.subtitle, theme.fonts.body, fontsReady]
+  )
 
   return (
     <div
@@ -92,7 +101,7 @@ export default function RoundIntroSlide({ slide, show }) {
             style={{
               fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
               color: theme.colors.text,
-              fontSize: rt.subtitle?.fontSizePx ?? fitToBox(data.subtitle, { ...LINE_BOX, family: theme.fonts.body }),
+              fontSize: rt.subtitle?.fontSizePx ?? subtitleSize,
               fontWeight: 300,
             }}
           >

@@ -5,6 +5,7 @@ import { useTheme } from '../../shared/ThemeProvider.jsx';
 import { EASE_OUT, EASE_PANEL } from '../../../lib/easings.js';
 import { nextSlideAfter, TEAM_PICKER_HOLD_MS } from '../../../lib/slideStepping.js';
 import { hexToRgb as hexToRgbArr } from '../../../lib/oklab.js';
+import { hashSeed, mulberry32 } from '../../../lib/seededRandom.js';
 
 const DISP_CAP = 150, SS = 1.6;
 const CAP = DISP_CAP * SS, MAXW = 1520 * SS;
@@ -73,19 +74,14 @@ const STAR_HIGHLIGHT_FIXED = '#e8e8e8'
 // re-encoded/replaced — these numbers go stale silently otherwise.
 const SILENT_GAPS = [[196.6, 202.8], [399.1, 405.4], [601.6, 607.9], [804.2, 810.4], [1006.7, 1012.9]]
 
-// Deterministic seeded shuffle (mulberry32 + Fisher-Yates) — same seed
-// always produces the same order, so a reload or Stream Deck back/forward
-// over the sequence doesn't reshuffle teams the host has already announced.
+// Deterministic seeded shuffle (mulberry32 + Fisher-Yates, shared PRNG core
+// from lib/seededRandom.js — same consolidation that file's own note
+// describes doing once already for matchingScoring.js/orderScoring.js) —
+// same seed always produces the same order, so a reload or Stream Deck
+// back/forward over the sequence doesn't reshuffle teams the host has
+// already announced.
 function seededShuffle(arr, seedStr) {
-  let seed = 0;
-  for (const ch of String(seedStr)) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
-  const rand = () => {
-    seed = (seed + 0x6d2b79f5) >>> 0;
-    let t = seed;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+  const rand = mulberry32(hashSeed(String(seedStr)));
   const out = arr.slice();
   for (let i = out.length - 1; i > 0; i--) {
     const j = Math.floor(rand() * (i + 1));
