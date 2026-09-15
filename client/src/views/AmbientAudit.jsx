@@ -4,7 +4,8 @@ import { THEMES, getTheme } from '../themes/index.js'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
 import RingAmbient from '../components/display/RingAmbient.jsx'
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
-import { recolorWorld } from '../lib/ringRecolor.js'
+import { worldFromParams } from '../lib/drawWorld.js'
+import { SLOTS } from '../worlds/midnightGalaxy.slots.js'
 
 export default function AmbientAudit() {
   const [params] = useSearchParams()
@@ -20,17 +21,17 @@ export default function AmbientAudit() {
   const searchString = params.toString()
   const ringWorldData = useMemo(() => {
     const colorsParam = params.get('colors')
-    if (!colorsParam) return midnightGalaxyRing
-    const weightsParam = params.get('weights')
-    const driftParam = params.get('drift')
+    const stationsParam = params.get('stations')
+    if (!colorsParam && !stationsParam) return midnightGalaxyRing
     try {
-      return recolorWorld(midnightGalaxyRing, {
-        colors: colorsParam.split(','),
-        weights: weightsParam ? weightsParam.split(',').map(Number) : undefined,
-        drift: driftParam ? { arc: Number(driftParam) } : undefined,
-      }, getTheme('midnight-galaxy'))
+      return worldFromParams({
+        colorsParam,
+        weightsParam: params.get('weights'),
+        driftParam: params.get('drift'),
+        stationsParam,
+      }, { base: midnightGalaxyRing, pool: midnightGalaxyRing.stations, slots: SLOTS, baseTheme: getTheme('midnight-galaxy') })
     } catch (err) {
-      console.warn('[AmbientAudit] bad ?colors= palette, using base:', err.message)
+      console.warn('[AmbientAudit] bad ?colors=/?stations= params, using base:', err.message)
       return midnightGalaxyRing
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
