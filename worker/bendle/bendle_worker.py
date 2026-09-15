@@ -19,9 +19,12 @@ from dotenv import load_dotenv
 load_dotenv(os.path.expanduser("~/Library/Application Support/bendle-worker/.env"))
 
 POLL_SECONDS = 30
-STEMS = ["drums", "bass", "other", "vocals"]
 DOWNLOAD_TIMEOUT_SECONDS = 1800
-DEMUCS_TIMEOUT_SECONDS = 3600
+# 40min: generous headroom over guitar_stem.py's own internal budget (the
+# SW separation pass itself, plus its optional up-to-30min htdemucs guitar
+# refine substep) — this is now the ceiling for every song, not just an
+# occasional guitar top-up.
+SW_TIMEOUT_SECONDS = 2400
 
 # guitar_stem.py lives in its own throwaway venv (audio-separator + torch),
 # deliberately never merged into this file's requirements.txt — see its own
@@ -153,46 +156,31 @@ def process_song(sb, song):
         query = build_search_query(song["title"], song.get("artist"))
         audio_path = download_source_audio(query, tmp)
 
-        demucs_out = f"{tmp}/separated"
+        # BS-Roformer-SW is the only separation pipeline now (2026-09-15,
+        # Ben: "if its a better pipeline, its a better pipeline" — plain
+        # htdemucs retired as the default; every song gets all 5 stems,
+        # guitar included, from one SW pass instead of guitar being a
+        # separate opt-in request). Shells out to guitar_stem.py's own venv
+        # (own torch/audio-separator deps, kept off this process — see that
+        # file's docstring) rather than importing it, same isolation the
+        # guitar-only flow already relied on. Synchronous (.run, not the
+        # guitar flow's detached Popen): run_once's queue is itself
+        # synchronous, one song at a time, so there's nothing to keep this
+        # from blocking on.
         try:
-            # No --mp3: Demucs' own mp3 encode was getting thrown away and
-            # re-encoded anyway by normalize_stem below (that used to
-            # silently drop to 128k — see the comment there). Lossless WAV
-            # here means there's exactly one lossy encode in the whole
-            # pipeline, at full 320k, instead of two stacked ones.
-            # Requires the `soundfile` package (requirements.txt) — Demucs'
-            # WAV output goes through torchaudio.save(), which raises
-            # "Couldn't find appropriate backend" with an empty
-            # torchaudio.list_audio_backends() if it's missing. --mp3 used
-            # to route around torchaudio's save() entirely, which is why
-            # this dependency was never needed before 2026-09-14.
             result = subprocess.run(
-                [sys.executable, "-m", "demucs", "-n", "htdemucs", "-o", demucs_out, audio_path],
-                capture_output=True, text=True, timeout=DEMUCS_TIMEOUT_SECONDS,
+                [SW_VENV_PYTHON, "guitar_stem.py", song_id, audio_path],
+                cwd=os.path.dirname(os.path.abspath(__file__)),
+                capture_output=True, text=True, timeout=SW_TIMEOUT_SECONDS,
             )
         except subprocess.TimeoutExpired:
-            raise RuntimeError(f"stem separation timed out after {DEMUCS_TIMEOUT_SECONDS}s")
+            raise RuntimeError(f"stem separation timed out after {SW_TIMEOUT_SECONDS}s")
         if result.returncode != 0:
-            print(f"[Bendle] demucs failed:\n{result.stderr[-2000:]}", flush=True)
+            print(f"[Bendle] guitar_stem separation failed:\n{result.stderr[-2000:]}", flush=True)
             raise RuntimeError("stem separation failed — the audio may be corrupt or unsupported")
-
-        # demucs names its output folder after the input file's stem — "audio" here,
-        # since output_template above always writes to a file named audio.<ext>.
-        stem_dir = f"{demucs_out}/htdemucs/audio"
-        urls = {}
-        for stem in STEMS:
-            local_path = f"{stem_dir}/{stem}.wav"
-            if not Path(local_path).exists():
-                raise RuntimeError(f"missing {stem} stem after separation")
-            upload_path = normalize_stem(local_path)
-            storage_path = f"bendle/{song_id}/{stem}.mp3"
-            with open(upload_path, "rb") as f:
-                sb.storage.from_("trivia-show-media").upload(
-                    storage_path, f, {"content-type": "audio/mpeg", "upsert": "true"}
-                )
-            urls[stem] = sb.storage.from_("trivia-show-media").get_public_url(storage_path)
-
-        sb.table("bendle_songs").update(build_ready_update(urls)).eq("id", song_id).execute()
+        # guitar_stem.py's own main() already did the full upload + DB
+        # write (status/drums_url/.../guitar_url/guitar_status) — nothing
+        # left to do here.
 
 
 def run_once(sb):
