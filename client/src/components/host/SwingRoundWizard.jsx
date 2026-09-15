@@ -5,10 +5,22 @@ const BTN = 'host-button'
 // 2026-08-19, Ben: "if i select shiny itll insert 6 slides of the same
 // shiny, only introducing it once" — that exact mechanic (N slides, one
 // shinyFormatId/seriesTheme, intro skipped on siblings) already exists in
-// AddSlideWizard's shiny-question batch-add path. Rather than duplicate that
-// branching logic here, the Shiny choice below hands off to it directly
-// (onGoShiny, wired in BuildMode.jsx) instead of continuing this wizard's
-// own text-entry flow.
+// AddSlideWizard's shiny-question batch-add path (the 'separate' relationship
+// + assetCount). Rather than duplicate that branching logic here, the Shiny
+// choice below hands off to it directly (onGoShiny, wired in BuildMode.jsx)
+// instead of continuing this wizard's own text-entry flow — but it fires
+// straight from the style screen, before the 'count' step, so `count` (this
+// wizard's own local state, default 6) rides along as a second argument
+// instead of the host ever seeing/confirming it here.
+//
+// 2026-09-15, Ben: reported this only created 1 slide, not 6 — the count
+// above was captured in local state but never actually passed to onGoShiny
+// (this line used to read `onGoShiny(activeRoundId)`). Fixed by passing
+// `count` through; BuildMode.jsx's handleSwingGoShiny now seeds
+// AddSlideWizard's assetCount + relationship('separate') from it. Formats in
+// FIXED_SHAPE_KINDS (matching/wager/order/choice/hues-cues/elimination/race
+// — shinyWizardKinds.jsx) still create exactly 1 blank slide regardless —
+// that's a separate, deliberate design constraint this fix does not touch.
 export default function SwingRoundWizard({ activeRoundId, onAdd, onGoShiny, onClose }) {
   const [step, setStep] = useState('style')
   const [count, setCount] = useState(6)
@@ -64,7 +76,7 @@ export default function SwingRoundWizard({ activeRoundId, onAdd, onGoShiny, onCl
               </span>
             </button>
             <button
-              onClick={() => onGoShiny(activeRoundId)}
+              onClick={() => onGoShiny(activeRoundId, count)}
               className={`w-full flex items-center gap-3 p-4 rounded-xl border border-gray-200 hover:border-[#1a6b4a] text-left transition-colors ${BTN}`}
             >
               <span className="text-2xl">✨</span>

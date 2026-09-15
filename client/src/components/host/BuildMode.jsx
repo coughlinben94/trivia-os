@@ -464,10 +464,25 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
   // — see AddSlideWizard.jsx's handleCreate). Round is created up front (if
   // needed) so the wizard opens already scoped to it, same as clicking the
   // Shiny Question tile with a round pre-selected.
-  async function handleSwingGoShiny(roundId) {
+  //
+  // 2026-09-15, Ben: "it walks me only through one question, not 6" — `count`
+  // (SwingRoundWizard's own "how many questions" state, default 6) used to be
+  // dropped on the floor here. Seeding assetCount + relationship:'separate'
+  // makes AddSlideWizard default to N blank separate slides sharing one
+  // intro, the same shape its own comments describe as already built for
+  // non-fixed-shape formats. Formats in FIXED_SHAPE_KINDS (matching/wager/
+  // order/choice/hues-cues/elimination/race) still create exactly 1 blank
+  // slide regardless — deliberate, not something this touches (see
+  // shinyWizardKinds.jsx).
+  async function handleSwingGoShiny(roundId, count) {
     setShowSwingWizard(false)
     const targetRoundId = await ensureRound(roundId, { roundType: 'swing', title: 'Swing Round' })
-    openAddModal({ type: 'shiny-question', roundId: targetRoundId })
+    openAddModal({
+      type: 'shiny-question',
+      roundId: targetRoundId,
+      assetCount: String(Math.max(1, count || 6)),
+      relationship: 'separate',
+    })
   }
 
   async function handlePYLAdd(themes, roundId) {

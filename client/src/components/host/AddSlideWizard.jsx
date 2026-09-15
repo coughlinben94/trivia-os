@@ -191,8 +191,14 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   // assets come after the title card, and how they relate to each other.
   // Both are pre-filled from the format and both are always editable.
   // Blank-able string state so the field can be cleared while typing.
-  const [assetCount, setAssetCount] = useState('1')
-  const [relationship, setRelationship] = useState('sequential')
+  // A caller can seed both up front via initialData (Swing Round's shiny
+  // hand-off does — BuildMode.jsx's handleSwingGoShiny — so its own "how
+  // many questions" count survives into here instead of every format
+  // resetting it back to that format's own `slots` preset; see the pick-
+  // format button below, which only applies a format's defaults when
+  // initialData didn't already decide this).
+  const [assetCount, setAssetCount] = useState(initialData.assetCount ?? '1')
+  const [relationship, setRelationship] = useState(initialData.relationship ?? 'sequential')
 
   // Round-intro — pre-filled from AddRoundWizard or from round filter; also derived from selected round
   const _preRound = initialData.roundId ? show.rounds.find(r => r.id === initialData.roundId) : null
@@ -888,8 +894,13 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                   onClick={() => {
                     // Seed both shape controls from the format — a pre-fill,
                     // not a lock. Both stay editable on the next screen.
-                    setAssetCount(String(defaultAssetCount(selectedShinyFmt)))
-                    setRelationship(defaultRelationship(selectedShinyFmt))
+                    // Skipped when a caller already decided these up front
+                    // (initialData.assetCount/relationship — Swing Round's
+                    // shiny hand-off does this so its own count doesn't get
+                    // overwritten by whatever slots preset the chosen format
+                    // happens to carry).
+                    if (initialData.assetCount == null) setAssetCount(String(defaultAssetCount(selectedShinyFmt)))
+                    if (initialData.relationship == null) setRelationship(defaultRelationship(selectedShinyFmt))
                     setShinyStep('details')
                   }}
                   className={`w-full bg-yellow-500 text-white text-sm font-semibold py-3 rounded-xl hover:bg-yellow-600 ${BTN}`}
