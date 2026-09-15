@@ -186,11 +186,18 @@ export default function RaceSlide({ slide }) {
   const trackAnimated = !reduce && !!raceStartedAt && n > 0
   // Track surface: a flat gradient ring (references/themes.md rule 6, no
   // hard edges) — otherwise this is four emoji floating with nothing
-  // readable as a racetrack underneath them.
+  // readable as a racetrack underneath them. Was theme.colors.bgDeep, a
+  // theme-variable dark color that on several themes lands nearly
+  // indistinguishable from shinyBg (the slide's own background) — flagged
+  // in the final whole-branch review as a thin/near-invisible ring, then
+  // confirmed live. theme.colors.text at low alpha is what every other
+  // subtle-surface-on-shinyBg element already uses (HuesCuesBoard's swatch
+  // borders, status lines, etc.) — guaranteed real contrast against
+  // shinyBg on any theme, not just the ones bgDeep happened to work for.
   const trackStyle = {
     position: 'absolute', inset: 0, margin: 'auto', width: '62%', height: '62%', transformOrigin: 'center',
     borderRadius: '50%',
-    background: `radial-gradient(ellipse at center, transparent 32%, ${theme.colors.bgDeep} 58%, transparent 92%)`,
+    background: `radial-gradient(ellipse at center, transparent 32%, ${theme.colors.text}26 58%, transparent 92%)`,
   }
   let trackClassName
   if (trackAnimated && !finished) {
