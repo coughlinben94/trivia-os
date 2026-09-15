@@ -828,8 +828,14 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
     onRingStateChange?.({
       stationOverride: breakActive ? MUSIC_STATION : (warp === 'back' ? RING_RETURN : null),
       showStationDebug: isPreview,
+      // Same fix as team-picker's forceSnap (below): the shiny warp vortex is
+      // the only motion Ben wants visible on a shiny entry/exit — the ring's
+      // own turn() glide underneath it read as the ring moving on its own
+      // ("the ring background shouldn't move... it should just warp"). Snap
+      // it under cover of the vortex instead, same as team-picker's reveal.
+      forceSnap: shinyWarp != null,
     })
-  }, [onRingStateChange, breakActive, warp, isPreview])
+  }, [onRingStateChange, breakActive, warp, isPreview, shinyWarp])
 
   // Auto-open after BREAK_DELAY_MS (Ben's timing — the break screen reads, then
   // music takes the TV). Space/ArrowRight skip the wait, unchanged from the old
@@ -938,7 +944,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
           slideIndex={ringVisibleStationIndex(sortedSlides, ringPeekIndex(sortedSlides, show.current_slide_index ?? 0), isRingVisible)}
           stationOverride={breakActive ? MUSIC_STATION : (warp === 'back' ? RING_RETURN : null)}
           showStationDebug={isPreview}
-          forceSnap={sortedSlides[show.current_slide_index ?? 0]?.type === 'team-picker'}
+          forceSnap={sortedSlides[show.current_slide_index ?? 0]?.type === 'team-picker' || shinyWarp != null}
         />
       )}
 
@@ -1212,7 +1218,7 @@ export default function Display() {
   // can render across the PreShowScreen<->DisplayInner swap at Go Live
   // without remounting (Critical Rule 1). slideId is NOT part of this — it's
   // derived straight from `show` on every render instead, see the JSX below.
-  const [ringState, setRingState] = useState({ stationOverride: null, showStationDebug: false })
+  const [ringState, setRingState] = useState({ stationOverride: null, showStationDebug: false, forceSnap: false })
   // Host-verified state for step-through. `null` while the initial session
   // check is in flight — a step attempted in that window opens the prompt
   // rather than silently doing nothing. Mirrored into a ref because the
@@ -1850,8 +1856,8 @@ export default function Display() {
           // station the moment the sheet wipes away (2026-09-14, Ben, live:
           // "coming out of the team intro slide, it should already be on
           // S1, not moving").
-          forceSnap={sortedForRing?.[show.current_slide_index ?? 0]?.type === 'team-picker'}
           {...ringState}
+          forceSnap={sortedForRing?.[show.current_slide_index ?? 0]?.type === 'team-picker' || ringState.forceSnap}
         />
         {show.is_live && show.current_slide_id !== null ? (
           <DisplayInner show={show} direction={direction} onBreakAdvance={handleBreakAdvance} onRingStateChange={setRingState} />
