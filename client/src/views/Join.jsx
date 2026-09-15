@@ -13,6 +13,7 @@ import WagerBoard from '../components/join/WagerBoard.jsx'
 import OrderBoard from '../components/join/OrderBoard.jsx'
 import ChoiceBoard from '../components/join/ChoiceBoard.jsx'
 import HuesCuesBoard from '../components/join/HuesCuesBoard.jsx'
+import HorseRaceBoard from '../components/join/HorseRaceBoard.jsx'
 import ShrinkToFit from '../components/join/ShrinkToFit.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import { PRESHOW_BEN_PHOTO } from '../components/shared/BenPhoto.jsx'
@@ -795,28 +796,8 @@ function SlideBody({ slide, show, theme, team, onInteractiveAnswered, overridePa
       )
     }
 
-    case 'horse-race': {
-      const contenders = (slide.data.contenders ?? []).filter(c => c?.name)
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {slide.data.text && (
-            <p style={{
-              color: text, fontSize: 'clamp(1.35rem, 5.5vw, 1.6rem)',
-              lineHeight: 1.55, margin: 0, fontFamily: 'DM Sans, sans-serif', fontWeight: 500,
-            }}>
-              {slide.data.text}
-            </p>
-          )}
-          {contenders.length > 0 && (
-            <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {contenders.map((c) => (
-                <li key={c.id} style={{ color: text, fontSize: '1rem', lineHeight: 1.4, margin: 0 }}>{c.name}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )
-    }
+    case 'horse-race':
+      return <HorseRaceBoard slide={slide} team={team} theme={theme} onAnswered={onInteractiveAnswered} />
 
     // Every remaining slide type — winner-reveal, team-picker, pyl-reveal,
     // pre-show, pixelate-series, state-of-union, grid, custom, team-preview.
