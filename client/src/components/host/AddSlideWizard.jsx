@@ -284,12 +284,30 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
         // longer needs to know those formats exist by name.
         if (fixedShapeKind?.buildSlideData) {
           const afterId = insertAfterSlideId(roundSlides, sorted)
-          await addShiny(fixedShapeKind.buildSlideData({
-            qNum, roundId, afterId, selectedShinyFmt,
+          const buildCtx = {
+            roundId, afterId, selectedShinyFmt,
             shinyQuestion, shinyAnswer,
             gridCols, gridRows, vennPerSide, vennSlideCount,
             bendleSongId, bendleSongs,
-          }))
+          }
+          if (fixedShapeCount > 1) {
+            // N separate blank siblings (elimination/race — grid/venn/bendle
+            // never reach here with fixedShapeCount > 1, see its definition
+            // above), same shinyGroupId/isSeries shape the generic 'separate'
+            // path below uses so the intro still shows once across the run.
+            const groupId = `sgrp_${nanoid(8)}`
+            const slidesData = Array.from({ length: fixedShapeCount }, (_, i) => {
+              const built = fixedShapeKind.buildSlideData({ ...buildCtx, qNum: qNum + i })
+              return {
+                type: built.type,
+                roundId: built.roundId,
+                data: { ...built.data, isSeries: true, seriesTheme: selectedShinyFmt.name, shinyGroupId: groupId },
+              }
+            })
+            await addShiny({ afterSlideId: afterId, slides: slidesData })
+            return
+          }
+          await addShiny(fixedShapeKind.buildSlideData({ ...buildCtx, qNum }))
           return
         }
 
@@ -378,6 +396,30 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
               })),
             },
           })
+          return
+        }
+
+        if (fixedShapeCount > 1) {
+          // N blank separate siblings (matching/wager/order/choice/hues-cues
+          // via Swing Round's shiny hand-off) — same shape the 'separate'
+          // path above uses, just for a format with no count/relationship
+          // controls of its own.
+          const groupId = `sgrp_${nanoid(8)}`
+          const slidesData = Array.from({ length: fixedShapeCount }, (_, i) => ({
+            type: 'question',
+            roundId: roundId ?? null,
+            data: {
+              ...shinyBase(qNum + i),
+              shinyInputSchema: schema,
+              isSeries:     true,
+              seriesTheme:  selectedShinyFmt.name,
+              shinyGroupId: groupId,
+              text:         '',
+              answer:       '',
+              mediaSlots:   [],
+            },
+          }))
+          await addShiny({ afterSlideId: afterId, slides: slidesData })
           return
         }
 
@@ -486,16 +528,33 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   // batch of standalone ones," so it skips the relationship picker entirely.
   const isVenn          = shinyFmtType === 'venn'
   const vennNum         = Math.min(20, Math.max(1, parseInt(vennSlideCount, 10) || 1))
+  // A fixed-shape format with no own count control (matching/wager/order/
+  // choice/hues-cues/elimination/race — NOT grid/venn/bendle, which have
+  // real extraControls of their own and are untouched by this) still honors
+  // a count seeded via initialData (Swing Round's shiny hand-off —
+  // BuildMode.jsx's handleSwingGoShiny). Outside that hand-off assetCount
+  // is never seeded, so this stays 1 and every other fixed-shape entry
+  // point behaves exactly as before (Ben, 2026-09-15: reported "Hues, Cues,
+  // and Booze" via Swing Round only created 1 slide, not the count he'd
+  // just set, then "it asks me for an answer... dont want it to... just
+  // insert the slides" — N blank slides, no shared answer, same as the
+  // generic 'separate' path already does for non-fixed-shape formats).
+  const fixedShapeCount = (isFixedShapeFmt && !fixedShapeKind.hasOwnControls && initialData.assetCount != null)
+    ? Math.min(20, Math.max(1, parseInt(assetCount, 10) || 1))
+    : 1
   // Separate questions can't share one typed answer — those slides start
   // blank and get filled in the editor, exactly as the old batch path did.
-  const showSharedFields = effectiveRel !== 'separate' && !(isVenn && vennNum > 1)
+  // Same story for a multi-count fixed-shape run.
+  const showSharedFields = effectiveRel !== 'separate' && !(isVenn && vennNum > 1) && fixedShapeCount === 1
   // Bendle's answer comes from the picked song, not free text — the generic
   // Answer field doesn't apply, so it's gated separately from Question-text.
   // Race has no typed answer either — it's filled in by the race engine.
   const showAnswerField  = showSharedFields && shinyFmtType !== 'bendle' && shinyFmtType !== 'race'
-  // A plain single-asset question — and every fixed-shape format — still
-  // needs its answer up front, unchanged. Multi-asset tied questions usually
-  // answer per-asset in the editor, so the shared answer is optional there.
+  // A plain single-asset question, and a single-count fixed-shape format,
+  // still needs its answer up front, unchanged. Multi-asset tied questions
+  // and a multi-count fixed-shape run (fixedShapeCount > 1, via
+  // showSharedFields above) answer per-slide in the editor instead, so the
+  // shared answer is optional there.
   // Bendle has no typed answer to require (see showAnswerField above) — its
   // song is optional here too, since Task 6's upload panel may not have
   // shipped any songs yet.
@@ -604,7 +663,11 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
 
             {fixedShapeKind?.nextStepHint && (
               <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2.5">
-                <p className="text-xs text-blue-800">{fixedShapeKind.nextStepHint}</p>
+                <p className="text-xs text-blue-800">
+                  {fixedShapeCount > 1
+                    ? `Creates ${fixedShapeCount} blank slides — fill each one in from the sidebar after.`
+                    : fixedShapeKind.nextStepHint}
+                </p>
               </div>
             )}
 
