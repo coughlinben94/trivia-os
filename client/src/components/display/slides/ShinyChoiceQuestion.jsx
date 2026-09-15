@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../../lib/supabase.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_OUT } from '../../../lib/easings.js'
-import { useFitToBox, WAGER_Q_FLOOR, WAGER_Q_CEIL } from '../../../lib/autoFitText.js'
+import { fitToBox, SHINY_CHOICE_Q_BOX } from '../../../lib/autoFitText.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 
 // The TV side of a Choice question — Mandela Effect (single-select images)
@@ -77,22 +77,23 @@ export default function ShinyChoiceQuestion({ slide, show, theme }) {
 }
 
 // Measure-to-fit instead of a fixed clamp() (2026-09-06, Ben: question text
-// should take up as much of the screen as it can without overflowing) — same
-// bounds and useFitToBox call as ShinyWagerQuestion's own QuestionText,
-// since Choice's layout is the same shape: one dominant question line, then
-// the interactive content taking the rest of the screen.
+// should take up as much of the screen as it can without overflowing).
+// Fixed design-resolution box (SHINY_CHOICE_Q_BOX), not a real DOM
+// measurement — see that const's comment in autoFitText.js for why: a real
+// `useFitToBox` measurement of this box gave a smaller real size on any TV
+// browser narrower than 1920px than the host's editor preview (always a
+// hard-pinned 1920x1080 iframe) ever showed.
 function QuestionText({ text, theme }) {
-  const boxRef = useRef(null)
-  const size = useFitToBox(boxRef, text ?? '', {
-    family: theme.fonts.display,
-    floorPx: WAGER_Q_FLOOR * 16,
-    ceilPx: WAGER_Q_CEIL * 16,
-    maxLines: 3,
-    lineHeight: 1.15,
-  })
+  const [fontsReady, setFontsReady] = useState(false)
+  useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
+  const size = useMemo(
+    () => fitToBox(text ?? '', { ...SHINY_CHOICE_Q_BOX, family: theme.fonts.display }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [text, theme.fonts.display, fontsReady]
+  )
   if (!text) return null
   return (
-    <div ref={boxRef} style={{ width: '100%', maxWidth: 1300, height: '30vh', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ width: '100%', maxWidth: SHINY_CHOICE_Q_BOX.boxW, height: SHINY_CHOICE_Q_BOX.boxH, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p style={{
         margin: 0, textAlign: 'center',
         fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,

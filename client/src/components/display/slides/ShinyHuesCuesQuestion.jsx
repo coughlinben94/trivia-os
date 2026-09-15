@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../../lib/supabase.js'
 import { getHuesCuesCell } from '../../../lib/huesCuesGrid.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_OUT, EASE_DROP } from '../../../lib/easings.js'
-import { useFitToBox, WAGER_Q_FLOOR, WAGER_Q_CEIL } from '../../../lib/autoFitText.js'
+import { fitToBox, SHINY_CHOICE_Q_BOX } from '../../../lib/autoFitText.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 
 // The TV side of Hues and Cues. Mirrors ShinyWagerQuestion's beat structure
@@ -72,21 +72,23 @@ export default function ShinyHuesCuesQuestion({ slide, show, theme }) {
   )
 }
 
-// Measure-to-fit, same bounds and useFitToBox call as ShinyChoiceQuestion's/
-// ShinyWagerQuestion's own QuestionText — the clue is the only content on
-// screen during the guessing phase, same shape as those surfaces.
+// Fixed design-resolution box (SHINY_CHOICE_Q_BOX, shared with
+// ShinyChoiceQuestion — same box size, same fix) instead of a real DOM
+// measurement — see that const's comment in autoFitText.js: a real
+// `useFitToBox` measurement shrank on any TV browser narrower than 1920px,
+// since the host's editor preview always measures a hard-pinned 1920x1080
+// iframe instead.
 function QuestionText({ text, theme }) {
-  const boxRef = useRef(null)
-  const size = useFitToBox(boxRef, text ?? '', {
-    family: theme.fonts.display,
-    floorPx: WAGER_Q_FLOOR * 16,
-    ceilPx: WAGER_Q_CEIL * 16,
-    maxLines: 3,
-    lineHeight: 1.15,
-  })
+  const [fontsReady, setFontsReady] = useState(false)
+  useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
+  const size = useMemo(
+    () => fitToBox(text ?? '', { ...SHINY_CHOICE_Q_BOX, family: theme.fonts.display }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [text, theme.fonts.display, fontsReady]
+  )
   if (!text) return null
   return (
-    <div ref={boxRef} style={{ width: '100%', maxWidth: 1300, height: '30vh', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ width: '100%', maxWidth: SHINY_CHOICE_Q_BOX.boxW, height: SHINY_CHOICE_Q_BOX.boxH, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p style={{
         margin: 0, textAlign: 'center',
         fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,

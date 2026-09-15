@@ -255,6 +255,31 @@ export const REVEAL_BOX = {
   maxLines: 2, lineHeight: 1.1,
 }
 
+// Shiny Choice/Hues-Cues question text: fixed at 1300x324 — 30% of the
+// 1920x1080 design stage, same numbers these boxes always had, but as a
+// FIXED design-resolution box now instead of a real `useFitToBox` DOM
+// measurement (was `width:'100%', maxWidth:1300, height:'30vh'` measured via
+// ResizeObserver). That real measurement is exactly the bug found
+// 2026-09-14: the host's editor preview always renders inside an iframe
+// hard-pinned to 1920x1080, so it always measured a full 1300px-wide box —
+// but a real TV browser whose actual window is narrower (kiosk chrome, a
+// non-native resolution, anything short of true 1920px) measured a smaller
+// real box and rendered smaller text than the host ever saw. Every other
+// question-type slide (QUESTION_BOX above) already sizes against a fixed
+// design-width box for exactly this reason — this brings Choice/Hues-Cues
+// in line with that existing convention instead of introducing a new one.
+export const SHINY_CHOICE_Q_BOX = {
+  boxW: 1300, boxH: 324, floorPx: WAGER_Q_FLOOR * 16, ceilPx: WAGER_Q_CEIL * 16,
+  maxLines: 3, lineHeight: 1.15,
+}
+
+// Shiny Wager question text: fixed at 1500x410 — 38% of the design stage.
+// Same fixed-box fix as SHINY_CHOICE_Q_BOX above, same bug, same reasoning.
+export const SHINY_WAGER_Q_BOX = {
+  boxW: 1500, boxH: 410, floorPx: WAGER_Q_FLOOR * 16, ceilPx: WAGER_Q_CEIL * 16,
+  maxLines: 3, lineHeight: 1.15,
+}
+
 /**
  * Container-relative fit. Measures the referenced box at runtime (ResizeObserver)
  * and returns the fitToBox px size. For captions/cells/rows whose width isn't fixed.

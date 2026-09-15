@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../../lib/supabase.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { WAGER_TIERS, getWagerTier, wagerOddsLine, wagerTierReachable, parseWagerNumber } from '../../../lib/wagerScoring.js'
-import { useFitToBox, WAGER_Q_FLOOR, WAGER_Q_CEIL } from '../../../lib/autoFitText.js'
+import { fitToBox, SHINY_WAGER_Q_BOX } from '../../../lib/autoFitText.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 
 // Fixed tier signal colors, same rule as SHINY_GOLD: the calm → dangerous
@@ -177,17 +177,21 @@ export default function ShinyWagerQuestion({ slide, show, theme }) {
   )
 }
 
+// Fixed design-resolution box (SHINY_WAGER_Q_BOX), not a real DOM
+// measurement — see that const's comment in autoFitText.js: a real
+// `useFitToBox` measurement of this box shrank on any real TV browser
+// narrower than 1920px, since the host's editor preview always measures a
+// hard-pinned 1920x1080 iframe instead.
 function QuestionText({ text: questionText, theme }) {
-  const boxRef = useRef(null)
-  const size = useFitToBox(boxRef, questionText ?? '', {
-    family: theme.fonts.display,
-    floorPx: WAGER_Q_FLOOR * 16,
-    ceilPx: WAGER_Q_CEIL * 16,
-    maxLines: 3,
-    lineHeight: 1.15,
-  })
+  const [fontsReady, setFontsReady] = useState(false)
+  useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
+  const size = useMemo(
+    () => fitToBox(questionText ?? '', { ...SHINY_WAGER_Q_BOX, family: theme.fonts.display }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [questionText, theme.fonts.display, fontsReady]
+  )
   return (
-    <div ref={boxRef} style={{ width: '100%', maxWidth: 1500, height: '38vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ width: '100%', maxWidth: SHINY_WAGER_Q_BOX.boxW, height: SHINY_WAGER_Q_BOX.boxH, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p style={{
         margin: 0, textAlign: 'center',
         fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
