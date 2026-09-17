@@ -24,6 +24,11 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   Sentry.init({
     dsn: import.meta.env.VITE_SENTRY_DSN,
     beforeSend: (event) => (reloadingForStaleChunk ? null : event),
+    // TRIVIA-OS-D: @supabase/realtime-js's Serializer.decode JSON.parses
+    // incoming WebSocket frames with no try/catch — a frame truncated by a
+    // flaky mobile connection throws inside their onmessage handler, no app
+    // frames in the stack. Their bug, not reachable from our code.
+    ignoreErrors: ["JSON Parse error: Unterminated string"],
   })
 }
 
