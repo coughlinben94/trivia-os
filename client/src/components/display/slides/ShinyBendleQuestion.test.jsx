@@ -19,6 +19,7 @@ const SONG = {
 
 let songRow = SONG
 let loadFails = new Set()
+let loadStalls = new Set() // stem load never settles — distinct from loadFails, which rejects immediately
 // When true the bendle_songs fetch never settles — the only way to hold the
 // component in its 'loading' beat, since the mocked stem loads resolve inside
 // the same act() flush that renders.
@@ -51,9 +52,11 @@ vi.mock('tone', () => ({
       volume: { value: 0, rampTo: vi.fn(), setValueAtTime: vi.fn() },
       buffer: { duration: 300 },
       toDestination: () => player,
-      load: url => (loadFails.has(url)
-        ? Promise.reject(new Error(`boom: ${url}`))
-        : Promise.resolve(player)),
+      load: url => (loadStalls.has(url)
+        ? new Promise(() => {})
+        : loadFails.has(url)
+          ? Promise.reject(new Error(`boom: ${url}`))
+          : Promise.resolve(player)),
       sync: () => player,
       start: vi.fn(() => player),
       dispose: vi.fn(),
@@ -81,6 +84,7 @@ describe('<ShinyBendleQuestion>', () => {
   beforeEach(() => {
     songRow = SONG
     loadFails = new Set()
+    loadStalls = new Set()
     songPending = false
     transport.seconds = 0
     vi.clearAllMocks()
@@ -186,6 +190,32 @@ describe('<ShinyBendleQuestion>', () => {
 
     expect(container.textContent).toContain('load this song')
     expect(transport.start).not.toHaveBeenCalled()
+  })
+
+  it('times out and shows the error line if a stem load stalls (bad wifi) instead of hanging on "Loading song…" forever', async () => {
+    loadStalls = new Set(['d.mp3']) // drums stalls, never resolves or rejects
+    vi.useFakeTimers()
+    try {
+      await render(bendleSlide({ bendleStepIndex: 0 })) // drums only, and it stalls
+      await act(async () => { await vi.advanceTimersByTimeAsync(20000) }) // STEM_LOAD_TIMEOUT_MS
+      expect(container.textContent).toContain('load this song')
+      expect(transport.start).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('times out and shows the error line if the song fetch stalls (bad wifi) instead of hanging on "Loading song…" forever', async () => {
+    songPending = true
+    vi.useFakeTimers()
+    try {
+      await render(bendleSlide({}))
+      await act(async () => { await vi.advanceTimersByTimeAsync(8000) }) // SONG_FETCH_TIMEOUT_MS
+      expect(container.textContent).toContain('load this song')
+      expect(transport.start).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('stops the Transport and disposes the players on unmount', async () => {

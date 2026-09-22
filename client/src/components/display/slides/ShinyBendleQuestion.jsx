@@ -19,6 +19,19 @@ import ShinySignal from '../ShinySignal.jsx'
 // unconditionally is safe for songs that don't have it.
 const STEM_KEYS = ['drums', 'bass', 'other', 'guitar', 'vocals']
 const FADE_SECONDS = 1.5
+const SONG_FETCH_TIMEOUT_MS = 8000
+const STEM_LOAD_TIMEOUT_MS = 20000
+
+// Neither the Supabase query nor Tone's fetch-based player.load() ever
+// reject on a stalled connection (bar wifi) — they just never settle. Every
+// await in this file needs this wrapper, or a stall leaves loadState stuck
+// at 'loading' forever with no way out short of reloading /display.
+function withTimeout(promise, ms, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
+  ])
+}
 
 // The TV side of ONE Bendle step-slide. A round is 3 REAL sibling slides
 // (2026-09-08 rebuild, Ben: "i asked you for three different slides. one
@@ -59,8 +72,25 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
     // leaves 'loading' and the TV shows "Loading song…" forever with no way
     // out — 2026-09-05 whole-branch review, Fix 1.
     if (!data.bendleSongId) { setLoadState('error'); return }
-    supabase.from('bendle_songs').select('*').eq('id', data.bendleSongId).single()
-      .then(({ data: row }) => { if (!cancelled) setSong(row) })
+    withTimeout(
+      supabase.from('bendle_songs').select('*').eq('id', data.bendleSongId).single(),
+      SONG_FETCH_TIMEOUT_MS,
+      'song fetch timed out',
+    )
+      .then(({ data: row, error }) => {
+        if (cancelled) return
+        if (error || !row) {
+          console.error('[Bendle] song fetch failed:', error)
+          setLoadState('error')
+          return
+        }
+        setSong(row)
+      })
+      .catch(e => {
+        if (cancelled) return
+        console.error('[Bendle] song fetch failed:', e)
+        setLoadState('error')
+      })
     return () => { cancelled = true }
   }, [data.bendleSongId])
 
@@ -87,27 +117,37 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
         ? STEM_KEYS
         : tiers.slice(0, stepIndex + 1).flatMap(t => t.stems)
 
-      const players = {}
-      for (const key of stemKeys) {
+      // Loaded concurrently, not serially: a stalled stem used to block every
+      // stem after it (up to 5x STEM_LOAD_TIMEOUT_MS before the beat gave
+      // up). Concurrent + per-stem timeout means one bad stem can't hold the
+      // rest hostage.
+      const loaded = await Promise.allSettled(stemKeys.map(async key => {
         const url = song[`${key}_url`]
-        if (!url) continue
-        let player = null
+        if (!url) return null
+        const player = new Tone.Player().toDestination()
         try {
-          player = new Tone.Player().toDestination()
-          await player.load(url)
+          await withTimeout(player.load(url), STEM_LOAD_TIMEOUT_MS, `stem "${key}" load timed out`)
+          return { key, player }
         } catch (e) {
           // Per-stem failure skips that layer rather than blocking the whole
           // beat on a live TV: it is left out of `players`, so it just
           // never sounds and the rest of the mix plays.
           console.error(`[Bendle] stem load failed for "${key}":`, e)
-          player?.dispose()
-          continue
+          player.dispose()
+          return null
         }
-        if (killed) { player.dispose(); return }
-        created.push(player)
-        players[key] = player
+      }))
+      if (killed) {
+        for (const r of loaded) if (r.status === 'fulfilled' && r.value) r.value.player.dispose()
+        return
       }
-      if (killed) return
+      const players = {}
+      for (const r of loaded) {
+        if (r.status === 'fulfilled' && r.value) {
+          created.push(r.value.player)
+          players[r.value.key] = r.value.player
+        }
+      }
       if (Object.keys(players).length === 0) { setLoadState('error'); return }
 
       // One shared offset for every stem, computed from the SHORTEST loaded
