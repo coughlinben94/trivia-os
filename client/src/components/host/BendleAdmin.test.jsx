@@ -11,12 +11,13 @@ import { createRoot } from 'react-dom/client'
 // the SONG_LIST_COLUMNS query this mock answers) — songsFixture is mutated
 // per-test before rendering.
 let songsFixture = []
+let lastSelectColumns = null
 vi.mock('../../lib/supabase.js', () => ({
   supabase: {
     channel: () => ({ on: () => ({ subscribe: () => ({}) }) }),
     removeChannel: () => {},
     from: () => ({
-      select: () => ({ order: () => Promise.resolve({ data: songsFixture }) }),
+      select: columns => { lastSelectColumns = columns; return { order: () => Promise.resolve({ data: songsFixture }) } },
     }),
   },
 }))
@@ -49,6 +50,25 @@ describe('<BendleAdmin> song list', () => {
     expect(container.textContent).toContain('Starts at 0:42')
     const scrubButtons = [...container.querySelectorAll('button')].filter(b => b.textContent.includes('Scrub'))
     expect(scrubButtons).toHaveLength(1) // only the ready song gets one
+
+    act(() => root.unmount())
+    container.remove()
+  })
+
+  // Regression: the list refetch (mount/insert/delete) used to leave
+  // end_offset_seconds out of its column select, so a saved end trim
+  // reset to "full duration" every time the panel reloaded, even though
+  // the DB still had the real value (Ben: "the scrubbed end doesn't
+  // keep it").
+  it('fetches end_offset_seconds along with the rest of the song list columns', async () => {
+    songsFixture = []
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => { root.render(<BendleAdmin onClose={() => {}} />) })
+    await settle()
+
+    expect(lastSelectColumns).toContain('end_offset_seconds')
 
     act(() => root.unmount())
     container.remove()

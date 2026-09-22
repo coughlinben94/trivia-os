@@ -13,7 +13,7 @@ const STEM_KEYS = ['drums', 'bass', 'other', 'vocals']
 // created_at/status/artist/error_text) never selected — a song already
 // `ready` at page-load time would otherwise render its scrubber with no
 // audio to fetch until the next realtime UPDATE happened to arrive.
-const SONG_LIST_COLUMNS = 'id, title, created_at, status, artist, error_text, drums_url, bass_url, other_url, guitar_url, guitar_status, guitar_error, start_offset_seconds'
+const SONG_LIST_COLUMNS = 'id, title, created_at, status, artist, error_text, drums_url, bass_url, other_url, guitar_url, guitar_status, guitar_error, start_offset_seconds, end_offset_seconds'
 
 function cleanSpotifyTitle(title) {
   return title
