@@ -133,7 +133,7 @@ export const ROUND_TYPES = [
   { id: 'pyl',    label: 'Press Your Luck!', needsNumber: false, title: 'Press Your Luck!' },
 ]
 
-export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange, initialData = {}, shinyFormats, shinyLoading, onQuickAddRound, onOpenBendleAdmin, bendleAdminOpen, createFormat }) {
+export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange, initialData = {}, shinyFormats, shinyLoading, onQuickAddRound, onOpenBendleAdmin, bendleAdminOpen, createFormat, deleteFormat }) {
   const [type, setType] = useState(initialData.type ?? null)
   const typeCard = TYPE_CARDS.find(c => c.type === type)
 
@@ -174,6 +174,11 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   const [customShinyName,      setCustomShinyName]      = useState('')
   const [customShinyCreating,  setCustomShinyCreating]  = useState(false)
   const [customShinyError,     setCustomShinyError]     = useState(null)
+  // Tracks a format created via the Custom tile THIS session so it can be
+  // deleted again once actually used (Ben, 2026-09-22: "after i add it it
+  // should delete itself") — genuinely one-off, shouldn't linger in the
+  // Format Library. A format the host picked normally is never touched.
+  const [customShinyFormatId,  setCustomShinyFormatId]  = useState(null)
 
   async function handleCreateCustomShiny() {
     const name = customShinyName.trim()
@@ -188,6 +193,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
         input_schema: { type: 'text', slots: 1, seriesEnabled: false },
       })
       setSelectedShinyFmt(created)
+      setCustomShinyFormatId(created.id)
       setShowCustomShinyInput(false)
       setCustomShinyName('')
     } catch (e) {
@@ -289,11 +295,22 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
     // a shinyGroupId the new question is a loose slide (no sidebar group, no
     // atomic reorder, no title to jump to), and `shiny-title` is hidden in
     // the picker so nothing could give it one later.
-    const addShiny = payload => onAddSlide(
-      formatAlreadyIntroducedThisRound(selectedShinyFmt.id)
-        ? withShinyGroupId(payload)
-        : withShinyTitleSlide(payload, selectedShinyFmt)
-    )
+    const addShiny = async payload => {
+      const result = await onAddSlide(
+        formatAlreadyIntroducedThisRound(selectedShinyFmt.id)
+          ? withShinyGroupId(payload)
+          : withShinyTitleSlide(payload, selectedShinyFmt)
+      )
+      // One-off cleanup: the slide already carries its own copy of
+      // shinyFormatName/Icon (stamped above), so deleting the library row
+      // now doesn't touch what was just created — only removes it from
+      // future format pickers.
+      if (customShinyFormatId && selectedShinyFmt.id === customShinyFormatId) {
+        setCustomShinyFormatId(null)
+        deleteFormat(customShinyFormatId).catch(() => {})
+      }
+      return result
+    }
     const nonBonusQ   = roundSlides.filter(s => (s.type === 'question' || s.type === 'pixelate-series' || s.type === 'grid' || s.type === 'flip-em-down') && !s.data?.isBonus)
     const bonusQ      = roundSlides.filter(s => s.type === 'question' && s.data?.isBonus)
     const qNum = nonBonusQ.length + 1

@@ -178,4 +178,68 @@ describe('AddSlideWizard shiny picker — custom one-off', () => {
     })
     expect(host.textContent).toContain('Add Trivia Team Roast')
   })
+
+  // 2026-09-22, Ben: "but then after i add it it should delete itself" — a
+  // custom one-off's library row is cleanup-only; the created slide already
+  // carries its own copy of the name/icon, so this must not block or alter
+  // slide creation itself.
+  it('deletes the custom format after the slide is actually created, once', async () => {
+    const createFormat = vi.fn(async format => ({ id: 'fmt_custom1', ...format }))
+    const deleteFormat = vi.fn(async () => {})
+    const onAddSlide = vi.fn(async () => [{ id: 'slide_1', type: 'question', roundId: 'round_1', data: {} }])
+    act(() => root.render(
+      <AddSlideWizard
+        show={{ id: 'show_1', rounds: [{ id: 'round_1', number: 1, title: 'Round 1' }] }}
+        shinyFormats={FORMATS}
+        shinyLoading={false}
+        initialData={{ type: 'shiny-question', roundId: 'round_1' }}
+        onAddSlide={onAddSlide}
+        onClose={() => {}}
+        onTypeChange={() => {}}
+        createFormat={createFormat}
+        deleteFormat={deleteFormat}
+      />,
+    ))
+    click('Custom — name a one-off shiny')
+    const input = host.querySelector('input[placeholder="Name this one-off shiny…"]')
+    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+    act(() => {
+      nativeSetter.call(input, 'Trivia Team Roast')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    click('Create & select')
+    await act(async () => { await Promise.resolve() })
+
+    click('Add Trivia Team Roast') // picker step -> details step
+    click('Add Trivia Team Roast') // details step -> actual submit
+    await act(async () => { await Promise.resolve() })
+
+    expect(onAddSlide).toHaveBeenCalledTimes(1)
+    expect(deleteFormat).toHaveBeenCalledTimes(1)
+    expect(deleteFormat).toHaveBeenCalledWith('fmt_custom1')
+  })
+
+  it('never touches a normally-picked format', async () => {
+    const deleteFormat = vi.fn(async () => {})
+    const onAddSlide = vi.fn(async () => [{ id: 'slide_1', type: 'question', roundId: 'round_1', data: {} }])
+    act(() => root.render(
+      <AddSlideWizard
+        show={{ id: 'show_1', rounds: [{ id: 'round_1', number: 1, title: 'Round 1' }] }}
+        shinyFormats={FORMATS}
+        shinyLoading={false}
+        initialData={{ type: 'shiny-question', roundId: 'round_1' }}
+        onAddSlide={onAddSlide}
+        onClose={() => {}}
+        onTypeChange={() => {}}
+        deleteFormat={deleteFormat}
+      />,
+    ))
+    click('Matching Fmt')
+    click('Add Matching Fmt') // picker step -> details step
+    click('Add Matching Fmt') // details step -> actual submit
+    await act(async () => { await Promise.resolve() })
+
+    expect(onAddSlide).toHaveBeenCalledTimes(1)
+    expect(deleteFormat).not.toHaveBeenCalled()
+  })
 })
