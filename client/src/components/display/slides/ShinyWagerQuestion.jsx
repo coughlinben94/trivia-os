@@ -211,8 +211,8 @@ function TierStrip({ theme, bodyFont }) {
   return (
     <div style={{ display: 'flex', gap: '1.75rem', alignItems: 'center' }}>
       {WAGER_TIERS.map(t => (
-        <span key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontFamily: bodyFont, fontSize: '1.05rem', color: `${theme.colors.text}70` }}>
-          <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>{t.emoji}</span>
+        <span key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontFamily: bodyFont, fontSize: '1.3rem', fontWeight: 700, color: `${theme.colors.text}a0` }}>
+          <span style={{ fontSize: '1.6rem', lineHeight: 1 }}>{t.emoji}</span>
           <span style={{ color: TIER_TINT[t.id], fontWeight: 700 }}>{t.points}</span>
         </span>
       ))}
