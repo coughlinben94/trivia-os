@@ -57,23 +57,23 @@ Minimum 8–10 raw candidates and 2 limit-testers, per generator-common.md. Exam
 
 ## Phase 3 — the five checks
 
-Uniform-mechanic: write out the EX item plus 2–3 more real-sounding items. Topic-specialist: run the check against the 6-slot item-type sketch — never real finished items. Confirm all five:
+Uniform-mechanic: the check is the six-to-nine answer list in (c). Topic-specialist: run the check against the 6-slot item-type sketch — never real finished items. Confirm all five:
 
 1. **Passes the hard paper-test constraint** — every one of the 6–9 items is exactly one thing written on paper, no app/device/grid/turn-based mechanic, no item secretly an open-ended brainstorm — OR, topic-specialist only, one of the 6 slots is a legitimate phone-matching carve-out (connect-the-pairs only) against the shared cap; every other slot paper-only.
-2. **Genuinely playable live** — each item readable/showable in under 30–45 seconds, the round fits the normal 6–9-minute window (limit-tester setup rule per generator-common.md). Uniform: the shape must actually hold for a real 6–9-item set — source 6–9 independently verifiable items, not the 2–3 you thought of; a concept that runs dry at item 4 is a shiny format wearing a costume. Topic-specialist: skip the uniform check; verify the topic has real depth for 6 genuinely varied items, not 2–3 padded out.
+2. **Genuinely playable live** — each item readable/showable in under 30–45 seconds, the round fits the normal 6–9-minute window (limit-tester setup rule per generator-common.md). Uniform: the (c) line names 6 to 9 real items and the one word each answer is. A concept that cannot name them is not a survivor. Topic-specialist: skip that list; verify the topic has real depth for 6 genuinely varied items, not 2–3 padded out.
 3. **Not a reskin.** Uniform: check against the full Phase 1 families and both format-library tables, not just the family it was paired from; flag (don't silently merge) genuine near-duplicates the way format-library does for "Off the Menu" / "86'd!" and "Recall Notice!" / "Recall! That! Toy!" — let Ben decide. Topic-specialist: check the topic against Phase 1.5 AND, since that table only holds this agent's past rejections, sanity-check it isn't an obvious repeat of a domain Ben runs often (Disney, sports, music) without a fresh angle — flag for Ben rather than guess at his history.
 4. **Actually fun, not just legal.** Ben, 2026-08-23: "the shiny questions are supposed to take off the blinders. think outside the box. be different, unique. the fun questions are what people come back for." At swing length: a candidate that's paper-answerable, playable, and fresh but STILL flat across 6–9 items (no comic or performative texture, no "click") fails. Does the shape itself have personality the way Fauxbituaries or Haikus does, or is it a colorless template repeated 6–9 times? Topic-specialist: does the domain reward a fan's excitement, not just fill 6 slots?
 5. **Kill-list survival** — per generator-common.md. "Recall Notice!" and "Sudden Death" from the 2026-07 catalog fail by construction; "Fauxbituaries" passes.
 
 ## Phase 4 — columns
 
-Uniform: `mechanic` = the uniform answer shape; `worked_example` = EX item + samples. Topic-specialist: `mechanic` = topic + why it's fresh; `worked_example` = the item-type sketch (never finished questions). Insert per generator-common.md.
+Uniform: `mechanic` = the uniform answer shape; `worked_example` = the six-to-nine item lines with their one-word answers. Topic-specialist: `mechanic` = topic + why it's fresh; `worked_example` = the item-type sketch (never finished questions). Insert per generator-common.md.
 
 ## Output — (c) and (d) for this lane
 
 Uniform-mechanic:
-- **(c)** The EX item (rounds often open with one) plus at least two more sample items with real, plausible placeholder content, showing the shape holds across the round.
-- **(d)** What the single written answer is per item and why no app/grid/device/turn-based element is needed, plus one line on whether 6–9 genuine items are actually sourceable.
+- **(c)** Six to nine real items. Each line is the item in a few words, then the one-word answer. No full question prose. The list is the proof the round exists.
+- **(d)** What the single written answer is per item, and why no app, grid, device, or turn-based element is needed.
 
 Topic-specialist (never finished items):
 - **(a)** the topic named like a round title; **(b)** the domain gap it fills and why it rewards a niche-expert team.

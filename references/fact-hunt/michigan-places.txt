@@ -1,0 +1,564 @@
+Acme
+Ada
+Addison
+Adrian
+Alanson
+Albion
+Alcona County
+Alden
+Alger
+Alger County
+Allegan
+Allegan County
+Allen
+Allen Park
+Allendale
+Alma
+Alpena
+Alpena County
+Amasa
+Amble
+Ann Arbor
+Antrim County
+Arenac County
+Ashley
+Athens
+Atlanta
+Atwood
+Au Train
+Auburn Hills
+Bailey
+Bangor
+Bannister
+Baraga County
+Barbeau
+Bark River
+Baroda
+Barry County
+Battle Creek
+Bay City
+Bay County
+Bay Mills
+Beal City
+Bear Lake
+Beaverton
+Bellaire
+Belleville
+Benton Harbor
+Benzie County
+Benzonia
+Bergland
+Berrien County
+Berrien Springs
+Bessemer
+Beulah
+Big Rapids
+Birmingham
+Blanchard
+Blaney Park
+Blissfield
+Bloomfield Hills
+Bloomingdale
+Boyne City
+Boyne Falls
+Branch County
+Breckenridge
+Brethren
+Bridgman
+Brighton
+Brimley
+Britton
+Bronson
+Brooklyn
+Bruce Crossing
+Buchanan
+Byron Center
+Cadillac
+Caledonia
+Calhoun County
+Camden
+Canton
+Carney
+Carson City
+Cascade
+Casnovia
+Cass County
+Cassopolis
+Cedar River
+Cedar Springs
+Cedarville
+Cement City
+Central Lake
+Channing
+Charlevoix
+Charlevoix County
+Charlotte
+Chatham
+Cheboygan
+Cheboygan County
+Chelsea
+Chesaning
+Chippewa County
+Christmas
+Clare
+Clare County
+Clarklake
+Clarkston
+Clinton
+Clinton County
+Coldwater
+Coleman
+Coloma
+Commerce
+Comstock
+Comstock Park
+Concord
+Conklin
+Cooks
+Coopersville
+Copemish
+Cornell
+Corunna
+Crawford County
+Crystal Falls
+Curtis
+Custer
+Dafter
+Daggett
+Dansville
+De Tour Village
+Dearborn
+Dearborn Heights
+Deerfield
+Delta County
+Delton
+Denver Township
+Detroit
+Dexter
+Dickinson County
+Dimondale
+Dorr
+Douglas
+Dowagiac
+Drummond Island
+Durand
+East Jordan
+East Lansing
+East Tawas
+Eastport
+Eaton County
+Eaton Rapids
+Eckerman
+Ecorse
+Edmore
+Edwardsburg
+Elberta
+Elk Rapids
+Ellsworth
+Elsie
+Emmet County
+Engadine
+Escanaba
+Essexville
+Ewen
+Fairview
+Faithorn
+Falmouth
+Farmington Hills
+Farwell
+Fayette
+Felch
+Fennville
+Fenton
+Ferndale
+Ferrysburg
+Fife Lake
+Flat Rock
+Flint
+Forest Hills
+Foster City
+Fountain
+Fowler
+Fowlerville
+Frankfort
+Frederic
+Free Soil
+Freeland
+Freeport
+Fremont
+Frontier
+Fruitport
+Galesburg
+Garden City
+Gaylord
+Genesee County
+Germfask
+Gladstone
+Gladwin
+Gladwin County
+Gobles
+Gogebic County
+Gould City
+Grand Haven
+Grand Ledge
+Grand Marais
+Grand Rapids
+Grand Traverse County
+Grandville
+Grant
+Grass Lake
+Gratiot County
+Grayling
+Greenland
+Gregory
+Gulliver
+Gwinn
+Hamburg
+Harbor Springs
+Harrietta
+Harris
+Harrison
+Harrisville
+Hart
+Hartford
+Hartland
+Harvey
+Haslett
+Hastings
+Hemlock
+Henderson
+Hermansville
+Hesperia
+Hessel
+Hiawatha
+Highland
+Hillman
+Hillsdale
+Hillsdale County
+Holland
+Holly
+Holt
+Homer
+Honor
+Hopkins
+Houghton County
+Houghton Lake
+Howard City
+Howell
+Hubbard Lake
+Hudson
+Hudsonville
+Hulbert
+Hurley
+Ida
+Indian River
+Ingham County
+Inkster
+Interlochen
+Ionia County
+Iosco County
+Iron County
+Iron Mountain
+Iron River
+Ironwood
+Isabella County
+Ishpeming
+Ithaca
+Jackson
+Jackson County
+Jenison
+Jonesville
+Kalamazoo
+Kalamazoo County
+Kaleva
+Kalkaska
+Kalkaska County
+Kawkawlin
+Kendall
+Kent City
+Kent County
+Kentwood
+Keweenaw County
+Kincheloe
+Kingsford
+Kingsley
+Kinross
+Lake Ann
+Lake City
+Lake County
+Lake Orion
+Land O Lakes
+Lansing
+Lawton
+Leelanau County
+Lenawee County
+Leroy
+Levering
+Lewiston
+Lincoln Park
+Linden
+Linwood
+Litchfield
+Livingston County
+Livonia
+Loretto
+Luce County
+Ludington
+Lyons
+Mackinac County
+Mackinaw City
+Macomb County
+Mancelona
+Manchester
+Manistee
+Manistee County
+Manistique
+Manitou Beach
+Manton
+Maple Rapids
+Marcellus
+Marenisco
+Marion
+Marne
+Marquette
+Marquette County
+Marshall
+Martin
+Mason
+Mason County
+Mattawan
+Mayfield
+McBain
+McMillan
+Mecosta County
+Melvindale
+Menominee
+Menominee County
+Merrill
+Merritt
+Mesick
+Metropolitan
+Michigamme
+Middleville
+Midland
+Midland County
+Milan
+Milford
+Mio
+Missaukee County
+Moline
+Monroe
+Monroe County
+Montague
+Montcalm County
+Montmorency County
+Morenci
+Morley
+Mount Pleasant
+Muir
+Munising
+Munith
+Muskegon
+Muskegon County
+Muskegon Heights
+Nadeau
+Napoleon
+Nashville
+Nathan
+Naubinway
+Negaunee
+Newaygo
+Newaygo County
+Newberry
+Niles
+North Adams
+North Muskegon
+Northville
+Norton Shores
+Norvell
+Norway
+Norwood
+Novi
+Nunica
+Oakland County
+Oakley
+Oceana County
+Ogemaw County
+Okemos
+Onekama
+Onsted
+Ontonagon
+Ontonagon County
+Osceola County
+Oscoda
+Oscoda County
+Ossineke
+Otsego
+Otsego County
+Ottawa County
+Ovid
+Owosso
+Oxford
+Paradise
+Paw Paw
+Pellston
+Pentwater
+Perkins
+Perronville
+Perry
+Petersburg
+Petoskey
+Pewamo
+Pickford
+Pinckney
+Pinconning
+Pittsford
+Plainwell
+Plymouth
+Pontiac
+Portage
+Portland
+Potterville
+Powers
+Presque Isle County
+Prudenville
+Quincy
+Ramsay
+Rapid City
+Rapid River
+Ravenna
+Reading
+Redford
+Reed City
+Republic
+Rhodes
+Richland
+River Rouge
+Riverdale
+Rochester
+Rochester Hills
+Rock
+Rockford
+Rockland
+Romulus
+Roscommon
+Roscommon County
+Rose City
+Rosebush
+Rothbury
+Royal Oak
+Rudyard
+Saginaw
+Saginaw County
+Sagola
+Saline
+Sand Lake
+Sanford
+Saugatuck
+Sault Ste Marie
+Sawyer
+Schoolcraft
+Schoolcraft County
+Scottville
+Seney
+Shanty Creek
+Shelby
+Shelbyville
+Shepherd
+Sheridan
+Shiawassee County
+Shingleton
+Sidney
+Silver City
+Six Lakes
+Skandia
+Somerset
+South Boardman
+South Haven
+South Lyon
+Southfield
+Spalding
+Sparta
+Spring Lake
+St Charles
+St Ignace
+St Johns
+St Joseph
+St Joseph County
+St Louis
+Stalwart
+Standish
+Stanton
+Stephenson
+Sterling
+Sterling Heights
+Stevensville
+Stockbridge
+Sturgis
+Sunfield
+Tawas City
+Taylor
+Tecumseh
+Tekonsha
+Temperance
+Thompson
+Thompsonville
+Three Rivers
+Torch Lake
+Traverse City
+Trenary
+Trenton
+Trout Creek
+Trout Lake
+Troy
+Twin Lake
+Union City
+Van Buren County
+Vandalia
+Vanderbilt
+Vermontville
+Vestaburg
+Vicksburg
+Vulcan
+Wakefield
+Waldron
+Walhalla
+Wallace
+Walled Lake
+Warren
+Washtenaw County
+Waterford
+Waters
+Watersmeet
+Watervliet
+Waucedah
+Wayland
+Wayne
+Wayne County
+Webberville
+Weidman
+Wells
+Wellston
+West Bloomfield
+West Branch
+Westland
+Westphalia
+Wexford County
+White Cloud
+White Pine
+Whitehall
+Whitmore Lake
+Williamsburg
+Williamston
+Wilson
+Winn
+Wixom
+Wolf Lake
+Wolverine
+Woodbury
+Woodhaven
+Woodland
+Wyandotte
+Wyoming
+Ypsilanti
+Zeeland
