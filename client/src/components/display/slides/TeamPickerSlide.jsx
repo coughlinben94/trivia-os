@@ -61,18 +61,17 @@ const BG_FIXED = '#000000'
 const STAR_ACCENT_FIXED = '#3a3a3a'
 const STAR_HIGHLIGHT_FIXED = '#e8e8e8'
 
-// Real gaps baked into the source file itself, not a playback bug — Ben
-// reported the ceremony music "falls silent" around team 5-8, every time.
-// Measured directly (ffmpeg silencedetect, -35dB/0.5s floor): the track
-// has ~6s of genuine dead air at 196.6s, 399.1s, 601.6s, 804.2s, 1006.7s
-// (a looped/reused bed with visible seams). Starting at AUDIO_START_S
-// (181s) lands the FIRST one 15.6s in — right at team #6-7 for a normal
-// roster, exactly the reported symptom. Skipped in real time (see the
-// timeupdate effect below) rather than moving AUDIO_START_S, which would
-// lose the track's own deliberate 3:01-3:04 fade-in this start point was
-// chosen for. Re-measure with the same ffmpeg command if this file is ever
-// re-encoded/replaced — these numbers go stale silently otherwise.
-const SILENT_GAPS = [[196.6, 202.8], [399.1, 405.4], [601.6, 607.9], [804.2, 810.4], [1006.7, 1012.9]]
+// team-intro-theme.mp3 used to have ~6s of genuine dead air baked into the
+// source at 196.6s/399.1s/601.6s/804.2s/1006.7s (a looped/reused bed with
+// visible seams) — Ben reported the ceremony music "falls silent" around
+// team 5-8, every time. A runtime duck/jump/recover skip (ffmpeg
+// silencedetect-measured timestamps, ~530ms dip) shipped 2026-09-14 but
+// still produced ~5s of real silence live on 2026-09-15 — root-caused to
+// the seek stalling on venue network load rather than the skip itself
+// being broken (see git history on this file). 2026-09-22: cut the 5 gaps
+// out of the source file directly (150ms crossfade at each join,
+// silencedetect-verified clean at the same -35dB/0.5s floor) instead,
+// removing the failure mode instead of racing it at runtime.
 
 // Deterministic seeded shuffle (mulberry32 + Fisher-Yates, shared PRNG core
 // from lib/seededRandom.js — same consolidation that file's own note
@@ -267,59 +266,6 @@ export default function TeamPickerSlide({ slide, show, isPreview }) {
     }, Math.max(0, REVEAL_S * 1000 - START_LEAD_MS));
     volAnimRef.current.timeout = t;
     return stopVolAnim;
-  }, []);
-
-  // Duck-jump-recover past real dead air in the source file (see
-  // SILENT_GAPS above) — no held silence at all (Ben: "i dont like the dead
-  // air", asked for blending instead). Measured the actual splice: the far
-  // side of each gap resumes at a real, non-trivial level (~-16 to -19dB,
-  // not a fade-up from nothing in the source itself), so jumping straight
-  // there at full volume would read as the music popping back in. Fades OUT
-  // over GAP_DUCK_MS, jumps `currentTime` once silent, then fades back IN
-  // over GAP_RECOVER_MS — reads as a musical dip, not an edit. Reuses the
-  // same setVol/stopVolAnim/volAnimRef the entry fade-in and settled fade-
-  // out already use (see those effects above) so there's still only one
-  // owner of a.volume at a time. `skippedGapEnd` guards against re-firing
-  // every `timeupdate` tick while still inside the duck ramp — timeupdate
-  // keeps firing as real time passes even though we haven't jumped yet.
-  // Also covers the currentPart>0 mount-resume estimate above landing
-  // inside a gap: that effect's `a.currentTime =` write queues its own
-  // `timeupdate` as a task rather than firing synchronously, and this
-  // effect (declared after it) attaches its listener in the same commit,
-  // before that task runs — so reordering these two effects would need
-  // re-checking this still holds.
-  const GAP_DUCK_MS = 180
-  const GAP_RECOVER_MS = 350
-  useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    let skippedGapEnd = null;
-    function skipSilence() {
-      const t = a.currentTime;
-      const gap = SILENT_GAPS.find(([start, end]) => t >= start && t < end);
-      if (!gap) { skippedGapEnd = null; return; }
-      const [, end] = gap;
-      if (skippedGapEnd === end) return;
-      skippedGapEnd = end;
-      stopVolAnim();
-      const startVol = a.volume, t0 = performance.now();
-      const duckStep = (now) => {
-        const p = Math.min(1, (now - t0) / GAP_DUCK_MS);
-        setVol(a, startVol * (1 - p));
-        if (p < 1) { volAnimRef.current.raf = requestAnimationFrame(duckStep); return; }
-        a.currentTime = end;
-        const t1 = performance.now();
-        const recoverStep = (now2) => {
-          const p2 = Math.min(1, (now2 - t1) / GAP_RECOVER_MS);
-          setVol(a, AUDIO_VOL * p2);
-          if (p2 < 1) volAnimRef.current.raf = requestAnimationFrame(recoverStep);
-        };
-        volAnimRef.current.raf = requestAnimationFrame(recoverStep);
-      };
-      volAnimRef.current.raf = requestAnimationFrame(duckStep);
-    }
-    a.addEventListener('timeupdate', skipSilence);
-    return () => a.removeEventListener('timeupdate', skipSilence);
   }, []);
 
   // live from teams table, baked on mount (everyone who scanned the QR).
