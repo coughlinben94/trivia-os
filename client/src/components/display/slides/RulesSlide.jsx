@@ -15,7 +15,7 @@ export const DEFAULT_RULES = [
   "This ain't just your mommas trivia....",
   'Teams up to 6 — extra players cost you points. 20 for the first extra, 10 each after.',
   'Whatever the quizmaster says, goes.',
-  'Phones down. Cheating gets your phone thrown in the river.',
+  "Phones are for playing the game, not for Googling the answer — cheat and it's going in the river.",
   "Have fun, and don't yell at me — I'm not a professional trivia writer!",
 ]
 

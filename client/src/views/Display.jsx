@@ -161,6 +161,35 @@ function NavDeniedBanner({ visible }) {
   )
 }
 
+// Small, discreet corner indicator — deliberately NOT a full banner like
+// NavDeniedBanner (top-center, loud): this can be up during a brief 1.5s
+// self-heal retry, and /display is a performance surface on a bar TV, not a
+// dashboard (Critical Rule 5). It exists purely so a host glancing at the
+// TV — not picking up a phone or laptop — has SOME on-screen sign the show
+// might be stuck, instead of the silent console.warn this used to be.
+function ConnLostBadge({ visible }) {
+  if (!visible) return null
+  return (
+    <div
+      style={{
+        position: 'fixed', bottom: 14, right: 14, zIndex: 200, pointerEvents: 'none',
+        display: 'flex', alignItems: 'center', gap: 6,
+        background: 'rgba(0,0,0,0.55)', color: '#ffcf5c',
+        fontFamily: 'DM Sans, sans-serif', fontSize: '0.7rem', fontWeight: 600,
+        letterSpacing: '0.02em', padding: '5px 10px', borderRadius: 999,
+      }}
+    >
+      <span className="conn-lost-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#ffcf5c' }} />
+      Reconnecting…
+      <style>{`
+        .conn-lost-dot { animation: connLostPulse 1s ease-in-out infinite; }
+        @keyframes connLostPulse { 0%,100%{opacity:0.4;} 50%{opacity:1;} }
+        @media (prefers-reduced-motion: reduce) { .conn-lost-dot { animation: none !important; } }
+      `}</style>
+    </div>
+  )
+}
+
 // ─── Inline host-PIN prompt ────────────────────────────────────────────────
 // /display must keep rendering the live show to the room no matter what, so
 // it is NOT wrapped in <HostPinGate> — a full-screen PIN modal over the venue
@@ -1213,6 +1242,14 @@ export default function Display() {
   // successfully) or a later nav write succeeds. Guard the RESULT, not the
   // cause: any 0-row/error outcome must surface, including unknown future ones.
   const [navDenied, setNavDenied] = useState(false)
+  // The realtime channel already self-heals (subscribe() below retries on
+  // CHANNEL_ERROR/TIMED_OUT/CLOSED) — but that recovery was entirely silent
+  // on the TV itself, just a console.warn. The host's "Connection lost" and
+  // the phone's ReconnectingBanner already tell a human something's wrong;
+  // the TV, the one surface a host can actually SEE without picking up a
+  // device, had nothing, so a retry that failed repeatedly left the room
+  // staring at a stale slide with zero on-screen sign anything was wrong.
+  const [connLost, setConnLost] = useState(false)
   // Break/warp ring state, reported up by DisplayInner (see its
   // onRingStateChange effect) — lives here so ONE ParticleBackground instance
   // can render across the PreShowScreen<->DisplayInner swap at Go Live
@@ -1700,6 +1737,7 @@ export default function Display() {
           if (channel !== myChannel) return
           if (status === 'SUBSCRIBED') {
             clearTimeout(retryTimer)
+            setConnLost(false)
             if (everSubscribed) {
               console.warn('[Display] realtime channel rejoined — refetching to catch up on any missed updates')
               refetchRow(showId)
@@ -1707,6 +1745,7 @@ export default function Display() {
             everSubscribed = true
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
             console.warn('[Display] realtime channel dropped:', status, '— rejoining in 1.5s')
+            setConnLost(true)
             clearTimeout(retryTimer)
             retryTimer = setTimeout(() => {
               const old = channel
@@ -1721,6 +1760,7 @@ export default function Display() {
 
     subscribe(show.id)
     return () => {
+      setConnLost(false)
       clearTimeout(retryTimer)
       // Null before removeChannel() so its synchronous CLOSED echo can't
       // re-arm retryTimer after the clearTimeout above — otherwise the orphan
@@ -1865,6 +1905,7 @@ export default function Display() {
           <PreShowScreen show={show} onInstall={canInstall ? handleInstall : null} />
         )}
         <NavDeniedBanner visible={navDenied} />
+        <ConnLostBadge visible={connLost} />
         {pinOpen && (
           <DisplayPinPrompt
             onDismiss={() => { stepRef.current = null; setPinOpen(false) }}

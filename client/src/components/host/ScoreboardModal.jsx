@@ -146,6 +146,26 @@ function QuickEntry({ teams, cols, onSave, onClose }) {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// Loose enough to catch "Ben's favorites!" vs "Bens Favorites" — the exact
+// case a hand-typed team name split one team's points across two scoreboard
+// rows (an apostrophe/punctuation difference `syncRegisteredTeams`'s
+// trim+lowercase normalize doesn't catch, since that pair isn't even the
+// same string once you strip case). This only flags a warning in the UI —
+// it doesn't touch the scoring fold-in's own exact-match normalize.
+function normalizeLoose(name) {
+  return (name ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+function duplicateNameIds(teams) {
+  const counts = {}
+  teams.forEach(t => {
+    const key = normalizeLoose(t.name)
+    if (!key) return
+    counts[key] = (counts[key] ?? 0) + 1
+  })
+  return new Set(teams.filter(t => counts[normalizeLoose(t.name)] > 1).map(t => t.id))
+}
+
 function addStats(teams, cols) {
   const withTotals = teams.map(t => ({ ...t, _total: computeTotal(t.scores, cols) }))
   const byTotal = [...withTotals].sort((a, b) => b._total - a._total)
@@ -169,7 +189,7 @@ const TH = ({ children, className = '', style }) => (
   </th>
 )
 
-function TeamTable({ teams, cols, onUpdateName, onUpdateScore, onDelete, highlightIds, atRiskCells }) {
+function TeamTable({ teams, cols, onUpdateName, onUpdateScore, onDelete, highlightIds, atRiskCells, dupeIds }) {
   return (
     <table className="w-full border-collapse text-sm">
       <thead>
@@ -197,6 +217,11 @@ function TeamTable({ teams, cols, onUpdateName, onUpdateScore, onDelete, highlig
                   className={`w-full text-sm text-gray-800 bg-transparent border-b outline-none py-0.5 placeholder:text-gray-300 ${
                     atRiskCells?.[`${team.id}:name`] ? 'border-amber-400' : 'border-transparent hover:border-gray-200 focus:border-[#1a6b4a]'
                   }`} />
+                {dupeIds?.has(team.id) && (
+                  <span className="block text-[10px] leading-tight text-amber-500 font-medium mt-0.5" title="Another team has almost this same name — probably a typo splitting one team's points in two">
+                    ⚠ similar to another team
+                  </span>
+                )}
               </td>
               {cols.map(c => {
                 const split = normalizeRoundScore(team.scores[c.key])
@@ -254,6 +279,7 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
 
   const cols           = deriveRoundCols(show)
   const teamsWithStats = addStats(teams, cols)
+  const dupeIds        = duplicateNameIds(teamsWithStats)
   const half           = Math.ceil(teamsWithStats.length / 2)
   const leftTeams      = teamsWithStats.slice(0, half)
   const rightTeams     = teamsWithStats.slice(half)
@@ -579,13 +605,13 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
             ) : (
               <div className="flex gap-4 min-h-0">
                 <div className="flex-1 overflow-x-auto">
-                  <TeamTable teams={leftTeams} cols={cols} onUpdateName={updateName} onUpdateScore={updateScore} onDelete={deleteTeam} highlightIds={highlightIds} atRiskCells={atRiskCells} />
+                  <TeamTable teams={leftTeams} cols={cols} onUpdateName={updateName} onUpdateScore={updateScore} onDelete={deleteTeam} highlightIds={highlightIds} atRiskCells={atRiskCells} dupeIds={dupeIds} />
                 </div>
                 {rightTeams.length > 0 && (
                   <>
                     <div className="w-px bg-gray-100 shrink-0 self-stretch" />
                     <div className="flex-1 overflow-x-auto">
-                      <TeamTable teams={rightTeams} cols={cols} onUpdateName={updateName} onUpdateScore={updateScore} onDelete={deleteTeam} highlightIds={highlightIds} atRiskCells={atRiskCells} />
+                      <TeamTable teams={rightTeams} cols={cols} onUpdateName={updateName} onUpdateScore={updateScore} onDelete={deleteTeam} highlightIds={highlightIds} atRiskCells={atRiskCells} dupeIds={dupeIds} />
                     </div>
                   </>
                 )}

@@ -85,7 +85,14 @@ function ShowPicker({ loadShow, listShows, createShow }) {
                   className="w-full bg-white border border-gray-200 rounded-xl px-5 py-4 flex items-center justify-between text-left hover:border-gray-400 hover:shadow-sm transition-all duration-[120ms] disabled:opacity-50"
                 >
                   <div>
-                    <p className="text-sm font-semibold text-gray-900">{s.title || 'Untitled'}</p>
+                    <p className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+                      {s.title || 'Untitled'}
+                      {s.isLive && (
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full">
+                          ● Live
+                        </span>
+                      )}
+                    </p>
                     {dateLabel && <p className="text-xs text-gray-400 mt-0.5">{dateLabel}</p>}
                   </div>
                   {working === s.id
@@ -250,6 +257,11 @@ function HostInner({ showApi }) {
       if (!savedResultsRef.current) {
         savedResultsRef.current = true
         showApi.saveResults()
+        // A scoreboard left showing from an earlier round otherwise sits on
+        // top of the winner slide (z-[60], above slide content) until the
+        // host remembers to hit Score/S — which is how the winner ended up
+        // hidden under the leaderboard on Sept 15.
+        if (show.showState.scoreboardVisible) showApi.setScoreboardVisible(false)
       }
     } else {
       savedResultsRef.current = false

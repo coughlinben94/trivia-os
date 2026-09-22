@@ -5,6 +5,7 @@ import { supabase } from '../../../lib/supabase.js'
 import {
   deriveRoundCols,
   computeTotal,
+  computePlaces,
   splitByRank,
   revealMetrics,
   revealTemplate,
@@ -169,7 +170,8 @@ export default function ScoreboardRevealSlide({ slide, show }) {
         const sorted = sbTeams
           .map(t => ({ ...t, total: computeTotal(t.scores, cols) }))
           .sort((a, b) => b.total - a.total)
-        setRanked(sorted)
+        const places = computePlaces(sorted)
+        setRanked(sorted.map((t, i) => ({ ...t, place: places[i] })))
         return
       }
 
@@ -183,7 +185,8 @@ export default function ScoreboardRevealSlide({ slide, show }) {
       const sorted = (teamsData ?? [])
         .map(t => ({ ...t, total: totals[t.id] ?? 0 }))
         .sort((a, b) => b.total - a.total)
-      setRanked(sorted)
+      const places = computePlaces(sorted)
+      setRanked(sorted.map((t, i) => ({ ...t, place: places[i] })))
     }
     load()
   }, [show.id, slide.id])
@@ -252,8 +255,8 @@ export default function ScoreboardRevealSlide({ slide, show }) {
             className="flex flex-col"
             style={{ width: `${columnCqw}cqw`, gap: `${m.gap}cqh` }}
           >
-            {column.map((team, i) => {
-              const rank = colIdx === 0 ? i + 1 : columns[0].length + i + 1
+            {column.map((team) => {
+              const rank = team.place
               return (
                 <ScoreRow
                   key={team.id}

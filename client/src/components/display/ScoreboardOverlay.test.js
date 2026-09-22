@@ -26,15 +26,19 @@ describe('gridTemplate', () => {
     // Split mode always has 0 round columns (see the comment above
     // gridTemplate) — this is the exact shape the live board hit.
     const t = gridTemplate(0, true)
-    expect(t).toBe('1.68cqw minmax(0, 16.27cqw) 4.44cqw')
+    expect(t).toBe('1.68cqw minmax(0, 1fr) 4.44cqw')
     // Un-scaled, this same call produced '3.4cqw minmax(0, 33cqw) 9cqw' —
     // fixed-track width alone (before any padding/border) already ate 45.4
     // of the ~49.3cqw a split column actually has. The scaled fixed-track
     // total below must clear real headroom under that budget, not just
     // technically fit it, or a border/padding pixel clips it again exactly
     // like before.
-    const fixedCqwTotal = 1.68 + 16.27 + 4.44
+    const fixedCqwTotal = 1.68 + 4.44
     const perColumnBudget = (100 - 1.4) / 2 // two columns, 1.4cqw gap
     expect(fixedCqwTotal).toBeLessThan(perColumnBudget * 0.7)
+  })
+
+  it('split mode gives the name track 1fr instead of a fixed cap — a long name has room to breathe instead of clipping against unused column width (Sept 15 show, 22 teams: "Jons Questionable Lif…")', () => {
+    expect(gridTemplate(0, true)).toMatch(/minmax\(0, 1fr\)/)
   })
 })

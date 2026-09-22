@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
-import { deriveRoundCols, computeTotal, normalizeRoundScore, roundLabel, MEDALS } from '../lib/scoreboardMath.js'
+import { deriveRoundCols, computeTotal, computePlaces, normalizeRoundScore, roundLabel, MEDALS } from '../lib/scoreboardMath.js'
 import { groupQuestionsByRound } from '../lib/showGrouping.js'
 import { sortSlides } from '../lib/slideStepping.js'
 
@@ -67,9 +67,11 @@ export default function ShowDetail() {
   }))
   const totalCols = deriveRoundCols(show)
 
-  const rankedTeams = (scoreboardTeams ?? [])
+  const rankedTeamsRaw = (scoreboardTeams ?? [])
     .map(team => ({ ...team, total: computeTotal(team.scores, totalCols) }))
     .sort((a, b) => b.total - a.total)
+  const teamPlaces = computePlaces(rankedTeamsRaw)
+  const rankedTeams = rankedTeamsRaw.map((team, i) => ({ ...team, place: teamPlaces[i] }))
 
   // Build questions grouped by round
   const { roundGroups, orphanQuestions } = groupQuestionsByRound(rounds, slides, sortSlides)
@@ -142,9 +144,9 @@ export default function ShowDetail() {
                       className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}
                     >
                       <td className="px-4 py-2.5 text-center">
-                        {MEDALS[i]
-                          ? <span className="text-base">{MEDALS[i]}</span>
-                          : <span className="text-xs text-gray-400 font-bold">#{i + 1}</span>
+                        {MEDALS[team.place - 1]
+                          ? <span className="text-base">{MEDALS[team.place - 1]}</span>
+                          : <span className="text-xs text-gray-400 font-bold">#{team.place}</span>
                         }
                       </td>
                       <td className="px-4 py-2.5 font-medium text-gray-800">{team.name}</td>

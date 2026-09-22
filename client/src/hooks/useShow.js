@@ -219,7 +219,7 @@ export function useShow() {
   async function listShows() {
     const { data, error } = await supabase
       .from('shows')
-      .select('id, title, date, updated_at, slides, rounds')
+      .select('id, title, date, updated_at, slides, rounds, is_live')
       .order('updated_at', { ascending: false })
     if (error) throw new Error(error.message)
     return (data ?? []).map(row => ({
@@ -229,6 +229,7 @@ export function useShow() {
       updatedAt: row.updated_at,
       slideCount: (row.slides ?? []).length,
       roundCount: (row.rounds ?? []).length,
+      isLive: row.is_live ?? false,
     }))
   }
 
@@ -816,6 +817,20 @@ export function useShow() {
     await applyStepPatch(patch)
   }
 
+  // Nothing else ever clears is_live once goLive() sets it — leaving a show
+  // (closing the tab, loading a different show, walking away after the last
+  // slide) never flips it back off. A bare /display with no show in the URL
+  // picks whichever is_live row was most recently updated_at, so a stale
+  // live show silently wins over the next real show until this is called.
+  async function endShow(id) {
+    const targetId = id ?? show?.id
+    if (!targetId) return
+    if (show?.id === targetId) {
+      setShow(s => ({ ...s, isLive: false, showState: { ...s.showState, isLive: false } }))
+    }
+    await updateShowRow(targetId, { is_live: false })
+  }
+
   async function setScoreboardVisible(visible) {
     if (!show) return
     setShow(s => ({ ...s, showState: { ...s.showState, scoreboardVisible: visible } }))
@@ -927,6 +942,7 @@ export function useShow() {
     getHostPhotos,
     goLive,
     goLiveFrom,
+    endShow,
     syncArchive,
     nextSlide,
     prevSlide,

@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { nanoid } from 'nanoid'
 import { supabase } from '../lib/supabase.js'
-import { deriveRoundCols, computeTotal, MEDALS } from '../lib/scoreboardMath.js'
+import { deriveRoundCols, computeTotal, computePlaces, MEDALS } from '../lib/scoreboardMath.js'
 import { getTheme } from '../themes/index.js'
 import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentMediaShiny, isChoiceShiny, isHuesCuesShiny } from '../lib/shinySeries.js'
 import { getWagerTier } from '../lib/wagerScoring.js'
@@ -128,7 +128,7 @@ function ErrorScreen({ message }) {
 }
 
 // ─── No show ──────────────────────────────────────────────────────────────────
-function NoShowScreen() {
+function NoShowScreen({ title = 'No show running right now.', subtitle = 'Ask Ben for the QR code when things kick off.' }) {
   return (
     <div style={{
       minHeight: '100dvh', background: '#050505',
@@ -136,10 +136,10 @@ function NoShowScreen() {
       alignItems: 'center', justifyContent: 'center', padding: '2rem',
     }}>
       <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.9375rem', textAlign: 'center', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.6 }}>
-        No show running right now.
+        {title}
       </p>
       <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.8rem', marginTop: '0.5rem', textAlign: 'center', fontFamily: 'DM Sans, sans-serif' }}>
-        Ask Ben for the QR code when things kick off.
+        {subtitle}
       </p>
     </div>
   )
@@ -499,8 +499,15 @@ function ScoresPillButton({ onOpen }) {
 // not per-show, since it's a browsing preference, not show data.
 const FOLLOW_MODE_KEY = 'trivia-os:followMode'
 function loadFollowMode() {
-  try { return localStorage.getItem(FOLLOW_MODE_KEY) === 'follow' ? 'follow' : 'manual' }
-  catch { return 'manual' }
+  // Defaults to 'follow', not 'manual' — most teams never touch this toggle,
+  // and "Stay" (now "Browse") read as "stay with the show" to a hurried
+  // reader instead of its actual meaning ("stay on this slide, don't
+  // advance"), so a team that wanted to follow along left it on the default
+  // and watched a stale question while the room moved on. Following the
+  // show is the behavior almost everyone wants without ever opening this
+  // toggle; browsing ahead is the deliberate, opt-in minority case.
+  try { return localStorage.getItem(FOLLOW_MODE_KEY) === 'manual' ? 'manual' : 'follow' }
+  catch { return 'follow' }
 }
 function FollowToggle({ mode, onChange, theme }) {
   const highlight = theme?.colors?.highlight ?? '#4dffc3'
@@ -509,7 +516,7 @@ function FollowToggle({ mode, onChange, theme }) {
       display: 'flex', borderRadius: 14, background: 'rgba(255,255,255,0.08)',
       border: '1px solid rgba(255,255,255,0.12)', padding: 2, flexShrink: 0,
     }}>
-      {[['manual', 'Stay'], ['follow', 'Follow']].map(([id, label]) => (
+      {[['manual', 'Browse'], ['follow', 'Follow']].map(([id, label]) => (
         <button
           key={id}
           onClick={() => onChange(id)}
@@ -668,14 +675,24 @@ function SlideBody({ slide, show, theme, team, onInteractiveAnswered, overridePa
         )
       }
       const part = resolveShinyPart(d, overridePart)
+      // A picture-round question legitimately has no text — the image IS
+      // the question, same as it renders on the TV. Only a question with
+      // NEITHER text nor media is actually missing content; that's the one
+      // case worth flagging instead of silently rendering a blank sheet.
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-          <p style={{
-            color: text, fontSize: 'clamp(1.15rem, 4.5vw, 1.35rem)',
-            lineHeight: 1.55, margin: 0, fontFamily: 'DM Sans, sans-serif', fontWeight: 500,
-          }}>
-            {part.text || <span style={{ opacity: 0.3, fontStyle: 'italic' }}>No question text</span>}
-          </p>
+          {part.text ? (
+            <p style={{
+              color: text, fontSize: 'clamp(1.15rem, 4.5vw, 1.35rem)',
+              lineHeight: 1.55, margin: 0, fontFamily: 'DM Sans, sans-serif', fontWeight: 500,
+            }}>
+              {part.text}
+            </p>
+          ) : !part.mediaUrl && (
+            <p style={{ opacity: 0.3, fontStyle: 'italic', fontSize: '1rem', margin: 0, fontFamily: 'DM Sans, sans-serif' }}>
+              No question text
+            </p>
+          )}
 
           {part.mediaUrl && part.mediaType?.startsWith('audio/') ? (
             <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 10, padding: '0.75rem 1rem', textAlign: 'center' }}>
@@ -970,8 +987,8 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
             )
             : teams.map((t, i) => {
                 const isMe     = t.name.trim().toLowerCase() === myNameNorm
-                const medal    = MEDALS[i] ?? null
-                const isLeader = i === 0
+                const medal    = MEDALS[(t.place ?? i + 1) - 1] ?? null
+                const isLeader = (t.place ?? i + 1) === 1
                 // A 2% floor keeps a zero-score row from reading as a render
                 // bug — it's a nub, not a bar.
                 const pct = Math.max(2, ((t.total ?? 0) / leaderTotal) * 100)
@@ -1039,7 +1056,7 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
                       <span style={{ fontSize: '1.05rem', width: 24, textAlign: 'center', flexShrink: 0 }}>
                         {/* Bumped from 30 → 70: the rank now sits on top of a
                             bar instead of flat panel and got lost against it. */}
-                        {medal ?? <span style={{ color: `${text}b3`, fontSize: '0.8rem', fontWeight: 700, textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>{i + 1}</span>}
+                        {medal ?? <span style={{ color: `${text}b3`, fontSize: '0.8rem', fontWeight: 700, textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>{t.place ?? i + 1}</span>}
                       </span>
                       <span style={{
                         flex: 1, color: isMe ? '#f5c842' : `${text}f2`,
@@ -2036,6 +2053,17 @@ export default function Join() {
         // Genuinely gone — clear the dead entry so it doesn't retry forever.
         localStorage.removeItem(getTeamKey(fetchedShow.id))
       }
+      // A show that's not live AND has already stepped through slides is a
+      // show that's OVER, not one still waiting to start — a fresh phone
+      // (no stored team, so it never played) scanning an old/bookmarked QR
+      // code for it must not be offered registration into a night that
+      // already happened. A show that's simply not live YET has
+      // current_slide_id still null, and registration there is the normal
+      // pre-show flow — must not be blocked.
+      if (!fetchedShow.is_live && fetchedShow.current_slide_id != null) {
+        setPhase('ended')
+        return
+      }
       setPhase('register')
     }
 
@@ -2411,7 +2439,8 @@ export default function Join() {
       const withTotals = (data ?? [])
         .map(t => ({ ...t, total: computeTotal(t.scores, cols) }))
         .sort((a, b) => b.total - a.total)
-      setScoresDrawerTeams(withTotals)
+      const places = computePlaces(withTotals)
+      setScoresDrawerTeams(withTotals.map((t, i) => ({ ...t, place: places[i] })))
     } catch {
       // Leave whatever was already on screen — a transient fetch failure
       // (the exact case a reconnect-triggered refresh can hit) used to wipe
@@ -2455,6 +2484,8 @@ export default function Join() {
     body = <LoadingScreen />
   } else if (phase === 'no-show') {
     body = <NoShowScreen />
+  } else if (phase === 'ended') {
+    body = <NoShowScreen title="That trivia night's already over." subtitle="Ask Ben for the QR code at the next one." />
   } else if (phase === 'error') {
     body = <ErrorScreen message={initError} />
   } else {

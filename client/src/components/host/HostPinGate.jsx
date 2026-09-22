@@ -83,7 +83,7 @@ export default function HostPinGate({ children }) {
           autoFocus
           value={pin}
           onChange={e => { setPin(e.target.value.replace(/\D/g, '').slice(0, 4)); setError(null) }}
-          placeholder="••••"
+          placeholder="Enter PIN"
           className="text-center text-2xl tracking-[0.6em] border border-gray-300 rounded-lg py-3 focus:outline-none focus:border-baynes-forest"
         />
         {error && <p className="text-red-500 text-sm text-center">{error}</p>}

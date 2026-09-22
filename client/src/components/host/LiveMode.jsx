@@ -237,6 +237,20 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   const [huesCuesScoreError, setHuesCuesScoreError] = useState(null)
   const [raceBusy, setRaceBusy] = useState(false)
   const [raceScoreError, setRaceScoreError] = useState(null)
+  const [endShowConfirm, setEndShowConfirm] = useState(false)
+  const endShowConfirmTimerRef = useRef(null)
+
+  function handleEndShowClick() {
+    if (!endShowConfirm) {
+      setEndShowConfirm(true)
+      clearTimeout(endShowConfirmTimerRef.current)
+      endShowConfirmTimerRef.current = setTimeout(() => setEndShowConfirm(false), 4000)
+      return
+    }
+    clearTimeout(endShowConfirmTimerRef.current)
+    setEndShowConfirm(false)
+    actions.endShow()
+  }
 
   // scoringBusy + the 12s cap below (2026-08-31, Opus second-opinion review
   // of the maybeStartLockCountdown fix): the fix that blocks Next during
@@ -1267,7 +1281,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
           )}
           <button
             onClick={() => actions.setScoreboardVisible(!show.showState.scoreboardVisible)}
-            title="Toggle TV scoreboard (S)"
+            title="Show/hide the scoreboard on the TV (S)"
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ml-1 ${
               show.showState.scoreboardVisible
                 ? 'bg-green-500 text-white hover:bg-green-600'
@@ -1329,7 +1343,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
             <button
               onClick={onOpenScoreboard}
               disabled={phoneActionShowing}
-              title={phoneActionShowing ? 'Lock/score this question first — the scoreboard covers that button' : undefined}
+              title={phoneActionShowing ? 'Lock/score this question first — the scoreboard covers that button' : 'Open the full scoreboard to add/edit teams or scores'}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ml-1 ${
                 phoneActionShowing
                   ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
@@ -1341,6 +1355,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
           )}
           <button
             onClick={() => setScorePanelOpen(true)}
+            title="Find a team and enter their score for this question"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-baynes-forest text-white text-sm font-semibold hover:bg-green-900 transition-colors"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -1349,7 +1364,18 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
               <rect x="8" y="3" width="2" height="10" rx="1" fill="currentColor"/>
               <rect x="11.5" y="1" width="2" height="12" rx="1" fill="currentColor"/>
             </svg>
-            Edit
+            Grade
+          </button>
+          <button
+            onClick={handleEndShowClick}
+            title="Marks this show over so it stops showing as live on the TV and phones"
+            className={`flex items-center gap-1.5 text-sm font-medium px-2 py-1 rounded-lg transition-colors ml-1 ${
+              endShowConfirm
+                ? 'bg-red-600 text-white hover:bg-red-700'
+                : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            {endShowConfirm ? 'Confirm End Show' : 'End Show'}
           </button>
         </div>
       </div>

@@ -5,7 +5,7 @@ import { fitToBox, GRADING_BREAK_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { regionTransformCSS, regionFontSizeCSS } from '../../../lib/regionTransform.js'
 
-const DEFAULT_MESSAGE = "Now, please sit back, relax, and enjoy each other's company as Ben grades papers 😊"
+const DEFAULT_MESSAGE = "Sit back, relax, and enjoy each other's company while Ben grades papers — music's coming right up 🎶"
 
 export default function GradingBreakSlide({ slide, show, isPreview = false }) {
   const { theme } = useTheme()

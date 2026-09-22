@@ -1,5 +1,24 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeRoundScore, computeTotal, roundScoreTotal, mergeScoreEdit, roundLabel, deriveRoundCols, pickableTeams } from './scoreboardMath.js'
+import { normalizeRoundScore, computeTotal, computePlaces, roundScoreTotal, mergeScoreEdit, roundLabel, deriveRoundCols, pickableTeams } from './scoreboardMath.js'
+
+describe('computePlaces', () => {
+  it('ranks distinct totals 1,2,3', () => {
+    const sorted = [{ total: 200 }, { total: 150 }, { total: 60 }]
+    expect(computePlaces(sorted)).toEqual([1, 2, 3])
+  })
+
+  it('gives tied totals the same place and skips the next rank', () => {
+    // matches the Sept 15 bug: two teams both at 200 must both read 1st,
+    // and the next team down is 3rd, not 2nd
+    const sorted = [{ total: 200 }, { total: 200 }, { total: 150 }]
+    expect(computePlaces(sorted)).toEqual([1, 1, 3])
+  })
+
+  it('handles a tie in the middle of the board', () => {
+    const sorted = [{ total: 300 }, { total: 180 }, { total: 180 }, { total: 60 }]
+    expect(computePlaces(sorted)).toEqual([1, 2, 2, 4])
+  })
+})
 
 describe('pickableTeams', () => {
   // Bug this guards against: `+ Team` inserts a row with name: '' as a

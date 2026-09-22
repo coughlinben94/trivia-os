@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { AnimatePresence, motion, useReducedMotion, animate } from 'framer-motion'
 import { supabase } from '../../lib/supabase.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
-import { deriveRoundCols, computeTotal, normalizeRoundScore, MEDALS, SPLIT_TEAM_THRESHOLD, splitByRank } from '../../lib/scoreboardMath.js'
+import { deriveRoundCols, computeTotal, computePlaces, normalizeRoundScore, MEDALS, SPLIT_TEAM_THRESHOLD, splitByRank } from '../../lib/scoreboardMath.js'
 import { EASE_OUT, EASE_DROP } from '../../lib/easings.js'
 
 // ─── Layout math ───────────────────────────────────────────────────────────
@@ -74,7 +74,15 @@ export function gridTemplate(roundCount, isSplit = false) {
   const nameMax = +(33 * scale).toFixed(2)
   const total = +(9 * scale).toFixed(2)
   const rounds = Array.from({ length: roundCount }, () => 'minmax(0, 1fr)').join(' ')
-  return `${rank}cqw minmax(0, ${nameMax}cqw) ${rounds ? `${rounds} ` : ''}${total}cqw`
+  // Split mode is always called with roundCount 0 (splitCols drops the round
+  // columns entirely — see the caller) — so with a fixed nameMax cap and no
+  // `1fr` round columns to soak up the rest, most of the column's width sat
+  // unused while a long name still clipped ("Jons Questionable Lif…" on a
+  // 22-team split board, plenty of empty space to its right). Non-split
+  // mode keeps the fixed cap on purpose: its round columns are the ones
+  // meant to absorb the leftover width there.
+  const nameTrack = isSplit ? 'minmax(0, 1fr)' : `minmax(0, ${nameMax}cqw)`
+  return `${rank}cqw ${nameTrack} ${rounds ? `${rounds} ` : ''}${total}cqw`
 }
 
 // ─── Count-up total ────────────────────────────────────────────────────────
@@ -259,7 +267,8 @@ function ScoreboardContent({ show }) {
       const sorted = data
         .map(t => ({ ...t, total: computeTotal(t.scores, liveCols) }))
         .sort((a, b) => b.total - a.total)
-      setRanked(sorted)
+      const places = computePlaces(sorted)
+      setRanked(sorted.map((t, i) => ({ ...t, place: places[i] })))
     }
     load()
 
@@ -392,7 +401,7 @@ function ScoreboardContent({ show }) {
           display: 'flex', flexDirection: 'column',
         }}>
           {half.map((team, i) => {
-            const rank = colIdx === 0 ? i + 1 : columns[0].length + i + 1
+            const rank = team.place
             return (
               <TeamRow
                 key={team.id}

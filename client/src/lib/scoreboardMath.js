@@ -140,6 +140,25 @@ export function mergeScoreEdit(fresh, local, fieldKey) {
   return { ...fresh, [fieldKey]: local[fieldKey] }
 }
 
+// Tie-aware placement (competition/"1224" ranking): teams tied on total share
+// the same place, and the next distinct total skips ranks accordingly (two
+// teams tied for 2nd, next team is 4th — not 3rd). `sorted` must already be
+// sorted descending by `totalKey`. Every scoreboard surface (TV overlay, TV
+// reveal slide, phone drawer, post-show history) must use this instead of
+// ranking by array position — array-position ranking shows ties as if one
+// team beat the other, which is wrong and was the actual bug (only
+// ScoreboardModal, the host admin view, had tie-aware ranking; the four
+// audience-facing surfaces didn't).
+export function computePlaces(sorted, totalKey = 'total') {
+  const places = []
+  let place = 1
+  sorted.forEach((t, i) => {
+    if (i > 0 && t[totalKey] < sorted[i - 1][totalKey]) place = i + 1
+    places.push(place)
+  })
+  return places
+}
+
 // Sums only the keys present in `cols` — a team's scores object may carry
 // stale keys from a since-deleted round, which must not count toward the total.
 export function computeTotal(scores, cols) {
