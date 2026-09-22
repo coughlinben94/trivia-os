@@ -133,7 +133,7 @@ export const ROUND_TYPES = [
   { id: 'pyl',    label: 'Press Your Luck!', needsNumber: false, title: 'Press Your Luck!' },
 ]
 
-export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange, initialData = {}, shinyFormats, shinyLoading, onQuickAddRound, onOpenBendleAdmin, bendleAdminOpen }) {
+export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange, initialData = {}, shinyFormats, shinyLoading, onQuickAddRound, onOpenBendleAdmin, bendleAdminOpen, createFormat }) {
   const [type, setType] = useState(initialData.type ?? null)
   const typeCard = TYPE_CARDS.find(c => c.type === type)
 
@@ -164,6 +164,38 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   const [selectedShinyFmt, setSelectedShinyFmt] = useState(null)
   const [shinyStep,         setShinyStep]        = useState('pick') // 'pick' | 'details'
   const [shinyFmtSearch,    setShinyFmtSearch]    = useState('')
+  // One-off shiny: skips the separate "✨ Add Shiny" trip — types a name
+  // right here, we create a minimal real shiny_formats row (text/slots:1,
+  // no series) so the title-slide dedup/render machinery (keyed off a
+  // stable format id) just works with zero new code paths. Ben can delete
+  // it from the Format Library later if it clutters — see 2026-09-22 design
+  // call: persisted-row-over-throwaway, reuse over new machinery.
+  const [showCustomShinyInput, setShowCustomShinyInput] = useState(false)
+  const [customShinyName,      setCustomShinyName]      = useState('')
+  const [customShinyCreating,  setCustomShinyCreating]  = useState(false)
+  const [customShinyError,     setCustomShinyError]     = useState(null)
+
+  async function handleCreateCustomShiny() {
+    const name = customShinyName.trim()
+    if (!name) return
+    setCustomShinyCreating(true)
+    setCustomShinyError(null)
+    try {
+      const created = await createFormat({
+        name,
+        icon: '✨',
+        description: 'One-off shiny question',
+        input_schema: { type: 'text', slots: 1, seriesEnabled: false },
+      })
+      setSelectedShinyFmt(created)
+      setShowCustomShinyInput(false)
+      setCustomShinyName('')
+    } catch (e) {
+      setCustomShinyError(e.message ?? 'Could not create format')
+    } finally {
+      setCustomShinyCreating(false)
+    }
+  }
   const [shinyQuestion,     setShinyQuestion]    = useState('')
   const [shinyAnswer,       setShinyAnswer]      = useState('')
   const [gridCols, setGridCols] = useState(4)
@@ -897,6 +929,49 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
               <p className="text-sm font-semibold text-gray-800">✨ Shiny formats</p>
               <p className="text-xs text-gray-400 mt-0.5">Pick a format</p>
             </div>
+
+            {/* One-off: type a name, skip the separate Format Library trip. */}
+            {showCustomShinyInput ? (
+              <div className="flex flex-col gap-1.5 p-2.5 rounded-lg border border-yellow-300 bg-yellow-50">
+                <input
+                  autoFocus
+                  type="text"
+                  value={customShinyName}
+                  onChange={e => setCustomShinyName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleCreateCustomShiny() }}
+                  placeholder="Name this one-off shiny…"
+                  className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
+                />
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleCreateCustomShiny}
+                    disabled={!customShinyName.trim() || customShinyCreating}
+                    className={`flex-1 bg-[#1a6b4a] text-white text-xs font-semibold py-1.5 rounded-lg hover:bg-green-900 ${BTN} disabled:opacity-40 disabled:cursor-not-allowed`}
+                  >
+                    {customShinyCreating ? 'Creating…' : 'Create & select'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowCustomShinyInput(false); setCustomShinyName(''); setCustomShinyError(null) }}
+                    className="text-xs text-gray-400 hover:text-gray-600 px-2"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {customShinyError && <p className="text-[11px] text-red-500">{customShinyError}</p>}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowCustomShinyInput(true)}
+                className={`flex items-center gap-2 p-2.5 rounded-lg border border-dashed border-gray-300 text-left hover:border-gray-400 hover:bg-gray-50 transition-colors ${BTN}`}
+              >
+                <span className="text-base leading-none">＋</span>
+                <span className="text-xs font-semibold text-gray-600">Custom — name a one-off shiny</span>
+              </button>
+            )}
+
             {!shinyLoading && shinyFormats.length > 0 && (
               <div className="relative shrink-0">
                 <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300" width="13" height="13" viewBox="0 0 14 14" fill="none">

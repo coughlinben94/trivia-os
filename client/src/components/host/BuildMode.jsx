@@ -947,6 +947,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                 onClose={closeAddModal}
                 shinyFormats={shinyFormats}
                 shinyLoading={shinyFormatsLoading}
+                createFormat={createFormat}
                 onQuickAddRound={() => ensureRound(null, { roundType: 'normal', title: `Round ${nextRoundNumber}` })}
                 // Deliberately doesn't closeAddModal() — closing would unmount
                 // AddSlideWizard and drop everything the host already picked

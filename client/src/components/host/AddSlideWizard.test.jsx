@@ -139,3 +139,43 @@ describe('AddSlideWizard shiny details — bendle song gate', () => {
     expect(bendleEqSpy).toHaveBeenCalledWith('status', 'ready')
   })
 })
+
+// 2026-09-22: one-off shiny — types a name inline instead of a separate
+// Format Library trip. Asserts the created row's shape (text/slots:1/no
+// series, so the existing title-slide/dedup machinery needs no changes)
+// and that it lands selected, ready for the normal "Add X →" step.
+describe('AddSlideWizard shiny picker — custom one-off', () => {
+  it('creates a minimal format from the typed name and selects it', async () => {
+    const createFormat = vi.fn(async format => ({ id: 'fmt_custom1', ...format }))
+    act(() => root.render(
+      <AddSlideWizard
+        show={{ id: 'show_1', rounds: [] }}
+        shinyFormats={FORMATS}
+        shinyLoading={false}
+        initialData={{ type: 'shiny-question' }}
+        onAddSlide={() => {}}
+        onClose={() => {}}
+        onTypeChange={() => {}}
+        createFormat={createFormat}
+      />,
+    ))
+    click('Custom — name a one-off shiny')
+
+    const input = host.querySelector('input[placeholder="Name this one-off shiny…"]')
+    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+    act(() => {
+      nativeSetter.call(input, 'Trivia Team Roast')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    click('Create & select')
+    await act(async () => { await Promise.resolve() })
+
+    expect(createFormat).toHaveBeenCalledWith({
+      name: 'Trivia Team Roast',
+      icon: '✨',
+      description: 'One-off shiny question',
+      input_schema: { type: 'text', slots: 1, seriesEnabled: false },
+    })
+    expect(host.textContent).toContain('Add Trivia Team Roast')
+  })
+})
