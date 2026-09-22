@@ -4,15 +4,15 @@ import { scoreHuesCuesRound, computeHuesCuesScoreUpdates } from './huesCuesScori
 describe('scoreHuesCuesRound', () => {
   const correctAnswer = 'H8'
 
-  it('scores an exact match 20 points', () => {
+  it('scores an exact match 30 points', () => {
     const results = scoreHuesCuesRound({
       entries: [{ teamId: 't1', teamName: 'Alpha', guess: { col: 'H', row: 8 } }],
       correctAnswer,
     })
-    expect(results[0]).toMatchObject({ teamId: 't1', distance: 0, points: 20 })
+    expect(results[0]).toMatchObject({ teamId: 't1', distance: 0, points: 30 })
   })
 
-  it('scores each of the 8 adjacent squares 10 points', () => {
+  it('scores each of the 8 adjacent squares 20 points', () => {
     const neighbors = [
       { col: 'G', row: 7 }, { col: 'H', row: 7 }, { col: 'I', row: 7 },
       { col: 'G', row: 8 },                        { col: 'I', row: 8 },
@@ -22,24 +22,32 @@ describe('scoreHuesCuesRound', () => {
     const results = scoreHuesCuesRound({ entries, correctAnswer })
     for (const r of results) {
       expect(r.distance).toBe(1)
-      expect(r.points).toBe(10)
+      expect(r.points).toBe(20)
     }
   })
 
-  it('scores distance 2+ as 0 points', () => {
+  it('scores distance 2 as 10 points', () => {
     const results = scoreHuesCuesRound({
       entries: [{ teamId: 't1', teamName: 'Alpha', guess: { col: 'J', row: 8 } }],
       correctAnswer,
     })
-    expect(results[0]).toMatchObject({ distance: 2, points: 0 })
+    expect(results[0]).toMatchObject({ distance: 2, points: 10 })
   })
 
-  it('a corner-square answer still scores its real neighbors at 10, no special case', () => {
+  it('scores distance 3+ as 0 points', () => {
+    const results = scoreHuesCuesRound({
+      entries: [{ teamId: 't1', teamName: 'Alpha', guess: { col: 'K', row: 8 } }],
+      correctAnswer,
+    })
+    expect(results[0]).toMatchObject({ distance: 3, points: 0 })
+  })
+
+  it('a corner-square answer still scores its real neighbors at 20, no special case', () => {
     const results = scoreHuesCuesRound({
       entries: [{ teamId: 't1', teamName: 'Alpha', guess: { col: 'B', row: 2 } }],
       correctAnswer: 'A1',
     })
-    expect(results[0]).toMatchObject({ distance: 1, points: 10 })
+    expect(results[0]).toMatchObject({ distance: 1, points: 20 })
   })
 
   it('a team with no guess scores 0, not thrown out', () => {

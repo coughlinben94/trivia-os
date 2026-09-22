@@ -17,7 +17,7 @@ export function scoreHuesCuesRound({ entries, correctAnswer }) {
       return { teamId: e.teamId, teamName: e.teamName ?? null, guess: null, distance: null, points: 0 }
     }
     const distance = chebyshevDistance(guess, correct)
-    const points = distance === 0 ? 20 : distance === 1 ? 10 : 0
+    const points = distance === 0 ? 30 : distance === 1 ? 20 : distance === 2 ? 10 : 0
     return { teamId: e.teamId, teamName: e.teamName ?? null, guess: colRowToCode(guess), distance, points }
   })
   return results.sort((a, b) => {
