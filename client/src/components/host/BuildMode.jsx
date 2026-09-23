@@ -91,6 +91,7 @@ const CARD_STYLE = {
   'theme':         'bg-gradient-to-br from-pink-50   to-fuchsia-100 border-pink-200   hover:border-pink-400',
   'ticker':        'bg-gradient-to-br from-sky-50    to-cyan-100    border-sky-200    hover:border-sky-400',
   'shiny':         'bg-gradient-to-br from-yellow-50 to-amber-100   border-yellow-200 hover:border-yellow-400',
+  'facts':         'bg-gradient-to-br from-lime-50   to-green-100   border-lime-200   hover:border-lime-400',
   'bendle':        'bg-gradient-to-br from-emerald-50 to-teal-100   border-emerald-200 hover:border-emerald-400',
   'swing':         'bg-gradient-to-br from-orange-50 to-red-100     border-orange-200 hover:border-orange-400',
   'pyl':           'bg-gradient-to-br from-teal-50   to-blue-100    border-teal-200   hover:border-teal-400',
@@ -117,7 +118,7 @@ const REST_STATE_BOX_ORDER_KEY = 'trivia-os:rest-state-box-order'
 function defaultRestStateBoxOrder() {
   return [
     ...TYPE_CARDS.filter(c => !c.hidden).map(c => c.type),
-    'swing', 'pyl', 'shiny', 'database', 'ticker', 'data', 'shows', 'music',
+    'swing', 'pyl', 'shiny', 'facts', 'database', 'ticker', 'data', 'shows', 'music',
   ]
 }
 
@@ -778,10 +779,8 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                   </div>
                 )}
 
-                {/* 5-5-3 grid: all 13 boxes flat, drag the ⠿ grip to reorder.
-                    5-wide (not 4) so the last row holds 3 tiles instead of a
-                    single orphaned one — 13 has no clean divisor, but a
-                    3-wide remainder row centers far better than a lone tile. */}
+                {/* 5-5-4 grid: all 14 boxes flat, drag the ⠿ grip to reorder.
+                    5-wide, last row holds the 4-box remainder. */}
                 <div className="flex flex-wrap gap-2.5 justify-center">
                   {(() => {
                     const restBoxContent = {
@@ -792,6 +791,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
                       swing:    { icon: '🎷', name: 'Swing Round', desc: 'Bulk-add all swing questions at once', styleKey: 'swing', onClick: () => setShowSwingWizard(true) },
                       pyl:      { icon: '🎰', name: 'Press Your Luck!', desc: 'Set up PYL themes and slides', styleKey: 'pyl', onClick: () => setShowPylMenu(v => !v), menu: true },
                       shiny:    { icon: '✨', name: 'Shiny Formats', desc: 'Add or edit shiny question styles', styleKey: 'shiny', onClick: () => setShowFormatLibrary(true) },
+                      facts:    { icon: '🌱', name: 'Pruned Facts', desc: 'Kept facts, not used yet', styleKey: 'facts', onClick: () => window.open('/facts', '_blank') },
                       database: { icon: '🗃️', name: 'Question Database', desc: 'Browse and search your archive', styleKey: 'database', onClick: () => window.open('/questions', '_blank') },
                       ticker:   { icon: '👥', name: 'Team List', desc: 'Show all team names on screen', styleKey: 'ticker', onClick: () => openAddModal({ type: 'team-preview', roundId: activeRoundId }) },
                       data:     { icon: '📊', name: 'Data', desc: 'Shows history & analytics', styleKey: 'data', onClick: () => window.open('/dashboard', '_blank') },

@@ -15,6 +15,7 @@ const ShowDetail  = lazy(lazyRetry(() => import('./views/ShowDetail.jsx')))
 const Dashboard   = lazy(lazyRetry(() => import('./views/Dashboard.jsx')))
 const SpotifyCallback = lazy(lazyRetry(() => import('./views/SpotifyCallback.jsx')))
 const Music       = lazy(lazyRetry(() => import('./views/Music.jsx')))
+const Facts       = lazy(lazyRetry(() => import('./views/Facts.jsx')))
 
 function RouteShell({ children }) {
   return (
@@ -42,6 +43,7 @@ export default function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/spotify-callback" element={<SpotifyCallback />} />
           <Route path="/music" element={<Music />} />
+          <Route path="/facts" element={<Facts />} />
           <Route path="*" element={<Navigate to="/host" replace />} />
         </Routes>
       </RouteShell>
