@@ -107,7 +107,7 @@ export default function CustomSlide({ slide }) {
               src={img.url}
               alt=""
               className="rounded-2xl object-contain"
-              style={{ maxHeight: '45vh', maxWidth: images.length > 1 ? `${Math.floor(88 / images.length)}vw` : '100%' }}
+              style={{ maxHeight: '65vh', maxWidth: images.length > 1 ? `${Math.floor(88 / images.length)}vw` : '100%' }}
             />
           ))}
         </motion.div>
