@@ -226,6 +226,7 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
     try {
       const { world } = drawWorld({ base: midnightGalaxyRing, pool: RING_POOL, shelf, showId: String(showId ?? 'preview'), baseTheme })
       applyPalette(world.palette.colors, world.palette.weights, world.palette.drift.arc)
+      setDrift(world.palette.drift.arc)
       setStations(world.stations.map(s => s.key))
     } catch {
       // Known, deterministic today: the real pool has 5 radial-mass entries

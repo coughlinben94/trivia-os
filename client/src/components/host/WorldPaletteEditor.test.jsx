@@ -295,6 +295,28 @@ describe('WorldPaletteEditor', () => {
     expect(mounts.at(-1).worldData.stations[0].key).toBe('eclipse')
   })
 
+  it('Apply after a successful Re-roll reflects the rolled drift, not a stale one', async () => {
+    // Reuses shelf row 2's exact colors/weights/drift so findMatch hits and
+    // Apply applies immediately — the payload it hands up must carry the
+    // ROLLED drift (30), not the editor's untouched initial drift state (60).
+    const DRAWN_KEYS = ['eclipse', 'spiral galaxy', 'star cluster', 'amber planet', 'lit planet', 'pulsar', 'rose nebula', 'comet', 'binary pair', 'asteroid field', 'ringed planet', 'aurora ribbon', 'supernova']
+    drawWorldImpl = () => ({
+      world: {
+        stations: DRAWN_KEYS.map(key => ({ key })),
+        palette: { colors: ['#22c55e', '#eab308'], weights: [0.5, 0.5], drift: { arc: 30 } },
+      },
+      showSeed: 1, nounSeed: 2, palSeed: 3,
+    })
+    const applied = []
+    render({ onApplyThemeColors: c => applied.push(c), showId: 'show-abc' })
+    await act(async () => { await Promise.resolve() })
+    act(() => byText('Re-roll objects').click())
+    act(() => byText("Apply to this show's theme").click())
+    expect(applied).toHaveLength(1)
+    expect(applied[0].worldPalette.drift).toEqual({ arc: 30 })
+    expect(applied[0].ringWorld.palette.drift).toEqual({ arc: 30 })
+  })
+
   it("Re-roll objects shows a plain error instead of crashing when the pool cannot fill 13 slots (known limit — docs/superpowers/plans/2026-09-14-ring-world-shelf-stations.md)", async () => {
     render()
     await act(async () => { await Promise.resolve() })
