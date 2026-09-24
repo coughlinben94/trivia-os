@@ -257,16 +257,43 @@ async function runSeedBatch(n, browser) {
     })
     console.log(`preset "${preset.name}": ${passed ? 'CERTIFIED' : 'FAILED'}`)
   }
+  // 2026-09-24 (Ben: certified palettes kept clustering around violet/red —
+  // "tired of current duos"). Root cause, found via Codex read-only review:
+  // this loop used to spend its ENTIRE real-gate budget on the first
+  // candidate generatePalette() handed back (already just the first one to
+  // pass the generator's own cheap checks) — one real-gate failure sank the
+  // whole seed slot, no retry with a different hue pairing. A generated
+  // blue/green pair can clear the generator's cheap MIN_SEPARATION=60° check
+  // and still fail the real gate's safe-box luminance cap (station 0's fixed
+  // base hue disadvantages some hue families there — see "Plum & Ember" in
+  // paletteGenerator.js) — so one roll per seed was never enough exploration
+  // to find the surviving diverse pairs that DO exist (e.g. "Amazon Dusk").
+  // Fix: each seed slot gets SEED_RETRIES independent candidates (distinct
+  // sub-seeds, not re-tries of the same one) against the REAL gate before
+  // giving up — multiplies the search without touching DEAD_BAND,
+  // ANCHOR_WINDOW, or any certification threshold (all Ben's call, untouched
+  // here). Only the seed slot's FIRST certified candidate is kept; if none
+  // certify, the row records the last attempt's failure (same one-row-per-
+  // slot shape as before, just backed by more real search per slot).
+  const SEED_RETRIES = 5
   for (let s = 1; s <= n; s++) {
-    const candidate = generatePalette(s, midnightGalaxyRing, { colors: { bg: '#08001a', bgDeep: '#040010' } })
-    if (candidate.fallback) continue // fallback IS BASE_PALETTE, already shelved above as PRESETS[0]
-    const { passed, summary } = await certifyPalette(browser, candidate)
+    let result = null
+    for (let attempt = 1; attempt <= SEED_RETRIES; attempt++) {
+      const subSeed = seedFrom(`${s}:${attempt}`)
+      const candidate = generatePalette(subSeed, midnightGalaxyRing, { colors: { bg: '#08001a', bgDeep: '#040010' } })
+      if (candidate.fallback) continue // fallback IS BASE_PALETTE, already shelved above as PRESETS[0]
+      const { passed, summary } = await certifyPalette(browser, candidate)
+      result = { candidate, passed, summary, attempt }
+      console.log(`seed ${s} attempt ${attempt}/${SEED_RETRIES}: ${passed ? 'CERTIFIED' : 'FAILED'} (${summary.regression_fail_count} regression FAIL, ${summary.spec_fail_count} spec FAIL)`)
+      if (passed) break
+    }
+    if (!result) continue // every attempt this slot tried was a fallback
+    const { candidate, passed, summary, attempt } = result
     rows.push({
       colors: candidate.colors, weights: candidate.weights, drift: candidate.drift,
-      status: passed ? 'certified' : 'failed', source: 'generated', seed: String(candidate.seed),
+      status: passed ? 'certified' : 'failed', source: 'generated', seed: `${s}:${attempt}`,
       ring_version: RING_VERSION, gate_summary: summary, checked_at: new Date().toISOString(),
     })
-    console.log(`seed ${s}: ${passed ? 'CERTIFIED' : 'FAILED'} (${summary.regression_fail_count} regression FAIL, ${summary.spec_fail_count} spec FAIL)`)
   }
   if (rows.length) {
     // Two-step, not one upsert: the INSERT policy only allows status =
