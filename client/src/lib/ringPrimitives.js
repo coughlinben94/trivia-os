@@ -116,12 +116,14 @@ const PA2_MULT = { ribbon: 1.25 }
 // same silhouette at every constellation slot. Points normalized 0..1 in
 // each constellation's own bounding box (not real sky coordinates — this
 // codebase already has a `dots` kind for an unresolved cluster; the whole
-// point of a separate `constellation` kind is the connecting lines making
-// a NAMED shape, so approximate-but-recognizable relative geometry is what
-// matters, not celestial accuracy). `mag` (rough apparent-magnitude proxy,
-// 0-1) only scales dot size/brightness, brighter for the asterism's named
-// bright stars. `edges` are index pairs into `points`, the traditional
-// stick-figure lines for that asterism.
+// point of a separate `constellation` kind is a NAMED shape's real relative
+// geometry, so approximate-but-recognizable point layout is what matters,
+// not celestial accuracy). `mag` (rough apparent-magnitude proxy, 0-1) only
+// scales dot size/brightness, brighter for the asterism's named bright
+// stars. `edges` are index pairs into `points`, the traditional stick-figure
+// lines for that asterism — 2026-09-24: no longer rendered (Ben: dots only,
+// no connecting lines), left in place as authored data in case something
+// other than rendering reads it later.
 const CONSTELLATIONS = {
   bigDipper: { // Ursa Major's asterism — bowl + handle
     points: [
@@ -144,6 +146,13 @@ const CONSTELLATIONS = {
       { x: 0.38, y: 0.52, mag: 0.65 }, // Mintaka
       { x: 0.70, y: 0.86, mag: 0.85 }, // Saiph
       { x: 0.20, y: 0.88, mag: 1.0 },  // Rigel
+      // 2026-09-24: the sword, hanging below the belt's center star
+      // (Alnilam, x:0.50 y:0.50) — the full figure, not just belt+
+      // shoulders. Fainter than the named bright stars per this file's own
+      // mag convention (0-1, brighter = higher).
+      { x: 0.48, y: 0.60, mag: 0.55 }, // sword, upper
+      { x: 0.50, y: 0.67, mag: 0.6 },  // sword, middle (Orion Nebula region)
+      { x: 0.52, y: 0.74, mag: 0.55 }, // sword, lower
     ],
     // 2026-09-15 round 2 (Fable-5: shoulder lines crossed in an X above the
     // belt — "a bow tie more than a figure," real Orion never crosses
@@ -2402,12 +2411,14 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // RING_POOL (once certified) is a real, useful pool-growth entry, not
     // just an art addition — see that plan's comment for why any non-
     // radial-mass pool entry unblocks --world-batch regardless of order.
-    // PASS criterion (protocol, frozen before first render): "a fresh
-    // viewer names this as stars connected by lines / a constellation" —
-    // not a plain star cluster (the existing 'dots' kind, an unresolved
-    // haze by design) and not random scattered specks. Unrendered as of
-    // this comment — self-render + blind read pending, same discipline as
-    // every other Phase-4 noun. Not wired to any station, not pooled.
+    // PASS criterion (protocol, frozen 2026-09-24 — replaces the prior
+    // sentence below, no longer true once lines were removed): "a fresh
+    // viewer names each of these four as a star pattern / a constellation —
+    // not a plain scattered cluster, not connected dots, not a random field
+    // of stars." Dots only, no connecting lines (Ben's explicit call).
+    // Not a plain star cluster (the existing 'dots' kind, an unresolved
+    // haze by design) and not random scattered specks. Not wired to any
+    // station, not pooled.
     // 2026-09-15 round 3 (Fable-5: Southern Cross's top star "touches the
     // quadrant edge... check it has clearance"): not a Southern-Cross-only
     // problem — the largest star's glow radius (r0*3, up to ~15 viewBox
@@ -2429,17 +2440,6 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     svg.style.width = '100%'; svg.style.height = '100%'
     const defs = document.createElementNS(NS, 'defs')
     svg.appendChild(defs)
-    // lines first, under the stars
-    SET.edges.forEach(([a, b]) => {
-      const pa = SET.points[a], pb = SET.points[b]
-      const line = document.createElementNS(NS, 'line')
-      line.setAttribute('x1', (remap(pa.x) * 100).toFixed(2)); line.setAttribute('y1', (remap(pa.y) * 100).toFixed(2))
-      line.setAttribute('x2', (remap(pb.x) * 100).toFixed(2)); line.setAttribute('y2', (remap(pb.y) * 100).toFixed(2))
-      line.setAttribute('stroke', hsla(hue, 40, 70, A(0.35, fill)))
-      line.setAttribute('stroke-width', '0.6')
-      line.setAttribute('vector-effect', 'non-scaling-stroke')
-      svg.appendChild(line)
-    })
     // stars on top — soft glow + a near-white core per point, sized by mag.
     // 2026-09-15 round 2 (Fable-5: "star sizes are near-uniform"): was a
     // linear 1.6+mag*1.8 (2.4-3.4 across mag 0.45-1.0, ~40% spread, easy to
