@@ -396,12 +396,13 @@ describe('WorldPaletteEditor', () => {
   })
 
   it('Re-roll objects composing a valid draw forces the preview to remount even when the hue sequence is unchanged (finding #2 — previewKey must include station keys, not just hues)', async () => {
-    // Empirically verified: swapping RING_POOL positions 0 ("ringed planet")
-    // and 10 ("eclipse") under the default committed palette produces a
-    // byte-identical hue sequence to the unswapped order. A hue-only remount
-    // key would never change here, so the preview would silently keep
-    // showing the old noun order.
-    const reordered = RING_POOL.map((s, i) => (i === 0 ? RING_POOL[10] : i === 10 ? RING_POOL[0] : s))
+    // Empirically verified: swapping the first 13 RING_POOL entries (authored
+    // stations) at positions 0 ("ringed planet") and 10 ("eclipse") under the
+    // default committed palette produces a byte-identical hue sequence to the
+    // unswapped order. A hue-only remount key would never change here, so the
+    // preview would silently keep showing the old noun order.
+    const authored = RING_POOL.slice(0, 13)
+    const reordered = authored.map((s, i) => (i === 0 ? authored[10] : i === 10 ? authored[0] : s))
     drawStationsImpl = () => reordered
     render()
     await act(async () => { await Promise.resolve() })
@@ -413,15 +414,15 @@ describe('WorldPaletteEditor', () => {
     expect(mounts.at(-1).worldData.stations[0].key).toBe('eclipse')
   })
 
-  it("picking a drawn-world shelf card preserves fields RING_POOL doesn't carry (finding #1 — eclipse's region survives the resolve)", async () => {
+  it("picking a drawn-world shelf card preserves fields RING_POOL now carries (finding #1 — eclipse's region survives the resolve)", async () => {
     render()
     await act(async () => { await Promise.resolve() })
     const worldCard = [...host.querySelectorAll('button[title]')].find(b => b.title.startsWith('eclipse'))
     act(() => worldCard.click())
     const last = mounts.at(-1).worldData.stations
-    // region/regionSource live only on the full authored station object
-    // (midnightGalaxy.ring.js), never on RING_POOL's reduced
-    // {key,prim,hue,accent,family} shape.
+    // region/regionSource live on the full station objects in RING_POOL
+    // (part of the 2026-09-24 fix — before then, a reduced projection
+    // silently dropped these fields, visible only at render time).
     expect(last[0].region).toBe('corona')
     expect(last[0].regionSource).toBe(true)
   })

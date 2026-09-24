@@ -181,12 +181,11 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
   const resolvedStations = useMemo(() => {
     if (!stations) return midnightGalaxyRing.stations
     try {
-      // Full authored station objects, not RING_POOL (the reduced shape
-      // drawStations' noun-selection algorithm needs) — this feeds the
-      // actual live preview, which reads variant/region/regionSource/
-      // noCompanion/companionKind by station identity. See ringWorldFor.js's
+      // Resolve against RING_POOL, which carries the full station objects
+      // (variant, region, regionSource, noCompanion, companionKind), not a
+      // reduced projection — this feeds the live preview. See ringWorldFor.js's
       // matching fix and references/ring-world-mistakes.md.
-      return resolveStations(midnightGalaxyRing.stations, stations)
+      return resolveStations(RING_POOL, stations)
     } catch (err) {
       console.warn('[palette editor] bad stations, using authored order:', err.message)
       return midnightGalaxyRing.stations

@@ -4,6 +4,7 @@
 // ringWorldFor test existed before this file. See design doc §7.1:
 // docs/superpowers/plans/2026-09-05-ring-unified-noun-color-draw-design.md
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
+import { RING_POOL } from '../worlds/ringPool.js'
 import { resolveStations } from './drawWorld.js'
 import { recolorWorld } from './ringRecolor.js'
 import { RING_VERSION } from './ringCertification.js'
@@ -50,15 +51,12 @@ export function ringWorldFor(theme) {
     const key = theme.id + '|world|' + JSON.stringify(theme.ringWorld)
     if (!worldCache.has(key)) {
       try {
-        // Resolve against the FULL authored station objects, not RING_POOL —
-        // RING_POOL is the reduced {key,prim,hue,accent,family} shape built
-        // only for drawStations' noun-selection algorithm. Resolving a
-        // drawn world's render data against it silently drops every field
-        // RingAmbient.jsx reads by station identity (variant, region,
-        // regionSource, noCompanion, companionKind) — see
-        // references/ring-world-mistakes.md and
-        // docs/superpowers/plans/2026-09-14-ring-world-shelf-stations.md.
-        const stations = resolveStations(midnightGalaxyRing.stations, theme.ringWorld.stations)
+        // Resolve against RING_POOL, which carries the full station objects
+        // (variant, region, regionSource, noCompanion, companionKind), not a
+        // reduced projection. Before 2026-09-24, a reduced {key,prim,hue,accent,
+        // family} pool silently dropped those fields at render time — see
+        // references/ring-world-mistakes.md.
+        const stations = resolveStations(RING_POOL, theme.ringWorld.stations)
         // Structural crash-safety: a stations array that resolves cleanly
         // but is the wrong length or has a duplicate key still reaches
         // RingAmbient.jsx (fixed station count, no such check), which can

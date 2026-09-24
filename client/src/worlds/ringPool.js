@@ -1,27 +1,22 @@
 //
-// Today's 13 ring stations, reshaped as a draw pool for ringDraw.js
-// (docs/superpowers/plans/2026-09-02-ring-station-variety.md §2.4). This is
-// a read of midnightGalaxy.ring.js + midnightGalaxy.slots.js, not a second
-// source of truth — if either of those files changes, ringPool.test.js's
-// hue-constant checks and family assertions catch drift immediately.
-//
-// The 2026-09-05 decision to retire `record` for an `eclipse` noun
-// (docs/superpowers/plans/2026-09-05-ring-unified-noun-color-draw-design.md
-// §11a item 4) landed 2026-09-06: station 10 is `eclipse` in both builds and
-// ringDraw/drawWorld pin that key by default. Placement at 10 is still
-// provisional pending Ben's TV sign-off; the pool itself just reads whatever
-// the station data says.
+// Full station objects for the 13 authored (fixed default ring) plus the
+// pool-only candidates in midnightGalaxy.candidates.js — this is the pool
+// client/src/lib/ringDraw.js's drawStations draws from. Carries every
+// render field (variant/region/regionSource/noCompanion/companionKind),
+// not a reduced {key,prim,hue,accent,family} projection: resolving a drawn
+// world's render data against a reduced pool silently dropped those
+// fields at render time — fixed 2026-09-24, see
+// references/ring-world-mistakes.md and client/src/lib/ringWorldFor.js's
+// own comment. `family` still comes from SLOTS[i] for the 13 authored
+// entries (reading a reshuffle of stations can't silently pair the wrong
+// hue/family to the wrong station); the six candidates carry their own
+// family directly, since they have no SLOTS entry — they're never part of
+// the fixed default ring, only ever pool-drawn.
 import { midnightGalaxyRing } from './midnightGalaxy.ring.js'
 import { SLOTS } from './midnightGalaxy.slots.js'
+import { CANDIDATE_STATIONS } from './midnightGalaxy.candidates.js'
 
-// Key, prim, hue, and accent come straight from the stations array; family
-// comes from SLOTS. Reading hue off the station (rather than a separate,
-// position-matched constants array) means a reshuffle of stations can't
-// silently pair the wrong hue to the wrong station.
-export const RING_POOL = midnightGalaxyRing.stations.map((station, i) => ({
-  key: station.key,
-  prim: station.prim,
-  hue: station.hue,
-  accent: station.accent,
-  family: SLOTS[i].family,
-}))
+export const RING_POOL = [
+  ...midnightGalaxyRing.stations.map((station, i) => ({ ...station, family: SLOTS[i].family })),
+  ...CANDIDATE_STATIONS,
+]
