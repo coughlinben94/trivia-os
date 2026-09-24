@@ -70,4 +70,62 @@ describe('ringWorldFor', () => {
     expect(() => ringWorldFor(theme)).not.toThrow()
     expect(ringWorldFor(theme)).toBe(midnightGalaxyRing)
   })
+
+  it('a resolved ringWorld station carries fields RING_POOL does not have (finding #1 — full authored station shape, not the reduced draw-pool shape)', () => {
+    // RING_POOL is {key,prim,hue,accent,family} only — variant/region/
+    // regionSource/noCompanion/companionKind live solely on the full
+    // midnightGalaxyRing.stations objects, and RingAmbient.jsx reads them
+    // by station identity. Resolving against RING_POOL silently drops them.
+    const theme = {
+      ...BASE_THEME,
+      ringWorld: {
+        rowId: 'row-1', seed: 'x', ringVersion: RING_VERSION,
+        stations: SWAPPED_KEYS,
+        palette: { colors: ['#22c55e', '#eab308'], weights: [0.5, 0.5], drift: { arc: 30 } },
+      },
+    }
+    const world = ringWorldFor(theme)
+    const eclipse = world.stations.find(s => s.key === 'eclipse')
+    expect(eclipse.region).toBe('corona')
+    expect(eclipse.regionSource).toBe(true)
+    const pulsar = world.stations.find(s => s.key === 'pulsar')
+    expect(pulsar.noCompanion).toBe(true)
+  })
+
+  it('falls back to the base world when a resolved ringWorld.stations array is the wrong length, without throwing (finding #3)', () => {
+    const theme = {
+      ...BASE_THEME,
+      ringWorld: { rowId: null, seed: 'x', ringVersion: RING_VERSION, stations: AUTHORED_KEYS.slice(0, 12), palette: { colors: ['#22c55e', '#eab308'], weights: [0.5, 0.5], drift: { arc: 30 } } },
+    }
+    expect(() => ringWorldFor(theme)).not.toThrow()
+    expect(ringWorldFor(theme)).toBe(midnightGalaxyRing)
+  })
+
+  it('falls back to the base world when a resolved ringWorld.stations array has a duplicate key, without throwing (finding #3)', () => {
+    // 13 entries, but the last is overwritten with the first key — one key
+    // ("supernova") silently missing, "ringed planet" appearing twice.
+    const dup = AUTHORED_KEYS.map((k, i) => (i === 12 ? AUTHORED_KEYS[0] : k))
+    const theme = {
+      ...BASE_THEME,
+      ringWorld: { rowId: null, seed: 'x', ringVersion: RING_VERSION, stations: dup, palette: { colors: ['#22c55e', '#eab308'], weights: [0.5, 0.5], drift: { arc: 30 } } },
+    }
+    expect(() => ringWorldFor(theme)).not.toThrow()
+    expect(ringWorldFor(theme)).toBe(midnightGalaxyRing)
+  })
+
+  it('falls through to the recolored worldPalette, not straight to base, when ringWorld fails to resolve but worldPalette is ALSO present (combinatorial gap flagged in review)', () => {
+    const theme = {
+      ...BASE_THEME,
+      // Distinct seed/key from the "unresolvable station key" case above —
+      // ringWorldFor's cache key is derived from theme.ringWorld alone, so
+      // reusing that exact payload would hit the OTHER test's cached
+      // (worldPalette-less) fallback instead of exercising this one.
+      ringWorld: { rowId: null, seed: 'combinatorial', ringVersion: RING_VERSION, stations: ['still-not-a-real-key', ...AUTHORED_KEYS.slice(1)], palette: { colors: ['#22c55e', '#eab308'], weights: [0.5, 0.5], drift: { arc: 30 } } },
+      worldPalette: { colors: ['#ff0000', '#0000ff'], weights: [0.6, 0.4], drift: { arc: 60 } },
+    }
+    const world = ringWorldFor(theme)
+    expect(world).not.toBe(midnightGalaxyRing)
+    expect(world.stations.map(s => s.key)).toEqual(AUTHORED_KEYS) // worldPalette never reorders
+    expect(world.stations.map(s => s.hue)).not.toEqual(midnightGalaxyRing.stations.map(s => s.hue))
+  })
 })

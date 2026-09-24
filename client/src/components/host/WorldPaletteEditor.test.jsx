@@ -360,8 +360,69 @@ describe('WorldPaletteEditor', () => {
     render()
     await act(async () => { await Promise.resolve() })
     act(() => byText('Re-roll objects').click())
-    expect(host.textContent).toContain("Couldn't compose a new object set")
+    expect(host.textContent).toContain("Re-roll objects can't work yet")
+    // Message must read as permanent, not a transient failure worth retrying
+    // (finding #4 — a host was confused by the old "known, tracked" wording):
+    expect(host.textContent).toContain("clicking again won't")
     // Must not have crashed the rest of the modal:
     expect(byText("Apply to this show's theme")).toBeTruthy()
+  })
+
+  it('Re-roll objects stays enabled even while the shelf is loading/empty — it never reads the shelf (finding #5)', async () => {
+    render()
+    // Shelf fetch hasn't resolved yet — Apply is disabled, Re-roll is not.
+    expect(byText('Re-roll objects').disabled).toBeFalsy()
+    await act(async () => { await Promise.resolve() })
+    expect(byText('Re-roll objects').disabled).toBeFalsy()
+  })
+
+  it('clears a stale re-roll error once the host picks a shelf row (finding #5)', async () => {
+    render()
+    await act(async () => { await Promise.resolve() })
+    act(() => byText('Re-roll objects').click())
+    expect(host.textContent).toContain("Re-roll objects can't work yet")
+    const worldCard = [...host.querySelectorAll('button[title]')].find(b => b.title.startsWith('eclipse'))
+    act(() => worldCard.click())
+    expect(host.textContent).not.toContain("Re-roll objects can't work yet")
+  })
+
+  it('clears a stale re-roll error once the host clicks Surprise me (finding #5)', async () => {
+    render()
+    await act(async () => { await Promise.resolve() })
+    act(() => byText('Re-roll objects').click())
+    expect(host.textContent).toContain("Re-roll objects can't work yet")
+    act(() => byText('Surprise me').click())
+    expect(host.textContent).not.toContain("Re-roll objects can't work yet")
+  })
+
+  it('Re-roll objects composing a valid draw forces the preview to remount even when the hue sequence is unchanged (finding #2 — previewKey must include station keys, not just hues)', async () => {
+    // Empirically verified: swapping RING_POOL positions 0 ("ringed planet")
+    // and 10 ("eclipse") under the default committed palette produces a
+    // byte-identical hue sequence to the unswapped order. A hue-only remount
+    // key would never change here, so the preview would silently keep
+    // showing the old noun order.
+    const reordered = RING_POOL.map((s, i) => (i === 0 ? RING_POOL[10] : i === 10 ? RING_POOL[0] : s))
+    drawStationsImpl = () => reordered
+    render()
+    await act(async () => { await Promise.resolve() })
+    const beforeMountCount = mounts.length
+    const beforeHues = mounts.at(-1).worldData.stations.map(s => s.hue)
+    act(() => byText('Re-roll objects').click())
+    expect(mounts.at(-1).worldData.stations.map(s => s.hue)).toEqual(beforeHues) // same hue sequence
+    expect(mounts.length).toBe(beforeMountCount + 1) // still remounted
+    expect(mounts.at(-1).worldData.stations[0].key).toBe('eclipse')
+  })
+
+  it("picking a drawn-world shelf card preserves fields RING_POOL doesn't carry (finding #1 — eclipse's region survives the resolve)", async () => {
+    render()
+    await act(async () => { await Promise.resolve() })
+    const worldCard = [...host.querySelectorAll('button[title]')].find(b => b.title.startsWith('eclipse'))
+    act(() => worldCard.click())
+    const last = mounts.at(-1).worldData.stations
+    // region/regionSource live only on the full authored station object
+    // (midnightGalaxy.ring.js), never on RING_POOL's reduced
+    // {key,prim,hue,accent,family} shape.
+    expect(last[0].region).toBe('corona')
+    expect(last[0].regionSource).toBe(true)
   })
 })

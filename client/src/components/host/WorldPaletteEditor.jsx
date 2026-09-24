@@ -181,7 +181,12 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
   const resolvedStations = useMemo(() => {
     if (!stations) return midnightGalaxyRing.stations
     try {
-      return resolveStations(RING_POOL, stations)
+      // Full authored station objects, not RING_POOL (the reduced shape
+      // drawStations' noun-selection algorithm needs) — this feeds the
+      // actual live preview, which reads variant/region/regionSource/
+      // noCompanion/companionKind by station identity. See ringWorldFor.js's
+      // matching fix and references/ring-world-mistakes.md.
+      return resolveStations(midnightGalaxyRing.stations, stations)
     } catch (err) {
       console.warn('[palette editor] bad stations, using authored order:', err.message)
       return midnightGalaxyRing.stations
@@ -216,7 +221,14 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
   // own iframe-hosted instance — RingAmbient keeps all real state in
   // per-instance refs; only the window.__world debug handle is shared,
   // last-mounted wins, harmless.)
-  const previewKey = previewWorldData.stations.map(s => s.hue).join(',')
+  // Keys AND hues: recolorWorld's assignment can land two different noun
+  // orderings on the identical hue sequence (station-identity-aware color
+  // assignment, not position-based — verified: swapping the authored
+  // world's positions 0/10 under the default palette produces byte-identical
+  // hues). A hue-only key would then never change key, so RingAmbient (built
+  // once per mount) would silently keep showing the stale noun order after
+  // a re-roll or a same-palette shelf pick.
+  const previewKey = previewWorldData.stations.map(s => `${s.key}:${s.hue}`).join(',')
 
   // Built from the committed palette, not the live drag state — matches
   // what the preview above is actually showing.
@@ -304,6 +316,7 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
                 <button
                   key={row.id}
                   onClick={() => {
+                    setRerollError(false)
                     applyPalette(row.colors, row.weights, row.drift?.arc ?? 60)
                     setDrift(row.drift?.arc ?? 60)
                     setStations(row.stations ?? null)
@@ -338,6 +351,7 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
             <button
               onClick={() => {
                 if (!shelf.length) return
+                setRerollError(false)
                 const pick = shelf[Math.floor(Math.random() * shelf.length)]
                 // Math.random is fine HERE — this is host-UI selection among
                 // ALREADY-CERTIFIED rows, not world construction; the Global
@@ -354,15 +368,16 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
             </button>
             <button
               onClick={reRollObjects}
-              disabled={shelfLoading || !shelf.length}
-              className="text-xs font-medium px-3 py-1.5 rounded-full border border-gray-200 hover:border-gray-400 disabled:opacity-40"
+              className="text-xs font-medium px-3 py-1.5 rounded-full border border-gray-200 hover:border-gray-400"
             >
               🔀 Re-roll objects
             </button>
           </div>
           {rerollError && (
             <p className="text-xs text-amber-700">
-              Couldn't compose a new object set yet — the noun pool needs more variety first (known, tracked).
+              Re-roll objects can't work yet — the current noun set doesn't have enough variety to
+              build a new arrangement. This is a known limit, not a glitch: clicking again won't
+              help until more objects are added.
             </p>
           )}
           {showCustom && (
