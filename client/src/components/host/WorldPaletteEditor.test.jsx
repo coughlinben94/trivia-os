@@ -16,7 +16,15 @@ import { createRoot } from 'react-dom/client'
 // re-renders the preview, so only a remount counts.
 vi.mock('../../lib/ringPalettesClient.js', () => ({
   fetchCertifiedPalettes: vi.fn().mockResolvedValue([
-    { id: '1', colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35], drift: { arc: 60 }, source: 'generated', seed: '42' },
+    { id: '1', colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35], drift: { arc: 60 }, source: 'generated', seed: '42', stations: null },
+    {
+      id: '2', colors: ['#22c55e', '#eab308'], weights: [0.5, 0.5], drift: { arc: 30 }, source: 'generated', seed: '99',
+      // Swap of positions 0/10 — same swap the 2026-09-14 shelf-stations
+      // plan's own integration test used, reused here for the same reason
+      // ringWorldFor.test.js reuses it: two independent "known good" swaps
+      // agreeing is worth more than either alone.
+      stations: ['eclipse', 'spiral galaxy', 'star cluster', 'amber planet', 'lit planet', 'pulsar', 'rose nebula', 'comet', 'binary pair', 'asteroid field', 'ringed planet', 'aurora ribbon', 'supernova'],
+    },
   ]),
   saveAsPending: vi.fn().mockResolvedValue(undefined),
   findMatch: (shelf, p) => shelf.find(s => JSON.stringify(s.colors) === JSON.stringify(p.colors) && JSON.stringify(s.weights) === JSON.stringify(p.weights) && JSON.stringify(s.drift) === JSON.stringify(p.drift)),
@@ -33,6 +41,12 @@ vi.mock('../display/RingAmbient.jsx', async () => {
   }
 })
 
+let drawWorldImpl = () => { throw new Error('ringDraw: pool cannot fill 13 slots under the caps (chose 11 of 13)') }
+vi.mock('../../lib/drawWorld.js', async () => {
+  const actual = await vi.importActual('../../lib/drawWorld.js')
+  return { ...actual, drawWorld: (...args) => drawWorldImpl(...args) }
+})
+
 const { default: WorldPaletteEditor } = await import('./WorldPaletteEditor.jsx')
 
 const BASE = {
@@ -45,6 +59,7 @@ const BASE = {
 let host, root
 beforeEach(() => {
   mounts.length = 0
+  drawWorldImpl = () => { throw new Error('ringDraw: pool cannot fill 13 slots under the caps (chose 11 of 13)') }
   vi.useFakeTimers()
   host = document.createElement('div')
   document.body.appendChild(host)
@@ -212,5 +227,80 @@ describe('WorldPaletteEditor', () => {
     await act(async () => { await Promise.resolve() })
     expect(applied).toHaveLength(0)
     expect(byText('Saved, pending check')).toBeTruthy()
+  })
+
+  it('lists certified shelf rows as clickable cards, including a drawn-world row', async () => {
+    // Scoped to `.shrink-0` (the shelf-card class) — the preset row's own
+    // buttons also carry a `title` attribute (pre-existing, unrelated to
+    // this task), so a bare `button[title]` query over-matches.
+    render()
+    await act(async () => { await Promise.resolve() })
+    const cards = [...host.querySelectorAll('button.shrink-0[title]')]
+    expect(cards).toHaveLength(2)
+    expect(cards[1].title).toContain('eclipse')
+  })
+
+  it('picking a drawn-world shelf card reorders the preview stations to match', async () => {
+    render()
+    await act(async () => { await Promise.resolve() })
+    const worldCard = [...host.querySelectorAll('button[title]')].find(b => b.title.startsWith('eclipse'))
+    act(() => worldCard.click())
+    const last = mounts.at(-1).worldData.stations
+    expect(last[0].key).toBe('eclipse')
+    expect(last[10].key).toBe('ringed planet')
+  })
+
+  it('Apply on a picked drawn-world row hands up a ringWorld payload matching the shelf row', async () => {
+    const applied = []
+    render({ onApplyThemeColors: c => applied.push(c), showId: 'show-abc' })
+    await act(async () => { await Promise.resolve() })
+    const worldCard = [...host.querySelectorAll('button[title]')].find(b => b.title.startsWith('eclipse'))
+    act(() => worldCard.click())
+    act(() => byText("Apply to this show's theme").click())
+    expect(applied).toHaveLength(1)
+    expect(applied[0].ringWorld).toEqual({
+      rowId: '2',
+      seed: expect.stringMatching(/^showSeed:[0-9a-f]+$/),
+      ringVersion: expect.any(String),
+      stations: ['eclipse', 'spiral galaxy', 'star cluster', 'amber planet', 'lit planet', 'pulsar', 'rose nebula', 'comet', 'binary pair', 'asteroid field', 'ringed planet', 'aurora ribbon', 'supernova'],
+      palette: { colors: ['#22c55e', '#eab308'], weights: [0.5, 0.5], drift: { arc: 30 } },
+    })
+  })
+
+  it('Apply on a plain palette pick omits ringWorld entirely (back-compat)', async () => {
+    const applied = []
+    render({ onApplyThemeColors: c => applied.push(c) })
+    await act(async () => { await Promise.resolve() })
+    act(() => byText("Apply to this show's theme").click())
+    expect(applied).toHaveLength(1)
+    expect('ringWorld' in applied[0]).toBe(false)
+  })
+
+  it('Re-roll objects composes a new draw and updates the preview on success', async () => {
+    // Real drawWorld keys are always resolvable RING_POOL entries (drawn
+    // FROM the pool) — reuse the same known-good 13-key reorder as the
+    // shelf mock above rather than placeholder keys, since the component
+    // re-resolves stations by key against RING_POOL (see previewWorldData).
+    const DRAWN_KEYS = ['eclipse', 'spiral galaxy', 'star cluster', 'amber planet', 'lit planet', 'pulsar', 'rose nebula', 'comet', 'binary pair', 'asteroid field', 'ringed planet', 'aurora ribbon', 'supernova']
+    drawWorldImpl = () => ({
+      world: {
+        stations: DRAWN_KEYS.map(key => ({ key })),
+        palette: { colors: ['#111111', '#222222'], weights: [0.7, 0.3], drift: { arc: 45 } },
+      },
+      showSeed: 1, nounSeed: 2, palSeed: 3,
+    })
+    render()
+    await act(async () => { await Promise.resolve() })
+    act(() => byText('Re-roll objects').click())
+    expect(mounts.at(-1).worldData.stations[0].key).toBe('eclipse')
+  })
+
+  it("Re-roll objects shows a plain error instead of crashing when the pool cannot fill 13 slots (known limit — docs/superpowers/plans/2026-09-14-ring-world-shelf-stations.md)", async () => {
+    render()
+    await act(async () => { await Promise.resolve() })
+    act(() => byText('Re-roll objects').click())
+    expect(host.textContent).toContain("Couldn't compose a new object set")
+    // Must not have crashed the rest of the modal:
+    expect(byText("Apply to this show's theme")).toBeTruthy()
   })
 })

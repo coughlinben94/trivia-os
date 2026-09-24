@@ -1,8 +1,11 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { derivePalette } from '../../lib/weightedPalette.js'
-import { PRESETS } from '../../lib/paletteGenerator.js'
+import { PRESETS, seedFrom } from '../../lib/paletteGenerator.js'
 import { recolorWorld } from '../../lib/ringRecolor.js'
 import { midnightGalaxyRing } from '../../worlds/midnightGalaxy.ring.js'
+import { RING_POOL } from '../../worlds/ringPool.js'
+import { resolveStations, drawWorld } from '../../lib/drawWorld.js'
+import { RING_VERSION } from '../../lib/ringCertification.js'
 import { fetchCertifiedPalettes, saveAsPending, findMatch } from '../../lib/ringPalettesClient.js'
 import RingAmbient from '../display/RingAmbient.jsx'
 
@@ -34,6 +37,7 @@ const MIN_WEIGHT = 0.05
 const COLOR_DEBOUNCE_MS = 400
 
 const CURRENT_HUES = midnightGalaxyRing.stations.map(s => s.hue)
+const AUTHORED_STATION_KEYS = midnightGalaxyRing.stations.map(s => s.key)
 
 // Cumulative divider positions, so dragging one divider moves weight
 // between exactly its two neighbours and the total is 1 by construction.
@@ -88,7 +92,7 @@ function WeightBar({ colors, weights, onChange, onCommit }) {
   )
 }
 
-export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeColors }) {
+export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeColors, showId }) {
   const [colors, setColors]   = useState(['#a855f7', '#3b82f6'])
   const [weights, setWeights] = useState([0.65, 0.35])
   const [drift, setDrift] = useState(60) // Ben's 2026-09-03 default
@@ -105,6 +109,8 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
   const [shelf, setShelf] = useState([])
   const [shelfLoading, setShelfLoading] = useState(true)
   const [shelfError, setShelfError] = useState(false)
+  const [stations, setStations] = useState(null) // null = authored ring; else a 13-key drawn order
+  const [rerollError, setRerollError] = useState(false)
   const colorDebounceRef = useRef(null)
   const appliedTimeoutRef = useRef(null)
   const copyTimeoutRef = useRef(null)
@@ -181,12 +187,13 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
   // just fail to preview a colour.
   const previewWorldData = useMemo(() => {
     try {
-      return recolorWorld(midnightGalaxyRing, committed, baseTheme)
+      const base = stations ? { ...midnightGalaxyRing, stations: resolveStations(RING_POOL, stations) } : midnightGalaxyRing
+      return recolorWorld(base, committed, baseTheme)
     } catch (err) {
-      console.warn('[palette editor] bad committed palette, showing base world:', err.message)
+      console.warn('[palette editor] bad committed world, showing base world:', err.message)
       return midnightGalaxyRing
     }
-  }, [committed, baseTheme])
+  }, [committed, stations, baseTheme])
 
   // Remount key: RingAmbient builds once on mount by design, so a new
   // palette needs a new instance. (Coexists fine with the theme modal's
@@ -214,6 +221,20 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
     }).catch(() => {})
   }
 
+  function reRollObjects() {
+    setRerollError(false)
+    try {
+      const { world } = drawWorld({ base: midnightGalaxyRing, pool: RING_POOL, shelf, showId: String(showId ?? 'preview'), baseTheme })
+      applyPalette(world.palette.colors, world.palette.weights, world.palette.drift.arc)
+      setStations(world.stations.map(s => s.key))
+    } catch {
+      // Known, deterministic today: the real pool has 5 radial-mass entries
+      // against a cap of 4, so every seed throws. See Global Constraints,
+      // docs/superpowers/plans/2026-09-24-ring-world-picker-ui.md.
+      setRerollError(true)
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-6" onClick={onClose}>
       <div
@@ -222,7 +243,7 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
-          <h2 className="text-sm font-semibold text-gray-800">World palette — Midnight Galaxy</h2>
+          <h2 className="text-sm font-semibold text-gray-800">World — Midnight Galaxy</h2>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg text-sm">✕</button>
         </div>
 
@@ -242,6 +263,40 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
               </button>
             ))}
           </div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {shelfLoading ? (
+              [0, 1, 2].map(i => <div key={i} className="shrink-0 w-28 h-14 rounded-lg bg-gray-100 animate-pulse" />)
+            ) : shelf.length === 0 ? (
+              <p className="text-xs text-gray-400 py-2">No certified worlds yet — run `palette-sweep.mjs --world-batch`.</p>
+            ) : (
+              shelf.map(row => (
+                <button
+                  key={row.id}
+                  onClick={() => {
+                    applyPalette(row.colors, row.weights, row.drift?.arc ?? 60)
+                    setDrift(row.drift?.arc ?? 60)
+                    setStations(row.stations ?? null)
+                  }}
+                  title={(row.stations ?? AUTHORED_STATION_KEYS).join(', ')}
+                  className="shrink-0 w-28 rounded-lg border border-gray-200 hover:border-gray-400 overflow-hidden text-left"
+                >
+                  <div className="flex h-6">
+                    {row.colors.map((c, i) => (
+                      <span key={i} className="h-full" style={{ width: `${(row.weights[i] ?? 0) * 100}%`, background: c }} />
+                    ))}
+                  </div>
+                  {/* ponytail: dot-per-noun hue coloring skipped — every
+                      certified row today has stations=null (see Global
+                      Constraints), so 13 identical dots would show nothing.
+                      Add real per-dot hue once a --world-batch run actually
+                      certifies a drawn-world row. */}
+                  <div className="px-1.5 py-1 text-[10px] text-gray-500">
+                    {row.stations ? `${row.stations.length}-noun world` : 'Palette'}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
           <div className="flex items-center gap-3">
             <button
               onClick={() => setShowCustom(v => !v)}
@@ -259,13 +314,26 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
                 // own build, which this file is not.
                 applyPalette(pick.colors, pick.weights, pick.drift.arc)
                 setDrift(pick.drift.arc)
+                setStations(pick.stations ?? null)
               }}
               disabled={shelfLoading || !shelf.length}
               className="text-xs font-medium px-3 py-1.5 rounded-full border border-gray-200 hover:border-gray-400 disabled:opacity-40"
             >
               {shelfLoading ? 'Loading palettes…' : shelfError ? "Couldn't load palettes — try again" : shelf.length ? `🎲 Surprise me (${shelf.length} ready)` : 'No certified palettes yet'}
             </button>
+            <button
+              onClick={reRollObjects}
+              disabled={shelfLoading || !shelf.length}
+              className="text-xs font-medium px-3 py-1.5 rounded-full border border-gray-200 hover:border-gray-400 disabled:opacity-40"
+            >
+              🔀 Re-roll objects
+            </button>
           </div>
+          {rerollError && (
+            <p className="text-xs text-amber-700">
+              Couldn't compose a new object set yet — the noun pool needs more variety first (known, tracked).
+            </p>
+          )}
           {showCustom && (
             <div className="space-y-3 pt-1">
               <div className="flex items-center gap-3">
@@ -299,7 +367,7 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
 
         <div className="flex flex-1 min-h-0 overflow-hidden">
           <div className="w-52 shrink-0 border-r border-gray-100 overflow-y-auto py-2">
-            {midnightGalaxyRing.stations.map((st, i) => (
+            {previewWorldData.stations.map((st, i) => (
               <button
                 key={st.key}
                 onClick={() => setPreviewStation(i)}
@@ -339,7 +407,7 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
               <tbody>
                 {derived.advisory.map(a => (
                   <tr key={a.index} className={a.delta > 25 ? 'text-amber-700' : 'text-gray-600'}>
-                    <td className="text-left capitalize">{midnightGalaxyRing.stations[a.index].key}</td>
+                    <td className="text-left capitalize">{previewWorldData.stations[a.index].key}</td>
                     <td className="text-right">{a.fromHue}° → {a.toHue}°</td>
                     <td className="text-right">{a.fromLuma}</td>
                     <td className="text-right">{a.toLuma}</td>
@@ -396,10 +464,20 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
           <button
             onClick={async () => {
               setSaveFailed(false) // clear any stale failure from a prior attempt before this one starts
-              const current = { colors, weights, drift: { arc: drift } }
+              const current = { colors, weights, drift: { arc: drift }, stations }
               const match = findMatch(shelf, current)
+              const payload = { themeColors: derived.themeColors, worldPalette: { colors, weights, drift: { arc: drift } } }
+              if (stations) {
+                payload.ringWorld = {
+                  rowId: match?.id ?? null,
+                  seed: `showSeed:${seedFrom(String(showId ?? '')).toString(16)}`,
+                  ringVersion: RING_VERSION,
+                  stations,
+                  palette: { colors, weights, drift: { arc: drift } },
+                }
+              }
               if (match) {
-                onApplyThemeColors({ themeColors: derived.themeColors, worldPalette: { colors, weights, drift: { arc: drift } } })
+                onApplyThemeColors(payload)
                 setApplied(true)
                 // Visible confirmation before closing — the write itself is
                 // silent (same fire-and-forget theme_overrides path every

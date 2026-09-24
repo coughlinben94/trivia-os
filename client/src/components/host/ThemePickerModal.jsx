@@ -132,8 +132,10 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
   // worldPalette rides along in the same write (2026-09-03) — the ring is
   // now a per-show runtime value, not a file a human edits separately; see
   // ParticleBackground.jsx's ringWorldFor.
-  function applyPaletteColors({ themeColors, worldPalette }) {
+  function applyPaletteColors({ themeColors, worldPalette, ringWorld }) {
     const next = { ...overrides, colors: { ...overrides.colors, ...themeColors }, worldPalette }
+    if (ringWorld) next.ringWorld = ringWorld
+    else delete next.ringWorld
     setOverrides(next)
     onUpdateOverrides(next)
   }
@@ -143,6 +145,7 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
     delete next.colors
     delete next.fonts
     delete next.worldPalette
+    delete next.ringWorld
     setOverrides(next)
     onUpdateOverrides(next)
   }
@@ -299,6 +302,7 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
         {paletteOpen && (
           <WorldPaletteEditor
             baseTheme={baseTheme}
+            showId={show.id}
             onApplyThemeColors={applyPaletteColors}
             onClose={() => setPaletteOpen(false)}
           />
