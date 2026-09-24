@@ -89,8 +89,11 @@ export function drawWorld({ base, pool, shelf, showId, baseTheme, pinKey = 'ecli
   // Also: this draw's real identity is (showId, pool contents, shelf
   // contents), not just showId — palSeed/nounSeed are reduced modulo the
   // current array lengths, so adding/removing one pool entry or shelf row
-  // silently re-rolls every existing show's draw, not just new ones. A
-  // future persistence layer needs to account for that.
+  // silently re-rolls every existing show's draw, not just new ones. This
+  // was a hypothetical when RING_POOL was 13 entries and drawStations threw
+  // for every showId anyway — RING_POOL growing to 19 (2026-09-24) is a real
+  // pool-length change, so this re-roll effect is now live, not theoretical.
+  // A future persistence layer needs to account for that.
   const palette = shelf[palSeed % shelf.length]
 
   const world = recolorWorld({ ...base, stations }, palette, baseTheme)
