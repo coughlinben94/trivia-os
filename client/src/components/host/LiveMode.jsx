@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useState, useRef } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { getTheme, THEMES } from '../../themes/index.js'
-import { resolveShinyPart, isAudioShiny } from '../../lib/shinySeries.js'
+import { resolveShinyPart, isAudioShiny, isBendleShiny } from '../../lib/shinySeries.js'
 import ScorePanel from './ScorePanel.jsx'
 import LateTeamPopover from './LateTeamPopover.jsx'
 import { SELECTION_ANIMATIONS } from '../display/slides/selectionAnimations.js'
@@ -949,6 +949,14 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // same contract as maybeStartLockCountdown above.
   function maybeStartAudioPlay() {
     if (!currentSlide || currentSlide.type !== 'question') return false
+    // Bendle's audio isn't mediaUrl-shaped (it's a Tone.js stem mix keyed
+    // by bendleSongId) — resolveShinyPart/hasAudio below don't apply to
+    // it, so it's handled as its own branch ahead of the generic checks.
+    if (isBendleShiny(currentSlide.data)) {
+      if (show.audio_playing?.slideId === currentSlide.id) return false
+      guardNav(() => actions.setAudioPlaying({ slideId: currentSlide.id, playing: true }))
+      return true
+    }
     if (currentSlide.data?.isShiny) {
       // A shiny audio question (2026-09-01, P1 live, Round 2's "One Hit
       // Unwonder": "hitting next skips to next question, doesnt play
