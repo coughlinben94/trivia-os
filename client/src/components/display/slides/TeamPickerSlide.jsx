@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { supabase } from '../../../lib/supabase.js';
+import { analyzeAudioGain } from '../../../lib/audioNormalize.js';
 import { useTheme } from '../../shared/ThemeProvider.jsx';
 import { EASE_OUT, EASE_PANEL } from '../../../lib/easings.js';
 import { nextSlideAfter, TEAM_PICKER_HOLD_MS } from '../../../lib/slideStepping.js';
@@ -24,6 +25,29 @@ const CAP = DISP_CAP * SS, MAXW = 1520 * SS;
 // than timed from `landed` — `landed` fires when the outro text finishes
 // exiting, ~0.8s BEFORE the stars have actually come to rest.
 const SETTLED_WARP = 0.02;
+// Ceremony theme file is a fixed public/ asset, not a per-slide upload, so
+// it never goes through the host's normal analyzeAudioGain-on-upload path
+// (SlideEditor.jsx) — that's the same RMS-to-target formula this reuses,
+// just triggered on first play instead of on upload. Cached at module scope
+// (not per-mount) since it's the same file for the life of the page and
+// decoding a ~16min mp3 on every team-picker slide would be wasteful.
+// 2026-09-24, Ben: measured -14.9dB mean / -0.3dB peak on the played
+// segment vs. this app's -20dB RMS target elsewhere — ~5dB hotter than
+// every other audio source, which is what was reading as "so loud" on the
+// PA. Doing this via decode+analyze (not a hardcoded dB constant) means a
+// future theme-file swap (it's been swapped before, 2026-08-25) self-
+// corrects instead of needing this number hand-recomputed again.
+const TEAM_INTRO_AUDIO_URL = '/audio/team-intro-theme.mp3';
+let teamIntroGainDbPromise = null;
+function getTeamIntroGainDb() {
+  if (!teamIntroGainDbPromise) {
+    teamIntroGainDbPromise = fetch(TEAM_INTRO_AUDIO_URL)
+      .then((r) => r.blob())
+      .then(analyzeAudioGain)
+      .catch(() => 0);
+  }
+  return teamIntroGainDbPromise;
+}
 // Ceremonial reveal, not a UI transition — deliberately slower than the
 // app's 150-250ms interaction range. EASE_PANEL is this repo's drawer/sheet
 // curve, which is exactly what this motion is: a black sheet sliding away.
@@ -170,7 +194,16 @@ export default function TeamPickerSlide({ slide, show, isPreview }) {
   // case has one, but `.play()` rejection is swallowed either way rather
   // than surfaced, since there's no UI here to show an error in.
   const audioRef = useRef(null);
-  const AUDIO_VOL = 0.55;
+  const audioCtxRef = useRef(null);
+  const gainNodeRef = useRef(null);
+  // Was a hand-picked 0.55 (the element's own linear volume, no loudness
+  // analysis behind it) — that's what let this track play louder than
+  // every other audio source in the show. Now unity: the actual level
+  // correction lives in gainNodeRef, computed from the real file (see
+  // getTeamIntroGainDb above), so this constant is just the fade
+  // ceiling — a.volume swings 0..1, the GainNode does the dB correction
+  // on top.
+  const AUDIO_VOL = 1;
   // 2026-08-25 (Ben: swap the ceremony theme, start at 3:01, fade in, run
   // until he advances past it — same fade-in/fade-out this slide already
   // had, just a different clip and a mid-track start). Playback starts at
@@ -232,6 +265,24 @@ export default function TeamPickerSlide({ slide, show, isPreview }) {
     // PreShowSlide.jsx).
     if (!a || isPreview) return;
     stopVolAnim();
+    // Gain graph built once per mount (createMediaElementSource throws if
+    // called twice on the same element — this effect has an empty dep
+    // array, so it only runs once, same guard shape as QuestionSlide.jsx's
+    // audioCtxRef). Starts at unity and corrects itself once the analysis
+    // (fetched once, cached at module scope — see getTeamIntroGainDb above)
+    // resolves, rather than blocking playback on it.
+    if (!audioCtxRef.current) {
+      const ctx = new AudioContext();
+      const gainNode = ctx.createGain();
+      ctx.createMediaElementSource(a).connect(gainNode);
+      gainNode.connect(ctx.destination);
+      audioCtxRef.current = ctx;
+      gainNodeRef.current = gainNode;
+      getTeamIntroGainDb().then((gainDb) => {
+        if (gainNodeRef.current) gainNodeRef.current.gain.value = Math.pow(10, gainDb / 20);
+      });
+    }
+    if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume().catch(() => {});
     // Fresh entry (currentPart 0 — the opening text, before the host's first
     // Next) plays the real intro: silent hold, fade up from 0 in step with
     // the reveal. A MOUNT that starts mid-ceremony (currentPart > 0) is not
@@ -265,7 +316,12 @@ export default function TeamPickerSlide({ slide, show, isPreview }) {
       volAnimRef.current.raf = requestAnimationFrame(step);
     }, Math.max(0, REVEAL_S * 1000 - START_LEAD_MS));
     volAnimRef.current.timeout = t;
-    return stopVolAnim;
+    return () => {
+      stopVolAnim();
+      audioCtxRef.current?.close();
+      audioCtxRef.current = null;
+      gainNodeRef.current = null;
+    };
   }, []);
 
   // live from teams table, baked on mount (everyone who scanned the QR).
