@@ -35,6 +35,18 @@ describe('DUO_GRAPH', () => {
     }
   })
 
+  it('every palette carries its own certified drift arc — never falls back to the wrong, uncertified 0', () => {
+    // Real bug (Codex review, 2026-09-24): the first version of this file
+    // omitted drift entirely. ring_palettes certifies colors+weights+drift
+    // together, and recolorWorld() silently defaults missing drift to
+    // { arc: 0 } — rendering any of these duos without it would show a
+    // DIFFERENT visual state than what actually passed the gate.
+    for (const [id, { drift }] of Object.entries(DUO_PALETTES)) {
+      expect(drift, id).toBeTruthy()
+      expect(typeof drift.arc, id).toBe('number')
+    }
+  })
+
   it('a real walk stays on real duos for a long stretch (smoke test)', () => {
     for (let step = 0; step < 40; step++) {
       const id = duoWalk('show_smoke_test', DUO_GRAPH, step)

@@ -14,19 +14,28 @@
 // green, and the newly-certified vivid family (mint, turquoise, cyan,
 // electric blue+pink, neon magenta+green) that a palette-sweep.mjs retry
 // fix (2026-09-24, same session) found for the first time.
+// `drift` is part of what was actually certified (Codex review, 2026-09-24
+// — a real gap the first version of this file had): ring_palettes stores
+// and matches on colors+weights+drift together, and recolorWorld() defaults
+// to drift arc 0 when it's missing — rendering any of these without its own
+// drift value would show a DIFFERENT, never-certified visual state. Every
+// value below is copied from the live certified row (verified via Supabase
+// query this same session, not assumed) — the 6 presets were all swept at
+// arc 60 (palette-sweep.mjs's preset loop hardcodes that), the 6 generated
+// duos each carry their own individually-rolled arc.
 export const DUO_PALETTES = {
-  crimson_gold:    { colors: ['#dc2626', '#eab308'], weights: [0.6, 0.4] },
-  solar_flare:     { colors: ['#ea580c', '#facc15'], weights: [0.6, 0.4] },
-  amber_rose:      { colors: ['#f59e0b', '#f43f5e'], weights: [0.55, 0.45] },
-  purple_blue:     { colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35] },
-  violet_pink:     { colors: ['#8b5cf6', '#ec4899'], weights: [0.6, 0.4] },
-  amazon_dusk:     { colors: ['#166534', '#7c3aed'], weights: [0.55, 0.45] },
-  mint_drift:      { colors: ['#63e4a3', '#5134f9'], weights: [0.688, 0.312] },
-  electric_bloom:  { colors: ['#3f1ef5', '#f0298b'], weights: [0.594, 0.406] },
-  turquoise_bloom: { colors: ['#2bdeb6', '#8254ef'], weights: [0.664, 0.336] },
-  neon_garden:     { colors: ['#f943aa', '#36f357'], weights: [0.586, 0.414] },
-  solar_storm:     { colors: ['#f41d2a', '#5026e0'], weights: [0.588, 0.412] },
-  cyan_mirage:     { colors: ['#53f7e2', '#d24aed'], weights: [0.646, 0.354] },
+  crimson_gold:    { colors: ['#dc2626', '#eab308'], weights: [0.6, 0.4], drift: { arc: 60 } },
+  solar_flare:     { colors: ['#ea580c', '#facc15'], weights: [0.6, 0.4], drift: { arc: 60 } },
+  amber_rose:      { colors: ['#f59e0b', '#f43f5e'], weights: [0.55, 0.45], drift: { arc: 60 } },
+  purple_blue:     { colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35], drift: { arc: 60 } },
+  violet_pink:     { colors: ['#8b5cf6', '#ec4899'], weights: [0.6, 0.4], drift: { arc: 60 } },
+  amazon_dusk:     { colors: ['#166534', '#7c3aed'], weights: [0.55, 0.45], drift: { arc: 60 } },
+  mint_drift:      { colors: ['#63e4a3', '#5134f9'], weights: [0.688, 0.312], drift: { arc: 79 } },
+  electric_bloom:  { colors: ['#3f1ef5', '#f0298b'], weights: [0.594, 0.406], drift: { arc: 40 } },
+  turquoise_bloom: { colors: ['#2bdeb6', '#8254ef'], weights: [0.664, 0.336], drift: { arc: 52 } },
+  neon_garden:     { colors: ['#f943aa', '#36f357'], weights: [0.586, 0.414], drift: { arc: 38 } },
+  solar_storm:     { colors: ['#f41d2a', '#5026e0'], weights: [0.588, 0.412], drift: { arc: 48 } },
+  cyan_mirage:     { colors: ['#53f7e2', '#d24aed'], weights: [0.646, 0.354], drift: { arc: 75 } },
 }
 
 // Edges = "this transition looks good" (an aesthetic call, made explicitly

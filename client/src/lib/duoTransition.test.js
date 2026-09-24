@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { stepIndexForSlide, currentAndNextDuo } from './duoTransition.js'
+import { stepIndexForSlide, outgoingAndIncomingDuo } from './duoTransition.js'
 import { DUO_GRAPH } from './duoGraph.js'
 
 describe('stepIndexForSlide', () => {
@@ -35,17 +35,39 @@ describe('stepIndexForSlide', () => {
   })
 })
 
-describe('currentAndNextDuo', () => {
-  it('current and next are always adjacent in the graph', () => {
+describe('outgoingAndIncomingDuo', () => {
+  it('at step 0 (show start), outgoing equals incoming — nothing to transition from yet', () => {
+    const { outgoing, incoming } = outgoingAndIncomingDuo('show_e', DUO_GRAPH, 0)
+    expect(outgoing).toBe(incoming)
+  })
+
+  it('outgoing is always the PREVIOUS step, incoming the CURRENT one — real regression case', () => {
+    // Pinned against actual output (Codex review, 2026-09-24): seed
+    // "show_b" reaches step 1 at ringVisibleIndex 2. The old (buggy)
+    // current/next shape returned next as a step-1 PREVIEW ('mint_drift',
+    // which happened to be the step-0 duo by coincidence of the graph
+    // walk) instead of what's actually incoming. outgoing/incoming must
+    // read the opposite direction: outgoing = step 0's duo, incoming =
+    // step 1's duo, in that order.
+    const { outgoing, incoming } = outgoingAndIncomingDuo('show_b', DUO_GRAPH, 2)
+    expect(incoming).toBe('turquoise_bloom') // step 1's duo (the new current)
+    expect(outgoing).toBe('mint_drift')       // step 0's duo (what it came from)
+  })
+
+  it('incoming always matches what duoWalk itself gives that step', () => {
     for (let i = 0; i < 60; i += 3) {
-      const { current, next } = currentAndNextDuo('show_e', DUO_GRAPH, i)
-      expect(DUO_GRAPH[current], `at slide ${i}`).toContain(next)
+      const step = stepIndexForSlide('show_g', i)
+      const { incoming } = outgoingAndIncomingDuo('show_g', DUO_GRAPH, i)
+      expect(DUO_GRAPH).toHaveProperty(incoming)
+      // incoming must be reachable from outgoing in one hop (or equal, at step 0)
+      const { outgoing } = outgoingAndIncomingDuo('show_g', DUO_GRAPH, i)
+      if (step > 0) expect(DUO_GRAPH[outgoing], `at slide ${i}`).toContain(incoming)
     }
   })
 
   it('agrees with itself when called twice for the same slide (Host/Display never disagree)', () => {
-    const a = currentAndNextDuo('show_f', DUO_GRAPH, 17)
-    const b = currentAndNextDuo('show_f', DUO_GRAPH, 17)
+    const a = outgoingAndIncomingDuo('show_f', DUO_GRAPH, 17)
+    const b = outgoingAndIncomingDuo('show_f', DUO_GRAPH, 17)
     expect(a).toEqual(b)
   })
 })
