@@ -114,11 +114,15 @@ describe('<ShinyBendleQuestion>', () => {
     expect(transport.start).not.toHaveBeenCalled()
   })
 
-  it('step 0 loads just the first stem and shows its label/points', async () => {
+  it('step 0 loads just the first stem and shows its label/points, but does not play yet', async () => {
     await render(bendleSlide({ bendleStepIndex: 0 }))
     await settle()
 
-    expect(transport.start).toHaveBeenCalled()
+    // 2026-09-24: step-mode playback is host-triggered (see the
+    // "host-triggered play" describe block below) — loading/priming still
+    // happens eagerly on mount, but transport.start() waits for
+    // show.audio_playing to match this slide.
+    expect(transport.start).not.toHaveBeenCalled()
     const players = Tone.Player.mock.results.map(r => r.value)
     expect(players).toHaveLength(1) // default order: drums only at step 0
     expect(container.textContent).toContain('Drums Only · 20 pts')
@@ -175,7 +179,7 @@ describe('<ShinyBendleQuestion>', () => {
     await render(bendleSlide({ bendleStepIndex: 1 })) // drums + bass
     await settle()
 
-    expect(transport.start).toHaveBeenCalled()
+    expect(transport.start).not.toHaveBeenCalled() // primed, not host-triggered yet
     const players = Tone.Player.mock.results.map(r => r.value)
     expect(players).toHaveLength(2) // both constructed, bass's own load rejected
     const failed = players.find(p => p.dispose.mock.calls.length > 0)
@@ -272,6 +276,40 @@ describe('<ShinyBendleQuestion>', () => {
     await settle()
 
     expect(transport.scheduleOnce).not.toHaveBeenCalled()
+  })
+
+  describe('host-triggered play (step mode)', () => {
+    it('does not play on mount, then plays once show.audio_playing matches this slide', async () => {
+      await render(bendleSlide({ bendleStepIndex: 0 })) // slide id 's1'
+      await settle()
+      expect(transport.start).not.toHaveBeenCalled()
+
+      await render(bendleSlide({ bendleStepIndex: 0 }), { ...show, audio_playing: { slideId: 's1', playing: true } })
+      await settle()
+      expect(transport.start).toHaveBeenCalledTimes(1)
+    })
+
+    it('ignores show.audio_playing for a different slide id', async () => {
+      await render(bendleSlide({ bendleStepIndex: 0 }))
+      await settle()
+
+      await render(bendleSlide({ bendleStepIndex: 0 }), { ...show, audio_playing: { slideId: 'some-other-slide', playing: true } })
+      await settle()
+      expect(transport.start).not.toHaveBeenCalled()
+    })
+
+    it('does not re-start on a second matching audio_playing update', async () => {
+      await render(bendleSlide({ bendleStepIndex: 0 }))
+      await render(bendleSlide({ bendleStepIndex: 0 }), { ...show, audio_playing: { slideId: 's1', playing: true } })
+      await settle()
+      expect(transport.start).toHaveBeenCalledTimes(1)
+
+      // Same signal object shape re-delivered (e.g. an unrelated realtime
+      // merge) must not fire a second transport.start().
+      await render(bendleSlide({ bendleStepIndex: 0 }), { ...show, audio_playing: { slideId: 's1', playing: true } })
+      await settle()
+      expect(transport.start).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('never touches audio in the build-mode preview pane, even revealed', async () => {

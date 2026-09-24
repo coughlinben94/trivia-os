@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 // ponytail: static import — Tone costs ~61kB gzip on the SlideRenderer chunk
 // (72.6 → 134.0), paid once at /display page load whether or not tonight has a
 // Bendle slide. Deliberately NOT a dynamic import: that would move the fetch to
@@ -60,6 +60,7 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
 
   const [song, setSong] = useState(null)
   const [loadState, setLoadState] = useState('loading') // 'loading' | 'ready' | 'error'
+  const startedRef = useRef(false)
 
   const text = theme.colors.text
   const displayFont = `'${theme.fonts.display}', 'Boogaloo', sans-serif`
@@ -112,6 +113,7 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
       // beat's un-fired stop/fade rides along into this one.
       transport.cancel(0)
       transport.seconds = 0
+      startedRef.current = false
 
       const stemKeys = revealed
         ? STEM_KEYS
@@ -183,7 +185,10 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
       // would hang the slide on "Loading song…" in front of the room.
       Tone.start().catch(() => {})
       setLoadState('ready')
-      transport.start()
+      if (revealed) {
+        startedRef.current = true
+        transport.start()
+      }
     }
     setup()
 
@@ -195,6 +200,24 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
       created.length = 0
     }
   }, [song, isPreview, revealed, stepIndex, data.bendleTierOrder])
+
+  // Host-triggered play for step-mode legs (2026-09-24, Ben: "get to the
+  // slide, tell them which instrument it is, then invoke with a click").
+  // Mirrors the existing "Next plays audio" pattern (LiveMode.jsx's
+  // maybeStartAudioPlay) other shiny-audio questions already use — first
+  // Next after landing on the slide fires show.audio_playing instead of
+  // advancing, this effect reacts to it. Reveal mode is untouched: it
+  // still auto-starts in the effect above, since pressing A is already an
+  // explicit host action.
+  useEffect(() => {
+    if (revealed) return
+    if (loadState !== 'ready') return
+    if (startedRef.current) return
+    const playing = show?.audio_playing
+    if (playing?.slideId !== slide.id || !playing?.playing) return
+    startedRef.current = true
+    Tone.getTransport().start()
+  }, [show?.audio_playing, loadState, revealed, slide.id])
 
   return (
     <div style={{
