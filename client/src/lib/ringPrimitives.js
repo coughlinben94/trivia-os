@@ -2509,6 +2509,66 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     f.appendChild(svg)
   }
 
+  else if (kind === 'darkNebula') {
+    // 2026-09-24 pool candidate (docs/superpowers/plans/2026-09-24-ring-world-
+    // six-new-objects.md). Iconic per OBJECT-RENDERING-PROTOCOL.md's noun
+    // test: an irregular dark polygon with a soft blurred edge, occluding
+    // the stars behind it — the anatomical opposite of this file's
+    // 'nebulaCloud' branch (which emits light; this absorbs it).
+    // Deliberately a FIXED 7-point polygon, not a per-instance randomized
+    // contour — a randomized silhouette risks drifting toward a
+    // recognizable figure across different seeds/instances, which would
+    // tip this into figurative/reference-trace territory per the noun
+    // test (see OBJECT-RENDERING-PROTOCOL.md). Stays iconic by staying
+    // fixed and simple.
+    // Mandatory hard-edge rim (ART-DIRECTION-SPEC.md's rim rule, the
+    // section right after 6.0/before 6.2 — the doc's own prose calls it
+    // "§6.1"): confirmed real numbers, thickness >=4px and peak luma >=
+    // local background + 40, not the paraphrase. NOT optional — this
+    // shape exists specifically to satisfy it: a dark fill with no bright
+    // edge can vanish entirely against dark sky.
+    // stroke-width is set in real CSS px via vector-effect="non-scaling-
+    // stroke", the same technique drawPlanetDisc's own rim arc already
+    // uses (see its rim, stroke-width 4 + non-scaling-stroke, below) —
+    // NOT a viewBox-relative unit, which would scale with the station's
+    // render size and could fall under 4px at a small station box. 5px
+    // (not the plan's draft "2.2") gives margin over the 4px floor.
+    // Alpha/lightness (45/86/0.85) measured via headline-isolated.html +
+    // a real pixel-luma read against this box's own black surround: see
+    // this task's report for the actual delta against the +40 floor —
+    // not eyeballed.
+    // Occluder placement (ART-DIRECTION-SPEC.md §7.2): this primitive
+    // cannot enforce "not in a bottom-third-loudness slot" itself —
+    // loudness is a property of the SLOT a draw places this in, not the
+    // noun's own data. The certification pipeline (palette-sweep.mjs
+    // --world-batch, the real ring-verify.mjs gate) is the actual
+    // backstop — flagged in this plan's Global Constraints, not solved
+    // here.
+    // PASS criterion (protocol, frozen before first render): "a fresh
+    // viewer names this as a dark cloud / a shadow in the stars" — not a
+    // hole, not a black circle, not a glitch.
+    const NS = 'http://www.w3.org/2000/svg'
+    const svg = document.createElementNS(NS, 'svg')
+    svg.setAttribute('viewBox', '0 0 100 100')
+    svg.style.position = 'absolute'; svg.style.inset = '0'
+    svg.style.width = '100%'; svg.style.height = '100%'
+    const PTS = [[50, 10], [78, 22], [92, 48], [80, 76], [50, 92], [22, 74], [10, 44]]
+    const d = 'M ' + PTS.map(([x, y]) => `${x},${y}`).join(' L ') + ' Z'
+    const blob = document.createElementNS(NS, 'path')
+    blob.setAttribute('d', d)
+    blob.setAttribute('fill', hsla(hue, 30, 6, A(0.92, fill)))
+    blob.style.filter = 'blur(3px)'
+    svg.appendChild(blob)
+    const rim = document.createElementNS(NS, 'path')
+    rim.setAttribute('d', d)
+    rim.setAttribute('fill', 'none')
+    rim.setAttribute('stroke', hsla(hue, 45, 86, A(0.85, fill)))
+    rim.setAttribute('stroke-width', '5')
+    rim.setAttribute('vector-effect', 'non-scaling-stroke')
+    svg.appendChild(rim)
+    f.appendChild(svg)
+  }
+
   else if (kind === 'saucer') {
     // 2026-09-15, Phase-4 pool noun #4, last in the plan's order (crescent
     // moon, banded giant, constellation, eclipse[shipped], saucer). Not a
