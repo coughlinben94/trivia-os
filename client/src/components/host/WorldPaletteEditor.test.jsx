@@ -27,7 +27,15 @@ vi.mock('../../lib/ringPalettesClient.js', () => ({
     },
   ]),
   saveAsPending: vi.fn().mockResolvedValue(undefined),
-  findMatch: (shelf, p) => shelf.find(s => JSON.stringify(s.colors) === JSON.stringify(p.colors) && JSON.stringify(s.weights) === JSON.stringify(p.weights) && JSON.stringify(s.drift) === JSON.stringify(p.drift)),
+  // Mirrors the real findMatch (ringPalettesClient.js) exactly, including
+  // the stations comparison — a mock that skipped it used to leave "a
+  // drawn-world pick that doesn't match any shelf row falls to pending"
+  // untested (review finding).
+  findMatch: (shelf, p) => shelf.find(s =>
+    JSON.stringify(s.colors) === JSON.stringify(p.colors) &&
+    JSON.stringify(s.weights) === JSON.stringify(p.weights) &&
+    JSON.stringify(s.drift) === JSON.stringify(p.drift) &&
+    JSON.stringify(s.stations ?? null) === JSON.stringify(p.stations ?? null)),
 }))
 
 const mounts = []
@@ -41,13 +49,24 @@ vi.mock('../display/RingAmbient.jsx', async () => {
   }
 })
 
-let drawWorldImpl = () => { throw new Error('ringDraw: pool cannot fill 13 slots under the caps (chose 11 of 13)') }
+// reRollObjects (2026-09-24 rewrite) no longer calls drawWorld — it calls
+// drawStations (ringDraw.js) directly with a per-click seed, then
+// recolorWorld+assertWorld (drawWorld.js) over the currently committed
+// palette. Mock both call sites the same way the old drawWorld mock did.
+let drawStationsImpl = () => { throw new Error('ringDraw: pool cannot fill 13 slots under the caps (chose 11 of 13)') }
+vi.mock('../../lib/ringDraw.js', async () => {
+  const actual = await vi.importActual('../../lib/ringDraw.js')
+  return { ...actual, drawStations: (...args) => drawStationsImpl(...args) }
+})
+
+let assertWorldImpl = () => true
 vi.mock('../../lib/drawWorld.js', async () => {
   const actual = await vi.importActual('../../lib/drawWorld.js')
-  return { ...actual, drawWorld: (...args) => drawWorldImpl(...args) }
+  return { ...actual, assertWorld: (...args) => assertWorldImpl(...args) }
 })
 
 const { default: WorldPaletteEditor } = await import('./WorldPaletteEditor.jsx')
+const { RING_POOL } = await import('../../worlds/ringPool.js')
 
 const BASE = {
   colors: {
@@ -59,7 +78,8 @@ const BASE = {
 let host, root
 beforeEach(() => {
   mounts.length = 0
-  drawWorldImpl = () => { throw new Error('ringDraw: pool cannot fill 13 slots under the caps (chose 11 of 13)') }
+  drawStationsImpl = () => { throw new Error('ringDraw: pool cannot fill 13 slots under the caps (chose 11 of 13)') }
+  assertWorldImpl = () => true
   vi.useFakeTimers()
   host = document.createElement('div')
   document.body.appendChild(host)
@@ -250,6 +270,22 @@ describe('WorldPaletteEditor', () => {
     expect(last[10].key).toBe('ringed planet')
   })
 
+  it("advisory table's hue/Δ columns describe the drawn noun at each position, not the authored noun that used to sit there (finding #3 — 'currentHues' used to always be the authored order's hues)", async () => {
+    render()
+    await act(async () => { await Promise.resolve() })
+    const worldCard = [...host.querySelectorAll('button[title]')].find(b => b.title.startsWith('eclipse'))
+    act(() => worldCard.click())
+    act(() => byText('Technical details').click())
+    const rows = [...host.querySelectorAll('tbody tr')]
+    expect(rows[0].querySelectorAll('td')[0].textContent).toBe('eclipse')
+    // "hue" column renders as "{fromHue}° → {toHue}°" — fromHue must be
+    // eclipse's OWN base hue (the noun actually at position 0 now), not
+    // whichever authored station used to sit at index 0.
+    const eclipseHue = RING_POOL.find(s => s.key === 'eclipse').hue
+    const fromHueCell = rows[0].querySelectorAll('td')[1].textContent
+    expect(fromHueCell.startsWith(`${eclipseHue}°`)).toBe(true)
+  })
+
   it('Apply on a picked drawn-world row hands up a ringWorld payload matching the shelf row', async () => {
     const applied = []
     render({ onApplyThemeColors: c => applied.push(c), showId: 'show-abc' })
@@ -277,44 +313,47 @@ describe('WorldPaletteEditor', () => {
   })
 
   it('Re-roll objects composes a new draw and updates the preview on success', async () => {
-    // Real drawWorld keys are always resolvable RING_POOL entries (drawn
-    // FROM the pool) — reuse the same known-good 13-key reorder as the
-    // shelf mock above rather than placeholder keys, since the component
-    // re-resolves stations by key against RING_POOL (see previewWorldData).
-    const DRAWN_KEYS = ['eclipse', 'spiral galaxy', 'star cluster', 'amber planet', 'lit planet', 'pulsar', 'rose nebula', 'comet', 'binary pair', 'asteroid field', 'ringed planet', 'aurora ribbon', 'supernova']
-    drawWorldImpl = () => ({
-      world: {
-        stations: DRAWN_KEYS.map(key => ({ key })),
-        palette: { colors: ['#111111', '#222222'], weights: [0.7, 0.3], drift: { arc: 45 } },
-      },
-      showSeed: 1, nounSeed: 2, palSeed: 3,
-    })
+    // Real pool entries (drawn FROM RING_POOL), just reordered — the
+    // component re-resolves stations by key against RING_POOL (see
+    // resolvedStations/previewWorldData), so a fabricated key would fail
+    // that lookup and fall back silently.
+    const reordered = [...RING_POOL].reverse()
+    drawStationsImpl = () => reordered
     render()
     await act(async () => { await Promise.resolve() })
     act(() => byText('Re-roll objects').click())
-    expect(mounts.at(-1).worldData.stations[0].key).toBe('eclipse')
+    expect(mounts.at(-1).worldData.stations[0].key).toBe(reordered[0].key)
   })
 
-  it('Apply after a successful Re-roll reflects the rolled drift, not a stale one', async () => {
-    // Reuses shelf row 2's exact colors/weights/drift so findMatch hits and
-    // Apply applies immediately — the payload it hands up must carry the
-    // ROLLED drift (30), not the editor's untouched initial drift state (60).
-    const DRAWN_KEYS = ['eclipse', 'spiral galaxy', 'star cluster', 'amber planet', 'lit planet', 'pulsar', 'rose nebula', 'comet', 'binary pair', 'asteroid field', 'ringed planet', 'aurora ribbon', 'supernova']
-    drawWorldImpl = () => ({
-      world: {
-        stations: DRAWN_KEYS.map(key => ({ key })),
-        palette: { colors: ['#22c55e', '#eab308'], weights: [0.5, 0.5], drift: { arc: 30 } },
-      },
-      showSeed: 1, nounSeed: 2, palSeed: 3,
-    })
+  it('Re-roll objects keeps the committed palette untouched — only nouns change (design doc §2.3/§11a item 9, Ben-confirmed)', async () => {
+    // drawWorld() used to always swap in a shelf palette on reroll; the fix
+    // draws stations only and recolors with whatever palette is already
+    // committed. themeColors is a pure function of colors/weights/baseTheme
+    // (weightedPalette.js) — unaffected by which noun sits where — so the
+    // "Theme colors:" swatch row (always rendered, not gated by "Technical
+    // details") is a clean untouched-palette probe.
+    const reordered = [...RING_POOL].reverse()
+    drawStationsImpl = () => reordered
+    render()
+    await act(async () => { await Promise.resolve() })
+    const themeColorCodes = () => [...host.querySelectorAll('code')].map(c => c.textContent)
+    const before = themeColorCodes()
+    act(() => byText('Re-roll objects').click())
+    expect(themeColorCodes()).toEqual(before)
+    expect(mounts.at(-1).worldData.stations[0].key).toBe(reordered[0].key)
+  })
+
+  it('a drawn-world pick that matches no shelf row falls to pending instead of a false Apply (findMatch now compares stations too)', async () => {
+    const reordered = [...RING_POOL].reverse()
+    drawStationsImpl = () => reordered
     const applied = []
-    render({ onApplyThemeColors: c => applied.push(c), showId: 'show-abc' })
+    render({ onApplyThemeColors: c => applied.push(c) })
     await act(async () => { await Promise.resolve() })
     act(() => byText('Re-roll objects').click())
     act(() => byText("Apply to this show's theme").click())
-    expect(applied).toHaveLength(1)
-    expect(applied[0].worldPalette.drift).toEqual({ arc: 30 })
-    expect(applied[0].ringWorld.palette.drift).toEqual({ arc: 30 })
+    await act(async () => { await Promise.resolve() })
+    expect(applied).toHaveLength(0)
+    expect(byText('Saved, pending check')).toBeTruthy()
   })
 
   it("Re-roll objects shows a plain error instead of crashing when the pool cannot fill 13 slots (known limit — docs/superpowers/plans/2026-09-14-ring-world-shelf-stations.md)", async () => {

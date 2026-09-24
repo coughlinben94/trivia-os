@@ -4,7 +4,8 @@ import { PRESETS, seedFrom } from '../../lib/paletteGenerator.js'
 import { recolorWorld } from '../../lib/ringRecolor.js'
 import { midnightGalaxyRing } from '../../worlds/midnightGalaxy.ring.js'
 import { RING_POOL } from '../../worlds/ringPool.js'
-import { resolveStations, drawWorld } from '../../lib/drawWorld.js'
+import { resolveStations, assertWorld } from '../../lib/drawWorld.js'
+import { drawStations } from '../../lib/ringDraw.js'
 import { RING_VERSION } from '../../lib/ringCertification.js'
 import { fetchCertifiedPalettes, saveAsPending, findMatch } from '../../lib/ringPalettesClient.js'
 import RingAmbient from '../display/RingAmbient.jsx'
@@ -36,7 +37,6 @@ const SNAP = 0.05
 const MIN_WEIGHT = 0.05
 const COLOR_DEBOUNCE_MS = 400
 
-const CURRENT_HUES = midnightGalaxyRing.stations.map(s => s.hue)
 const AUTHORED_STATION_KEYS = midnightGalaxyRing.stations.map(s => s.key)
 
 // Cumulative divider positions, so dragging one divider moves weight
@@ -114,6 +114,7 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
   const colorDebounceRef = useRef(null)
   const appliedTimeoutRef = useRef(null)
   const copyTimeoutRef = useRef(null)
+  const rerollNonceRef = useRef(0) // per-click, so two clicks in the same ms still draw differently
 
   useEffect(() => {
     fetchCertifiedPalettes().then(setShelf).catch(() => { setShelf([]); setShelfError(true) }).finally(() => setShelfLoading(false))
@@ -171,12 +172,28 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
     applyPalette(preset.colors, preset.weights)
   }
 
+  // The stations actually being previewed, in slot order — the authored
+  // ring when no draw is picked, else the drawn reorder. Shared by `derived`
+  // (left-rail dots + advisory table) and `previewWorldData` below so a
+  // drawn-world pick's hue data pairs with the drawn noun at each position,
+  // not the authored noun that used to sit there (2026-09-24 fix — this was
+  // previously always CURRENT_HUES, the authored order's hues).
+  const resolvedStations = useMemo(() => {
+    if (!stations) return midnightGalaxyRing.stations
+    try {
+      return resolveStations(RING_POOL, stations)
+    } catch (err) {
+      console.warn('[palette editor] bad stations, using authored order:', err.message)
+      return midnightGalaxyRing.stations
+    }
+  }, [stations])
+
   // Live derivation — cheap pure math, fine to run per drag tick for the
   // station dots, swatch row, and advisory table.
   const derived = useMemo(() => derivePalette({
-    colors, weights, stationCount: CURRENT_HUES.length,
-    baseTheme, currentHues: CURRENT_HUES, drift: { arc: drift },
-  }), [colors, weights, baseTheme, drift])
+    colors, weights, stationCount: resolvedStations.length,
+    baseTheme, currentHues: resolvedStations.map(s => s.hue), drift: { arc: drift },
+  }), [colors, weights, baseTheme, drift, resolvedStations])
 
   // Committed palette (recolorWorld internally derives it) — drives the ring
   // preview only. Mirrors ringWorldFor's own fallback (ParticleBackground.jsx):
@@ -187,13 +204,12 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
   // just fail to preview a colour.
   const previewWorldData = useMemo(() => {
     try {
-      const base = stations ? { ...midnightGalaxyRing, stations: resolveStations(RING_POOL, stations) } : midnightGalaxyRing
-      return recolorWorld(base, committed, baseTheme)
+      return recolorWorld({ ...midnightGalaxyRing, stations: resolvedStations }, committed, baseTheme)
     } catch (err) {
       console.warn('[palette editor] bad committed world, showing base world:', err.message)
       return midnightGalaxyRing
     }
-  }, [committed, stations, baseTheme])
+  }, [committed, resolvedStations, baseTheme])
 
   // Remount key: RingAmbient builds once on mount by design, so a new
   // palette needs a new instance. (Coexists fine with the theme modal's
@@ -221,12 +237,26 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
     }).catch(() => {})
   }
 
+  // Objects and palette are independently re-rollable (design doc §2.3/§11a
+  // item 9, Ben-confirmed) — this button only touches nouns. drawWorld()
+  // isn't the right tool: its noun seed is derived from showId alone, so it
+  // draws the SAME arrangement every click for a given show, and it always
+  // swaps in a shelf palette, discarding whatever's currently committed.
+  // Draw fresh stations directly with a per-click nonce seed instead, then
+  // recolor them with the CURRENTLY COMMITTED palette (untouched) and
+  // validate the composed result before accepting it.
   function reRollObjects() {
     setRerollError(false)
     try {
-      const { world } = drawWorld({ base: midnightGalaxyRing, pool: RING_POOL, shelf, showId: String(showId ?? 'preview'), baseTheme })
-      applyPalette(world.palette.colors, world.palette.weights, world.palette.drift.arc)
-      setDrift(world.palette.drift.arc)
+      rerollNonceRef.current += 1
+      // Math.random-derived is fine HERE — this is host-UI random-selection
+      // among already-valid pool entries (same category "Surprise me"'s
+      // Math.random comment above already justifies), not world-construction
+      // determinism.
+      const seed = Date.now() + rerollNonceRef.current + Math.floor(Math.random() * 1e6)
+      const drawnStations = drawStations(RING_POOL, { seed, slots: midnightGalaxyRing.stations.length })
+      const world = recolorWorld({ ...midnightGalaxyRing, stations: drawnStations }, committed, baseTheme)
+      assertWorld(world)
       setStations(world.stations.map(s => s.key))
     } catch {
       // Known, deterministic today: the real pool has 5 radial-mass entries

@@ -42,8 +42,12 @@ export function applyOverrides(baseTheme, overrides) {
         fonts: { ...baseTheme.fonts, ...(overrides.fonts ?? {}) },
         colors: { ...baseTheme.colors, ...(overrides.colors ?? {}) },
         // Passed through untouched — floorReadableColors below never sees
-        // it, and ringWorldFor (ParticleBackground.jsx) is the only reader.
+        // either of these. ringWorldFor (client/src/lib/ringWorldFor.js) is
+        // the main reader of both, but not the only one: ThemePickerModal's
+        // live preview and WarpTransition.jsx also read theme.ringWorld off
+        // this merged object.
         worldPalette: overrides?.worldPalette ?? undefined,
+        ringWorld: overrides?.ringWorld ?? undefined,
       }
   const flooredColors = floorReadableColors(merged.colors)
   return flooredColors === merged.colors ? merged : { ...merged, colors: flooredColors }

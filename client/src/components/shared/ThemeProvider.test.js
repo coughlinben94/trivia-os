@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { applyOverrides } from './ThemeProvider.jsx'
 import { getTheme } from '../../themes/index.js'
 import { contrastRatio } from '../../lib/contrast.js'
+import { ringWorldFor } from '../../lib/ringWorldFor.js'
+import { midnightGalaxyRing } from '../../worlds/midnightGalaxy.ring.js'
+import { RING_VERSION } from '../../lib/ringCertification.js'
 
 describe('applyOverrides — highlight contrast floor', () => {
   it('floors a low-contrast highlight override against bg/bgDeep', () => {
@@ -20,5 +23,27 @@ describe('applyOverrides — highlight contrast floor', () => {
     const overrides = { colors: { accent: base.colors.bg } }
     const themed = applyOverrides(base, overrides)
     expect(themed.colors.accent).toBe(base.colors.bg)
+  })
+})
+
+describe('applyOverrides — ringWorld round-trip (regression: a drawn-world pick used to be dropped here, making the whole feature inert)', () => {
+  it('carries overrides.ringWorld through to a theme ringWorldFor can resolve into the reordered stations', () => {
+    const base = getTheme('midnight-galaxy')
+    const authoredKeys = midnightGalaxyRing.stations.map(s => s.key)
+    const swappedKeys = authoredKeys.map((k, i) => (i === 0 ? authoredKeys[10] : i === 10 ? authoredKeys[0] : k))
+    const overrides = {
+      ringWorld: {
+        rowId: 'row-1',
+        seed: 'showSeed:abc',
+        ringVersion: RING_VERSION,
+        stations: swappedKeys,
+        palette: { colors: ['#22c55e', '#eab308'], weights: [0.5, 0.5], drift: { arc: 30 } },
+      },
+    }
+
+    const themed = applyOverrides(base, overrides)
+    const world = ringWorldFor(themed)
+
+    expect(world.stations.map(s => s.key)).toEqual(swappedKeys)
   })
 })
