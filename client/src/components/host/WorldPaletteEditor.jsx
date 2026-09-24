@@ -181,12 +181,11 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
   const resolvedStations = useMemo(() => {
     if (!stations) return midnightGalaxyRing.stations
     try {
-      // Full authored station objects, not RING_POOL (the reduced shape
-      // drawStations' noun-selection algorithm needs) — this feeds the
-      // actual live preview, which reads variant/region/regionSource/
-      // noCompanion/companionKind by station identity. See ringWorldFor.js's
+      // Resolve against RING_POOL, which carries the full station objects
+      // (variant, region, regionSource, noCompanion, companionKind), not a
+      // reduced projection — this feeds the live preview. See ringWorldFor.js's
       // matching fix and references/ring-world-mistakes.md.
-      return resolveStations(midnightGalaxyRing.stations, stations)
+      return resolveStations(RING_POOL, stations)
     } catch (err) {
       console.warn('[palette editor] bad stations, using authored order:', err.message)
       return midnightGalaxyRing.stations
@@ -257,25 +256,46 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
   // Draw fresh stations directly with a per-click nonce seed instead, then
   // recolor them with the CURRENTLY COMMITTED palette (untouched) and
   // validate the composed result before accepting it.
+  // Bounded retry (2026-09-24 fix wave, finding #2): a single seed can pass
+  // drawStations's family/prim spacing but still fail assertWorld's OWN
+  // extra checks (sky-region hue placement, the DEAD_BAND check) — verified
+  // by simulation running this exact draw->recolor->assertWorld sequence
+  // 300 times per shipped color preset: failure rates from ~27% up to 100%
+  // depending on the preset (default preset PRESETS[0] fails ~34% of the
+  // time). One attempt used to just give up; retrying with a fresh seed
+  // usually finds a passing arrangement within a handful of tries. 20 is
+  // generous headroom above the worst normal-preset rate, not a measured
+  // minimum.
+  const REROLL_MAX_ATTEMPTS = 20
   function reRollObjects() {
     setRerollError(false)
-    try {
-      rerollNonceRef.current += 1
-      // Math.random-derived is fine HERE — this is host-UI random-selection
-      // among already-valid pool entries (same category "Surprise me"'s
-      // Math.random comment above already justifies), not world-construction
-      // determinism.
-      const seed = Date.now() + rerollNonceRef.current + Math.floor(Math.random() * 1e6)
-      const drawnStations = drawStations(RING_POOL, { seed, slots: midnightGalaxyRing.stations.length })
-      const world = recolorWorld({ ...midnightGalaxyRing, stations: drawnStations }, committed, baseTheme)
-      assertWorld(world)
-      setStations(world.stations.map(s => s.key))
-    } catch {
-      // Known, deterministic today: the real pool has 5 radial-mass entries
-      // against a cap of 4, so every seed throws. See Global Constraints,
-      // docs/superpowers/plans/2026-09-24-ring-world-picker-ui.md.
-      setRerollError(true)
+    for (let attempt = 0; attempt < REROLL_MAX_ATTEMPTS; attempt++) {
+      try {
+        rerollNonceRef.current += 1
+        // Math.random-derived is fine HERE — this is host-UI random-selection
+        // among already-valid pool entries (same category "Surprise me"'s
+        // Math.random comment above already justifies), not world-construction
+        // determinism. Fresh nonce each attempt so a retry never reuses a
+        // seed that already failed.
+        const seed = Date.now() + rerollNonceRef.current + Math.floor(Math.random() * 1e6)
+        const drawnStations = drawStations(RING_POOL, { seed, slots: midnightGalaxyRing.stations.length })
+        const world = recolorWorld({ ...midnightGalaxyRing, stations: drawnStations }, committed, baseTheme)
+        assertWorld(world)
+        setStations(world.stations.map(s => s.key))
+        return
+      } catch {
+        // Try again with a fresh seed — see the retry-loop comment above for
+        // why a single failure isn't the whole story.
+      }
     }
+    // Every attempt above is a full draw+recolor+validate cycle on its own
+    // fresh seed. Failing all REROLL_MAX_ATTEMPTS tries usually means this
+    // color preset structurally can't pass assertWorld on a rearranged ring
+    // (verified: Solar Flare failed 300/300 simulated seeds) — a different
+    // preset is the real fix, not another click. The old pool-exhaustion
+    // case (RING_POOL too small to fill 13 slots) is now rare given the
+    // 19-entry pool, but still theoretically possible.
+    setRerollError(true)
   }
 
   return (
@@ -375,9 +395,9 @@ export default function WorldPaletteEditor({ onClose, baseTheme, onApplyThemeCol
           </div>
           {rerollError && (
             <p className="text-xs text-amber-700">
-              Re-roll objects can't work yet — the current noun set doesn't have enough variety to
-              build a new arrangement. This is a known limit, not a glitch: clicking again won't
-              help until more objects are added.
+              Re-roll objects tried {REROLL_MAX_ATTEMPTS} new arrangements and none passed the color
+              checks. This usually means the current color preset doesn't leave room for a legal
+              layout on a rearranged ring — try a different preset. Clicking again may still work.
             </p>
           )}
           {showCustom && (

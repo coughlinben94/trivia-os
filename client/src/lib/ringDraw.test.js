@@ -72,14 +72,19 @@ describe('drawStations', () => {
     expect(result).toEqual(RING_POOL)
   })
 
-  it('throws for a real seed on the current 13-entry pool — radial-mass has 5 members, cap is 4', () => {
-    // This is the documented, expected failure (docs/superpowers/plans/
-    // 2026-09-05-ring-unified-noun-color-draw-design.md §9): with pool.length
-    // === slots, every member must be chosen, and today's pool has 5
-    // radial-mass nouns against LANE_CAP(13)=4. The throw IS the proof the
-    // cap is enforced, not a bug — pool growth (a separate art-project task)
-    // is what makes a real seed succeed.
-    expect(() => drawStations(RING_POOL, { seed: 42 })).toThrow(/cannot fill 13 slots under the caps/)
+  it('a real seed succeeds on the 16-entry pool — the three surviving candidates give radial-mass room to be excluded', () => {
+    // Inverse of the old regression test this replaces: before the pool
+    // grew past 13 entries, drawStations had zero freedom and threw on
+    // every real seed (5 authored stations share family 'radial-mass'
+    // against LANE_CAP(13)=4). The SUCCESS here is the proof the fix
+    // worked, the same way the old test's throw was proof of the bug.
+    // Pool was briefly 19 entries (6 candidates); orion/wormhole/dark
+    // nebula were pulled after Ben's aesthetic review (2026-09-24, same
+    // day) — 16/3 is the real shipped shape.
+    const result = drawStations(RING_POOL, { seed: 42 })
+    expect(result).toHaveLength(13)
+    expect(new Set(result.map(s => s.key)).size).toBe(13) // no duplicates
+    expect(() => assertRing(result)).not.toThrow()
   })
 
   it('throws if pinKey is not in the pool (non-authored seed)', () => {

@@ -167,13 +167,14 @@ async function certifyWorld(browser, { colors, weights, drift, stations }) {
 
 // Draws N worlds against the LIVE RING_POOL and today's certified whole-ring
 // shelf (rows with stations = null — a world needs a palette AND a station
-// draw). Per this plan's Global Constraints: RING_POOL has 5 radial-mass
-// members against LANE_CAP(13)=4, so drawWorld() throws
-// "cannot fill 13 slots under the caps" for every showId here, deterministically,
-// until step 6 (pool growth, a separate art-project plan) lands. Each
-// showId's failure is caught and written as its own row — one bad/every draw
-// must never crash the batch, same discipline runSeedBatch already has for a
-// bad generated palette.
+// draw). RING_POOL grew from 13 to 19 entries 2026-09-24 (docs/superpowers/
+// plans/2026-09-24-ring-world-six-new-objects.md) specifically so
+// drawStations has real slack — most showIds now draw successfully. A given
+// showId can still fail (drawStations's family/prim caps, or assertWorld's
+// region/dead-band checks under an unlucky palette pairing) — each failure
+// is caught and written as its own row, one bad draw must never crash the
+// batch, same discipline runSeedBatch already has for a bad generated
+// palette.
 async function runWorldBatch(n, browser) {
   const { data: shelf, error: shelfErr } = await sb.from('ring_palettes')
     .select('colors, weights, drift')

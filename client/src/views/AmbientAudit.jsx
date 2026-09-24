@@ -4,6 +4,7 @@ import { THEMES, getTheme } from '../themes/index.js'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
 import RingAmbient from '../components/display/RingAmbient.jsx'
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
+import { RING_POOL } from '../worlds/ringPool.js'
 import { worldFromParams } from '../lib/drawWorld.js'
 
 export default function AmbientAudit() {
@@ -28,7 +29,7 @@ export default function AmbientAudit() {
         weightsParam: params.get('weights'),
         driftParam: params.get('drift'),
         stationsParam,
-      }, { base: midnightGalaxyRing, pool: midnightGalaxyRing.stations, baseTheme: getTheme('midnight-galaxy') })
+      }, { base: midnightGalaxyRing, pool: RING_POOL, baseTheme: getTheme('midnight-galaxy') })
     } catch (err) {
       console.error('[AmbientAudit] bad ?colors=/?stations= params, using base:', err.message)
       return midnightGalaxyRing
