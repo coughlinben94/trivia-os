@@ -2493,9 +2493,13 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // Off-center on purpose — a dead-centered set of concentric circles
     // reads as a target/bullseye, not a tunnel receding into the frame.
     const focalX = w * 0.42, focalY = h * 0.5
+    // Outer rx capped at 0.40w (was 0.46w) — at 0.46w the outer ring's left
+    // edge landed at focalX-rx = -0.04w, past the frame edge, clipped. See
+    // task-3-wormhole-hi.png and docs/superpowers/plans/2026-09-24-ring-
+    // world-six-new-objects.md's final-review fix wave, finding "cheap-3".
     for (let i = 0; i < RINGS; i++) {
       const t = i / (RINGS - 1) // 0 = outer/dimmest, 1 = inner/brightest
-      const rx = lerp(w * 0.46, w * 0.08, t)
+      const rx = lerp(w * 0.40, w * 0.08, t)
       const ry = rx * 0.62
       const ring = document.createElementNS(NS, 'ellipse')
       ring.setAttribute('cx', focalX.toFixed(1)); ring.setAttribute('cy', focalY.toFixed(1))
