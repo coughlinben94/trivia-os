@@ -2472,6 +2472,43 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     f.appendChild(svg)
   }
 
+  else if (kind === 'wormhole') {
+    // 2026-09-24 pool candidate (docs/superpowers/plans/2026-09-24-ring-world-
+    // six-new-objects.md). Iconic per OBJECT-RENDERING-PROTOCOL.md's noun
+    // test: several concentric ellipses, shrinking and brightening toward
+    // an off-center focal point, reading as a tunnel receding into the
+    // frame. Reuses this file's existing elliptical-stroke construction
+    // (see the 'ring' branch above) rather than inventing new SVG
+    // mechanics — no fill, no back/front split needed (nothing occludes
+    // a wormhole the way a planet's body occludes its own ring).
+    // PASS criterion (protocol, frozen before first render): "a fresh
+    // viewer names this as a wormhole / a tunnel in space" — not a
+    // target, not a bullseye, not a plain ring.
+    const NS = 'http://www.w3.org/2000/svg'
+    const svg = document.createElementNS(NS, 'svg')
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`)
+    svg.style.position = 'absolute'; svg.style.inset = '0'
+    svg.style.width = '100%'; svg.style.height = '100%'
+    const RINGS = 5
+    // Off-center on purpose — a dead-centered set of concentric circles
+    // reads as a target/bullseye, not a tunnel receding into the frame.
+    const focalX = w * 0.42, focalY = h * 0.5
+    for (let i = 0; i < RINGS; i++) {
+      const t = i / (RINGS - 1) // 0 = outer/dimmest, 1 = inner/brightest
+      const rx = lerp(w * 0.46, w * 0.08, t)
+      const ry = rx * 0.62
+      const ring = document.createElementNS(NS, 'ellipse')
+      ring.setAttribute('cx', focalX.toFixed(1)); ring.setAttribute('cy', focalY.toFixed(1))
+      ring.setAttribute('rx', rx.toFixed(1)); ring.setAttribute('ry', ry.toFixed(1))
+      ring.setAttribute('fill', 'none')
+      ring.setAttribute('stroke', hsla(hue, 55, lerp(55, 92, t), A(lerp(0.30, 0.85, t), fill)))
+      ring.setAttribute('stroke-width', px(lerp(w * 0.010, w * 0.018, t)))
+      ring.setAttribute('vector-effect', 'non-scaling-stroke')
+      svg.appendChild(ring)
+    }
+    f.appendChild(svg)
+  }
+
   else if (kind === 'saucer') {
     // 2026-09-15, Phase-4 pool noun #4, last in the plan's order (crescent
     // moon, banded giant, constellation, eclipse[shipped], saucer). Not a
