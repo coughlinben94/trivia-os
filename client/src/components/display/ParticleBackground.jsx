@@ -3,9 +3,8 @@ import ErrorBoundary from '../ErrorBoundary.jsx'
 import { getTheme } from '../../themes/index.js'
 import BreathingGradient from './BreathingGradient'
 import RingAmbient from './RingAmbient.jsx'
-import { midnightGalaxyRing } from '../../worlds/midnightGalaxy.ring.js'
+import { RING_WORLDS, ringWorldFor } from '../../lib/ringWorldFor.js'
 import { deriveTint, hexToRgba } from '../../lib/colorTint.js'
-import { recolorWorld } from '../../lib/ringRecolor.js'
 
 // ─── Keyframes ────────────────────────────────────────────────────────────
 const KEYFRAMES = `
@@ -1154,45 +1153,9 @@ const AMBIENT_MAP = {
 }
 
 // ─── Ring-world registry ──────────────────────────────────────────────────
-// Plug-and-play: every ring-based ambient (built on RingAmbient.jsx +
-// ringEngine.js/ringPrimitives.js, the same way midnightGalaxyRing was)
-// registers here by theme id -> its worldData module. Adding a new one is
-// one import + one registry entry, no other change in this file —
-// RING_WORLDS[theme.id] below is what routes a theme to RingAmbient
-// instead of AMBIENT_MAP.
-// Caveat on "plug-and-play": ENGINE (frame geometry, layer config,
-// SURGE_MS) is module-scoped inside RingAmbient.jsx, not derived per-world.
-// A world that reuses that geometry really is a two-line drop-in; one that
-// needs different geometry is a change to RingAmbient.jsx, not just a
-// registry entry.
-const RING_WORLDS = {
-  'midnight-galaxy': midnightGalaxyRing,
-}
-
-// A per-show `theme.worldPalette` recolours the registered base world via the
-// SAME recolorWorld the picker's Apply and scripts/ring-recolor.mjs use — one
-// implementation, never three. Memoized at module scope (not per-component
-// state) so WarpTransition.jsx can read the identical recoloured object
-// ParticleBackground built, without either side recomputing it. Cache key is
-// theme id + the palette JSON, so distinct shows/palettes don't collide and a
-// repeat palette (a show reloaded, or two shows sharing one) reuses the same
-// recoloured world instead of rebuilding it. A malformed saved palette must
-// never blank the TV: caught and logged, base world used instead.
-const worldCache = new Map()
-export function ringWorldFor(theme) {
-  const base = RING_WORLDS[theme.id]
-  if (!base || !theme.worldPalette) return base
-  const key = theme.id + '|' + JSON.stringify(theme.worldPalette)
-  if (!worldCache.has(key)) {
-    try {
-      worldCache.set(key, recolorWorld(base, theme.worldPalette, getTheme(theme.id)))
-    } catch (err) {
-      console.warn('[ring] bad worldPalette, using base:', err.message)
-      worldCache.set(key, base)
-    }
-  }
-  return worldCache.get(key)
-}
+// RING_WORLDS/ringWorldFor live in client/src/lib/ringWorldFor.js (moved
+// 2026-09-24 for unit-testability). RING_WORLDS[theme.id] is what routes a
+// theme to RingAmbient instead of AMBIENT_MAP, below.
 
 // ─── Gradient-collapse routing ──────────────────────────────────────────
 // These 12 themes retired their bespoke ambient scene in favor of the shared

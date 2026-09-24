@@ -1,5 +1,5 @@
 import { useEffect, useRef, useMemo } from 'react'
-import { ringWorldFor } from './ParticleBackground.jsx'
+import { ringWorldFor } from '../../lib/ringWorldFor.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import { midnightGalaxyRing } from '../../worlds/midnightGalaxy.ring.js'
 import { withHueOf } from '../../lib/weightedPalette.js'
