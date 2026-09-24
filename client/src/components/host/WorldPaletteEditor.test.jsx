@@ -356,16 +356,55 @@ describe('WorldPaletteEditor', () => {
     expect(byText('Saved, pending check')).toBeTruthy()
   })
 
-  it("Re-roll objects shows a plain error instead of crashing when the pool cannot fill 13 slots (known limit — docs/superpowers/plans/2026-09-14-ring-world-shelf-stations.md)", async () => {
+  it("Re-roll objects shows a plain error instead of crashing when every retry fails (2026-09-24 fix wave finding #2 — draws exhaust REROLL_MAX_ATTEMPTS, don't loop forever or throw)", async () => {
+    let calls = 0
+    drawStationsImpl = () => { calls += 1; throw new Error('ringDraw: pool cannot fill 13 slots under the caps (chose 11 of 13)') }
     render()
     await act(async () => { await Promise.resolve() })
     act(() => byText('Re-roll objects').click())
-    expect(host.textContent).toContain("Re-roll objects can't work yet")
-    // Message must read as permanent, not a transient failure worth retrying
-    // (finding #4 — a host was confused by the old "known, tracked" wording):
-    expect(host.textContent).toContain("clicking again won't")
+    expect(host.textContent).toContain('none passed the color checks')
+    // Retried a bounded number of times, not once and not forever:
+    expect(calls).toBe(20)
+    // Message no longer claims retrying categorically won't help — most
+    // presets DO usually succeed on a later attempt, per the 2026-09-24 fix
+    // wave's simulation (finding #2); only this specific always-fails preset
+    // proves the bound actually terminates instead of looping forever.
+    expect(host.textContent).not.toContain("won't help")
     // Must not have crashed the rest of the modal:
     expect(byText("Apply to this show's theme")).toBeTruthy()
+  })
+
+  it('Re-roll objects retries automatically on a bad draw and succeeds without showing the error (2026-09-24 fix wave finding #2)', async () => {
+    const good = [...RING_POOL].reverse()
+    let calls = 0
+    drawStationsImpl = () => {
+      calls += 1
+      if (calls < 4) throw new Error('ringDraw: pool cannot fill 13 slots under the caps (chose 11 of 13)')
+      return good
+    }
+    render()
+    await act(async () => { await Promise.resolve() })
+    act(() => byText('Re-roll objects').click())
+    expect(calls).toBe(4) // 3 failures, then the succeeding attempt — no more
+    expect(host.textContent).not.toContain('none passed the color checks')
+    expect(mounts.at(-1).worldData.stations[0].key).toBe(good[0].key)
+  })
+
+  it('Re-roll objects retries on an assertWorld failure too, not just a drawStations failure (2026-09-24 fix wave finding #2)', async () => {
+    const good = [...RING_POOL].reverse()
+    drawStationsImpl = () => good
+    let calls = 0
+    assertWorldImpl = () => {
+      calls += 1
+      if (calls < 2) throw new Error('assertWorld: station hue inside the dead band')
+      return true
+    }
+    render()
+    await act(async () => { await Promise.resolve() })
+    act(() => byText('Re-roll objects').click())
+    expect(calls).toBe(2)
+    expect(host.textContent).not.toContain('none passed the color checks')
+    expect(mounts.at(-1).worldData.stations[0].key).toBe(good[0].key)
   })
 
   it('Re-roll objects stays enabled even while the shelf is loading/empty — it never reads the shelf (finding #5)', async () => {
@@ -380,19 +419,19 @@ describe('WorldPaletteEditor', () => {
     render()
     await act(async () => { await Promise.resolve() })
     act(() => byText('Re-roll objects').click())
-    expect(host.textContent).toContain("Re-roll objects can't work yet")
+    expect(host.textContent).toContain('none passed the color checks')
     const worldCard = [...host.querySelectorAll('button[title]')].find(b => b.title.startsWith('eclipse'))
     act(() => worldCard.click())
-    expect(host.textContent).not.toContain("Re-roll objects can't work yet")
+    expect(host.textContent).not.toContain('none passed the color checks')
   })
 
   it('clears a stale re-roll error once the host clicks Surprise me (finding #5)', async () => {
     render()
     await act(async () => { await Promise.resolve() })
     act(() => byText('Re-roll objects').click())
-    expect(host.textContent).toContain("Re-roll objects can't work yet")
+    expect(host.textContent).toContain('none passed the color checks')
     act(() => byText('Surprise me').click())
-    expect(host.textContent).not.toContain("Re-roll objects can't work yet")
+    expect(host.textContent).not.toContain('none passed the color checks')
   })
 
   it('Re-roll objects composing a valid draw forces the preview to remount even when the hue sequence is unchanged (finding #2 — previewKey must include station keys, not just hues)', async () => {
