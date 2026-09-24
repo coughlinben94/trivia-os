@@ -72,12 +72,15 @@ describe('drawStations', () => {
     expect(result).toEqual(RING_POOL)
   })
 
-  it('a real seed succeeds on the 19-entry pool — the six candidates give radial-mass room to be excluded', () => {
+  it('a real seed succeeds on the 16-entry pool — the three surviving candidates give radial-mass room to be excluded', () => {
     // Inverse of the old regression test this replaces: before the pool
     // grew past 13 entries, drawStations had zero freedom and threw on
     // every real seed (5 authored stations share family 'radial-mass'
     // against LANE_CAP(13)=4). The SUCCESS here is the proof the fix
     // worked, the same way the old test's throw was proof of the bug.
+    // Pool was briefly 19 entries (6 candidates); orion/wormhole/dark
+    // nebula were pulled after Ben's aesthetic review (2026-09-24, same
+    // day) — 16/3 is the real shipped shape.
     const result = drawStations(RING_POOL, { seed: 42 })
     expect(result).toHaveLength(13)
     expect(new Set(result.map(s => s.key)).size).toBe(13) // no duplicates

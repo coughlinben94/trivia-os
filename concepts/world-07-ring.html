@@ -454,13 +454,13 @@ let WORLD = {
 // its own literal copy of the 13 authored stations rather than an import).
 // Keep in sync with the real file by hand if either changes — never given a
 // SLOTS entry here either, same as the real pool.
+// Ben rejected orion/wormhole/dark nebula on the self-render gallery
+// (2026-09-24) — pulled from the pool here too, kept in sync with the real
+// file's own removal note.
 const CANDIDATE_STATIONS = [
   { key: 'big dipper', prim: 'constellation', variant: 'bigDipper', hue: 210, accent: false, family: 'constellation' },
-  { key: 'orion', prim: 'constellation', variant: 'orion', hue: 195, accent: false, family: 'constellation' },
   { key: 'cassiopeia', prim: 'constellation', variant: 'cassiopeia', hue: 180, accent: false, family: 'constellation' },
   { key: 'southern cross', prim: 'constellation', variant: 'southernCross', hue: 165, accent: false, family: 'constellation' },
-  { key: 'wormhole', prim: 'wormhole', hue: 230, accent: false, family: 'lens' },
-  { key: 'dark nebula', prim: 'darkNebula', hue: 265, accent: false, family: 'cloud' },
 ];
 
 // 2026-09-03: `?colors=%23ff2200,%23ffd400&weights=0.55,0.45` builds this

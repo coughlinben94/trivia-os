@@ -13,14 +13,19 @@
 // to drop before 2026-09-24's critique-fix pass: whatever
 // client/src/components/display/RingAmbient.jsx reads by station identity
 // (variant/region/regionSource/noCompanion/companionKind) for stations
-// that need them. None of these six do (deliberately kept simple for a
+// that need them. None of these do (deliberately kept simple for a
 // first pass) — omitted fields default the same way an authored station
 // omitting them does.
+//
+// Ben's aesthetic call on the self-render gallery (2026-09-24, same day):
+// orion, wormhole, and dark nebula all rejected ("doesn't look good" /
+// "suck") — pulled from the pool. Their primitive code (ringPrimitives.js's
+// 'constellation' orion variant, 'wormhole' kind, 'darkNebula' kind) is
+// left in place, unreachable from the pool, in case a future pass reworks
+// and re-adds them — this file is the only place that needs editing to
+// bring one back. Not a code defect, an aesthetic rejection.
 export const CANDIDATE_STATIONS = [
   { key: 'big dipper', prim: 'constellation', variant: 'bigDipper', hue: 210, accent: false, family: 'constellation' },
-  { key: 'orion', prim: 'constellation', variant: 'orion', hue: 195, accent: false, family: 'constellation' },
   { key: 'cassiopeia', prim: 'constellation', variant: 'cassiopeia', hue: 180, accent: false, family: 'constellation' },
   { key: 'southern cross', prim: 'constellation', variant: 'southernCross', hue: 165, accent: false, family: 'constellation' },
-  { key: 'wormhole', prim: 'wormhole', hue: 230, accent: false, family: 'lens' },
-  { key: 'dark nebula', prim: 'darkNebula', hue: 265, accent: false, family: 'cloud' },
 ]

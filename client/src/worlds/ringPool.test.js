@@ -16,7 +16,7 @@ const EXPECTED_AUTHORED_KEYS = [
   'pulsar', 'rose nebula', 'comet', 'binary pair', 'asteroid field', 'eclipse',
   'aurora ribbon', 'supernova',
 ]
-const EXPECTED_CANDIDATE_KEYS = ['big dipper', 'orion', 'cassiopeia', 'southern cross', 'wormhole', 'dark nebula']
+const EXPECTED_CANDIDATE_KEYS = ['big dipper', 'cassiopeia', 'southern cross']
 
 const EXPECTED_ACCENT_KEYS = ['amber planet', 'rose nebula', 'supernova']
 
@@ -27,8 +27,8 @@ const EXPECTED_AUTHORED_FAMILIES = [
 ]
 
 describe('RING_POOL', () => {
-  it('has 19 entries: the 13 authored stations, then the pool-only candidates', () => {
-    expect(RING_POOL).toHaveLength(19)
+  it('has 16 entries: the 13 authored stations, then the pool-only candidates', () => {
+    expect(RING_POOL).toHaveLength(16)
     expect(RING_POOL.map(s => s.key)).toEqual([...EXPECTED_AUTHORED_KEYS, ...EXPECTED_CANDIDATE_KEYS])
   })
 
@@ -49,7 +49,7 @@ describe('RING_POOL', () => {
     expect(RING_POOL.slice(0, 13).map(s => s.family)).toEqual(EXPECTED_AUTHORED_FAMILIES)
   })
 
-  it('the last 6 entries are exactly CANDIDATE_STATIONS, in order, unmodified', () => {
+  it('the last 3 entries are exactly CANDIDATE_STATIONS, in order, unmodified', () => {
     expect(RING_POOL.slice(13)).toEqual(CANDIDATE_STATIONS)
   })
 
