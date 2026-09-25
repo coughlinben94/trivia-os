@@ -42,16 +42,16 @@ describe('outgoingAndIncomingDuo', () => {
   })
 
   it('outgoing is always the PREVIOUS step, incoming the CURRENT one — real regression case', () => {
-    // Pinned against actual output (Codex review, 2026-09-24): seed
-    // "show_b" reaches step 1 at ringVisibleIndex 2. The old (buggy)
-    // current/next shape returned next as a step-1 PREVIEW ('mint_drift',
-    // which happened to be the step-0 duo by coincidence of the graph
-    // walk) instead of what's actually incoming. outgoing/incoming must
-    // read the opposite direction: outgoing = step 0's duo, incoming =
-    // step 1's duo, in that order.
+    // Pinned against actual output (Codex review, 2026-09-24; re-pinned
+    // 2026-09-25 after the graph grew from 12 to 15 duos — same direction
+    // bug, new graph shape gives different concrete values, recomputed
+    // live rather than hand-derived). The old (buggy) current/next shape
+    // returned next as a step-AHEAD preview instead of what's actually
+    // incoming. outgoing/incoming must read the opposite direction:
+    // outgoing = the previous step's duo, incoming = the current step's.
     const { outgoing, incoming } = outgoingAndIncomingDuo('show_b', DUO_GRAPH, 2)
-    expect(incoming).toBe('turquoise_bloom') // step 1's duo (the new current)
-    expect(outgoing).toBe('mint_drift')       // step 0's duo (what it came from)
+    expect(incoming).toBe('mint_drift')       // step 1's duo (the new current)
+    expect(outgoing).toBe('turquoise_bloom')  // step 0's duo (what it came from)
   })
 
   it('incoming always matches what duoWalk itself gives that step', () => {

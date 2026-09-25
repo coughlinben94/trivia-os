@@ -7,10 +7,10 @@ describe('DUO_GRAPH', () => {
     expect(validateDuoGraph(DUO_GRAPH)).toEqual([])
   })
 
-  it('has 10-12 duos, per the design doc', () => {
-    const count = Object.keys(DUO_PALETTES).length
-    expect(count).toBeGreaterThanOrEqual(10)
-    expect(count).toBeLessThanOrEqual(12)
+  it('has at least the original 10-12 duos the design doc called for', () => {
+    // Ben, 2026-09-25: "how do we get more" — the set is meant to grow past
+    // the original 12, so no upper cap here, just the original floor.
+    expect(Object.keys(DUO_PALETTES).length).toBeGreaterThanOrEqual(10)
   })
 
   it('every graph node has a matching palette, and vice versa', () => {
