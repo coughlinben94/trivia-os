@@ -16,7 +16,7 @@
 
 import { runChecks, startStaticServer, ensureViteServer } from './ring-verify.mjs'
 import { midnightGalaxyRing } from '../../client/src/worlds/midnightGalaxy.ring.js'
-import { drawWorld } from '../../client/src/lib/drawWorld.js'
+import { drawWorld, resolveStations } from '../../client/src/lib/drawWorld.js'
 import { RING_POOL } from '../../client/src/worlds/ringPool.js'
 import { RING_VERSION } from '../../client/src/lib/ringCertification.js'
 import { generatePalette, seedFrom, BASE_PALETTE, PRESETS } from '../../client/src/lib/paletteGenerator.js'
@@ -333,12 +333,29 @@ async function runPending(browser) {
   const { data: pending, error } = await sb.from('ring_palettes').select('*').eq('status', 'pending').eq('ring_version', RING_VERSION)
   if (error) throw new Error(`select failed: ${error.message}`)
   for (const row of pending ?? []) {
-    const { passed, summary } = await certifyPalette(browser, { colors: row.colors, weights: row.weights, drift: row.drift })
+    // A pending row with a station list came from a drawn-world save
+    // (WorldPaletteEditor's Apply falling to saveAsPending when no certified
+    // row matches yet — findMatch requires an exact stations match, and none
+    // ever exist for a fresh draw). Certifying it via certifyPalette alone
+    // only checks the color anchors, never the actual drawn arrangement —
+    // the real per-station safe-box/placement gate (certifyWorld) never
+    // runs, so a bad drawn world could reach "certified" status completely
+    // untested. This was found independently by three review passes this
+    // session (opus, fable, sonnet) as the single highest-priority gap in
+    // the certification pipeline — nothing before this fix ever ran a drawn
+    // world through the real gate at Apply/pending time.
+    let passed, summary
+    if (row.stations) {
+      const stations = resolveStations(RING_POOL, row.stations)
+      ;({ passed, summary } = await certifyWorld(browser, { colors: row.colors, weights: row.weights, drift: row.drift, stations }))
+    } else {
+      ;({ passed, summary } = await certifyPalette(browser, { colors: row.colors, weights: row.weights, drift: row.drift }))
+    }
     const { error: updateErr } = await sb.from('ring_palettes').update({
       status: passed ? 'certified' : 'failed', gate_summary: summary, checked_at: new Date().toISOString(),
     }).eq('id', row.id)
     if (updateErr) throw new Error(`update failed for ${row.id}: ${updateErr.message}`)
-    console.log(`${row.id}: ${passed ? 'CERTIFIED' : 'FAILED'}`)
+    console.log(`${row.id}: ${passed ? 'CERTIFIED' : 'FAILED'}${row.stations ? ' (world)' : ''}`)
   }
   console.log(`\nChecked ${pending?.length ?? 0} pending palette(s).`)
 }
