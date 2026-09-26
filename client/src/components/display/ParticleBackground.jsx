@@ -3,6 +3,7 @@ import ErrorBoundary from '../ErrorBoundary.jsx'
 import { getTheme } from '../../themes/index.js'
 import BreathingGradient from './BreathingGradient'
 import RingAmbient from './RingAmbient.jsx'
+import EvolvingRingAmbient from './EvolvingRingAmbient.jsx'
 import { RING_WORLDS, ringWorldFor } from '../../lib/ringWorldFor.js'
 import { deriveTint, hexToRgba } from '../../lib/colorTint.js'
 
@@ -1202,8 +1203,18 @@ export default function ParticleBackground({ theme, showId, slideIndex, stationO
   // while /display is open shows on the next reload, not live. Phase 4 of
   // docs/superpowers/plans/2026-09-02-ring-palette-runtime.md is where that
   // changes.
+  // Evolving color mode: only for midnight-galaxy, only when no host has set
+  // an explicit per-show override (WorldPaletteEditor's worldPalette, or a
+  // saved ringWorld) — an explicit host pick always wins, unchanged from
+  // today. No new theme_overrides field: this is a pure function of showId +
+  // slide position, same "recompute, never store" discipline the walk itself
+  // already uses. See docs/superpowers/plans/2026-09-26-ring-world-night-
+  // color-evolution-wiring.md, "Scoping decision," for why there's no on/off
+  // toggle yet.
+  const evolvingEligible = theme.id === 'midnight-galaxy' && !!showId && !theme.worldPalette && !theme.ringWorld
+
   const ringWorldRef = useRef(null)
-  if (ringWorldRef.current === null) {
+  if (ringWorldRef.current === null && !evolvingEligible) {
     ringWorldRef.current = ringWorldFor(theme, showId) ?? false
   }
   const ringWorld = ringWorldRef.current || null
@@ -1244,9 +1255,11 @@ export default function ParticleBackground({ theme, showId, slideIndex, stationO
         <ErrorBoundary fallback={<></>}>
           {gradientMood
             ? <BreathingGradient palette={theme.colors} mood={gradientMood} />
-            : ringWorld
-              ? <RingAmbient worldData={ringWorld} slideIndex={slideIndex} stationOverride={stationOverride} showStationDebug={showStationDebug} forceSnap={forceSnap} />
-              : AmbientComponent && <AmbientComponent tint={tint} />}
+            : evolvingEligible
+              ? <EvolvingRingAmbient showId={showId} slideIndex={slideIndex} stationOverride={stationOverride} showStationDebug={showStationDebug} forceSnap={forceSnap} />
+              : ringWorld
+                ? <RingAmbient worldData={ringWorld} slideIndex={slideIndex} stationOverride={stationOverride} showStationDebug={showStationDebug} forceSnap={forceSnap} />
+                : AmbientComponent && <AmbientComponent tint={tint} />}
         </ErrorBoundary>
         <Vignette
           r={v.r ?? 0}
