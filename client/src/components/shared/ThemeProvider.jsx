@@ -53,7 +53,7 @@ export function applyOverrides(baseTheme, overrides) {
   return flooredColors === merged.colors ? merged : { ...merged, colors: flooredColors }
 }
 
-export function ThemeProvider({ showThemeId, overrides, children }) {
+export function ThemeProvider({ showThemeId, overrides, showId, children }) {
   const [themeId, setThemeId] = useState(showThemeId ?? DEFAULT_THEME_ID)
   const registeredFontRef = useRef(null)
 
@@ -91,7 +91,13 @@ export function ThemeProvider({ showThemeId, overrides, children }) {
     }
   }, [theme.fonts.displayUrl, theme.fonts.display])
 
-  const value = useMemo(() => ({ theme, themeId, setThemeId }), [theme, themeId])
+  // showId: the live show's own id, distinct from themeId (which theme is
+  // active). ringWorldFor's auto-draw tier (client/src/lib/ringWorldFor.js)
+  // uses it to seed a per-show station arrangement when no host has applied
+  // an explicit ringWorld override. Absent on demo/preview/no-show-live
+  // paths (Display.jsx passes no showId there) — ringWorldFor treats a
+  // missing showId as "no auto-draw," same as today's behavior.
+  const value = useMemo(() => ({ theme, themeId, setThemeId, showId }), [theme, themeId, showId])
 
   return (
     <ThemeContext.Provider value={value}>

@@ -210,11 +210,15 @@ export default function WarpTransition({ dir = 'out', onDone, durationMs = DURAT
   const doneRef = useRef(onDone)
   doneRef.current = onDone
 
-  const { theme } = useTheme()
-  // The same recoloured (or base) world ParticleBackground froze at mount —
-  // ringWorldFor's own cache means this is the identical object, not a
-  // second recolour computed from scratch. Recomputed only if theme/palette
-  // identity changes (it doesn't mid-warp; this component remounts per warp).
+  const { theme, showId } = useTheme()
+  // The same recoloured (or base, or auto-drawn) world ParticleBackground
+  // froze at mount — ringWorldFor's own cache means this is the identical
+  // object, not a second recolour/draw computed from scratch. Must pass the
+  // same showId ParticleBackground used, or a cache-key mismatch would
+  // silently compute a DIFFERENT auto-drawn arrangement here (still
+  // deterministic, just not the one already on screen). Recomputed only if
+  // theme/palette/showId identity changes (it doesn't mid-warp; this
+  // component remounts per warp).
   // Fallback to midnightGalaxyRing: the grading-break warp fires on EVERY
   // theme (Display.jsx's breakEligible has no theme check), but RING_WORLDS
   // only has a midnight-galaxy entry — ringWorldFor returns undefined for
@@ -222,7 +226,7 @@ export default function WarpTransition({ dir = 'out', onDone, durationMs = DURAT
   // to hardcode midnightGalaxyRing unconditionally; this preserves that,
   // rather than throwing (a throw here is swallowed by Display.jsx's
   // ErrorBoundary, but onDone never fires and the grading break gets stuck).
-  const world = useMemo(() => ringWorldFor(theme) ?? midnightGalaxyRing, [theme])
+  const world = useMemo(() => ringWorldFor(theme, showId) ?? midnightGalaxyRing, [theme, showId])
   // Same stop RingAmbient paints its stage ground with — the world's own
   // terminal sky, not a second near-black to keep in sync by hand.
   const BG = world.sky[world.sky.length - 1]

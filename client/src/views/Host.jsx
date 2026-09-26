@@ -134,7 +134,7 @@ export default function Host() {
 
   return (
     <HostPinGate>
-      <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides}>
+      <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides} showId={show.id}>
         <ErrorBoundary>
           <HostInner showApi={showApi} />
         </ErrorBoundary>

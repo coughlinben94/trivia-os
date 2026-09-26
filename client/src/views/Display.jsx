@@ -101,11 +101,11 @@ const FULL_BLEED_SLIDE_TYPES = new Set(['state-of-union', 'winner-reveal', 'rule
 // ─── No-show holding screen (before any show goes live) ────────────────────
 
 function WaitingScreen() {
-  const { theme } = useTheme()
+  const { theme, showId } = useTheme()
   return (
     <div className="w-screen h-screen overflow-hidden relative select-none"
       style={{ background: theme.colors.bg }}>
-      <ParticleBackground theme={theme} />
+      <ParticleBackground theme={theme} showId={showId} />
       <div style={{
         position: 'absolute', inset: 0,
         display: 'flex', flexDirection: 'column',
@@ -333,7 +333,7 @@ const isRingVisible = s =>
   s?.type === 'shiny-title' || s?.type === 'bonus'
 
 function PersistentRing({ slideIndex, stationOverride, showStationDebug, forceSnap }) {
-  const { theme } = useTheme()
+  const { theme, showId } = useTheme()
   // ParticleBackground's own root is `absolute inset-0` — it needs a sized,
   // positioned ancestor of its own now that it's not nested inside
   // PreShowScreen's/DisplayInner's `w-screen h-screen relative` div anymore.
@@ -343,6 +343,7 @@ function PersistentRing({ slideIndex, stationOverride, showStationDebug, forceSn
     <div className="fixed inset-0 overflow-hidden" style={{ background: theme.colors.bg }}>
       <ParticleBackground
         theme={theme}
+        showId={showId}
         slideIndex={slideIndex}
         stationOverride={stationOverride}
         showStationDebug={showStationDebug}
@@ -738,7 +739,7 @@ const SHINY_WARP_MS = 1100
 const SHINY_WARP_COVER_AT = 0.24
 
 function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRingStateChange }) {
-  const { theme } = useTheme()
+  const { theme, showId } = useTheme()
   const reduce = useReducedMotion()
   const sortedSlides = sortSlides(show.slides)
   const currentSlide = sortedSlides[show.current_slide_index ?? 0] ?? null
@@ -970,6 +971,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
       {!onRingStateChange && (
         <ParticleBackground
           theme={theme}
+          showId={showId}
           slideIndex={ringVisibleStationIndex(sortedSlides, ringPeekIndex(sortedSlides, show.current_slide_index ?? 0), isRingVisible)}
           stationOverride={breakActive ? MUSIC_STATION : (warp === 'back' ? RING_RETURN : null)}
           showStationDebug={isPreview}
@@ -1845,7 +1847,7 @@ export default function Display() {
 
   if (isPreview) {
     return (
-      <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides}>
+      <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides} showId={show.id}>
         <DisplayInner show={resolvePreviewShow(show, previewSlideId)} direction={1} isPreview />
         <PreviewBadge />
       </ThemeProvider>
@@ -1882,7 +1884,7 @@ export default function Display() {
   const sortedForRing = show.is_live ? sortSlides(show.slides) : null
   return (
     <ErrorBoundary fallback={null}>
-      <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides}>
+      <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides} showId={show.id}>
         <PersistentRing
           slideIndex={sortedForRing && show.current_slide_index != null
             ? ringVisibleStationIndex(sortedForRing, ringPeekIndex(sortedForRing, show.current_slide_index), isRingVisible)
