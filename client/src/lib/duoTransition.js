@@ -47,3 +47,14 @@ export function outgoingAndIncomingDuo(seed, graph, ringVisibleIndex) {
   const outgoing = step > 0 ? duoWalk(seed, graph, step - 1) : incoming
   return { outgoing, incoming }
 }
+
+// A slide is a transition slide iff the walk's step just changed arriving at
+// it — i.e. this slide and the one before it belong to different steps.
+// Pure function of the index: no ref, no stored "am I mid-transition" state,
+// so back-nav (Stream Deck back button) just recomputes the same answer
+// walking the other direction, for free — the same discipline duoWalk.js's
+// own header comment already argues for.
+export function isTransitionSlide(seed, ringVisibleIndex) {
+  if (ringVisibleIndex <= 0) return false
+  return stepIndexForSlide(seed, ringVisibleIndex) !== stepIndexForSlide(seed, ringVisibleIndex - 1)
+}

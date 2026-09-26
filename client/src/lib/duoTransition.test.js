@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { stepIndexForSlide, outgoingAndIncomingDuo } from './duoTransition.js'
+import { stepIndexForSlide, outgoingAndIncomingDuo, isTransitionSlide } from './duoTransition.js'
 import { DUO_GRAPH } from './duoGraph.js'
 
 describe('stepIndexForSlide', () => {
@@ -70,5 +70,30 @@ describe('outgoingAndIncomingDuo', () => {
     const a = outgoingAndIncomingDuo('show_f', DUO_GRAPH, 17)
     const b = outgoingAndIncomingDuo('show_f', DUO_GRAPH, 17)
     expect(a).toEqual(b)
+  })
+})
+
+describe('isTransitionSlide', () => {
+  it('is false at slide 0 (nothing to transition from yet)', () => {
+    expect(isTransitionSlide('show_h', 0)).toBe(false)
+  })
+
+  it('is true exactly at the slides where stepIndexForSlide changes', () => {
+    let prevStep = stepIndexForSlide('show_i', 0)
+    for (let i = 1; i < 60; i++) {
+      const step = stepIndexForSlide('show_i', i)
+      expect(isTransitionSlide('show_i', i)).toBe(step !== prevStep)
+      prevStep = step
+    }
+  })
+
+  it('agrees with itself walking backward then forward across the same boundary (back-nav safe)', () => {
+    let boundary = -1
+    for (let i = 1; i < 30 && boundary === -1; i++) {
+      if (isTransitionSlide('show_j', i)) boundary = i
+    }
+    expect(boundary).toBeGreaterThan(0)
+    expect(isTransitionSlide('show_j', boundary)).toBe(true)
+    expect(isTransitionSlide('show_j', boundary)).toBe(true)
   })
 })
