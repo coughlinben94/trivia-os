@@ -9,13 +9,21 @@
 // which. Re-verify against `ring_palettes` (status='certified', current
 // RING_VERSION) before trusting this list after a `RING_VERSION` bump.
 //
-// 15 duos, picked for real hue-family spread rather than the old shelf's
+// 17 duos, picked for real hue-family spread rather than the old shelf's
 // purple/red cluster: warm (crimson/gold/amber/solar-storm), violet/blue,
 // green, and the newly-certified vivid family (mint, turquoise, cyan,
 // electric blue+pink, neon magenta+green) that a palette-sweep.mjs retry
 // fix (2026-09-24, same session) found for the first time. ember_orchid/
 // spring_lilac/violet_blaze added same day, same session, from the same
 // certified batch — they just didn't make the original 12-pick cut.
+// ice_violet/blue_coral added 2026-09-26 from a second real sweep batch
+// (--seed-batch 25, run by an Opus "ultrathink" pipeline-review agent) —
+// picked over the batch's other 8 new certified rows specifically because
+// they're genuinely new hue families (a literal "ice blue," and the
+// shelf's first blue+coral/orange pairing), not because they were simply
+// available; the rest were close variants of duos already in this file
+// and adding them would have undercut the whole point of this expansion
+// (Ben's original complaint was too much sameness, not too few rows).
 // `drift` is part of what was actually certified (Codex review, 2026-09-24
 // — a real gap the first version of this file had): ring_palettes stores
 // and matches on colors+weights+drift together, and recolorWorld() defaults
@@ -41,6 +49,8 @@ export const DUO_PALETTES = {
   ember_orchid:    { colors: ['#ee6929', '#e346de'], weights: [0.583, 0.417], drift: { arc: 62 } },
   spring_lilac:    { colors: ['#56f594', '#8659e9'], weights: [0.599, 0.401], drift: { arc: 85 } },
   violet_blaze:    { colors: ['#762bf3', '#f9463e'], weights: [0.684, 0.316], drift: { arc: 53 } },
+  ice_violet:      { colors: ['#39c1f5', '#8856f0'], weights: [0.599, 0.401], drift: { arc: 31 } },
+  blue_coral:      { colors: ['#2d13ef', '#ec8051'], weights: [0.661, 0.339], drift: { arc: 64 } },
 }
 
 // Edges = "this transition looks good" (an aesthetic call, made explicitly
@@ -55,20 +65,26 @@ export const DUO_GRAPH = {
   crimson_gold:    ['solar_flare', 'amber_rose', 'solar_storm', 'violet_blaze'],
   solar_flare:     ['crimson_gold', 'amber_rose', 'amazon_dusk', 'ember_orchid'],
   amber_rose:      ['crimson_gold', 'solar_flare', 'violet_pink'],
-  purple_blue:     ['violet_pink', 'mint_drift', 'electric_bloom', 'spring_lilac'],
+  purple_blue:     ['violet_pink', 'mint_drift', 'electric_bloom', 'spring_lilac', 'ice_violet'],
   violet_pink:     ['purple_blue', 'amber_rose', 'neon_garden'],
   amazon_dusk:     ['solar_flare', 'purple_blue', 'turquoise_bloom', 'violet_blaze'],
   mint_drift:      ['purple_blue', 'turquoise_bloom', 'cyan_mirage', 'spring_lilac'],
-  electric_bloom:  ['purple_blue', 'neon_garden', 'cyan_mirage', 'ember_orchid'],
-  turquoise_bloom: ['amazon_dusk', 'mint_drift', 'solar_storm', 'spring_lilac'],
+  electric_bloom:  ['purple_blue', 'neon_garden', 'cyan_mirage', 'ember_orchid', 'blue_coral'],
+  turquoise_bloom: ['amazon_dusk', 'mint_drift', 'solar_storm', 'spring_lilac', 'ice_violet'],
   neon_garden:     ['violet_pink', 'electric_bloom', 'cyan_mirage', 'ember_orchid'],
-  solar_storm:     ['crimson_gold', 'turquoise_bloom', 'cyan_mirage', 'violet_blaze'],
-  cyan_mirage:     ['mint_drift', 'electric_bloom', 'neon_garden', 'solar_storm'],
-  // New nodes, same session — mutual edges back into the hue family each
-  // shares a real bridge with (orange/magenta -> solar_flare/neon_garden/
-  // electric_bloom; mint/periwinkle -> mint_drift/purple_blue/turquoise_bloom;
-  // violet/red-orange -> solar_storm/crimson_gold/amazon_dusk).
-  ember_orchid:    ['solar_flare', 'neon_garden', 'electric_bloom'],
+  solar_storm:     ['crimson_gold', 'turquoise_bloom', 'cyan_mirage', 'violet_blaze', 'blue_coral'],
+  cyan_mirage:     ['mint_drift', 'electric_bloom', 'neon_garden', 'solar_storm', 'ice_violet'],
+  // ember_orchid/spring_lilac/violet_blaze (2026-09-24) — mutual edges back
+  // into the hue family each shares a real bridge with (orange/magenta ->
+  // solar_flare/neon_garden/electric_bloom; mint/periwinkle -> mint_drift/
+  // purple_blue/turquoise_bloom; violet/red-orange -> solar_storm/
+  // crimson_gold/amazon_dusk).
+  ember_orchid:    ['solar_flare', 'neon_garden', 'electric_bloom', 'blue_coral'],
   spring_lilac:    ['mint_drift', 'purple_blue', 'turquoise_bloom'],
   violet_blaze:    ['solar_storm', 'crimson_gold', 'amazon_dusk'],
+  // ice_violet/blue_coral (2026-09-26) — ice_violet bridges on blue/violet
+  // to purple_blue/turquoise_bloom/cyan_mirage; blue_coral bridges on
+  // blue to electric_bloom/solar_storm and on orange/coral to ember_orchid.
+  ice_violet:      ['purple_blue', 'turquoise_bloom', 'cyan_mirage'],
+  blue_coral:      ['electric_bloom', 'solar_storm', 'ember_orchid'],
 }
