@@ -652,7 +652,7 @@ export const RING_RETURN = 'return'
 // stations: [PANES x {key,prim,hue,accent}] } — see concepts/world-07-ring.html's
 // own WORLD literal. qColours is accepted but unused here (question-colour
 // styling belongs to the out-of-scope question-rendering system).
-const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, stationOverride, showStationDebug = false, forceSnap = false }, ref) {
+const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, stationOverride, showStationDebug = false, forceSnap = false, exposeDebugGlobal = true }, ref) {
   // The ground behind the stage. Was a hardcoded '#01010a' — a blue-black
   // tuned to the purple world, which stayed blue-black under every recolour.
   // The sky ramp's terminal stop is the same near-black, already generated
@@ -814,13 +814,18 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     // exposed as ringEngine.js's real two-argument `(engine, layer)` signature —
     // the gate calls `w.cylinderOf(L)` identically against both passes, and this
     // is the one place that has to bridge the difference, not the gate.
-    window.__world = {
-      ENGINE, WORLD: worldData, ARC: arc,
-      cylinderOf: (L) => cylinderOf(ENGINE, L),
-      authorPeriodOf: (L) => authorPeriodOf(ENGINE, L),
-      get station() { return stationRef.current },
-      get offset() { return offsetRef.current },
-      jumpTo, turn,
+    // A second RingAmbient mounted at once (the night-color-evolution split
+    // transition, EvolvingRingAmbient.jsx) would otherwise clobber whichever
+    // instance set this first — only the one becoming current should own it.
+    if (exposeDebugGlobal) {
+      window.__world = {
+        ENGINE, WORLD: worldData, ARC: arc,
+        cylinderOf: (L) => cylinderOf(ENGINE, L),
+        authorPeriodOf: (L) => authorPeriodOf(ENGINE, L),
+        get station() { return stationRef.current },
+        get offset() { return offsetRef.current },
+        jumpTo, turn,
+      }
     }
 
     // React 18 StrictMode double-invokes this effect in dev; clear what we
@@ -833,7 +838,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
       // dom.clampSafeBoxStarPeaks(designElRef.current).
       clearTimeout(turnTimerRef.current)
       design.replaceChildren()
-      if (window.__world && window.__world.WORLD === worldData) delete window.__world
+      if (exposeDebugGlobal && window.__world && window.__world.WORLD === worldData) delete window.__world
     }
   }, [])
 
