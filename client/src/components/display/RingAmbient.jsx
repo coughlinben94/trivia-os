@@ -755,7 +755,15 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
         surge.appendChild(copy)
       }
       surgeEls[L.id] = surge
-      offsetRef.current[L.id] = 0
+      // Seed from stationRef.current, not unconditionally 0. Normally this
+      // is 0 (a fresh mount starts at rest) — but a wrapper that calls
+      // jumpTo(slideIndex) in a useLayoutEffect (which runs before THIS
+      // plain useEffect) already advances stationRef.current before any
+      // surge element exists, so jumpTo's own offset math has nothing to
+      // write into yet and is silently lost. Matches jumpTo's own formula
+      // exactly: starting at 0 and adding L.surge, mod cyl, stationRef.current
+      // times equals (stationRef.current * L.surge) % cyl in one step.
+      offsetRef.current[L.id] = (stationRef.current * L.surge) % cyl
     }
     surgeElsRef.current = surgeEls
     arcRef.current = arc
@@ -800,6 +808,12 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     applyTints(stage, worldData.tints)
 
     writeOffsets()
+    // Same re-clamp jumpTo already does "at rest, new station" (item 3) —
+    // needed here too now that a mount can start already-advanced past
+    // station 0 (see the offsetRef seed above). Guarded so the ordinary
+    // mount-at-rest path (stationRef.current === 0, true for every existing
+    // live show) stays byte-identical to before this fix.
+    if (stationRef.current !== 0) dom.clampSafeBoxStarPeaks(design)
     shootLoop()
 
     // Exposed for concepts/tools/ring-verify.mjs's live-route pass — mirrors the
