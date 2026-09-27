@@ -1,34 +1,50 @@
 // @vitest-environment jsdom
-// Regression test for the real bug an adversarial Codex review caught
-// 2026-09-26 in the first version of this file: switching between the solo
-// and split render shapes unmounted the world that was ALREADY correctly
-// playing, and a host multi-slide skip could leave a stale duo on screen
-// forever (RingAmbient silently ignores a changed worldData prop after
-// mount). This test mocks RingAmbient itself (its real DOM-building engine
-// has no unit coverage anywhere in this repo, by design — see the wiring
-// plan) and asserts only on EvolvingRingAmbient's OWN reconciliation: which
-// mounts survive across a real transition, and which get replaced.
+// Reconciliation test for EvolvingRingAmbient: which RingAmbient instances
+// mount, survive, and get replaced as the show walks. RingAmbient itself is
+// mocked (EvolvingRingAmbient.onscreen/.glide tests cover the real engine);
+// recolorWorld is mocked only so each instance can be traced back to its duo.
+//
+// History: the first version of this file (2026-09-26) guarded against the
+// solo/split shape switch remounting whatever was already playing, and a
+// multi-slide skip leaving a stale duo on screen. Its "settle remounts once"
+// expectation was itself the next bug (the incoming world was thrown away at
+// settle and a fresh one snapped in) — now every world is one keyed instance
+// for as long as it's on screen or one slide away from it.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { act, forwardRef, useImperativeHandle, useState } from 'react'
+import { act, forwardRef, useEffect, useImperativeHandle, useState } from 'react'
 import { createRoot } from 'react-dom/client'
+import { DUO_PALETTES, DUO_GRAPH } from '../../lib/duoGraph.js'
+import { outgoingAndIncomingDuo, isTransitionSlide } from '../../lib/duoTransition.js'
 
 const mounts = []
 const jumpToCalls = []
 let nextInstanceId = 0
 
+vi.mock('../../lib/ringRecolor.js', () => ({
+  recolorWorld: (_world, palette) => ({ palette, sky: ['#000'] }),
+}))
+
 vi.mock('./RingAmbient.jsx', () => ({
   default: forwardRef(function MockRingAmbient({ worldData }, ref) {
-    const [instanceId] = useState(() => {
-      const id = nextInstanceId++
-      mounts.push({ id, worldData })
-      return id
+    const [m] = useState(() => {
+      const duo = Object.keys(DUO_PALETTES).find(k => DUO_PALETTES[k] === worldData.palette)
+      const rec = { id: nextInstanceId++, duo, alive: true }
+      mounts.push(rec)
+      return rec
     })
-    useImperativeHandle(ref, () => ({ jumpTo: (target) => jumpToCalls.push({ instanceId, target }) }))
+    useEffect(() => () => { m.alive = false }, [m])
+    useImperativeHandle(ref, () => ({ jumpTo: (target) => jumpToCalls.push({ instanceId: m.id, target }) }))
     return null
   }),
 }))
 
 const { default: EvolvingRingAmbient } = await import('./EvolvingRingAmbient.jsx')
+
+const onScreen = (showId, i) => {
+  const { outgoing, incoming } = outgoingAndIncomingDuo(showId, DUO_GRAPH, i)
+  return isTransitionSlide(showId, i) ? [outgoing, incoming] : [incoming]
+}
+const alive = () => mounts.filter(m => m.alive)
 
 describe('EvolvingRingAmbient', () => {
   beforeEach(() => {
@@ -37,60 +53,60 @@ describe('EvolvingRingAmbient', () => {
     nextInstanceId = 0
   })
 
-  it('keeps the current world mounted across a transition, and only remounts once it actually settles on a new duo', async () => {
-    // Seed/index pinned in duoTransition.test.js: at 'show_b' index 2,
-    // outgoing='neon_garden', incoming='electric_bloom'; the boundary gap is
-    // always >=2, so index 3 is still the same step (still electric_bloom).
-    const container = document.createElement('div')
-    const root = createRoot(container)
+  it('never remounts a world while it stays on screen or one slide away — including at settle', async () => {
+    // show_b: transition at 2 (neon_garden -> electric_bloom, pinned in
+    // duoTransition.test.js), settles at 3, next transition at 4.
+    const root = createRoot(document.createElement('div'))
+    const [a, b] = onScreen('show_b', 2)
 
     await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={1} />) })
-    expect(mounts.length).toBe(1) // solo: one RingAmbient
+    // Solo on a, with b pre-mounted (hidden) for the transition next slide.
+    expect(alive().map(m => m.duo).sort()).toEqual([a, b].sort())
+    const before = alive().map(m => m.id)
 
     await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={2} />) })
-    // Transitioning: the persistent "current" slot must NOT have remounted
-    // (still mount id 0), and exactly one NEW instance appears for incoming.
-    expect(mounts.length).toBe(2)
-    expect(mounts[0].id).toBe(0) // unchanged — proves no remount happened
+    expect(alive().map(m => m.id)).toEqual(before) // transition: nothing new, nothing lost
 
     await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={3} />) })
-    // Settled: the transition's incoming slot is gone, and the surviving
-    // "current" slot has now remounted exactly once (real new duo, real new
-    // colors — unavoidable) rather than continuing to reuse instance 0.
-    expect(mounts.length).toBe(3)
-    expect(mounts[2].id).toBe(2)
+    // Settle: b is the SAME instance it was as the incoming half; a stays
+    // mounted (Prev lands back on the transition); only the world for the
+    // NEXT transition (slide 4) is new.
+    const bInst = mounts.find(m => m.duo === b)
+    expect(bInst.alive).toBe(true)
+    expect(mounts.filter(m => m.duo === b)).toHaveLength(1)
+    expect(mounts.filter(m => m.duo === a)).toHaveLength(1)
+    const [, c] = onScreen('show_b', 4)
+    expect(alive().map(m => m.duo).sort()).toEqual([a, b, c].sort())
 
     await act(async () => { root.unmount() })
   })
 
-  it('calls jumpTo on every freshly mounted instance, but never on the surviving one', async () => {
-    const container = document.createElement('div')
-    const root = createRoot(container)
+  it('calls jumpTo on every freshly mounted instance, but never on a surviving one', async () => {
+    const root = createRoot(document.createElement('div'))
 
     await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={1} />) })
-    expect(jumpToCalls).toEqual([{ instanceId: 0, target: 1 }])
+    expect(jumpToCalls).toEqual([{ instanceId: 0, target: 1 }, { instanceId: 1, target: 1 }])
 
     await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={2} />) })
-    // Instance 0 (surviving) gets no second jumpTo call; only the new
-    // incoming instance (id 1) does.
-    expect(jumpToCalls).toEqual([{ instanceId: 0, target: 1 }, { instanceId: 1, target: 2 }])
+    expect(jumpToCalls).toHaveLength(2) // both survived, no new mounts
+
+    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={3} />) })
+    expect(jumpToCalls.slice(2)).toEqual([{ instanceId: 2, target: 3 }]) // only the new preload
 
     await act(async () => { root.unmount() })
   })
 
-  it('remounts (not silently ignores) a duo change on a multi-slide skip with no transition frame rendered', async () => {
-    // If a host jump lands two steps ahead without ever rendering the
-    // in-between transition frame, the real bug let the stale duo's DOM
-    // survive forever (RingAmbient ignores a changed worldData prop). This
-    // asserts the fix: the key changes with the duo, so it remounts.
-    const container = document.createElement('div')
-    const root = createRoot(container)
+  it('replaces stale worlds on a multi-slide skip with no transition frame rendered', async () => {
+    // RingAmbient ignores a changed worldData prop after mount, so a world
+    // must be keyed by its duo — a skip to a new duo has to mount it, not
+    // silently keep the old one.
+    const root = createRoot(document.createElement('div'))
 
     await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={1} />) })
-    expect(mounts.length).toBe(1)
-
     await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={7} />) })
-    expect(mounts.length).toBe(2) // remounted with the real duo at index 7, not stuck on index 1's
+    const want = [...new Set([6, 7, 8].flatMap(i => onScreen('show_b', i)))].sort()
+    expect(alive().map(m => m.duo).sort()).toEqual(want)
+    expect(onScreen('show_b', 7).every(d => !onScreen('show_b', 1).includes(d))).toBe(true) // really a new duo
 
     await act(async () => { root.unmount() })
   })

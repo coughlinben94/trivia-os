@@ -816,6 +816,27 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     if (stationRef.current !== 0) dom.clampSafeBoxStarPeaks(design)
     shootLoop()
 
+    // React 18 StrictMode double-invokes this effect in dev; clear what we
+    // built so the second invocation doesn't append a duplicate DOM tree.
+    return () => {
+      ro.disconnect()
+      clearTimeout(shootTimerRef.current)
+      // turn()'s in-flight unlock timer (~SURGE_MS+60) would otherwise fire
+      // post-unmount and call unlock() on null refs, throwing inside
+      // dom.clampSafeBoxStarPeaks(designElRef.current).
+      clearTimeout(turnTimerRef.current)
+      design.replaceChildren()
+    }
+  }, [])
+
+  // Its own effect (declared after the build effect, so arcRef is already
+  // set when it runs) rather than part of the build: exposeDebugGlobal can
+  // CHANGE on a live instance — EvolvingRingAmbient keeps one instance per
+  // duo mounted while its role moves hidden -> incoming -> current, and
+  // ownership has to follow the role, not the mount. For the plain
+  // single-instance path (prop never changes) this sets and clears at the
+  // same moments the build effect used to.
+  useEffect(() => {
     // Exposed for concepts/tools/ring-verify.mjs's live-route pass — mirrors the
     // reference build's own window.__world contract (concepts/world-07-ring.html,
     // bottom of its <script>) so the gate can drive/measure the component that
@@ -831,30 +852,20 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     // A second RingAmbient mounted at once (the night-color-evolution split
     // transition, EvolvingRingAmbient.jsx) would otherwise clobber whichever
     // instance set this first — only the one becoming current should own it.
-    if (exposeDebugGlobal) {
-      window.__world = {
-        ENGINE, WORLD: worldData, ARC: arc,
-        cylinderOf: (L) => cylinderOf(ENGINE, L),
-        authorPeriodOf: (L) => authorPeriodOf(ENGINE, L),
-        get station() { return stationRef.current },
-        get offset() { return offsetRef.current },
-        jumpTo, turn,
-      }
+    if (!exposeDebugGlobal) return
+    window.__world = {
+      ENGINE, WORLD: worldData, ARC: arcRef.current,
+      cylinderOf: (L) => cylinderOf(ENGINE, L),
+      authorPeriodOf: (L) => authorPeriodOf(ENGINE, L),
+      get station() { return stationRef.current },
+      get offset() { return offsetRef.current },
+      jumpTo, turn,
     }
-
-    // React 18 StrictMode double-invokes this effect in dev; clear what we
-    // built so the second invocation doesn't append a duplicate DOM tree.
     return () => {
-      ro.disconnect()
-      clearTimeout(shootTimerRef.current)
-      // turn()'s in-flight unlock timer (~SURGE_MS+60) would otherwise fire
-      // post-unmount and call unlock() on null refs, throwing inside
-      // dom.clampSafeBoxStarPeaks(designElRef.current).
-      clearTimeout(turnTimerRef.current)
-      design.replaceChildren()
-      if (exposeDebugGlobal && window.__world && window.__world.WORLD === worldData) delete window.__world
+      if (window.__world && window.__world.WORLD === worldData) delete window.__world
     }
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exposeDebugGlobal])
 
   // Advances one station per question change — or snaps straight to the
   // correct one when the change isn't a single adjacent step (a multi-slide

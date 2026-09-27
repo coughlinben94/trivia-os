@@ -23,7 +23,9 @@
 // when the duo itself changes, and (2) snapping every freshly mounted
 // instance to the correct station via RingAmbient's own exposed jumpTo()
 // (see SyncedRingAmbient) instead of leaving it to drift from 0.
-import { useEffect, useLayoutEffect, useRef } from 'react'
+// (1) was only half the fix — see DuoLayer below for the settle-slide cut
+// it still left, and the one-slide-either-side preload that replaced it.
+import { useLayoutEffect, useRef } from 'react'
 import RingAmbient from './RingAmbient.jsx'
 import { recolorWorld } from '../../lib/ringRecolor.js'
 import { midnightGalaxyRing } from '../../worlds/midnightGalaxy.ring.js'
@@ -67,23 +69,40 @@ function SyncedRingAmbient({ worldData, slideIndex, stationOverride, showStation
   )
 }
 
+// Which duos are on screen at slide i, bottom layer first: [current] when
+// solo, [outgoing, incoming] on a transition slide.
+function visibleDuosAt(showId, i) {
+  const { outgoing, incoming } = outgoingAndIncomingDuo(showId, DUO_GRAPH, i)
+  return isTransitionSlide(showId, i) ? [outgoing, incoming] : [incoming]
+}
+
 // v4 (Astra/Codex review, 2026-09-24, against the throwaway spike in
 // AmbientAudit.jsx's ?split=1 branch): outgoing world stays fully opaque and
 // UNMASKED underneath — masking both layers over black double-attenuates the
 // overlap. Only the incoming (top) layer gets the animated mask.
-// No shared turn() scheduler here (the spike needed one; it had no real
-// slide timeline to drive from) — both RingAmbients receive the same real
-// `slideIndex` prop and (via SyncedRingAmbient) are already camera-aligned
-// the moment they exist, so they stay in lockstep with no scheduler needed.
-function IncomingMask({ children }) {
-  const maskRef = useRef(null)
+//
+// One wrapper per duo, always the same element type under the same parent,
+// whatever its role — so a world keeps its RingAmbient instance while its
+// role changes (hidden -> incoming -> current, and back). Before 2026-09-26
+// the incoming world lived under its own <IncomingMask> parent and the
+// current one under another; React only reuses keyed elements among
+// siblings of ONE parent, so at settle the incoming world was thrown away
+// and a fresh instance took over — a hard cut instead of a glide.
+//
+// useLayoutEffect, not useEffect: the mask has to be on before the first
+// paint as incoming (else one full-screen frame of the new world) and off
+// before the first paint as current (else one frame of the masked-out
+// region showing bare backdrop, the outgoing world already being gone).
+function DuoLayer({ role, children }) {
+  const ref = useRef(null)
+  const masked = role === 'incoming'
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const el = ref.current
+    const setMask = (m) => { el.style.maskImage = m; el.style.webkitMaskImage = m }
+    if (!masked) { setMask(''); return }
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      if (maskRef.current) {
-        maskRef.current.style.maskImage = 'linear-gradient(90deg, black 0%, black 100%)'
-        maskRef.current.style.webkitMaskImage = maskRef.current.style.maskImage
-      }
+      setMask('linear-gradient(90deg, black 0%, black 100%)')
       return
     }
     let raf, cancelled = false
@@ -97,57 +116,65 @@ function IncomingMask({ children }) {
       const center = 50 + 18 * Math.sin(t * 0.07 + 0.6) + 7 * Math.sin(t * 0.023 + 3.1)
       const feather = 26 + 8 * Math.sin(t * 0.05 + 2.2)
       const lo = Math.max(0, center - feather), hi = Math.min(100, center + feather)
-      if (maskRef.current) {
-        const mask = `linear-gradient(${angle}deg, transparent ${lo}%, black ${hi}%, black 100%)`
-        maskRef.current.style.maskImage = mask
-        maskRef.current.style.webkitMaskImage = mask
-      }
+      setMask(`linear-gradient(${angle}deg, transparent ${lo}%, black ${hi}%, black 100%)`)
       raf = requestAnimationFrame(tick)
     }
-    raf = requestAnimationFrame(tick)
-    return () => { cancelled = true; cancelAnimationFrame(raf) }
-  }, [])
+    tick()
+    return () => { cancelled = true; cancelAnimationFrame(raf); setMask('') }
+  }, [masked])
 
-  return <div ref={maskRef} style={{ position: 'absolute', inset: 0 }}>{children}</div>
+  return (
+    <div
+      ref={ref}
+      style={{
+        position: 'absolute', inset: 0,
+        zIndex: masked ? 1 : 0,
+        visibility: role === 'hidden' ? 'hidden' : 'visible',
+      }}
+    >
+      {children}
+    </div>
+  )
 }
 
 export default function EvolvingRingAmbient({ showId, slideIndex, stationOverride, showStationDebug, forceSnap }) {
-  const transitioning = isTransitionSlide(showId, slideIndex)
-  const { outgoing, incoming } = outgoingAndIncomingDuo(showId, DUO_GRAPH, slideIndex)
+  const [current, incoming] = visibleDuosAt(showId, slideIndex)
 
-  // The persistent "current" slot: `outgoing` for the one render where
-  // transitioning is true (the pre-existing world, mid-transition), else
-  // `incoming` (settled). This value only changes when the walk genuinely
-  // advances to a new duo — never twice for the same transition — so
-  // keying on it means this slot's RingAmbient survives the whole
-  // solo -> transitioning -> solo cycle as ONE instance, only truly
-  // remounting when there's real new color data to show. Also fixes a
-  // multi-slide host skip that lands on a new duo without ever rendering a
-  // transition frame: `currentDuo` still changes value, so the key still
-  // changes and the stale instance still gets replaced (RingAmbient itself
-  // would otherwise silently ignore the new worldData prop forever).
-  const currentDuo = transitioning ? outgoing : incoming
+  // Also keep the duos shown one slide either side mounted, hidden. Every
+  // world that appears on an ordinary Next/Prev was then already mounted on
+  // the slide before and turned with the rest (every instance gets the same
+  // slideIndex), so it glides in instead of arriving as a fresh, already-
+  // parked mount. Back-nav is the mirror case: stepping back onto a
+  // transition slide needs the outgoing world, which the forward direction
+  // had already unmounted. A multi-slide jump still mounts fresh — it snaps
+  // anyway (ringNavAction's 'jump').
+  // ponytail: up to 3 live RingAmbient trees (vs. 2 before); drop the
+  // back-nav neighbor if the venue TV can't carry it.
+  const neighbors = Number.isInteger(slideIndex)
+    ? [...(slideIndex > 0 ? visibleDuosAt(showId, slideIndex - 1) : []), ...visibleDuosAt(showId, slideIndex + 1)]
+    : []
+
+  // Sorted by duo id, not walk order: a fixed global order means React never
+  // has to MOVE a surviving wrapper's DOM node (it only inserts/removes
+  // around it), and a browser cancels a node's running CSS transitions when
+  // it's detached — which would kill the very glide this is protecting.
+  // Paint order comes from zIndex instead.
+  const duos = [...new Set([current, incoming, ...neighbors].filter(Boolean))].sort()
 
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
-      <div style={{ position: 'absolute', inset: 0 }}>
-        <SyncedRingAmbient
-          key={currentDuo}
-          worldData={worldForDuo(currentDuo)} slideIndex={slideIndex}
-          stationOverride={stationOverride} showStationDebug={showStationDebug} forceSnap={forceSnap}
-          exposeDebugGlobal
-        />
-      </div>
-      {transitioning && (
-        <IncomingMask>
-          <SyncedRingAmbient
-            key={incoming}
-            worldData={worldForDuo(incoming)} slideIndex={slideIndex}
-            stationOverride={stationOverride} showStationDebug={showStationDebug} forceSnap={forceSnap}
-            exposeDebugGlobal={false}
-          />
-        </IncomingMask>
-      )}
+      {duos.map(duo => {
+        const role = duo === incoming ? 'incoming' : duo === current ? 'current' : 'hidden'
+        return (
+          <DuoLayer key={duo} role={role}>
+            <SyncedRingAmbient
+              worldData={worldForDuo(duo)} slideIndex={slideIndex}
+              stationOverride={stationOverride} showStationDebug={showStationDebug} forceSnap={forceSnap}
+              exposeDebugGlobal={role === 'current'}
+            />
+          </DuoLayer>
+        )
+      })}
     </div>
   )
 }
