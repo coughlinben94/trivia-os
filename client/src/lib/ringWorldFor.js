@@ -148,13 +148,18 @@ export function ringWorldFor(theme, showId) {
   const base = RING_WORLDS[theme.id]
   if (!base) return base
 
-  if (theme.ringWorld && theme.ringWorld.ringVersion === RING_VERSION) {
+  // forceFixedArrangement skips a saved ringWorld entirely (its drawn order
+  // is exactly what the host opted out of) and falls through to paletteOnly
+  // — worldPalette is always written alongside ringWorld, so colors survive.
+  if (theme.ringWorld && theme.ringWorld.ringVersion === RING_VERSION && !theme.forceFixedArrangement) {
     const key = theme.id + '|world|' + JSON.stringify(theme.ringWorld)
     if (!worldCache.has(key)) {
       const arrangement = resolveArrangement(theme, showId)
       try {
         // In this branch resolveArrangement returns `base` itself (by
-        // identity) ONLY when the saved arrangement failed — a valid one is
+        // identity) ONLY when the saved arrangement failed (its
+        // forceFixedArrangement early return can't fire here — the branch
+        // condition above excludes that flag) — a valid one is
         // always a fresh {...base, stations}. A failed arrangement must fall
         // back to paletteOnly/base, never get the saved palette painted onto
         // the authored order (an uncertified pair).

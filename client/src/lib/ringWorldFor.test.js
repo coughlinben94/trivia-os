@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { ringWorldFor, RING_WORLDS, resolveArrangement } from './ringWorldFor.js'
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
 import { RING_VERSION } from './ringCertification.js'
@@ -243,6 +243,20 @@ describe('resolveArrangement', () => {
     const theme = { ...BASE_THEME, forceFixedArrangement: true }
     expect(resolveArrangement(theme, 'show_force_fixed').stations.map(s => s.key)).toEqual(AUTHORED_KEYS)
     expect(ringWorldFor(theme, 'show_force_fixed').stations.map(s => s.key)).toEqual(AUTHORED_KEYS)
+  })
+
+  it('forceFixedArrangement + a current saved ringWorld + worldPalette: fixed order, palette colors, no false fallback warning', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const worldPalette = { colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35] }
+    const theme = {
+      ...BASE_THEME, forceFixedArrangement: true, worldPalette,
+      ringWorld: { rowId: 'row-ff', seed: 'x', ringVersion: RING_VERSION, stations: SWAPPED_KEYS, palette: { colors: ['#22c55e', '#eab308'], weights: [0.5, 0.5], drift: { arc: 30 } } },
+    }
+    const world = ringWorldFor(theme, 'show_force_fixed_ringworld')
+    expect(world.stations.map(s => s.key)).toEqual(AUTHORED_KEYS)
+    expect(world).toBe(ringWorldFor({ ...BASE_THEME, worldPalette })) // same paletteOnly result
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
   })
 
   it('returns the SAME arrangement resolveArrangement produces, for the equivalent ringWorldFor call — no divergence between the two functions', () => {
