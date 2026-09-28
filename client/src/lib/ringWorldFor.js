@@ -5,7 +5,7 @@
 // docs/superpowers/plans/2026-09-05-ring-unified-noun-color-draw-design.md
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
 import { RING_POOL } from '../worlds/ringPool.js'
-import { resolveStations, assertWorld } from './drawWorld.js'
+import { resolveStations } from './drawWorld.js'
 import { drawStations } from './ringDraw.js'
 import { recolorWorld } from './ringRecolor.js'
 import { RING_VERSION } from './ringCertification.js'
@@ -52,47 +52,46 @@ const AUTO_DRAW_MAX_ATTEMPTS = 20
 // the arrangement a room full of people already saw (same reproducible-
 // recompute pattern as duoWalk.js and TeamPickerSlide's seededShuffle).
 //
-// Deliberately does NOT run this draw through the color-evolution duo
-// system or any new certification model — that combination was reviewed
-// this session and found to fail assertWorld on the large majority of
-// arrangement/palette pairs (0/300 sampled arrangements passed all 15
-// duos). Scope held to station SELECTION only:
-//   - No theme.worldPalette set (the common case: no host has applied a
-//     custom palette): stations keep their own authored per-station hues,
-//     same as the base world always has. assertWorld's dead-band check
-//     never runs, because no recolor happens — nothing to reject.
-//   - theme.worldPalette set: recolor against it and require assertWorld to
-//     pass, retrying deterministic seeds up to AUTO_DRAW_MAX_ATTEMPTS (same
-//     retry shape as WorldPaletteEditor.jsx's reRollObjects), falling back
-//     to paletteOnly (today's fixed-order + palette combination) on
-//     exhaustion.
-// Never throws: any failure at any attempt falls back to the tier below,
-// same "never blank the TV" contract every tier in this file already keeps.
-function autoDrawWorld(theme, base, showId) {
+// Only ever called when theme.worldPalette is NOT set (ringWorldFor's own
+// gate below) — a host-picked palette was only ever certified against the
+// FIXED authored order (palette-sweep.mjs's --seed-batch shelf rows carry
+// stations=null), never against a drawn arrangement. Recoloring a fresh
+// draw with that palette and only checking assertWorld's cheap hue rules
+// (2026-09-28 finding: "gap C" — the real Playwright brightness gate never
+// ran on that combination) could put an uncertified picture on a real TV.
+// Scoped to station SELECTION only: stations keep their own authored
+// per-station hues, same as the base world always has. No recolor means
+// assertWorld's dead-band check never runs — nothing to reject, nothing
+// to falsely certify either.
+// Never throws: any failure (drawStations running out of valid seeds) falls
+// back to the tier below, same "never blank the TV" contract every tier in
+// this file already keeps.
+function autoDrawWorld(base, showId) {
   const showSeed = seedFrom(showId)
   for (let attempt = 0; attempt < AUTO_DRAW_MAX_ATTEMPTS; attempt++) {
     try {
       const seed = hash32(showSeed, AUTO_DRAW_SALT ^ attempt)
       const stations = drawStations(RING_POOL, { seed, slots: base.stations.length, pinKey: 'eclipse', pinAt: 10 })
-      if (!theme.worldPalette) return { ...base, stations }
-      const world = recolorWorld({ ...base, stations }, theme.worldPalette, getTheme(theme.id))
-      assertWorld(world)
-      return world
+      return { ...base, stations }
     } catch {
       // Try the next deterministic seed.
     }
   }
   console.warn(`[ring] auto-draw exhausted ${AUTO_DRAW_MAX_ATTEMPTS} attempts for show ${showId}, falling back`)
-  return paletteOnly(theme, base) ?? base
+  return base
 }
 
 // theme.ringWorld (a drawn world: stations + palette) wins when present and
 // its ringVersion is current; a per-show auto-draw (above) is the next
-// fallback when showId is known; theme.worldPalette (palette-only, fixed
-// authored order) is the fallback after that; the unmodified base world is
-// the fallback of the fallback. A malformed saved value must never blank
-// the TV — every failure mode below falls through to the next tier instead
-// of throwing.
+// fallback, but ONLY when showId is known AND no worldPalette is set — a
+// host-picked palette was only ever certified against the fixed authored
+// order (palette-sweep.mjs's shelf rows for a palette-only preset/generated
+// entry always carry stations=null), so a palette must always land on
+// paletteOnly's fixed order, never on a fresh, uncertified draw (2026-09-28,
+// "gap C"). theme.worldPalette (palette-only, fixed authored order) is the
+// fallback after auto-draw; the unmodified base world is the fallback of
+// the fallback. A malformed saved value must never blank the TV — every
+// failure mode below falls through to the next tier instead of throwing.
 export function ringWorldFor(theme, showId) {
   const base = RING_WORLDS[theme.id]
   if (!base) return base
@@ -133,10 +132,10 @@ export function ringWorldFor(theme, showId) {
     return worldCache.get(key)
   }
 
-  if (showId) {
-    const key = theme.id + '|autodraw|' + showId + '|' + JSON.stringify(theme.worldPalette ?? null)
+  if (showId && !theme.worldPalette) {
+    const key = theme.id + '|autodraw|' + showId
     if (!worldCache.has(key)) {
-      worldCache.set(key, autoDrawWorld(theme, base, showId))
+      worldCache.set(key, autoDrawWorld(base, showId))
     }
     return worldCache.get(key)
   }

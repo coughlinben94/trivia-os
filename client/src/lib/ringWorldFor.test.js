@@ -178,12 +178,26 @@ describe('ringWorldFor — auto-draw (no explicit ringWorld, showId present)', (
     expect(orders.size).toBeGreaterThan(1)
   })
 
-  it('with a worldPalette also set, auto-draw reorders stations AND recolors', () => {
+  // 2026-09-28, "gap C": a host-picked worldPalette was only ever certified
+  // (palette-sweep.mjs's shelf) against the FIXED authored order — never
+  // against a fresh per-show draw. Auto-draw must not run at all when a
+  // palette is set; it has to fall through to paletteOnly, the exact
+  // (palette, arrangement) pair the shelf actually checked.
+  it('with a worldPalette also set, auto-draw is skipped: stations stay the fixed authored order, only colors change', () => {
     const theme = { ...BASE_THEME, worldPalette: { colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35] } }
     const world = ringWorldFor(theme, 'show_autodraw_palette')
-    expect(world.stations).toHaveLength(13)
+    expect(world.stations.map(s => s.key)).toEqual(AUTHORED_KEYS)
     expect(world.stations.map(s => s.hue)).not.toEqual(midnightGalaxyRing.stations.map(s => s.hue))
-    expect(() => assertRing(world.stations)).not.toThrow()
+  })
+
+  it('a stale ringWorld plus a worldPalette plus a showId still lands on the fixed order, not a fresh draw', () => {
+    const theme = {
+      ...BASE_THEME,
+      ringWorld: { rowId: 'row-1', seed: 'x', ringVersion: 'v0-stale', stations: SWAPPED_KEYS, palette: { colors: ['#22c55e', '#eab308'], weights: [0.5, 0.5], drift: { arc: 30 } } },
+      worldPalette: { colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35] },
+    }
+    const world = ringWorldFor(theme, 'show_stale_ringworld_with_palette')
+    expect(world.stations.map(s => s.key)).toEqual(AUTHORED_KEYS)
   })
 
   it('explicit theme.ringWorld still wins over auto-draw when both a current ringWorld and a showId are present', () => {
