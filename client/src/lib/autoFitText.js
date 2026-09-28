@@ -262,6 +262,16 @@ export const REVEAL_BOX = {
   boxW: 1600, boxH: 320, floorPx: REVEAL_FLOOR * 16, ceilPx: REVEAL_CEIL * 16,
   maxLines: 2, lineHeight: 1.1,
 }
+// Winner Reveal podium: the 3rd/2nd-place beat name (centered, clearly
+// smaller than the winner slam) and the final-frame side slots.
+export const PODIUM_BEAT_BOX = {
+  boxW: 1400, boxH: 230, floorPx: REVEAL_FLOOR * 16, ceilPx: 6.5 * 16,
+  maxLines: 2, lineHeight: 1.1,
+}
+export const PODIUM_SLOT_BOX = {
+  boxW: 480, boxH: 140, floorPx: LINE_FLOOR * 16, ceilPx: LINE_CEIL * 16,
+  maxLines: 2, lineHeight: 1.1,
+}
 
 // Shiny Choice/Hues-Cues question text: fixed at 1300x324 — 30% of the
 // 1920x1080 design stage, same numbers these boxes always had, but as a

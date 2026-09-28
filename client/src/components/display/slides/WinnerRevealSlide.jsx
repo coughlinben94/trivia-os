@@ -3,8 +3,9 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { supabase } from '../../../lib/supabase.js'
 import { deriveRoundCols, computeTotal } from '../../../lib/scoreboardMath.js'
-import { fitToBox, REVEAL_BOX } from '../../../lib/autoFitText.js'
-import { EASE_OUT, EASE_EXIT } from '../../../lib/easings.js'
+import { fitToBox, REVEAL_BOX, PODIUM_BEAT_BOX, PODIUM_SLOT_BOX } from '../../../lib/autoFitText.js'
+import { EASE_OUT, EASE_EXIT, EASE_DROP } from '../../../lib/easings.js'
+import { buildPodium, lowerBeats } from '../../../lib/podium.js'
 
 // Cinematic sequence:
 //   'drumroll' — 4.2s MP3 plays; vignette closes in, spotlight + kicker breathe (tension build)
@@ -13,6 +14,17 @@ import { EASE_OUT, EASE_EXIT } from '../../../lib/easings.js'
 //                flares bloom, light rays rotate; the fireworks show launches ~480ms
 //                AFTER the impact (celebration follows the hit, never simultaneous with it)
 const HOLD_MS = 450
+
+// Podium lead-in (only when 2nd/3rd exist): 'third' → 'gap' → 'second' →
+// 'gap' → the winner sequence above, untouched. Silent on purpose: the drum
+// roll stays the only sound, so the lower places read as the warm-up act.
+const BEAT_MS = 2600
+const GAP_MS  = 350
+const LOWER_COPY = {
+  third:  { label: 'Third place',  tied: 'Tied for third' },
+  second: { label: 'Second place', tied: 'Tied for second' },
+}
+const pts = n => `${n} point${n === 1 ? '' : 's'}`
 
 // ─── Drum roll (MP3) ──────────────────────────────────────────────────────
 
@@ -200,11 +212,16 @@ function Fireworks({ active, themeColors = [] }) {
 export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
-  const [winner, setWinner] = useState(null)
-  const [phase,  setPhase]  = useState('drumroll')   // 'drumroll' → 'hold' → 'reveal'
+  // One frozen snapshot per mount: winner, 2nd and 3rd all come from the same
+  // read, so a scoreboard edit mid-sequence can't reshuffle the podium.
+  const [podium, setPodium] = useState(null)
+  const winner = podium && (podium.noData ? podium : podium.winner)
+  // ['third' → 'gap' →] ['second' → 'gap' →] 'drumroll' → 'hold' → 'reveal'
+  const [phase,  setPhase]  = useState('drumroll')
   const [celebrate, setCelebrate] = useState(false)  // fireworks launch AFTER the impact lands
   const audioCtxRef = useRef(null)
   const holdTimerRef = useRef(null)
+  const beatTimerRef = useRef(null)
 
   // fitToBox measures via canvas — a first paint before the display font
   // loads measures fallback-font metrics. This flips once web fonts are
@@ -224,7 +241,11 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
     // an ungated mount played the MP3 aloud in the host's editor. Show the
     // revealed layout with a sample winner instead.
     if (isPreview) {
-      setWinner({ name: 'Winning Team', total: 42, isTie: false })
+      setPodium({
+        winner: { name: 'Winning Team', total: 42, isTie: false },
+        second: { name: 'Runner-Up Team', total: 38, isTie: false },
+        third:  { name: 'Third Place Team', total: 35, isTie: false },
+      })
       setPhase('reveal')
       return
     }
@@ -262,31 +283,31 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
 
       if (cancelled) return
 
-      // Zero teams ever scored (empty show, or both fetches came back empty) —
-      // skip the drumroll/fireworks build-up and go straight to a graceful
-      // fallback instead of leaving three TVs on "And the winner is…" forever.
-      if (!ranked.length) {
-        setWinner({ noData: true })
-        setPhase('reveal')
-        return
+      // buildPodium (lib/podium.js) keeps the old rules for 1st: zero teams,
+      // or every team still on 0 (grading hasn't run), is noData — skip the
+      // build-up and go straight to the graceful fallback instead of leaving
+      // three TVs on "And the winner is…" forever or calling an all-zero
+      // board a tie. Ties for 1st join names with ' & ' exactly as before.
+      const p = buildPodium(ranked)
+      setPodium(p)
+      if (p.noData) { setPhase('reveal'); return }
+
+      // Lower places first, then the untouched winner sequence. With no
+      // 2nd/3rd (1 team, or a tie that ate those places) steps is empty and
+      // the drum roll starts right away, same as it always has.
+      const steps = lowerBeats(p).flatMap(b => [[b, BEAT_MS], ['gap', GAP_MS]])
+      const next = () => {
+        if (cancelled) return
+        const step = steps.shift()
+        if (!step) {
+          setPhase('drumroll')
+          audioCtxRef.current = playDrumRoll(goReveal, reduce)
+          return
+        }
+        setPhase(step[0])
+        beatTimerRef.current = setTimeout(next, step[1])
       }
-
-      const max = ranked[0]?.total ?? 0
-
-      // Every team still on 0 (normal state before grading has run, not a
-      // real game-ending tie) used to fall through to the tie path below and
-      // announce "It's a tie!" across every registered team's name, joined
-      // with no cap — treat it the same as no data at all rather than as a
-      // genuine outcome.
-      if (max <= 0) {
-        setWinner({ noData: true })
-        setPhase('reveal')
-        return
-      }
-
-      const tied = ranked.filter(t => t.total === max)
-      setWinner({ name: tied.map(t => t.name).join(' & '), total: max, isTie: tied.length > 1 })
-      audioCtxRef.current = playDrumRoll(goReveal, reduce)
+      next()
     }
     load()
     return () => {
@@ -294,6 +315,7 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
       audioCtxRef.current?.pause?.()
       audioCtxRef.current = null
       clearTimeout(holdTimerRef.current)
+      clearTimeout(beatTimerRef.current)
     }
   }, [show.id])
 
@@ -311,6 +333,9 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
   const ac = theme.colors.shinyAccent
   const revealed = phase === 'reveal'
   const impact   = revealed && !winner?.noData && !isPreview && !reduce
+  const lowerPhase = phase === 'third' || phase === 'second' || phase === 'gap'
+  const beat = (phase === 'third' || phase === 'second') ? podium?.[phase] : null
+  const hasPodium = !!(podium?.second || podium?.third)
 
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ zIndex: 1 }}>
@@ -402,7 +427,9 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
           ? { x: [0, -14, 10, -6, 3, -1, 0], y: [0, 8, -5, 3, -1, 1, 0], rotate: [0, -0.5, 0.35, -0.15, 0, 0, 0] }
           : { x: 0, y: 0, rotate: 0 }}
         transition={impact ? { delay: 0.18, duration: 0.26, ease: 'linear' } : undefined}
-        style={{ zIndex: 10 }}
+        // with side podium slots below, lift the winner block so a two-line
+        // name can't run into them; no podium (1 team) keeps today's centering
+        style={{ zIndex: 10, paddingBottom: hasPodium ? '14%' : 0 }}
       >
 
       {/* Rotating light rays — sustained celebration behind the name */}
@@ -435,7 +462,13 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
       <motion.p
         initial={{ opacity: 0, y: 24 }}
         animate={
-          winner?.noData
+          // hidden until the snapshot lands (so a podium show never flashes
+          // the winner line before its 3rd-place beat) and during the beats
+          !podium
+            ? { opacity: 0, y: 24 }
+            : lowerPhase
+            ? { opacity: 0, y: 0, scale: 1 }
+            : winner?.noData
             ? { opacity: 0.75, y: 0 }
             : phase === 'drumroll'
               ? { opacity: 0.75, y: 0, scale: 1 }
@@ -444,7 +477,9 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
                 : { opacity: 0.55, y: 0, scale: 0.9 }
         }
         transition={
-          phase === 'hold'
+          lowerPhase
+            ? { duration: 0.2, ease: EASE_EXIT }
+            : phase === 'hold'
             ? { duration: 0.2, ease: EASE_EXIT }
             : revealed && !winner?.noData
               ? { delay: 0.9, duration: 0.6, ease: EASE_OUT }
@@ -538,6 +573,99 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
       </AnimatePresence>
 
       </motion.div>
+
+      {/* 3rd / 2nd place beats — a warm rise, no slam, no flash, no shake,
+          smaller type in the secondary color: clearly the undercard */}
+      <AnimatePresence>
+        {beat && (
+          <motion.div
+            key={phase}
+            className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
+            exit={{ opacity: 0, transition: { duration: 0.25, ease: EASE_EXIT } }}
+            style={{ zIndex: 10, textAlign: 'center' }}
+          >
+            <motion.p
+              initial={{ opacity: 0, y: reduce ? 0 : 16 }}
+              animate={{ opacity: 0.75, y: 0 }}
+              transition={{ duration: 0.45, ease: EASE_OUT }}
+              style={{
+                color: theme.colors.text,
+                fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
+                fontSize: 'clamp(1.8rem, 3.5cqw, 3rem)',
+                fontWeight: 600,
+                letterSpacing: '0.02em',
+                marginBottom: '2rem',
+              }}
+            >
+              {beat.isTie ? LOWER_COPY[phase].tied : LOWER_COPY[phase].label}
+            </motion.p>
+            <motion.p
+              initial={{ opacity: 0, y: reduce ? 0 : 28, scale: reduce ? 1 : 0.94 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ delay: 0.35, duration: 0.55, ease: EASE_DROP }}
+              style={{
+                // text, not highlight: only the winner gets the gold treatment
+                color: theme.colors.text,
+                fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
+                fontSize: fitToBox(beat.name, { ...PODIUM_BEAT_BOX, family: theme.fonts.display }),
+                lineHeight: 1.1,
+                maxWidth: PODIUM_BEAT_BOX.boxW,
+                textShadow: `0 0 60px ${ac}55`,
+              }}
+            >
+              {beat.name}
+            </motion.p>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.8, duration: 0.4, ease: EASE_OUT }}
+              style={{
+                color: theme.colors.text,
+                fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
+                fontSize: 'clamp(1.2rem, 2cqw, 1.8rem)',
+                fontWeight: 700,
+                marginTop: '0.8rem',
+              }}
+            >
+              {pts(beat.total)}
+            </motion.p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Final frame: 2nd left, 3rd right, low and shorter than the winner
+          in the middle. They rise in after the winner's points line lands. */}
+      {revealed && hasPodium && [
+        ['second', '2nd', { left: '5%' },  '5.5rem', 1.5],
+        ['third',  '3rd', { right: '5%' }, '3.5rem', 1.7],
+      ].map(([key, label, side, pedestalH, delay]) => podium[key] && (
+        <motion.div
+          key={key}
+          className="absolute flex flex-col items-center pointer-events-none"
+          initial={{ opacity: 0, y: reduce ? 0 : 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: (reduce || isPreview) ? 0.3 : delay, duration: 0.6, ease: EASE_OUT }}
+          style={{ ...side, bottom: 0, width: '27%', zIndex: 10, textAlign: 'center' }}
+        >
+          <p style={{ color: theme.colors.text, opacity: 0.7, fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`, fontSize: 'clamp(1rem, 1.6cqw, 1.5rem)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            {label}
+          </p>
+          <p style={{
+            color: theme.colors.text,
+            fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
+            fontSize: fitToBox(podium[key].name, { ...PODIUM_SLOT_BOX, family: theme.fonts.display }),
+            lineHeight: 1.1,
+            maxWidth: PODIUM_SLOT_BOX.boxW,
+            margin: '0.3rem 0',
+          }}>
+            {podium[key].name}
+          </p>
+          <p style={{ color: theme.colors.text, fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`, fontSize: 'clamp(1rem, 1.5cqw, 1.4rem)', fontWeight: 700, marginBottom: '0.8rem' }}>
+            {pts(podium[key].total)}
+          </p>
+          <div style={{ width: '70%', height: pedestalH, background: `linear-gradient(to bottom, ${ac}40, ${ac}10)`, borderTop: `3px solid ${ac}`, borderRadius: '6px 6px 0 0' }} />
+        </motion.div>
+      ))}
     </div>
   )
 }
