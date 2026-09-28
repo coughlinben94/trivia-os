@@ -239,6 +239,12 @@ describe('resolveArrangement', () => {
     expect(arrangement.stations.map(s => s.key)).toEqual(AUTHORED_KEYS)
   })
 
+  it('forceFixedArrangement keeps the fixed authored order even with a showId (both resolvers)', () => {
+    const theme = { ...BASE_THEME, forceFixedArrangement: true }
+    expect(resolveArrangement(theme, 'show_force_fixed').stations.map(s => s.key)).toEqual(AUTHORED_KEYS)
+    expect(ringWorldFor(theme, 'show_force_fixed').stations.map(s => s.key)).toEqual(AUTHORED_KEYS)
+  })
+
   it('returns the SAME arrangement resolveArrangement produces, for the equivalent ringWorldFor call — no divergence between the two functions', () => {
     const showId = 'show_arrangement_parity'
     const arrangement = resolveArrangement(BASE_THEME, showId)

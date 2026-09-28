@@ -51,6 +51,8 @@ export function applyOverrides(baseTheme, overrides) {
         worldPalette: overrides?.worldPalette ?? undefined,
         ringWorld: overrides?.ringWorld ?? undefined,
         colorEvolution: overrides?.colorEvolution ?? undefined,
+        // Host "Fixed layout" pick — read by ringWorldFor.js's resolvers.
+        forceFixedArrangement: overrides?.forceFixedArrangement ?? undefined,
       }
   const flooredColors = floorReadableColors(merged.colors)
   return flooredColors === merged.colors ? merged : { ...merged, colors: flooredColors }

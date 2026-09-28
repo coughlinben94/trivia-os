@@ -91,6 +91,8 @@ function autoDrawWorld(base, showId) {
 export function resolveArrangement(theme, showId) {
   const base = RING_WORLDS[theme.id]
   if (!base) return base
+  // Host's "Fixed layout" pick (ThemePickerModal): no draw, no saved order.
+  if (theme.forceFixedArrangement) return base
 
   if (theme.ringWorld && theme.ringWorld.ringVersion === RING_VERSION) {
     try {
@@ -166,7 +168,9 @@ export function ringWorldFor(theme, showId) {
     return worldCache.get(key)
   }
 
-  if (showId && !theme.worldPalette) {
+  // Same forceFixedArrangement gate resolveArrangement has — without it the
+  // host's "Fixed layout" pick would only reach the color-evolution path.
+  if (showId && !theme.worldPalette && !theme.forceFixedArrangement) {
     const key = theme.id + '|autodraw|' + showId
     if (!worldCache.has(key)) {
       worldCache.set(key, autoDrawWorld(base, showId))

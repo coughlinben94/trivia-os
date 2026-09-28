@@ -59,4 +59,10 @@ describe('applyOverrides — colorEvolution', () => {
     const otherOverride = applyOverrides(base, { fonts: {} })
     expect(otherOverride.colorEvolution).toBeUndefined()
   })
+
+  it('applyOverrides carries forceFixedArrangement through, undefined when absent', () => {
+    const base = getTheme('midnight-galaxy')
+    expect(applyOverrides(base, { forceFixedArrangement: true }).forceFixedArrangement).toBe(true)
+    expect(applyOverrides(base, { fonts: {} }).forceFixedArrangement).toBeUndefined()
+  })
 })

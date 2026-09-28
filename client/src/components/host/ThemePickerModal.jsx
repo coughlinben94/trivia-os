@@ -136,6 +136,39 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
     const next = { ...overrides, colors: { ...overrides.colors, ...themeColors }, worldPalette }
     if (ringWorld) next.ringWorld = ringWorld
     else delete next.ringWorld
+    // Mutually exclusive with a palette: ParticleBackground checks
+    // colorEvolution first, so leaving it set would silently hide this palette.
+    delete next.colorEvolution
+    setOverrides(next)
+    onUpdateOverrides(next)
+  }
+
+  // Ring coloring: 'authored' (no overrides), 'custom' (worldPalette via
+  // WorldPaletteEditor), or 'evolution' (colorEvolution). Exactly one is
+  // ever saved — see applyPaletteColors for the other half of that rule.
+  const colorMode = overrides.colorEvolution ? 'evolution' : overrides.worldPalette ? 'custom' : 'authored'
+
+  function setColorMode(mode) {
+    if (mode === 'custom') { setPaletteOpen(true); return }
+    const next = { ...overrides }
+    delete next.worldPalette
+    delete next.ringWorld
+    if (mode === 'evolution') next.colorEvolution = true
+    else delete next.colorEvolution
+    setOverrides(next)
+    onUpdateOverrides(next)
+  }
+
+  function setFixedArrangement(fixed) {
+    const next = { ...overrides }
+    if (fixed) {
+      next.forceFixedArrangement = true
+      // A saved ringWorld carries its own drawn order; worldPalette (always
+      // written alongside it) keeps the colors on the fixed order instead.
+      delete next.ringWorld
+    } else {
+      delete next.forceFixedArrangement
+    }
     setOverrides(next)
     onUpdateOverrides(next)
   }
@@ -146,9 +179,15 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
     delete next.fonts
     delete next.worldPalette
     delete next.ringWorld
+    delete next.colorEvolution
+    delete next.forceFixedArrangement
     setOverrides(next)
     onUpdateOverrides(next)
   }
+
+  const optionClass = on => `text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
+    on ? 'bg-gray-900 text-white' : 'border border-gray-200 text-gray-500 hover:border-gray-400 hover:text-gray-700'
+  }`
 
   return (
     <div
@@ -290,13 +329,22 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
             theme_overrides.colors (the ungated theme half). The ring's
             station hues are untouched by anything in that editor. */}
         {previewId === 'midnight-galaxy' && (
-          <div className="px-5 py-2 border-t border-gray-100 shrink-0">
-            <button
-              onClick={() => setPaletteOpen(true)}
-              className="text-sm font-medium text-gray-600 hover:text-gray-900 underline"
-            >
-              World palette
-            </button>
+          <div className="flex items-center gap-5 px-5 py-2 border-t border-gray-100 shrink-0 flex-wrap">
+            <div className="flex items-center gap-2 text-xs font-medium text-gray-600">
+              Layout
+              <button onClick={() => setFixedArrangement(true)} className={optionClass(overrides.forceFixedArrangement)}>Fixed layout</button>
+              <button onClick={() => setFixedArrangement(false)} className={optionClass(!overrides.forceFixedArrangement)}>Random draw</button>
+            </div>
+            <div className="flex items-center gap-2 text-xs font-medium text-gray-600">
+              Colors
+              <button onClick={() => setColorMode('authored')} className={optionClass(colorMode === 'authored')}>Authored colors</button>
+              <button onClick={() => setColorMode('custom')} className={optionClass(colorMode === 'custom')}>Custom palette</button>
+              <button onClick={() => setColorMode('evolution')} className={optionClass(colorMode === 'evolution')}>Color evolution</button>
+            </div>
+            {/* ringWorldFor never auto-draws under a plain worldPalette (gap C) */}
+            {colorMode === 'custom' && !overrides.ringWorld && !overrides.forceFixedArrangement && (
+              <span className="text-[11px] text-gray-400">Custom palettes always use the fixed layout.</span>
+            )}
           </div>
         )}
         {paletteOpen && (
