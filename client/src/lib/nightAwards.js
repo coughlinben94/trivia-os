@@ -105,7 +105,22 @@ function buildBoard(show, teams) {
   return { played, normal: played.filter(c => !isSpecial(c)), field, snaps, now }
 }
 
-// Highest single score across `cols`; ties share it (capped, by name).
+// Exact ties on an award's deciding metric share the award, names A-Z (never
+// "better place, then alphabet" — that handed a whole tied room's award to one
+// team). More than MAX_NAMES tied = the award doesn't qualify tonight, so
+// pickAwards fills the card with another; a name is never silently dropped.
+const byName = (x, y) => x.name.localeCompare(y.name)
+function tiedTop(sorted, same) {
+  const top = sorted.filter(c => same(c, sorted[0]))
+  return top.length > MAX_NAMES ? null : top.sort(byName)
+}
+// One stat line for everyone sharing the card, or `fallback` if theirs differ.
+function sharedStat(top, stat, fallback) {
+  const lines = new Set(top.map(stat))
+  return lines.size === 1 ? [...lines][0] : fallback
+}
+
+// Highest single score across `cols`; ties share it (see tiedTop).
 function topScore(b, cols) {
   const hits = []
   for (const t of b.field) for (const c of cols) {
@@ -117,13 +132,11 @@ function topScore(b, cols) {
   const top = hits.filter(h => h.v === best)
   const topIds = new Set(top.map(h => h.id))
   const next = Math.max(0, ...hits.filter(h => !topIds.has(h.id)).map(h => h.v))
-  const names = [...new Set(top.map(h => h.name))].sort((x, y) => x.localeCompare(y)).slice(0, MAX_NAMES)
+  const names = [...new Set(top.map(h => h.name))].sort((x, y) => x.localeCompare(y))
+  if (names.length > MAX_NAMES) return null
   const labels = new Set(top.map(h => h.label))
   return { best, names, margin: (best - next) / best, label: labels.size === 1 ? [...labels][0] : null }
 }
-
-// Better current place, then name.
-const byPlaceThenName = b => (x, y) => b.now.get(x.id) - b.now.get(y.id) || x.name.localeCompare(y.name)
 
 function bestRound(b) {
   const t = topScore(b, b.normal)
@@ -149,9 +162,11 @@ function biggestComeback(b) {
     return { ...t, worst, worstAt, gap: worst - b.now.get(t.id) }
   }).filter(c => c.gap >= MIN_COMEBACK_GAP)
   if (!cands.length) return null
-  const [w] = cands.sort((x, y) => y.gap - x.gap || byPlaceThenName(b)(x, y))
-  const stat = `${ordinal(w.worst)} after ${roundName(b.played[w.worstAt].label)}, now ${ordinal(b.now.get(w.id))}`
-  return award('biggest-comeback', [w.name], stat, 0.3 + 0.7 * clamp01(w.gap / (b.field.length - 1)))
+  const top = tiedTop(cands.sort((x, y) => y.gap - x.gap), (x, y) => x.gap === y.gap)
+  if (!top) return null
+  const [w] = top
+  const stat = sharedStat(top, c => `${ordinal(c.worst)} after ${roundName(b.played[c.worstAt].label)}, now ${ordinal(b.now.get(c.id))}`, `Climbed ${w.gap} places`)
+  return award('biggest-comeback', top.map(c => c.name), stat, 0.3 + 0.7 * clamp01(w.gap / (b.field.length - 1)))
 }
 
 function mostConsistent(b) {
@@ -162,10 +177,16 @@ function mostConsistent(b) {
     .map(t => ({ ...t, min: Math.min(...t.vals), max: Math.max(...t.vals), spread: Math.max(...t.vals) - Math.min(...t.vals) }))
   if (cands.length < MIN_CONSISTENT_TEAMS) return null
   const meanSpread = avg(cands.map(c => c.spread))
-  const [w] = cands.sort((x, y) => x.spread - y.spread || y.sum - x.sum || x.name.localeCompare(y.name))
-  const stat = w.spread === 0 ? `${pts(w.min)} every round` : `Every round between ${w.min} and ${w.max} points`
+  // Deciding metric: smallest spread, then higher total (a steadier-AND-
+  // better team wins that tie on merit). Equal on both = shared.
+  const top = tiedTop(cands.sort((x, y) => x.spread - y.spread || y.sum - x.sum), (x, y) => x.spread === y.spread && x.sum === y.sum)
+  if (!top) return null
+  const [w] = top
+  const stat = sharedStat(top,
+    c => (c.spread === 0 ? `${pts(c.min)} every round` : `Every round between ${c.min} and ${c.max} points`),
+    w.spread === 0 ? 'Same score every round' : `Every round within ${pts(w.spread)}`)
   const strength = meanSpread > 0 ? 0.3 + 0.5 * clamp01(1 - w.spread / meanSpread) : 0.3
-  return award('most-consistent', [w.name], stat, strength)
+  return award('most-consistent', top.map(c => c.name), stat, strength)
 }
 
 // Run of rounds ending now, every one in the top 3, each place the same or
@@ -185,8 +206,10 @@ function hotStreak(b) {
     return { ...t, run }
   }).filter(c => c.run >= MIN_STREAK)
   if (!cands.length) return null
-  const [w] = cands.sort((x, y) => y.run - x.run || byPlaceThenName(b)(x, y))
-  return award('hot-streak', [w.name], `Top 3 for ${w.run} rounds straight, never slipping`, 0.2 + 0.6 * (w.run / n))
+  const top = tiedTop(cands.sort((x, y) => y.run - x.run), (x, y) => x.run === y.run)
+  if (!top) return null
+  const [w] = top
+  return award('hot-streak', top.map(c => c.name), `Top 3 for ${w.run} rounds straight, never slipping`, 0.2 + 0.6 * (w.run / n))
 }
 
 // First half vs second half of the team's scored normal rounds (the middle
@@ -201,18 +224,18 @@ function lateBloomer(b) {
     return { ...t, early, late, jump: late - early }
   }).filter(c => c && c.jump >= MIN_BLOOM_JUMP)
   if (!cands.length) return null
-  const [w] = cands.sort((x, y) => y.jump - x.jump || byPlaceThenName(b)(x, y))
-  return award('late-bloomer', [w.name], `Averaged ${fmt(w.early)} early, ${fmt(w.late)} late`, 0.3 + 0.5 * clamp01(w.jump / Math.max(w.late, 1)))
+  const top = tiedTop(cands.sort((x, y) => y.jump - x.jump), (x, y) => x.jump === y.jump)
+  if (!top) return null
+  const [w] = top
+  const stat = sharedStat(top, c => `Averaged ${fmt(c.early)} early, ${fmt(c.late)} late`, `${fmt(w.jump)} more points a round late`)
+  return award('late-bloomer', top.map(c => c.name), stat, 0.3 + 0.5 * clamp01(w.jump / Math.max(w.late, 1)))
 }
 
 function wireToWire(b) {
   if (b.snaps.length < MIN_WIRE_ROUNDS || b.field.length < MIN_WIRE_TEAMS) return null
   const first = b.snaps[0]
-  const ws = b.field
-    .filter(t => first.get(t.id) === 1 && b.now.get(t.id) <= 3)
-    .sort(byPlaceThenName(b))
-    .slice(0, MAX_NAMES)
-  if (!ws.length) return null
+  const ws = b.field.filter(t => first.get(t.id) === 1 && b.now.get(t.id) <= 3).sort(byName)
+  if (!ws.length || ws.length > MAX_NAMES) return null
   const lead = b.now.get(ws[0].id)
   const where = roundName(b.played[0].label)
   const stat = ws.length > 1
@@ -226,7 +249,8 @@ function bruisedApple(b) {
   const last = Math.max(...b.field.map(t => b.now.get(t.id)))
   if (last === 1) return null // everyone tied for first: nobody is last
   const names = b.field.filter(t => b.now.get(t.id) === last).map(t => t.name)
-    .sort((x, y) => x.localeCompare(y)).slice(0, MAX_NAMES)
+    .sort((x, y) => x.localeCompare(y))
+  if (names.length > MAX_NAMES) return null
   return award('bruised-apple', names, `${ordinal(last)} place. Bruised, not beaten.`, 0)
 }
 

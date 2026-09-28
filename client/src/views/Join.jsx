@@ -26,8 +26,13 @@ function loadStoredTeam(showId) {
   try { return JSON.parse(localStorage.getItem(getTeamKey(showId))) ?? null }
   catch { return null }
 }
+// Wrapped like saveLastTeam: private browsing / a full quota throws here AFTER
+// the team row is inserted, which used to leave the phone on the register
+// screen for a team that already exists. Without storage the phone just
+// won't auto-restore on reload.
 function saveStoredTeam(showId, team) {
-  localStorage.setItem(getTeamKey(showId), JSON.stringify(team))
+  try { localStorage.setItem(getTeamKey(showId), JSON.stringify(team)) }
+  catch { /* private browsing */ }
 }
 
 // Welcome back — the last team this phone registered, across ALL shows, so

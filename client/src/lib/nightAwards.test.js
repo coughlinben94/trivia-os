@@ -71,11 +71,11 @@ describe('Best Round', () => {
     expect(a.teamNames).toEqual(['B'])
   })
 
-  it('ties show both names; more than 2 tied caps at 2', () => {
+  it('ties show both names; more than 2 tied is no award (never silently drops a team)', () => {
     const two = byId(computeAwards(show, [team('B', [10]), team('A', [10]), team('C', [3])]), 'best-round')
     expect(two.teamNames).toEqual(['A', 'B'])
     const three = byId(computeAwards(show, [team('C', [10]), team('B', [10]), team('A', [10])]), 'best-round')
-    expect(three.teamNames).toHaveLength(2)
+    expect(three).toBeNull()
   })
 
   it('tied in different rounds says "a single round"', () => {
@@ -121,13 +121,22 @@ describe('Biggest Comeback', () => {
     expect(byId(computeAwards(show, smaller), 'biggest-comeback')).toBeNull()
   })
 
-  it('ties on gap go to the better current place, then name', () => {
+  it('an exact tie on gap shares the award; different climbs get a shared stat line', () => {
     const t = [
       team('A', [10, 0]), team('B', [9, 0]), team('C', [8, 0]), team('D', [7, 0]),
       team('Y', [1, 20]), team('X', [0, 18]),
     ]
-    // Y: 5th -> 1st (4). X: 6th -> 2nd (4). Same gap, Y is higher now.
-    expect(byId(computeAwards(show, t), 'biggest-comeback').teamNames).toEqual(['Y'])
+    // Y: 5th -> 1st (4). X: 6th -> 2nd (4). Same gap, so both, leader included.
+    expect(byId(computeAwards(show, t), 'biggest-comeback')).toMatchObject({ teamNames: ['X', 'Y'], statLine: 'Climbed 4 places' })
+  })
+
+  it('three tied on gap: no award', () => {
+    const t = [
+      team('A', [10, 0]), team('B', [9, 0]), team('C', [8, 0]), team('D', [7, 0]),
+      team('Z', [3, 30]), team('Y', [1, 28]), team('X', [0, 26]),
+    ]
+    // Z 5th->1st, Y 6th->2nd, X 7th->3rd: all gap 4.
+    expect(byId(computeAwards(show, t), 'biggest-comeback')).toBeNull()
   })
 
   it('a team that joined late is not ranked in rounds it missed', () => {
@@ -178,9 +187,9 @@ describe('Hot Streak', () => {
       team('D', [8, 8, 0, 1, 0, 1]),
     ]
     const a = byId(computeAwards(show, t), 'hot-streak')
-    // A holds 1st all 6 rounds, B holds 2nd all 6: same run, A is higher now.
-    // C is only top 3 for the last 3.
-    expect(a).toMatchObject({ title: 'Hot Streak', teamNames: ['A'], statLine: 'Top 3 for 6 rounds straight, never slipping' })
+    // A holds 1st all 6 rounds, B holds 2nd all 6: same run, so they share it
+    // (the leader included). C is only top 3 for the last 3.
+    expect(a).toMatchObject({ title: 'Hot Streak', teamNames: ['A', 'B'], statLine: 'Top 3 for 6 rounds straight, never slipping' })
   })
 
   it('needs a run of at least 3 rounds', () => {
@@ -191,6 +200,7 @@ describe('Hot Streak', () => {
   it('improving counts; a slip inside the top 3 breaks the run', () => {
     // A: 1,1,1 then 2,2,2 (slipped after c) -> run of 3.
     // B: 2,2,2 then 1,1,1 (improved) -> run of all 6.
+    // C: 3rd all 6 rounds -> also a run of 6, an exact tie, so they share it.
     const t = [
       team('A', [10, 10, 0, 0, 0, 0]),
       team('B', [9, 9, 0, 20, 0, 1]),
@@ -198,7 +208,7 @@ describe('Hot Streak', () => {
       team('D', [0, 0, 0, 0, 0, 0]),
     ]
     const a = byId(computeAwards(show, t), 'hot-streak')
-    expect(a.teamNames).toEqual(['B'])
+    expect(a.teamNames).toEqual(['B', 'C'])
     expect(a.statLine).toBe('Top 3 for 6 rounds straight, never slipping')
   })
 })
@@ -382,5 +392,76 @@ describe('computeAwards: phone-only rounds and degenerate boards', () => {
   it('gives no Bruised Apple when everyone is tied for first', () => {
     const teams = [t('A', 5, 5, 5), t('B', 5, 5, 5), t('C', 5, 5, 5), t('D', 5, 5, 5)]
     expect(computeAwards(show, teams, { bruisedApple: true }).find(a => a.id === 'bruised-apple')).toBeUndefined()
+  })
+})
+
+describe('exact ties share the award; more than 2 tied means no award', () => {
+  it('Most Consistent: 2 tied on spread and total share it', () => {
+    const t = [
+      team('B', [8, 9, 0, 8, 0, 9]), team('A', [9, 8, 0, 9, 0, 8]),
+      team('Wild', [2, 15, 0, 7, 0, 3]), team('Mid', [5, 9, 0, 6, 0, 8]),
+    ]
+    expect(byId(computeAwards(show, t), 'most-consistent')).toMatchObject({ teamNames: ['A', 'B'], statLine: 'Every round between 8 and 9 points' })
+  })
+
+  it('Most Consistent: 3 tied is no award', () => {
+    const t = [
+      team('C', [8, 9, 0, 8, 0, 9]), team('B', [8, 9, 0, 8, 0, 9]), team('A', [9, 8, 0, 9, 0, 8]),
+      team('Wild', [2, 15, 0, 7, 0, 3]),
+    ]
+    expect(byId(computeAwards(show, t), 'most-consistent')).toBeNull()
+  })
+
+  it('Hot Streak: 3 tied is no award', () => {
+    const t = [
+      team('A', [10, 10, 0, 10]), team('B', [10, 10, 0, 10]), team('C', [10, 10, 0, 10]), team('D', [1, 1, 0, 1]),
+    ]
+    expect(byId(computeAwards(show, t), 'hot-streak')).toBeNull()
+  })
+
+  it('Late Bloomer: 2 tied on jump share it, different averages get a shared stat line', () => {
+    const t = [team('B', [2, 4, 0, 10, 0, 12]), team('A', [5, 7, 0, 13, 0, 15]), team('Flat', [8, 8, 0, 8, 0, 8])]
+    expect(byId(computeAwards(show, t), 'late-bloomer')).toMatchObject({ teamNames: ['A', 'B'], statLine: '8 more points a round late' })
+  })
+
+  it('Late Bloomer: 3 tied is no award', () => {
+    const t = [team('C', [2, 4, 0, 10, 0, 12]), team('B', [2, 4, 0, 10, 0, 12]), team('A', [5, 7, 0, 13, 0, 15])]
+    expect(byId(computeAwards(show, t), 'late-bloomer')).toBeNull()
+  })
+
+  it('Swing Champion: 3 tied is no award', () => {
+    const t = [team('A', [5, 5, 12]), team('B', [5, 5, 12]), team('C', [5, 5, 12])]
+    expect(byId(computeAwards(show, t), 'swing-champion')).toBeNull()
+  })
+
+  it('Wire to Wire: 2 tied leaders share it (leader included), 3 is no award', () => {
+    const two = [team('A', [10, 5, 0, 5]), team('B', [10, 1, 0, 1]), team('C', [4, 4, 0, 4]), team('D', [1, 1, 0, 1])]
+    expect(byId(computeAwards(show, two), 'wire-to-wire')).toMatchObject({ teamNames: ['A', 'B'], statLine: 'Led after Round 1, both still top 3' })
+    const three = [team('A', [10, 5, 0, 5]), team('B', [10, 1, 0, 1]), team('C', [10, 4, 0, 4]), team('D', [1, 1, 0, 1])]
+    expect(byId(computeAwards(show, three), 'wire-to-wire')).toBeNull()
+  })
+
+  it('Bruised Apple: 2 tied last share it, 3 tied last is no award', () => {
+    const two = [team('A', [10, 10, 0, 10]), team('Y', [1, 1, 0, 1]), team('Z', [1, 1, 0, 1])]
+    expect(byId(computeAwards(show, two, { bruisedApple: true }), 'bruised-apple').teamNames).toEqual(['Y', 'Z'])
+    const three = [...two, team('X', [1, 1, 0, 1])]
+    expect(byId(computeAwards(show, three, { bruisedApple: true }), 'bruised-apple')).toBeNull()
+  })
+
+  it('an 8-team board tied on every round gives no award at all (no one-team-picked-alphabetically nonsense)', () => {
+    const names = ['Beer Pressure', 'Quizzly Bears', 'Les Quizerables', 'Tequila Mockingbird', 'Ho Ho Ho', 'Zed', 'Alpha', 'Mid']
+    const t = names.map(n => team(n, [10, 10, 10, 10, 10, 10]))
+    expect(computeAwards(show, t, { bruisedApple: true })).toEqual([])
+    expect(nightAwards(show, t, { bruisedApple: true, awardIds: AWARD_POOL.map(a => a.id) })).toEqual([])
+  })
+
+  it('same board in reversed row order gives identical awards and picks', () => {
+    const t = [
+      team('A', [10, 9, 12, 8, 20, 9]), team('B', [9, 8, 12, 9, 20, 8]), team('C', [1, 1, 3, 10, 5, 12]),
+      team('D', [5, 5, 1, 5, 1, 5]), team('E', [2, 3, 0, 9, 0, 10]),
+    ]
+    const rev = t.slice().reverse()
+    expect(computeAwards(show, rev, { bruisedApple: true })).toEqual(computeAwards(show, t, { bruisedApple: true }))
+    expect(nightAwards(show, rev, { bruisedApple: true })).toEqual(nightAwards(show, t, { bruisedApple: true }))
   })
 })
