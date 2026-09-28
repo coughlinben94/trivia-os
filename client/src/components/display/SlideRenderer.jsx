@@ -5,6 +5,7 @@ import RoundIntroSlide from './slides/RoundIntroSlide.jsx'
 import QuestionSlide from './slides/QuestionSlide.jsx'
 import GradingBreakSlide from './slides/GradingBreakSlide.jsx'
 import ScoreboardRevealSlide from './slides/ScoreboardRevealSlide.jsx'
+import BiggestClimbersSlide from './slides/BiggestClimbersSlide.jsx'
 import CustomSlide from './slides/CustomSlide.jsx'
 import BonusSlide from './slides/BonusSlide.jsx'
 import PixelateSeriesSlide from './slides/PixelateSeriesSlide.jsx'
@@ -128,6 +129,8 @@ const TRANSITIONS = {
 // neutralized to a constant 1 further down, regardless of this or any other
 // transition assigned to it — see the comment there for why.)
 SLIDE_ANIMATIONS['state-of-union'] = TRANSITIONS.zoom
+// Same quiet fade as the leaderboard it sits beside; the rows carry the motion.
+SLIDE_ANIMATIONS['biggest-climbers'] = SLIDE_ANIMATIONS['scoreboard-reveal']
 // rules chooses its own entrance (the header fade + flash/beep sequence
 // inside RulesSlide itself), so the outer wrapper just cuts in instantly
 // rather than layering a second fade on top of it.
@@ -182,6 +185,7 @@ const SLIDE_COMPONENTS = {
   'question':          QuestionSlide,
   'grading-break':     GradingBreakSlide,
   'scoreboard-reveal': ScoreboardRevealSlide,
+  'biggest-climbers':  BiggestClimbersSlide,
   'custom':            CustomSlide,
   'bonus':             BonusSlide,
   'pixelate-series':   PixelateSeriesSlide,

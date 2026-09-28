@@ -19,6 +19,7 @@ export const TYPE_CARDS = [
   { type: 'shiny-question', icon: '✨', name: 'Shiny Question',       desc: 'Pick a format and fill it in' },
   { type: 'grading-break',  icon: '⏸️', name: 'Grading Break',       desc: 'While Ben grades papers' },
   { type: 'scoreboard-reveal', icon: '🏆', name: 'Scoreboard Reveal', desc: 'Round standings — also unlocks phone scores for this round' },
+  { type: 'biggest-climbers', icon: '📈', name: 'Biggest Climbers', desc: 'Who jumped the most places since last round' },
   { type: 'winner-reveal',  icon: '🥇', name: 'Winner Reveal',       desc: 'Drum roll → winner + confetti' },
   // hidden 2026-08-19 — folded into a popup off the Press Your Luck tile in
   // BuildMode.jsx (Ben: board was "messy") instead of standing alone here.
@@ -34,7 +35,7 @@ export const TYPE_CARDS = [
   { type: 'shiny-title',    icon: '✨', name: 'Shiny Title',         desc: 'Announce card that opens a shiny series', hidden: true },
 ]
 
-const NEEDS_ROUND = new Set(['swing-round-intro', 'question', 'shiny-question', 'grading-break', 'scoreboard-reveal', 'pixelate-series', 'multi-question', 'pyl-lotto', 'pyl-board'])
+const NEEDS_ROUND = new Set(['swing-round-intro', 'question', 'shiny-question', 'grading-break', 'scoreboard-reveal', 'biggest-climbers', 'pixelate-series', 'multi-question', 'pyl-lotto', 'pyl-board'])
 
 const MEDIA_DOT = { image: 'bg-green-400', audio: 'bg-blue-400', text: 'bg-amber-400', video: 'bg-purple-400', list: 'bg-orange-400' }
 
@@ -251,6 +252,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
 
   // Grading-break
   const [jukeboxLib, setJukeboxLib]   = useState('random')
+  const [skipTop3, setSkipTop3]       = useState(true)
   const [jukeboxLibs, setJukeboxLibs] = useState(JUKEBOX_LIBRARIES)
 
   // PYL — Theme Picker board (persists as slide.type 'pyl-reveal' with
@@ -510,6 +512,9 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
         backLinkSlideId: null,
         jukeboxLib,
       }
+
+    } else if (type === 'biggest-climbers') {
+      data = { excludeTop: skipTop3 ? 3 : 0 }
 
     } else if (type === 'custom') {
       data = { title: '', body: '', mediaUrl: null, mediaType: null }
@@ -1087,7 +1092,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
             {needsRound && (
               <RoundPicker
                 id="add-round-select"
-                label={type === 'grading-break' ? 'End of which round?' : 'Round'}
+                label={type === 'grading-break' || type === 'biggest-climbers' ? 'End of which round?' : 'Round'}
                 rounds={show.rounds}
                 value={roundId}
                 onChange={pickRound}
@@ -1150,6 +1155,19 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                   )}
                 </div>
               </>
+            )}
+
+            {/* ── BIGGEST CLIMBERS: the finale already crowns the top 3 ── */}
+            {type === 'biggest-climbers' && (
+              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={skipTop3}
+                  onChange={e => setSkipTop3(e.target.checked)}
+                  className="h-4 w-4 accent-[#1a6b4a]"
+                />
+                Skip the top 3 teams
+              </label>
             )}
 
             {/* ── GRADING BREAK: jukebox only ── */}
