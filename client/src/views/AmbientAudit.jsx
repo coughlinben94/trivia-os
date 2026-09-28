@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { THEMES, getTheme } from '../themes/index.js'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
 import RingAmbient from '../components/display/RingAmbient.jsx'
+import EvolvingRingAmbient from '../components/display/EvolvingRingAmbient.jsx'
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
 import { RING_POOL } from '../worlds/ringPool.js'
 import { worldFromParams } from '../lib/drawWorld.js'
@@ -12,6 +13,13 @@ export default function AmbientAudit() {
   const themeId = params.get('theme')
   const theme = themeId ? getTheme(themeId) : null
   const ringMode = params.get('ring') === '1'
+  // Preview-only, not routed anywhere in the real app (ParticleBackground.jsx's
+  // evolvingEligible check is untouched by this file) — for Ben to actually
+  // watch the not-yet-routed night-color-evolution split transition live,
+  // the same way a real show would step through it, before deciding whether
+  // it's ready to route in. ?evolving=1&showId=whatever picks the walk.
+  const evolvingMode = params.get('evolving') === '1'
+  const evolvingShowId = params.get('showId') || 'preview'
   const ringRef = useRef(null)
   // ?colors=%23ff2200,%23ffd400&weights=0.55,0.45 — same worldFromParams
   // the app and world-07-ring.html use, so the two never drift out of sync.
@@ -55,6 +63,49 @@ export default function AmbientAudit() {
     }, 4000)
     return () => clearInterval(id)
   }, [ringMode, autoPlay])
+
+  // Evolving-color preview: slideIndex is the one thing EvolvingRingAmbient
+  // actually reacts to (it derives everything — which duo, which station,
+  // whether this is a transition slide — from showId + slideIndex, same as
+  // the real show would), so stepping it is enough to walk the whole thing.
+  const [evolvingSlide, setEvolvingSlide] = useState(0)
+  const [evolvingAutoPlay, setEvolvingAutoPlay] = useState(false)
+  useEffect(() => {
+    if (!evolvingMode || !evolvingAutoPlay) return
+    const id = setInterval(() => setEvolvingSlide(s => s + 1), 4000)
+    return () => clearInterval(id)
+  }, [evolvingMode, evolvingAutoPlay])
+
+  if (evolvingMode) {
+    return (
+      <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
+        <EvolvingRingAmbient showId={evolvingShowId} slideIndex={evolvingSlide} />
+        <div style={{ position: 'absolute', top: 24, left: 24, zIndex: 30, display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button
+            onClick={() => { setEvolvingAutoPlay(false); setEvolvingSlide(s => s - 1) }}
+            style={{ padding: '10px 20px' }}
+          >
+            ◀ Prev (slide {evolvingSlide})
+          </button>
+          <button
+            onClick={() => { setEvolvingAutoPlay(false); setEvolvingSlide(s => s + 1) }}
+            style={{ padding: '10px 20px' }}
+          >
+            Next slide ▶
+          </button>
+          <button
+            onClick={() => setEvolvingAutoPlay(p => !p)}
+            style={{ padding: '10px 20px', background: evolvingAutoPlay ? '#2a6' : undefined }}
+          >
+            {evolvingAutoPlay ? '⏸ Pause auto-play' : '▶ Auto-play (4s/slide)'}
+          </button>
+          <span style={{ color: '#fff', fontFamily: 'monospace', fontSize: '0.85rem', opacity: 0.7 }}>
+            showId={evolvingShowId} — try ?showId=x for a different walk
+          </span>
+        </div>
+      </div>
+    )
+  }
 
   if (ringMode) {
     return (
