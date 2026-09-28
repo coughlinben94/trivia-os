@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { isRecentlyLive } from '../../lib/goLive.js'
 
 export default function HostHeader({ show, onUpdateMeta, onGoLive, onReturnToLive, onExport, onSyncArchive, onOpenLibrary, onOpenScoreboard, onOpenThemePicker, onDashboard, previewSlideId }) {
   const [editingTitle, setEditingTitle] = useState(false)
@@ -137,7 +138,7 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onReturnToLiv
           >
             {syncState === 'syncing' ? 'Syncing…' : syncState === 'synced' ? 'Synced ✓' : 'Sync archive'}
           </button>
-          {show.showState?.isLive && onReturnToLive && (
+          {isRecentlyLive(show) && onReturnToLive && (
             <button
               onClick={onReturnToLive}
               title="The show is live on the TV. Go back to the live controls."

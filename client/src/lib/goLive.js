@@ -1,8 +1,17 @@
 // Pure decisions for Go Live / Live Mode entry, so a refresh or "Edit" mid-show
 // never drops the host back to Build Mode with no way to resume.
 
-// Live Mode is on whenever the loaded show is already live.
-export const initialLiveMode = show => !!show?.showState?.isLive
+// Old shows can sit at is_live=true forever, so "live" only counts when the
+// row was touched recently (updatedAt is DB-trigger fresh on every write).
+export const LIVE_WINDOW_MS = 12 * 60 * 60 * 1000
+export function isRecentlyLive(show, now = Date.now()) {
+  if (!show?.showState?.isLive) return false
+  const t = Date.parse(show.updatedAt)
+  return Number.isFinite(t) && now - t <= LIVE_WINDOW_MS
+}
+
+// Live Mode auto-resumes only for a genuinely mid-session show.
+export const initialLiveMode = (show, now) => isRecentlyLive(show, now)
 
 // What the Go Live picker's primary button does. Already-live shows resume at
 // the current slide; others start from the top.
