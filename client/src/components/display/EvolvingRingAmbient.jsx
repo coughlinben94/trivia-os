@@ -37,7 +37,7 @@ import { getTheme } from '../../themes/index.js'
 // duo's recolored world never changes (DUO_PALETTES is static), so this
 // only ever computes 17 entries total across the whole app lifetime.
 const duoWorldCache = new Map()
-function worldForDuo(duoId, arrangement) {
+export function worldForDuo(duoId, arrangement) {
   const key = duoId + '|' + arrangement.stations.map(s => s.key).join(',')
   if (!duoWorldCache.has(key)) {
     duoWorldCache.set(key, recolorWorld(arrangement, DUO_PALETTES[duoId], getTheme('midnight-galaxy')))
