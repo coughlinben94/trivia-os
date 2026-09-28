@@ -16,7 +16,6 @@ import {
   sortSlides,
 } from '../lib/slideStepping.js'
 import { idsToDeleteWith } from '../lib/shinySeries.js'
-import { nextLastCallNonce, withLastCall } from '../lib/lastCall.js'
 
 const ACTIVE_SHOW_KEY = 'trivia-os:activeShowId'
 const SHOW_MEDIA_BUCKET = 'trivia-show-media'
@@ -35,9 +34,6 @@ function normalizeShow(row) {
     rounds: row.rounds ?? [],
     powerups: row.powerups ?? [],
     tickerMessages: row.ticker_messages ?? [],
-    // { lastCall: nonce } — see lib/lastCall.js. Carried so triggerLastCall
-    // merges onto the real column instead of clobbering other keys.
-    specialEvent: row.special_event ?? null,
     showState: {
       currentSlideId: row.current_slide_id ?? null,
       currentSlideIndex: row.current_slide_index ?? 0,
@@ -861,15 +857,6 @@ export function useShow() {
     await updateShowRow(show.id, { audio_playing: payload })
   }
 
-  // L key / 🔔 button in LiveMode: bump the nonce; every /display that sees
-  // it change shows the Last Call sign + bell (LastCallOverlay).
-  async function triggerLastCall() {
-    if (!show) return
-    const specialEvent = withLastCall(show.specialEvent, nextLastCallNonce(show.specialEvent?.lastCall))
-    setShow(s => ({ ...s, specialEvent }))
-    await updateShowRow(show.id, { special_event: specialEvent })
-  }
-
   async function setScoresRevealed(revealed) {
     if (!show) return
     setShow(s => ({ ...s, showState: { ...s.showState, scoresRevealed: revealed } }))
@@ -968,7 +955,6 @@ export function useShow() {
     setAnswerReveal,
     setAudioPlaying,
     setScoresRevealed,
-    triggerLastCall,
     updateRoundScore,
     saveResults,
   }

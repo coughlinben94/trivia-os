@@ -548,6 +548,7 @@ function FollowToggle({ mode, onChange, theme }) {
 const OFF_PHONE_COPY = {
   'winner-reveal':  'Eyes on the screen — results coming in 🏆',
   'biggest-climbers': 'Look up. Somebody made a move 📈',
+  'last-call':      'Last call — grab a drink before the next round 🍺',
   'team-picker':    'Watch the screen — Ben is picking 👀',
   'team-preview':   'Watch the screen — Ben is picking 👀',
   'pre-show':       "Hang tight — we're about to start 🍺",
