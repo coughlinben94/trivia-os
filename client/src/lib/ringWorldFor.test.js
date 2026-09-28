@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ringWorldFor, RING_WORLDS } from './ringWorldFor.js'
+import { ringWorldFor, RING_WORLDS, resolveArrangement } from './ringWorldFor.js'
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
 import { RING_VERSION } from './ringCertification.js'
 import { RING_POOL } from '../worlds/ringPool.js'
@@ -217,5 +217,32 @@ describe('ringWorldFor — auto-draw (no explicit ringWorld, showId present)', (
     expect(() => ringWorldFor(BASE_THEME, '')).not.toThrow()
     const world = ringWorldFor(BASE_THEME, '')
     expect(world.stations.length).toBeGreaterThan(0)
+  })
+})
+
+describe('resolveArrangement', () => {
+  it('returns the fixed authored order when no showId and no ringWorld', () => {
+    const arrangement = resolveArrangement(BASE_THEME, undefined)
+    expect(arrangement.stations.map(s => s.key)).toEqual(AUTHORED_KEYS)
+    expect(arrangement.stations.map(s => s.hue)).toEqual(midnightGalaxyRing.stations.map(s => s.hue))
+  })
+
+  it('draws a per-show arrangement when showId is set and no worldPalette', () => {
+    const arrangement = resolveArrangement(BASE_THEME, 'show_arrangement_test')
+    expect(arrangement.stations.map(s => s.key)).not.toEqual(AUTHORED_KEYS)
+    expect(new Set(arrangement.stations.map(s => s.key)).size).toBe(AUTHORED_KEYS.length)
+  })
+
+  it('stays on the fixed order when a worldPalette is set, even with a showId', () => {
+    const theme = { ...BASE_THEME, worldPalette: { colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35] } }
+    const arrangement = resolveArrangement(theme, 'show_arrangement_test_2')
+    expect(arrangement.stations.map(s => s.key)).toEqual(AUTHORED_KEYS)
+  })
+
+  it('returns the SAME arrangement resolveArrangement produces, for the equivalent ringWorldFor call — no divergence between the two functions', () => {
+    const showId = 'show_arrangement_parity'
+    const arrangement = resolveArrangement(BASE_THEME, showId)
+    const full = ringWorldFor(BASE_THEME, showId)
+    expect(full.stations.map(s => s.key)).toEqual(arrangement.stations.map(s => s.key))
   })
 })

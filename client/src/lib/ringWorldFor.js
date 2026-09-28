@@ -81,6 +81,56 @@ function autoDrawWorld(base, showId) {
   return base
 }
 
+// Resolves ONLY the station arrangement (fixed authored order, a saved
+// ringWorld, or a per-show draw) — no coloring applied. Both the ordinary
+// worldPalette path (ringWorldFor, below) and the color-evolution path
+// (EvolvingRingAmbient.jsx) call this so there is exactly one place that
+// decides "which stations, in what order" — sharing it instead of a second
+// copy is what gap-C's own root cause (two places deciding the same thing)
+// argues for.
+export function resolveArrangement(theme, showId) {
+  const base = RING_WORLDS[theme.id]
+  if (!base) return base
+
+  if (theme.ringWorld && theme.ringWorld.ringVersion === RING_VERSION) {
+    try {
+      // Resolve against RING_POOL, which carries the full station objects
+      // (variant, region, regionSource, noCompanion, companionKind), not a
+      // reduced projection. Before 2026-09-24, a reduced {key,prim,hue,accent,
+      // family} pool silently dropped those fields at render time — see
+      // references/ring-world-mistakes.md.
+      const stations = resolveStations(RING_POOL, theme.ringWorld.stations)
+      // Structural crash-safety: a stations array that resolves cleanly
+      // but is the wrong length or has a duplicate key still reaches
+      // RingAmbient.jsx (fixed station count, no such check), which can
+      // throw there instead of here — and ParticleBackground.jsx's error
+      // boundary swallows that, blanking the whole ambient background
+      // instead of falling back through this chain. NOT assertRing: it
+      // also enforces family-spacing/prim-adjacency rules that the real
+      // SHIPPED authored order itself already fails (drawWorld.js's own
+      // comment — "a future fall-back-to-authored path must not re-run
+      // assertWorld against it"), so calling it here would reject every
+      // legitimate saved ringWorld, including the authored order itself.
+      if (stations.length !== base.stations.length) {
+        throw new Error(`resolveArrangement: expected ${base.stations.length} stations, got ${stations.length}`)
+      }
+      if (new Set(stations.map(s => s.key)).size !== stations.length) {
+        throw new Error('resolveArrangement: duplicate station keys in a resolved ringWorld')
+      }
+      return { ...base, stations }
+    } catch (err) {
+      console.warn('[ring] bad ringWorld arrangement, falling back:', err.message)
+      return base
+    }
+  }
+
+  if (showId && !theme.worldPalette) {
+    return autoDrawWorld(base, showId)
+  }
+
+  return base
+}
+
 // theme.ringWorld (a drawn world: stations + palette) wins when present and
 // its ringVersion is current; a per-show auto-draw (above) is the next
 // fallback, but ONLY when showId is known AND no worldPalette is set — a
@@ -99,31 +149,15 @@ export function ringWorldFor(theme, showId) {
   if (theme.ringWorld && theme.ringWorld.ringVersion === RING_VERSION) {
     const key = theme.id + '|world|' + JSON.stringify(theme.ringWorld)
     if (!worldCache.has(key)) {
+      const arrangement = resolveArrangement(theme, showId)
       try {
-        // Resolve against RING_POOL, which carries the full station objects
-        // (variant, region, regionSource, noCompanion, companionKind), not a
-        // reduced projection. Before 2026-09-24, a reduced {key,prim,hue,accent,
-        // family} pool silently dropped those fields at render time — see
-        // references/ring-world-mistakes.md.
-        const stations = resolveStations(RING_POOL, theme.ringWorld.stations)
-        // Structural crash-safety: a stations array that resolves cleanly
-        // but is the wrong length or has a duplicate key still reaches
-        // RingAmbient.jsx (fixed station count, no such check), which can
-        // throw there instead of here — and ParticleBackground.jsx's error
-        // boundary swallows that, blanking the whole ambient background
-        // instead of falling back through this chain. NOT assertRing: it
-        // also enforces family-spacing/prim-adjacency rules that the real
-        // SHIPPED authored order itself already fails (drawWorld.js's own
-        // comment — "a future fall-back-to-authored path must not re-run
-        // assertWorld against it"), so calling it here would reject every
-        // legitimate saved ringWorld, including the authored order itself.
-        if (stations.length !== base.stations.length) {
-          throw new Error(`ringWorldFor: expected ${base.stations.length} stations, got ${stations.length}`)
-        }
-        if (new Set(stations.map(s => s.key)).size !== stations.length) {
-          throw new Error('ringWorldFor: duplicate station keys in a resolved ringWorld')
-        }
-        worldCache.set(key, recolorWorld({ ...base, stations }, theme.ringWorld.palette, getTheme(theme.id)))
+        // In this branch resolveArrangement returns `base` itself (by
+        // identity) ONLY when the saved arrangement failed — a valid one is
+        // always a fresh {...base, stations}. A failed arrangement must fall
+        // back to paletteOnly/base, never get the saved palette painted onto
+        // the authored order (an uncertified pair).
+        if (arrangement === base) throw new Error('saved arrangement did not resolve')
+        worldCache.set(key, recolorWorld(arrangement, theme.ringWorld.palette, getTheme(theme.id)))
       } catch (err) {
         console.warn('[ring] bad ringWorld, falling back:', err.message)
         worldCache.set(key, paletteOnly(theme, base) ?? base)
