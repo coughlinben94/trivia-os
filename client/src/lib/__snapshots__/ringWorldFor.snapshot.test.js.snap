@@ -1,0 +1,261 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ringWorldFor snapshot (space world) > full world data (sky, tints, anchors) unchanged for no showId 1`] = `
+{
+  "hueAnchors": [
+    {
+      "deg": 276,
+      "window": 25,
+    },
+    {
+      "deg": 214,
+      "window": 25,
+    },
+    {
+      "deg": 140,
+      "window": 25,
+    },
+  ],
+  "id": "midnight-galaxy",
+  "name": "Midnight Galaxy",
+  "phase": 5,
+  "qColours": [
+    "#c66fff",
+    "#e8d0ff",
+  ],
+  "sky": [
+    "#0d002a",
+    "#0a0022",
+    "#06001a",
+    "#020006",
+  ],
+  "stations": [
+    {
+      "accent": false,
+      "hue": 256,
+      "key": "ringed planet",
+      "maxDetail": 2,
+      "prim": "ring",
+    },
+    {
+      "accent": false,
+      "companionKind": "dots",
+      "hue": 170,
+      "key": "spiral galaxy",
+      "maxDetail": 1,
+      "prim": "lens",
+    },
+    {
+      "accent": false,
+      "companionUpper": true,
+      "hue": 268,
+      "key": "star cluster",
+      "maxDetail": 1,
+      "prim": "dots",
+    },
+    {
+      "accent": true,
+      "hue": 28,
+      "key": "amber planet",
+      "maxDetail": 1,
+      "prim": "ring",
+      "variant": "dust",
+    },
+    {
+      "accent": false,
+      "hue": 140,
+      "key": "lit planet",
+      "maxDetail": 1,
+      "prim": "planet",
+      "region": "aurora",
+    },
+    {
+      "accent": false,
+      "hue": 120,
+      "key": "pulsar",
+      "noCompanion": true,
+      "prim": "pulsar",
+      "region": "aurora",
+      "regionSource": true,
+    },
+    {
+      "accent": true,
+      "companionBoost": true,
+      "cornerLeft": false,
+      "hue": 330,
+      "key": "rose nebula",
+      "prim": "nebulaCloud",
+    },
+    {
+      "accent": false,
+      "companionBoost": true,
+      "companionKind": "lens",
+      "cornerLeft": false,
+      "hue": 208,
+      "key": "comet",
+      "prim": "streak",
+    },
+    {
+      "accent": false,
+      "hue": 214,
+      "key": "binary pair",
+      "prim": "binary",
+    },
+    {
+      "accent": false,
+      "hue": 160,
+      "key": "asteroid field",
+      "prim": "asteroidField",
+    },
+    {
+      "accent": false,
+      "hue": 300,
+      "key": "eclipse",
+      "maxDetail": 1,
+      "prim": "eclipse",
+      "region": "corona",
+      "regionSource": true,
+    },
+    {
+      "accent": false,
+      "bandUpper": false,
+      "hue": 196,
+      "key": "aurora ribbon",
+      "maxDetail": 1,
+      "prim": "ribbon",
+    },
+    {
+      "accent": true,
+      "hue": 36,
+      "key": "supernova",
+      "maxDetail": 1,
+      "prim": "spikes",
+      "region": "ember",
+      "regionSource": true,
+    },
+  ],
+  "tints": {
+    "coreDim": "#fff6e6",
+    "coreWarm": "#fffaf0",
+    "drift": "#ffd9a0",
+    "driftGlow": "#ffb76e",
+    "dustWarm": "#fff3e0",
+    "glareCool": "#eaf5ff",
+    "halo": "#fdf7ff",
+    "shoot": "#fff8ec",
+    "shootTail": "#fff6e2",
+    "starTint1": "#f6e6ff",
+    "starTint2": "#fff3e2",
+    "starTint3": "#eaf0ff",
+  },
+  "type": "space",
+}
+`;
+
+exports[`ringWorldFor snapshot (space world) > showId=a 1`] = `
+[
+  "southern cross|constellation|165",
+  "aurora ribbon|ribbon|196",
+  "amber planet|ring|28",
+  "cassiopeia|constellation|180",
+  "pulsar|pulsar|120",
+  "comet|streak|208",
+  "asteroid field|asteroidField|160",
+  "supernova|spikes|36",
+  "big dipper|constellation|210",
+  "star cluster|dots|268",
+  "eclipse|eclipse|300",
+  "rose nebula|nebulaCloud|330",
+  "spiral galaxy|lens|170",
+]
+`;
+
+exports[`ringWorldFor snapshot (space world) > showId=show-1 1`] = `
+[
+  "amber planet|ring|28",
+  "spiral galaxy|lens|170",
+  "star cluster|dots|268",
+  "aurora ribbon|ribbon|196",
+  "lit planet|planet|140",
+  "cassiopeia|constellation|180",
+  "supernova|spikes|36",
+  "binary pair|binary|214",
+  "rose nebula|nebulaCloud|330",
+  "comet|streak|208",
+  "eclipse|eclipse|300",
+  "big dipper|constellation|210",
+  "pulsar|pulsar|120",
+]
+`;
+
+exports[`ringWorldFor snapshot (space world) > showId=show-2 1`] = `
+[
+  "amber planet|ring|28",
+  "star cluster|dots|268",
+  "big dipper|constellation|210",
+  "lit planet|planet|140",
+  "rose nebula|nebulaCloud|330",
+  "pulsar|pulsar|120",
+  "binary pair|binary|214",
+  "southern cross|constellation|165",
+  "spiral galaxy|lens|170",
+  "asteroid field|asteroidField|160",
+  "eclipse|eclipse|300",
+  "supernova|spikes|36",
+  "comet|streak|208",
+]
+`;
+
+exports[`ringWorldFor snapshot (space world) > showId=trivia-2026-09-28 1`] = `
+[
+  "amber planet|ring|28",
+  "pulsar|pulsar|120",
+  "asteroid field|asteroidField|160",
+  "ringed planet|ring|256",
+  "supernova|spikes|36",
+  "spiral galaxy|lens|170",
+  "lit planet|planet|140",
+  "star cluster|dots|268",
+  "aurora ribbon|ribbon|196",
+  "cassiopeia|constellation|180",
+  "eclipse|eclipse|300",
+  "rose nebula|nebulaCloud|330",
+  "comet|streak|208",
+]
+`;
+
+exports[`ringWorldFor snapshot (space world) > showId=undefined 1`] = `
+[
+  "ringed planet|ring|256",
+  "spiral galaxy|lens|170",
+  "star cluster|dots|268",
+  "amber planet|ring|28",
+  "lit planet|planet|140",
+  "pulsar|pulsar|120",
+  "rose nebula|nebulaCloud|330",
+  "comet|streak|208",
+  "binary pair|binary|214",
+  "asteroid field|asteroidField|160",
+  "eclipse|eclipse|300",
+  "aurora ribbon|ribbon|196",
+  "supernova|spikes|36",
+]
+`;
+
+exports[`ringWorldFor snapshot (space world) > worldPalette tier stays on the fixed authored order 1`] = `
+[
+  "ringed planet|ring|343",
+  "spiral galaxy|lens|36",
+  "star cluster|dots|28",
+  "amber planet|ring|63",
+  "lit planet|planet|346",
+  "pulsar|pulsar|40",
+  "rose nebula|nebulaCloud|23",
+  "comet|streak|56",
+  "binary pair|binary|354",
+  "asteroid field|asteroidField|46",
+  "eclipse|eclipse|18",
+  "aurora ribbon|ribbon|52",
+  "supernova|spikes|8",
+]
+`;

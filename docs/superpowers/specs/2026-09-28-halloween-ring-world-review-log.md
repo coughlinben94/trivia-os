@@ -30,3 +30,9 @@ VERDICT: APPROVED. Station-0 defect resolved; runtime and verification blockers 
 
 ## Post-approval edits (2026-09-28, Ben's answers)
 Theme id `haunted-october`; TV 10-30 ft, two 80" gating, 40" advisory, 7px floor; mix look with orange sky; harvest moon; space world unfinished so Phase 1 on own branch `feat/haunted-october-world`; phone Tier 1 palette + Tier 2 static backdrop (Phase 6). Sent back to Codex for a check of these edits only.
+
+## Codex re-check of post-approval edits (r6)
+VERDICT: REVISE (not re-approved). Px/deg math confirmed. Two gaps: phone can't derive station from raw slide index; "downscaled to match px/deg" lacked a viewing reference. Fixed in spec (§4.11 shared station resolver fed host position; §5.3 blur-by-acuity gate). Those two fixes have NOT been re-reviewed by Codex.
+
+## Independent Opus review of Phase 0 commit d133b4d
+VERDICT: HAS-GAPS. Accepted: /ambient baseline skips ringWorldFor/ParticleBackground/Display.jsx (added snapshot test + coverage map §5.1); animations:'disabled' hides motion (added motion.json, claim narrowed to static rest frames); settle too short (6000ms); station index unchecked (now asserted); capture ignored page/console errors (now fails); no provenance (provenance.json); pngjs undeclared (added devDependency); diff blunt (size mismatch / missing frame / frame count / mkdtemp); probe extended with single-pixel flip; spec line ref 695->693 and stale status header fixed. Not adopted: build-marker check on the served page (speculative; provenance.json records the SHA instead).

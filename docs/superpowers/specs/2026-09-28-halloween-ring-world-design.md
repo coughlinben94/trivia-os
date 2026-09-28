@@ -1,6 +1,6 @@
-# Halloween Ring World — Design Spec (DRAFT r1, not approved)
+# Halloween Ring World — Design Spec (r2: Codex-approved at r5, Ben's §0 answers folded in, Phase 0 built)
 
-Date: 2026-09-28. Source: council run `wf_34f21741-107`, then Codex round 1 (log: `2026-09-28-halloween-ring-world-review-log.md`). Nothing here is built. Ben has not approved.
+Date: 2026-09-28. Source: council run `wf_34f21741-107`, then Codex round 1 (log: `2026-09-28-halloween-ring-world-review-log.md`). Ben's answers are recorded in §0. Building on branch `feat/haunted-october-world` in worktree `~/Projects/baynes-trivia/trivia-os-haunted`. Phase 0 done; Phases 1+ pending.
 
 ## 0. Gate questions for Ben (answer before any code)
 
@@ -54,7 +54,7 @@ Paper check before approval (`ART-DIRECTION-SPEC.md` §6.2): fill all 13 shapes 
 
 ## 4. Engine changes (only the seams Halloween needs)
 
-Repo facts (verified by Codex): `RING_WORLDS` in `lib/ringWorldFor.js` is a routing registry only. Space-only coupling remains in: `ringWorldFor` (draws from the space `RING_POOL`, pins `'eclipse'` at 10), `ringDraw.js` (`pinKey='eclipse', pinAt=10`), `Display.jsx:695` (`MUSIC_STATION = 10`), `RingAmbient.jsx` (imports `midnightGalaxy.slots.js` directly; always builds stars, a space drifter, and a shooting-star lane), `ringPrimitives.js` (`SKY_REGIONS`, three space-named regions), `ringEngine.js skyFromTheme` (four-stop ramp only), `ThemePickerModal.jsx:184` and `LiveMode.jsx:1359` (both pickers filter to Midnight Galaxy), `AmbientAudit.jsx` (hardcodes `midnightGalaxyRing`), `concepts/tools/ring-verify.mjs` (live pass always opens `/ambient?ring=1`).
+Repo facts (verified by Codex): `RING_WORLDS` in `lib/ringWorldFor.js` is a routing registry only. Space-only coupling remains in: `ringWorldFor` (draws from the space `RING_POOL`, pins `'eclipse'` at 10), `ringDraw.js` (`pinKey='eclipse', pinAt=10`), `Display.jsx:693` (`MUSIC_STATION = 10`), `RingAmbient.jsx` (imports `midnightGalaxy.slots.js` directly; always builds stars, a space drifter, and a shooting-star lane), `ringPrimitives.js` (`SKY_REGIONS`, three space-named regions), `ringEngine.js skyFromTheme` (four-stop ramp only), `ThemePickerModal.jsx:184` and `LiveMode.jsx:1359` (both pickers filter to Midnight Galaxy), `AmbientAudit.jsx` (hardcodes `midnightGalaxyRing`), `concepts/tools/ring-verify.mjs` (live pass always opens `/ambient?ring=1`).
 
 Phase 1 changes, each behind a space pixel-regression check:
 1. Register `haunted-october` in `RING_WORLDS` and `THEMES` (mirror the guard that throws when a world's theme is missing).
@@ -80,7 +80,11 @@ Per-world only: horizon band, filled-silhouette-path primitive hand-traced from 
 
 ## 5. Verification and gates
 
-1. Before Phase 1: capture frozen baseline frames of midnight-galaxy (1920x1080, every station). Validate the diff tool with a known-different pair. Zero-change is measured against those frames.
+1. Before Phase 1: capture frozen baseline frames of midnight-galaxy (1920x1080, every station) with `scripts/ring-baseline.mjs`, plus a committed vitest snapshot of `ringWorldFor()` (`client/src/lib/ringWorldFor.snapshot.test.js`) taken on pre-change code. Frames are STATIC REST FRAMES of the authored world via `/ambient?ring=1` (an independent review found the page skips `ringWorldFor`, `ParticleBackground`, `Display.jsx`, and JS-timer motion such as shooting stars). Coverage map for Phase 1 items in §4:
+   - Frames + `motion.json` (DOM counts and computed animation names) cover: item 4 (ambient-layer gating) and the RingAmbient part of item 2.
+   - The `ringWorldFor` snapshot covers: item 2 (pool/pin) and item 1 (registry).
+   - Item 3 (`MUSIC_STATION`), item 8 (keyed remount + station alignment), item 9 (fallback), item 6 (pickers), item 10 (dispatch) get unit or component tests, not pixels. Item 3/9's station-override logic is first extracted into one pure resolver (also needed by phones, §4.11), then unit-tested against hand-derived pre-change cases.
+   - Validate the diff tool with `ring-baseline.mjs probe` (same-twice identical, recolor differs, one flipped pixel detected). Zero-change is measured against the frozen frames.
 2. Halloween static HTML copy for `ring-verify`, plus the parameterized live pass (§4.7).
 3. Per station: screenshot at 1920, then downscaled to simulate 10 ft and 30 ft (state the pixels-per-degree math used, based on the TV size Ben confirms); silhouette/squint check at 30 ft; centre clear; contrast against that station's sky at 10 ft. Any hard-edge or thin-line floor in `ART-DIRECTION-SPEC.md` §13 is recomputed for 30 ft, not taken from its 12 ft assumption.
    TV sizes (Ben, 2026-09-28): two 80" and one 40", all 16:9, rendering the same 1920x1080 frame. Pixels per degree of view (px/deg = 1920 / horizontal view angle):
@@ -101,7 +105,7 @@ Any gate fails, or a figurative station fails after tighter tracing: stop and as
 
 ## 8. Implementation prompt for Opus 5.5 (paste-ready, use only after approval)
 
-> You are building the Halloween ring world for Trivia OS in `~/Projects/baynes-trivia/trivia-os`. The approved spec is `docs/superpowers/specs/2026-09-28-halloween-ring-world-design.md`; follow it exactly.
+> You are building the Halloween ring world for Trivia OS in the worktree `~/Projects/baynes-trivia/trivia-os-haunted` (branch `feat/haunted-october-world`, cut from origin/main; do not touch `~/Projects/baynes-trivia/trivia-os` or other worktrees). The approved spec is `docs/superpowers/specs/2026-09-28-halloween-ring-world-design.md`; follow it exactly.
 >
 > Read first: `SKILL.md`, `references/ring-world-mistakes.md`, `references/ring-world-continuity.md`, `concepts/OBJECT-RENDERING-PROTOCOL.md`, `concepts/ART-DIRECTION-SPEC.md`, `concepts/FAILURE-LEDGER.md`, the `ring-object-craft` skill. Run `git status`, `git log -5`, `git stash list` first; another session may share this checkout.
 >
