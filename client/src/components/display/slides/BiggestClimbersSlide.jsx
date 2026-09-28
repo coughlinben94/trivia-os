@@ -183,7 +183,9 @@ export default function BiggestClimbersSlide({ slide, show, isPreview = false })
   }, [isPreview, teams, show, slide.roundId, slide.data?.excludeTop])
 
   useEffect(() => {
-    if (result && result.status !== 'incomplete') frozenRef.current = true
+    // Freeze only on a finished answer. 'no-teams'/'too-few' can still change
+    // once more scores land, and freezing there would strand the slide.
+    if (result && (result.status === 'ok' || result.status === 'no-movement')) frozenRef.current = true
   }, [result])
 
   const climbers = result?.climbers ?? []

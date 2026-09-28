@@ -4,8 +4,10 @@
 //
 // The rule:
 // - Rounds are ordered the way the scoreboard orders them (deriveRoundCols,
-//   by round.number). The bonus column is left out of BOTH snapshots, since
-//   it belongs to no round and would count the same on each side anyway.
+//   by round.number). The bonus column counts in BOTH snapshots, exactly as
+//   the TV scoreboard totals it, so a place shown here is the place the
+//   scoreboard shows right after. (Left out, a team with bonus points could
+//   read "1st" here and "2nd" on the board.)
 // - "Before" = cumulative total through the previous round. "Now" = through
 //   this round. Both ranked with the shared tie-aware computePlaces (1224),
 //   so a team tied for 2nd sits at place 2 either way.
@@ -16,6 +18,10 @@
 // - Grading counts as done for a team once this round's key exists on its
 //   scores (0 is a real score). One playing team missing it holds the whole
 //   reveal ('incomplete'), so a half-graded board never shows fake moves.
+//   Exception: a team with NO entry at all for LAST round (while other teams
+//   have one) has left the room. It stays on the board at its old total but no
+//   longer holds the reveal. A typed 0 last round is a real score (the team was
+//   there and missed everything), so that team still holds until graded.
 import { deriveRoundCols, computeTotal, computePlaces, pickableTeams } from './scoreboardMath.js'
 
 // Show at most this many climbers. Ties at the 3rd slot are kept (nobody
@@ -65,7 +71,9 @@ function normalizeExcludeTop(v) {
 // 2nd, so it's off whenever the top is skipped.
 export function computeClimbers(show, roundId, teams, { excludeTop } = {}) {
   const skipTop = normalizeExcludeTop(excludeTop)
-  const roundCols = deriveRoundCols(show).filter(c => c.key !== 'bonus')
+  const allCols = deriveRoundCols(show)
+  const roundCols = allCols.filter(c => c.key !== 'bonus')
+  const bonusCols = allCols.filter(c => c.key === 'bonus')
   const idx = roundCols.findIndex(c => c.key === `r_${roundId}`)
   const result = {
     status: 'ok',
@@ -83,6 +91,11 @@ export function computeClimbers(show, roundId, teams, { excludeTop } = {}) {
   const through = roundCols.slice(0, idx + 1)
   const before = roundCols.slice(0, idx)
 
+  const prevKey = before[before.length - 1].key
+  // If nobody has a last-round entry, that round simply was not scored, which
+  // says nothing about who left.
+  const prevRoundScored = (teams ?? []).some(t => hasScore(t.scores, prevKey))
+
   // Playing = named and scored in at least one round so far. A blank row or
   // a team that has never been graded is not on the board yet.
   const field = pickableTeams(teams ?? [])
@@ -91,13 +104,14 @@ export function computeClimbers(show, roundId, teams, { excludeTop } = {}) {
       id: t.id,
       name: t.name.trim(),
       graded: hasScore(t.scores, current.key),
+      gone: prevRoundScored && !hasScore(t.scores, prevKey),
       comparable: before.some(c => hasScore(t.scores, c.key)),
-      prev: computeTotal(t.scores, before),
-      now: computeTotal(t.scores, through),
+      prev: computeTotal(t.scores, [...before, ...bonusCols]),
+      now: computeTotal(t.scores, [...through, ...bonusCols]),
     }))
   if (!field.length) return { ...result, status: 'no-teams' }
 
-  const missing = field.filter(t => !t.graded).map(t => t.name)
+  const missing = field.filter(t => !t.graded && !t.gone).map(t => t.name)
   if (missing.length) return { ...result, status: 'incomplete', missing }
 
   const chase = skipTop ? null : closeChase(field)

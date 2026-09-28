@@ -428,8 +428,10 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
           : { x: 0, y: 0, rotate: 0 }}
         transition={impact ? { delay: 0.18, duration: 0.26, ease: 'linear' } : undefined}
         // with side podium slots below, lift the winner block so a two-line
-        // name can't run into them; no podium (1 team) keeps today's centering
-        style={{ zIndex: 10, paddingBottom: hasPodium ? '14%' : 0 }}
+        // name can't run into them; no podium (1 team) keeps today's centering.
+        // cqw, not %: padding % is width-based anyway, and cqw says so and
+        // tracks the stage instead of the parent box.
+        style={{ zIndex: 10, paddingBottom: hasPodium ? '14cqw' : 0 }}
       >
 
       {/* Rotating light rays — sustained celebration behind the name */}
@@ -645,7 +647,7 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
           initial={{ opacity: 0, y: reduce ? 0 : 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: (reduce || isPreview) ? 0.3 : delay, duration: 0.6, ease: EASE_OUT }}
-          style={{ ...side, bottom: 0, width: '27%', zIndex: 10, textAlign: 'center' }}
+          style={{ ...side, bottom: '2.5cqh', width: '27%', zIndex: 10, textAlign: 'center' }}
         >
           <p style={{ color: theme.colors.text, opacity: 0.7, fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`, fontSize: 'clamp(1rem, 1.6cqw, 1.5rem)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
             {label}

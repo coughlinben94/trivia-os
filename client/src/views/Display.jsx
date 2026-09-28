@@ -29,6 +29,7 @@ import {
   TEAM_PICKER_HOLD_MS,
 } from '../lib/slideStepping.js'
 import { warmYoutubeAudio } from '../lib/youtubeWarmAudio.js'
+import { keepAwake } from '../lib/keepAwake.js'
 
 // Realtime's payload and PostgREST's .select() are two independently
 // maintained serializers for the same Postgres timestamptz — lexicographic
@@ -1239,6 +1240,12 @@ export default function Display() {
   const [direction, setDirection] = useState(1)
   const installPromptRef = useRef(null)
   const [canInstall, setCanInstall] = useState(false)
+  // The Mac's display sleep would blank every TV on the splitter. Preview
+  // and demo frames are the editor's, not a TV.
+  useEffect(() => {
+    if (isPreview || isDemo) return undefined
+    return keepAwake()
+  }, [isPreview, isDemo])
   // A display nav write was denied (RLS, network, anything) — the host must
   // advance from /host. Cleared when any show update lands (someone advanced
   // successfully) or a later nav write succeeds. Guard the RESULT, not the

@@ -100,3 +100,19 @@ describe('lowerBeats', () => {
     expect(lowerBeats({ noData: true })).toEqual([])
   })
 })
+
+describe('buildPodium: blank names', () => {
+  it('never announces a blank-name leader, and keeps its place', () => {
+    const p = buildPodium([{ name: '', total: 50 }, { name: 'A', total: 40 }, { name: 'B', total: 30 }])
+    expect(p).toEqual({ noData: true })
+  })
+
+  it('drops a blank name from a tie for first instead of printing "Team & "', () => {
+    const p = buildPodium([{ name: '  ', total: 50 }, { name: 'A', total: 50 }])
+    expect(p.winner).toEqual({ name: 'A', total: 50, isTie: false })
+  })
+
+  it('reports noData when only blank rows have points', () => {
+    expect(buildPodium([{ name: '', total: 9 }])).toEqual({ noData: true })
+  })
+})

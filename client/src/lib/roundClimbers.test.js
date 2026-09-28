@@ -89,12 +89,24 @@ describe('computeClimbers: basic climb', () => {
     expect(r.climbers).toEqual([{ id: 'B', name: 'B', from: 2, to: 1, climb: 1, total: 14 }])
   })
 
-  it('ignores the bonus column so both snapshots use the same rounds', () => {
+  it('counts the bonus column in both snapshots, like the scoreboard does', () => {
+    // A leads on bonus points, so B moving past A's round score is not a climb
+    // to 1st: the board still has A on top.
     const r = computeClimbers(show, 'b', [
       team('A', 10, 0, undefined, { bonus: 50 }),
       team('B', 5, 6),
     ])
-    expect(r.climbers.map(c => c.name)).toEqual(['B'])
+    expect(r.status).toBe('no-movement')
+  })
+
+  it('reports the place the scoreboard shows when bonus reorders the field', () => {
+    const r = computeClimbers(show, 'b', [
+      team('A', 10, 0, undefined, { bonus: 50 }),
+      team('B', 5, 20),
+      team('C', 8, 0),
+    ])
+    // Board after R2: A60, B25, C8. Before: A60, C8... B5 -> B is 3rd before? A60 C8 B5.
+    expect(r.climbers).toEqual([{ id: 'B', name: 'B', from: 3, to: 2, climb: 1, total: 25 }])
   })
 })
 
@@ -188,6 +200,32 @@ describe('computeClimbers: incomplete grading', () => {
   it('counts a score of 0 as graded', () => {
     const r = computeClimbers(show, 'b', [team('A', 10, 0), team('B', 8, 0)])
     expect(r.status).toBe('no-movement')
+  })
+
+  it('does not hold the reveal for a team that also scored nothing last round', () => {
+    // Gone scored R1 only. R2 and R3 are both blank: it left, so R3 reveals.
+    const r = computeClimbers(show, 'c', [team('A', 10, 1, 1), team('B', 5, 2, 20), team('Gone', 8)])
+    expect(r.status).toBe('ok')
+    expect(r.missing).toEqual([])
+    expect(r.climbers.map(c => c.name)).toEqual(['B'])
+  })
+
+  it('still holds for a team that scored a real 0 last round and is not graded yet', () => {
+    const r = computeClimbers(show, 'c', [team('A', 10, 5, 5), team('B', 8, 6, 7), team('Zero', 9, 0)])
+    expect(r.status).toBe('incomplete')
+    expect(r.missing).toEqual(['Zero'])
+  })
+
+  it('does not call everyone gone when nobody was scored last round', () => {
+    const r = computeClimbers(show, 'c', [team('A', 10, undefined, undefined), team('B', 8)])
+    expect(r.status).toBe('incomplete')
+    expect(r.missing).toEqual(['A', 'B'])
+  })
+
+  it('still holds for a team that scored last round but is missing this one', () => {
+    const r = computeClimbers(show, 'c', [team('A', 10, 1, 1), team('B', 5, 6, 20), team('Late', 8, 4)])
+    expect(r.status).toBe('incomplete')
+    expect(r.missing).toEqual(['Late'])
   })
 
   it('treats a missing earlier round as 0, not as ungraded', () => {

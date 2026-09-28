@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { buildSnapshot, hostReply, makeSnapshotSender, hostChipText } from './remoteSnapshot.js'
+import { buildSnapshot, buildCard, hostReply, makeSnapshotSender, hostChipText } from './remoteSnapshot.js'
 
 const slides = [
   { id: 'a', type: 'round-intro', data: { roundTitle: 'Movies' } },
@@ -14,6 +14,7 @@ describe('buildSnapshot', () => {
     expect(snap).toEqual({
       type: 'state',
       slide: { index: 0, total: 4, id: 'a', label: 'Movies', type: 'round-intro' },
+      card: null,
       cue: 'Show question 1', gate: 'advance',
       upNext: [{ label: 'Q1', type: 'question' }, { label: 'Q2', type: 'question' }],
       toggles: { answerReveal: true, scoreboardVisible: false, scoresRevealed: false },
@@ -23,6 +24,35 @@ describe('buildSnapshot', () => {
   it('Up Next shrinks at the end; slide is null past the end', () => {
     expect(buildSnapshot({ slides, index: 3, showState: {}, cue: { label: null, gate: null } }).upNext).toEqual([])
     expect(buildSnapshot({ slides: [], index: 0, showState: {}, cue: { label: null, gate: null } }).slide).toBe(null)
+  })
+})
+
+describe('buildCard', () => {
+  const q = data => ({ id: 'q', type: 'question', data })
+  it('reads text and answer for a plain question', () => {
+    expect(buildCard(q({ questionNumber: 4, text: 'Which band?', answer: 'Queen' })))
+      .toEqual({ label: 'Q4', text: 'Which band?', answer: 'Queen', subtitle: null, part: null, isShiny: false })
+  })
+  it('uses the custom question label when there is one', () => {
+    expect(buildCard(q({ questionNumber: 4, questionLabel: 'Bonus', text: 't' })).label).toBe('Bonus')
+  })
+  it('follows the current part of a series, with part x of n', () => {
+    const card = buildCard(q({
+      questionNumber: 2, isShiny: true, currentPart: 1,
+      parts: [{ text: 'first', answer: 'A' }, { text: 'second', answer: 'B', label: 'Part two' }, { text: 'third' }],
+    }))
+    expect(card).toMatchObject({ text: 'second', answer: 'B', subtitle: 'Part two', part: { i: 1, n: 3 }, isShiny: true })
+  })
+  it('clamps a stale currentPart into range', () => {
+    expect(buildCard(q({ currentPart: 9, parts: [{ text: 'a' }, { text: 'b' }] })).part).toEqual({ i: 1, n: 2 })
+  })
+  it('has no answer when the slide has none (never invents one)', () => {
+    expect(buildCard(q({ text: 't' })).answer).toBeNull()
+  })
+  it('is null for non-question slides and missing data', () => {
+    expect(buildCard({ type: 'round-intro', data: {} })).toBeNull()
+    expect(buildCard({ type: 'question' })).toBeNull()
+    expect(buildCard(null)).toBeNull()
   })
 })
 

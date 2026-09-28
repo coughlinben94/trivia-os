@@ -5,6 +5,7 @@ import { DEFAULT_THEME_ID } from '../themes/index.js'
 import { deriveRoundCols, computeTotal, roundScoreTotal } from '../lib/scoreboardMath.js'
 import { renumberRoundQuestions } from '../lib/questionNumbering.js'
 import { trackWrite } from '../lib/writeTracking.js'
+import { mergeShowStateRow, SHOW_STATE_COLUMNS } from '../lib/showStateMerge.js'
 import { HOST_PHOTOS_BUCKET, listHostPhotos } from '../lib/hostPhotos.js'
 import { archiveShow } from '../lib/questionRows.js'
 import {
@@ -143,39 +144,43 @@ export function useShow() {
   // Subscribe to shows row changes so Display.jsx slide advances (e.g. PYL onDone)
   // and scoreboard/answer-reveal toggles propagate back to the Host in real time.
   // Only merges showState fields — never touches slides/rounds to avoid optimistic clobber.
+  // The TV writes the slide position itself (jukebox return, final-break jump,
+  // PYL onDone), so a dropped socket can leave this copy behind and the next
+  // Next press would step from a stale slide. Every reconnect, tab wake and
+  // network return re-reads the state slice (same merge, same 1.5s nav guard).
   useEffect(() => {
     if (!show?.id) return
     const showId = show.id
+    let cancelled = false
+    let subscribedBefore = false
+    async function resync() {
+      const { data } = await supabase.from('shows').select(SHOW_STATE_COLUMNS).eq('id', showId).maybeSingle()
+      if (cancelled || !data) return
+      setShow(prev => mergeShowStateRow(prev, data, { keepNav: localNavRef.current }))
+    }
     const ch = supabase
       .channel(`show-state:${showId}`)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'shows', filter: `id=eq.${showId}` },
         (payload) => {
-          const row = payload.new
-          setShow(prev => {
-            if (!prev || prev.id !== row.id) return prev
-            return {
-              ...prev,
-              showState: {
-                // Skip nav fields during the 1.5s window after a local action to
-                // prevent our own echo from overwriting an already-updated index.
-                ...(localNavRef.current ? prev.showState : {
-                  ...prev.showState,
-                  currentSlideIndex: row.current_slide_index ?? prev.showState.currentSlideIndex,
-                  currentSlideId: row.current_slide_id ?? prev.showState.currentSlideId,
-                }),
-                isLive: row.is_live ?? prev.showState.isLive,
-                scoreboardVisible: row.scoreboard_visible ?? prev.showState.scoreboardVisible,
-                scoresRevealed: row.scores_revealed ?? prev.showState.scoresRevealed,
-                answerReveal: row.answer_reveal ?? prev.showState.answerReveal,
-              },
-            }
-          })
+          setShow(prev => mergeShowStateRow(prev, payload.new, { keepNav: localNavRef.current }))
         }
       )
-      .subscribe()
-    return () => supabase.removeChannel(ch)
+      .subscribe((status) => {
+        if (status !== 'SUBSCRIBED') return
+        if (subscribedBefore) resync()
+        subscribedBefore = true
+      })
+    const onWake = () => { if (document.visibilityState === 'visible') resync() }
+    document.addEventListener('visibilitychange', onWake)
+    window.addEventListener('online', resync)
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', onWake)
+      window.removeEventListener('online', resync)
+      supabase.removeChannel(ch)
+    }
   }, [show?.id])
 
   async function fetchShow(id, isCancelled = () => false) {

@@ -3,6 +3,7 @@ import { sortedSlides } from '../../hooks/useShow.js'
 import { getTheme, THEMES } from '../../themes/index.js'
 import { resolveShinyPart, isAudioShiny, isBendleShiny } from '../../lib/shinySeries.js'
 import ScorePanel from './ScorePanel.jsx'
+import FocusWarning from './FocusWarning.jsx'
 import LateTeamPopover from './LateTeamPopover.jsx'
 import { SELECTION_ANIMATIONS } from '../display/slides/selectionAnimations.js'
 import { supabase } from '../../lib/supabase.js'
@@ -1267,6 +1268,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 select-none">
+      <FocusWarning />
 
       {/* ── Top nav bar — three absolute zones ─────────────────────── */}
       <div className="relative shrink-0 h-14 bg-white border-b border-gray-100 flex items-center">

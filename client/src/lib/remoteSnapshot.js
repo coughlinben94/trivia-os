@@ -5,12 +5,36 @@
 //                  for every socket open so a restarted relay gets a snapshot
 // hostChipText   — the Live Mode chip's plain-English line
 import { slidePickerLabel } from './slidePickerLabel.js'
+import { resolveShinyPart } from './shinySeries.js'
+
+// The cue card: what Ben reads aloud, and the answer he checks a table's
+// shout against, on the iPad. Same source the laptop's Live Mode card reads
+// (resolveShinyPart), so both show the same part of a series. The answer
+// travels only over the private relay to the paired iPad, never Supabase,
+// and the iPad keeps it hidden until a finger is held down. Question slides
+// only; anything else sends null and the iPad shows no card.
+export function buildCard(slide) {
+  if (slide?.type !== 'question' || !slide.data) return null
+  const data = slide.data
+  const part = resolveShinyPart(data)
+  const multi = Array.isArray(data.parts) && data.parts.length > 1
+  const label = data.questionNumber != null ? (data.questionLabel || `Q${data.questionNumber}`) : null
+  return {
+    label,
+    text: part.text || '',
+    answer: part.answer || null,
+    subtitle: part.subtitle || null,
+    part: multi ? { i: Math.min(Math.max(data.currentPart ?? 0, 0), data.parts.length - 1), n: data.parts.length } : null,
+    isShiny: !!data.isShiny,
+  }
+}
 
 export function buildSnapshot({ slides, index, showState, cue, busy = false, paused = false }) {
   const slide = slides[index] ?? null
   return {
     type: 'state',
     slide: slide ? { index, total: slides.length, id: slide.id, label: slidePickerLabel(slide), type: slide.type } : null,
+    card: buildCard(slide),
     cue: cue.label, gate: cue.gate,
     upNext: slides.slice(index + 1, index + 3).map(s => ({ label: slidePickerLabel(s), type: s.type })),
     toggles: {
