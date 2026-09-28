@@ -1245,7 +1245,7 @@ export default function ParticleBackground({ theme, showId, slideIndex, stationO
           {gradientMood
             ? <BreathingGradient palette={theme.colors} mood={gradientMood} />
             : ringWorld
-              ? <RingAmbient worldData={ringWorld} slideIndex={slideIndex} stationOverride={stationOverride} showStationDebug={showStationDebug} forceSnap={forceSnap} />
+              ? <RingAmbient worldData={ringWorld} showId={showId} slideIndex={slideIndex} stationOverride={stationOverride} showStationDebug={showStationDebug} forceSnap={forceSnap} />
               : AmbientComponent && <AmbientComponent tint={tint} />}
         </ErrorBoundary>
         <Vignette

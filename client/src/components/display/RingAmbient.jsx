@@ -41,6 +41,7 @@ import { ringNavAction } from '../../lib/ringStationIndex.js'
 import { EASE_SURGE } from '../../lib/easings.js'
 import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, skyRegionHues, accentCompanionHue, applySkyTints, applyTints } from '../../lib/ringPrimitives.js'
 import { SLOTS } from '../../worlds/midnightGalaxy.slots.js'
+import { seedFrom } from '../../lib/paletteGenerator.js'
 
 // ENGINE — engine-fixed, identical for every world; never a prop (a world
 // never sets any of this, same as the reference build's own ENGINE const).
@@ -124,7 +125,7 @@ ${ringCss('ring-')}
 @media (prefers-reduced-motion:reduce){
   .ring-surge{transition:none!important}
   .ring-star,.ring-pf,.ring-pf-breathe,.ring-shoot{animation-play-state:paused!important}
-  .ring-drift{animation-play-state:paused!important}
+  .ring-drift,.ring-driftRun{animation-play-state:paused!important}
   .ring-rock-spin{animation-play-state:paused!important}
 }
 `
@@ -151,7 +152,7 @@ const dom = ringDom('ring-', ENGINE)
 // clock, with the region's own headline object visibly lighting it.
 
 // ═══ BUILD ═══ dispatches per-layer content building.
-function buildLayerContent(engine, world, arc, host, L) {
+function buildLayerContent(engine, world, arc, host, L, showId) {
   // 2026-09-02 palette-aware, synced with world-07-ring.html: region hues are
   // derived from the world's own station data, never read off SKY_REGIONS.
   const regionHues = skyRegionHues(world.stations)
@@ -225,8 +226,49 @@ function buildLayerContent(engine, world, arc, host, L) {
       // ported to this component. Confirmed safe: skipMinBleed only gates
       // the post-hoc clamp, not bandY's own two rng() draws, so nothing
       // else in the seeded sequence shifts.
-      drift.style.top = px(dom.bandY(dr, ds, undefined, undefined, true))
-      host.appendChild(drift)
+      const top = dom.bandY(dr, ds, undefined, undefined, true)
+      if (showId == null) {
+        // No show identity (demo/preview paths): today's fixed path, the
+        // plain .drift keyframe, unchanged.
+        drift.style.top = px(top)
+        host.appendChild(drift)
+      } else {
+        // 2026-09-28 per-show journey (Ben: "fast sometimes, slow sometimes,
+        // different angles of flow, vertical instead of horizontal") —
+        // seeded from showId, recomputed every mount, never stored. Start
+        // point (left/top above) is unchanged; only the journey varies. See
+        // ringPrimitives.js's .driftRun block for the two-motion mechanism.
+        //
+        // Vertical room, derived from the real placement rather than
+        // hardcoded so a bandY reseed can't silently break it. GLOW = the
+        // box-shadow reach (blur 32 + spread 10), same figure the .drift
+        // comment's clearance math uses. At top=102.7: up at most 56.7px
+        // (glow keeps 4px on-frame — Ben's old "clipped at the top"), down
+        // at most 119.7px (glow's outer edge stays 24px clear of the safe
+        // box's top edge, 302.4px). That ~176px band is the entire vertical
+        // freedom this dot has, which is why "vertical" here means a steep
+        // local swing, not a sustained vertical flow — a real vertical path
+        // would run straight through the safe box.
+        const GLOW = 42
+        const upMax = top - GLOW - 4
+        const downMax = engine.SAFE.y * engine.H - 24 - GLOW - ds - top
+        const r = rng(seedFrom(String(showId)), 0xD817)
+        const dir = r() < 0.5 ? -1 : 1
+        const vx = lerp(18, 60, r()) // px/s sideways; old fixed path was 30
+        const by = r() < 0.7 ? lerp(0.35, 1, r()) * downMax : -lerp(0.6, 1, r()) * upMax
+        const bobS = lerp(4, 14, r()) // one half-swing, seconds
+        const run = dom.el('driftRun')
+        run.style.left = drift.style.left
+        run.style.top = px(top)
+        run.style.setProperty('--drx', px(dir * 3600))
+        run.style.setProperty('--drd', (3600 / vx).toFixed(2) + 's')
+        drift.style.left = ''
+        drift.classList.add('ring-drift-bob')
+        drift.style.setProperty('--dby', px(by))
+        drift.style.setProperty('--dbd', bobS.toFixed(2) + 's')
+        run.appendChild(drift)
+        host.appendChild(run)
+      }
     }
   }
 
@@ -652,7 +694,7 @@ export const RING_RETURN = 'return'
 // stations: [PANES x {key,prim,hue,accent}] } — see concepts/world-07-ring.html's
 // own WORLD literal. qColours is accepted but unused here (question-colour
 // styling belongs to the out-of-scope question-rendering system).
-const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, stationOverride, showStationDebug = false, forceSnap = false, exposeDebugGlobal = true }, ref) {
+const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, stationOverride, showStationDebug = false, forceSnap = false, exposeDebugGlobal = true, showId }, ref) {
   // The ground behind the stage. Was a hardcoded '#01010a' — a blue-black
   // tuned to the purple world, which stayed blue-black under every recolour.
   // The sky ramp's terminal stop is the same near-black, already generated
@@ -745,7 +787,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
       // author one period, then repeat it m+1 times. The extra copy covers
       // the window that hangs past the cylinder just before it wraps.
       const proto = dom.el(''); proto.style.position = 'absolute'; proto.style.inset = '0'
-      buildLayerContent(ENGINE, worldData, arc, proto, L)
+      buildLayerContent(ENGINE, worldData, arc, proto, L, showId)
       for (let k = 0; k <= L.m; k++) {
         const copy = k === 0 ? proto : proto.cloneNode(true)
         copy.style.position = 'absolute'

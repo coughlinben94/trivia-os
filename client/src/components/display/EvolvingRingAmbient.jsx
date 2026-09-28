@@ -54,7 +54,7 @@ function worldForDuo(duoId) {
 // comment) fixes the camera to the correct station before first paint
 // instead. useLayoutEffect (not useEffect) so it lands before the browser
 // ever paints this instance's initial station-0 build.
-function SyncedRingAmbient({ worldData, slideIndex, stationOverride, showStationDebug, forceSnap, exposeDebugGlobal }) {
+function SyncedRingAmbient({ worldData, showId, slideIndex, stationOverride, showStationDebug, forceSnap, exposeDebugGlobal }) {
   const ref = useRef(null)
   useLayoutEffect(() => {
     ref.current?.jumpTo(slideIndex)
@@ -62,7 +62,7 @@ function SyncedRingAmbient({ worldData, slideIndex, stationOverride, showStation
   }, [])
   return (
     <RingAmbient
-      ref={ref} worldData={worldData} slideIndex={slideIndex}
+      ref={ref} worldData={worldData} showId={showId} slideIndex={slideIndex}
       stationOverride={stationOverride} showStationDebug={showStationDebug} forceSnap={forceSnap}
       exposeDebugGlobal={exposeDebugGlobal}
     />
@@ -168,7 +168,7 @@ export default function EvolvingRingAmbient({ showId, slideIndex, stationOverrid
         return (
           <DuoLayer key={duo} role={role}>
             <SyncedRingAmbient
-              worldData={worldForDuo(duo)} slideIndex={slideIndex}
+              worldData={worldForDuo(duo)} showId={showId} slideIndex={slideIndex}
               stationOverride={stationOverride} showStationDebug={showStationDebug} forceSnap={forceSnap}
               exposeDebugGlobal={role === 'current'}
             />

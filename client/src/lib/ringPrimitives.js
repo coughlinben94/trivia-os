@@ -3976,7 +3976,7 @@ function kfName(prefix, camelName) {
 
 export function ringCss(prefix) {
   const p = prefix
-  const tw = kfName(p, 'Tw'), pfBreathe = kfName(p, 'PfBreathe'), driftMove = kfName(p, 'DriftMove'), rockSpin = kfName(p, 'RockSpin'), shootGo = kfName(p, 'ShootGo')
+  const tw = kfName(p, 'Tw'), pfBreathe = kfName(p, 'PfBreathe'), driftMove = kfName(p, 'DriftMove'), driftRun = kfName(p, 'DriftRun'), driftBob = kfName(p, 'DriftBob'), rockSpin = kfName(p, 'RockSpin'), shootGo = kfName(p, 'ShootGo')
   return `
 .${p}lyr{position:absolute;inset:0;overflow:hidden}
 .${p}surge{position:absolute;left:0;top:0;width:100%;height:100%;
@@ -4076,6 +4076,31 @@ export function ringCss(prefix) {
   83.333%{transform:translate(3000px,-47.6px)}
   91.667%{transform:translate(3300px,-27.5px)}
   100%{transform:translate(3600px,0)}}
+
+/* 2026-09-28, Ben: the drifter took the identical path every show for weeks
+   (fixed seed, one shared keyframe) — "why can't it move fast sometimes,
+   slow sometimes, different angles of flow, vertical instead of horizontal".
+   Per-show variant, opt-in: RingAmbient only uses it when it has a showId;
+   without one it builds the plain .drift above, untouched, so every caller
+   that doesn't pass showId (and world-07-ring.html) renders exactly as
+   before. Same per-instance custom-property pattern as .shoot's --sw/--sdu.
+   Two nested motions instead of one keyframe: .driftRun (wrapper) slides
+   ONLY along x, linear; .drift.drift-bob (the dot) swings ONLY along y,
+   ease-in-out alternate — a smooth rounded wave, "even rounded paths" kept.
+   Their two independent periods set the local angle of travel: slow run +
+   quick bob reads near-vertical, fast run + lazy bob reads as a flat glide.
+   Why not the .shootRot rotate-wrapper for angle: a rotated 3600px run moves
+   vertically by 3600*sin(angle), and this dot's whole vertical room is the
+   ~176px band between the frame top and the safe box (see RingAmbient's
+   drifter block for the numbers) — anything past ~2 degrees of sustained
+   tilt would cross the safe box. The y range is exactly [0, --dby] because
+   ease-in-out never overshoots and x-only motion can't move y, so the
+   safe-box bound is checkable per show in closed form. Both start at 0, so
+   a currentTime=0 freeze still sees the untranslated start point. */
+.${p}driftRun{position:absolute;animation:${driftRun} var(--drd) linear infinite alternate}
+@keyframes ${driftRun}{from{transform:translateX(0)}to{transform:translateX(var(--drx))}}
+.${p}drift.${p}drift-bob{left:0;top:0;animation:${driftBob} var(--dbd) ease-in-out infinite alternate}
+@keyframes ${driftBob}{from{transform:translateY(0)}to{transform:translateY(var(--dby))}}
 
 .${p}rock-spin{animation:${rockSpin} var(--rd) linear infinite}
 @keyframes ${rockSpin}{from{transform:rotate(var(--r0))}to{transform:rotate(calc(var(--r0) + var(--rspin)))}}

@@ -110,7 +110,7 @@ export default function AmbientAudit() {
   if (ringMode) {
     return (
       <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
-        <RingAmbient ref={ringRef} worldData={ringWorldData} />
+        <RingAmbient ref={ringRef} worldData={ringWorldData} showId={params.get('showId') ?? undefined} />
         <div style={{ position: 'absolute', top: 24, left: 24, zIndex: 30, display: 'flex', gap: 10, alignItems: 'center' }}>
           <button
             onClick={() => {
