@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { reusableRoundId } from '../../lib/showDefaults.js'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import HostHeader from './HostHeader.jsx'
 import RoundSidebar from './RoundSidebar.jsx'
@@ -427,7 +428,8 @@ export default function BuildMode({ show, actions, onGoLive, onReturnToLive, onO
   // text-entry paths AND the shiny hand-off path below (onGoShiny) — a round
   // must exist before opening AddSlideWizard pre-scoped to it either way.
   async function ensureRound(roundId, { roundType, title }) {
-    if (roundId) return roundId
+    const reuse = reusableRoundId(roundId, show?.rounds, roundType)
+    if (reuse) return reuse
     const round = await actions.addRound({ roundType, title, subtitle: '' })
     setActiveRoundId(round.id)
     return round.id

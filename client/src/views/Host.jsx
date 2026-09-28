@@ -10,6 +10,7 @@ import LiveMode from '../components/host/LiveMode.jsx'
 import ScoreboardModal from '../components/host/ScoreboardModal.jsx'
 import HostPinGate from '../components/host/HostPinGate.jsx'
 import { EASE_OUT } from '../lib/easings.js'
+import { localDateString } from '../lib/showDefaults.js'
 import { initialLiveMode, goLiveAction } from '../lib/goLive.js'
 
 // ─── Show Picker ─────────────────────────────────────────────────────────────
@@ -52,7 +53,7 @@ function ShowPicker({ loadShow, listShows, createShow }) {
   async function handleNew() {
     setWorking('new')
     setError(null)
-    const today = new Date().toISOString().slice(0, 10)
+    const today = localDateString()
     try {
       await createShow('New Show', today, null)
     } catch (e) {
