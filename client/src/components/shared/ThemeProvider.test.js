@@ -47,3 +47,16 @@ describe('applyOverrides — ringWorld round-trip (regression: a drawn-world pic
     expect(world.stations.map(s => s.key)).toEqual(swappedKeys)
   })
 })
+
+describe('applyOverrides — colorEvolution', () => {
+  it('applyOverrides carries colorEvolution through, undefined when absent', () => {
+    const base = getTheme('midnight-galaxy')
+    const withFlag = applyOverrides(base, { colorEvolution: true })
+    expect(withFlag.colorEvolution).toBe(true)
+    const without = applyOverrides(base, {})
+    expect(without.colorEvolution).toBeUndefined()
+    // Non-empty overrides take the merge branch — must still default to undefined.
+    const otherOverride = applyOverrides(base, { fonts: {} })
+    expect(otherOverride.colorEvolution).toBeUndefined()
+  })
+})

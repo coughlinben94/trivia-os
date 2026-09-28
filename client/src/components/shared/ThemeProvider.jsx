@@ -48,6 +48,7 @@ export function applyOverrides(baseTheme, overrides) {
         // this merged object.
         worldPalette: overrides?.worldPalette ?? undefined,
         ringWorld: overrides?.ringWorld ?? undefined,
+        colorEvolution: overrides?.colorEvolution ?? undefined,
       }
   const flooredColors = floorReadableColors(merged.colors)
   return flooredColors === merged.colors ? merged : { ...merged, colors: flooredColors }
