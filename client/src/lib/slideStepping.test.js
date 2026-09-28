@@ -885,3 +885,35 @@ describe('chunkParts', () => {
     }
   })
 })
+
+describe('computeNextStep re-entry of scored slides', () => {
+  const choice = (extra = {}) => slide('b', 1, 'question', { isShiny: true, shinyInputSchema: { type: 'choice' }, ...extra })
+
+  it('Prev then Next on a locked+revealed choice slide keeps it locked and revealed', async () => {
+    const slides = [slide('a', 0), choice({ choiceLocked: true, choiceRevealed: true })]
+    const back = await computePrevStep({ slides, currentSlideIndex: 1 }, noTeams)
+    expect(dataOf(back, 'b').choiceLocked).toBe(true)
+    const fwd = await computeNextStep({ slides: back.slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(fwd.current_slide_index).toBe(1)
+    expect(dataOf(fwd, 'b').choiceLocked).toBe(true)
+    expect(dataOf(fwd, 'b').choiceRevealed).toBe(true)
+  })
+
+  it('still resets a stale locked-but-unrevealed flag on fresh entry', async () => {
+    const slides = [slide('a', 0), choice({ choiceLocked: true })]
+    const fwd = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(dataOf(fwd, 'b').choiceLocked).toBe(false)
+  })
+
+  it('keeps Flip Em Down elimStep and horse race raceStartedAt on re-entry', async () => {
+    const slides = [
+      slide('a', 0),
+      slide('f', 1, 'flip-em-down', { elimStep: 2 }),
+      slide('h', 2, 'horse-race', { raceStartedAt: 123 }),
+    ]
+    const toF = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(dataOf(toF, 'f').elimStep).toBe(2)
+    const toH = await computeNextStep({ slides, currentSlideIndex: 1, currentSlideId: 'f' }, noTeams)
+    expect(dataOf(toH, 'h').raceStartedAt).toBe(123)
+  })
+})
