@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { isShinySeriesSibling, reorderWithinRound } from '../../lib/shinySeries.js'
 import { roundLabel } from '../../lib/scoreboardMath.js'
@@ -559,6 +559,7 @@ export default function RoundSidebar({
                             rowFor(slide, idx, {
                               key: `${slide.id}:${i}`,
                               doubleIndent: true,
+                              noDelete: true, // part row: delete would remove the whole slide
                               labelOverride: shinySiblingLabel(slide, i + 1, parts.length),
                               selected: activePart === i,
                               onSelect: () => onSelectPart(slide, i),
@@ -605,6 +606,7 @@ export default function RoundSidebar({
                           {parts.map((_, i) => rowFor(slide, idx, {
                             key: `${slide.id}:${i}`,
                             doubleIndent: true,
+                            noDelete: true,
                             labelOverride: shinySiblingLabel(slide, i + 1, parts.length),
                             selected: activePart === i,
                             onSelect: () => onSelectPart(slide, i),
@@ -674,7 +676,15 @@ export default function RoundSidebar({
   )
 }
 
-function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, onDelete, onGripDown, indent, doubleIndent, groupCount, groupExpanded, onToggleGroup, labelOverride, leadPartLabel }) {
+function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, onDelete, onGripDown, indent, doubleIndent, groupCount, groupExpanded, onToggleGroup, labelOverride, leadPartLabel, noDelete }) {
+  const [confirming, setConfirming] = useState(false)
+  const timerRef = useRef(null)
+  useEffect(() => () => clearTimeout(timerRef.current), [])
+  function askConfirm() {
+    setConfirming(true)
+    clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => setConfirming(false), 4000)
+  }
   const meta  = SLIDE_TYPE_META[slide.type] ?? { icon: '📄', label: slide.type }
   const icon  = slide.data?.isShiny ? (slide.data?.shinyFormatIcon || meta.icon) : meta.icon
   const label = labelOverride ?? slideLabel(slide)
@@ -719,13 +729,27 @@ function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, 
           {leadPartLabel ?? groupCount}
         </span>
       )}
-      <button
-        onClick={e => { e.stopPropagation(); onDelete() }}
-        className="text-[11px] opacity-0 group-hover:opacity-100 shrink-0 transition-opacity w-4 h-4 flex items-center justify-center rounded text-gray-400 hover:text-red-500"
-        title="Delete slide"
-      >
-        ✕
-      </button>
+      {noDelete ? null : confirming ? (
+        <>
+          <button
+            onClick={e => { e.stopPropagation(); clearTimeout(timerRef.current); setConfirming(false); onDelete() }}
+            className="text-[10px] font-semibold text-red-500 px-1 hover:text-red-700 host-button shrink-0"
+            title="Confirm delete"
+          >Delete?</button>
+          <button
+            onClick={e => { e.stopPropagation(); clearTimeout(timerRef.current); setConfirming(false) }}
+            className="text-[10px] text-gray-400 px-1 hover:text-gray-600 host-button shrink-0"
+          >No</button>
+        </>
+      ) : (
+        <button
+          onClick={e => { e.stopPropagation(); askConfirm() }}
+          className="text-[11px] opacity-0 group-hover:opacity-100 shrink-0 transition-opacity w-4 h-4 flex items-center justify-center rounded text-gray-400 hover:text-red-500"
+          title="Delete slide"
+        >
+          ✕
+        </button>
+      )}
     </div>
   )
 }
