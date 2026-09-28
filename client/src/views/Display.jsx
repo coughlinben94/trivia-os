@@ -576,14 +576,14 @@ function AnswerRevealOverlay({ show, currentSlide }) {
             }}
           >
             <p
-              className="text-sm font-semibold uppercase tracking-widest mb-5"
-              style={{ color: theme.colors.accent, opacity: 0.7 }}
+              className="font-semibold uppercase tracking-widest mb-5"
+              style={{ color: theme.colors.text, fontSize: '1.4rem' }}
             >
               Answer
             </p>
             <p
               style={{
-                color: theme.colors.accent,
+                color: theme.colors.text,
                 fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`,
                 fontSize: 'clamp(2rem, 5vw, 4.5rem)',
                 lineHeight: 1.15,

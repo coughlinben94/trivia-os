@@ -155,6 +155,13 @@ textarea {
   100% { opacity: 0;   transform: scale(1.5); }
 }
 
+/* Reduced motion: drop the full-screen white flash and glow burst outright
+   (animation:none alone would strand the flash fully opaque). */
+@media (prefers-reduced-motion: reduce) {
+  .shiny-flash { animation: none !important; display: none !important; }
+  [style*="shinyGlow"] { animation: none !important; display: none !important; }
+}
+
 /* ─── Display: waveform bars ─── */
 @keyframes waveformBar {
   0%, 100% { transform: scaleY(0.15); }

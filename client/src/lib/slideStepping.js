@@ -379,6 +379,15 @@ export const PHONE_MECHANICS = {
   huesCues: { guard: isHuesCuesShiny, lockFields: ['huesCuesLocked'], revealField: 'huesCuesRevealed' },
 }
 
+// True when a slide already finished a phone-scored round (every lock field
+// AND the reveal flag set). elimStep/raceStartedAt are deliberately NOT
+// protected: withEntryState resets those on fresh entry (stale rehearsals).
+function isScoredOrStarted(slide) {
+  const d = slide?.data
+  if (!d) return false
+  return Object.values(PHONE_MECHANICS).some(m => m.lockFields.every(f => d[f]) && d[m.revealField])
+}
+
 // Wager is the only mechanic with TWO lock phases on one slide (blind tiers
 // first, then the numeric guesses once the question is out), so it gets
 // checked in that order and returns null only when both are shut.
@@ -550,7 +559,13 @@ export async function computeNextStep(show, fetchTeamCount) {
   // plain slide" branch above.
   const targetSlide = sorted[target]
   const bakedSlides = await bakeTeamPickerParts(slides, targetSlide, fetchTeamCount)
-  const newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === targetSlide?.id) ?? targetSlide, { currentPart: 0 })
+  const resolvedNext = bakedSlides.find(s => s.id === targetSlide?.id) ?? targetSlide
+  // Walking Prev then Next lands back on a question that was already scored
+  // . That's a re-entry:
+  // keep its state so the room's answers aren't reopened. Only fully
+  // locked+revealed slides are protected — a half-finished rehearsal
+  // leftover still gets the fresh-entry reset.
+  const newSlides = withEntryState(bakedSlides, resolvedNext, { currentPart: 0, protectInProgress: isScoredOrStarted(resolvedNext) })
   return {
     slides: newSlides,
     current_slide_index: target,

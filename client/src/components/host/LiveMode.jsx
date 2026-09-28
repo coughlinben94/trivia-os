@@ -464,6 +464,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         .from('phone_answers')
         .select('team_id, answer, submitted_at')
         .eq('slide_id', slide.id)
+        .eq('show_id', show.id)
       if (fetchError) { console.error('phone_answers fetch failed:', fetchError); setError('Scoring failed — check connection and retry'); return }
       const answers = rawAnswers?.filter(a => !a.submitted_at || a.submitted_at <= lockedAt) ?? []
       const lateCount = (rawAnswers?.length ?? 0) - answers.length
@@ -710,6 +711,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         .from('phone_answers')
         .select('team_id, answer, submitted_at')
         .eq('slide_id', slide.id)
+        .eq('show_id', show.id)
       if (error) { console.error('phone_answers fetch failed:', error); setWagerError('Couldn’t read wagers — check connection and retry'); return }
       const answers = rawAnswers?.filter(a => !a.submitted_at || a.submitted_at <= lockedAt) ?? []
       const lateCount = (rawAnswers?.length ?? 0) - answers.length

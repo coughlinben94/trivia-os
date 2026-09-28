@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase.js'
 import { DEFAULT_THEME_ID } from '../themes/index.js'
 import { deriveRoundCols, computeTotal, roundScoreTotal } from '../lib/scoreboardMath.js'
 import { renumberRoundQuestions } from '../lib/questionNumbering.js'
+import { createPendingCounter } from '../lib/pendingWrites.js'
 import { trackWrite } from '../lib/writeTracking.js'
 import { mergeShowStateRow, SHOW_STATE_COLUMNS } from '../lib/showStateMerge.js'
 import { HOST_PHOTOS_BUCKET, listHostPhotos } from '../lib/hostPhotos.js'
@@ -109,6 +110,10 @@ export function useShow() {
   // one (ordinary network jitter), it silently overwrites newer data with older.
   // Chaining onto the prior write guarantees they complete in schedule order.
   const slidesSaveChainRef = useRef(Promise.resolve())
+  // Unsaved-slides tracking for the beforeunload guard: one unit while a
+  // debounce timer is armed, one per chained write until it lands.
+  const pendingSaves = useRef(createPendingCounter())
+  const debounceArmedRef = useRef(false)
 
   // Guards realtime echo from clobbering optimistic slide-index updates. Set for
   // 1.5s after any local navigation action — long enough to outlast the echo.
@@ -124,6 +129,19 @@ export function useShow() {
     slidesRef.current = show?.slides ?? []
     showIdRef.current = show?.id ?? null
   }, [show])
+
+  // Warn before closing the tab while a slides save is pending, and kick the
+  // write off now (best effort; the prompt gives it time to land).
+  useEffect(() => {
+    function onBeforeUnload(e) {
+      if (pendingSaves.current.count === 0) return
+      flushSlides()
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // On mount, restore the last active show.
   // Cancel flag prevents a Strict Mode double-invocation from letting a
@@ -457,7 +475,9 @@ export function useShow() {
       return { ...prev, slides: newSlides }
     })
     clearTimeout(debounceTimers.current['slides'])
+    if (!debounceArmedRef.current) { debounceArmedRef.current = true; pendingSaves.current.begin() }
     debounceTimers.current['slides'] = setTimeout(() => {
+      debounceArmedRef.current = false
       // Read slidesRef.current inside the chained callback (not here) so a write
       // that had to wait its turn still sends whatever is truly latest at send
       // time, not a stale snapshot from when its timer fired.
@@ -471,7 +491,7 @@ export function useShow() {
       // throwing), so this is defense against a future change, not a live bug.
       slidesSaveChainRef.current = slidesSaveChainRef.current.then(() =>
         updateShowRow(showIdRef.current, { slides: slidesRef.current })
-      ).catch(() => {})
+      ).catch(() => {}).finally(() => pendingSaves.current.end())
     }, 600)
   }
 
@@ -493,9 +513,11 @@ export function useShow() {
   // already relies on, so this can't race a write that's already in flight.
   function flushSlides() {
     clearTimeout(debounceTimers.current['slides'])
+    pendingSaves.current.begin()
+    if (debounceArmedRef.current) { debounceArmedRef.current = false; pendingSaves.current.end() }
     const run = slidesSaveChainRef.current.then(() =>
       updateShowRow(showIdRef.current, { slides: slidesRef.current })
-    )
+    ).finally(() => pendingSaves.current.end())
     // Same poisoned-chain guard as the debounced path above — the ref stores
     // the CAUGHT version so a rejection can't kill every later save, while
     // the caller still gets the real (uncaught) `run` to await/inspect.

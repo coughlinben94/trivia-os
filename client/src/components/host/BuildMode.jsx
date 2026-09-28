@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { reusableRoundId } from '../../lib/showDefaults.js'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import HostHeader from './HostHeader.jsx'
 import RoundSidebar from './RoundSidebar.jsx'
@@ -309,7 +310,7 @@ function PylMenuBox({ button, open, onClose, onSetup, onLotto, onThemePicker }) 
   )
 }
 
-export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOpenScoreboard }) {
+export default function BuildMode({ show, actions, onGoLive, onReturnToLive, onOpenLibrary, onOpenScoreboard }) {
   // Preloaded on dashboard mount (not on modal open) so FormatLibrary and
   // AddSlideWizard never show a blank-then-pop-in flash, and both share one
   // fetch instead of each running its own.
@@ -427,7 +428,8 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
   // text-entry paths AND the shiny hand-off path below (onGoShiny) — a round
   // must exist before opening AddSlideWizard pre-scoped to it either way.
   async function ensureRound(roundId, { roundType, title }) {
-    if (roundId) return roundId
+    const reuse = reusableRoundId(roundId, show?.rounds, roundType)
+    if (reuse) return reuse
     const round = await actions.addRound({ roundType, title, subtitle: '' })
     setActiveRoundId(round.id)
     return round.id
@@ -668,6 +670,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
         show={show}
         onUpdateMeta={actions.updateShowMeta}
         onGoLive={onGoLive}
+        onReturnToLive={onReturnToLive}
         onExport={actions.exportShow}
         onSyncArchive={actions.syncArchive}
         onOpenLibrary={onOpenLibrary}
