@@ -26,6 +26,7 @@ import { isConcurrentShiny, isConcurrentMediaShiny } from '../../lib/shinySeries
 import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 import { sortSlides } from '../../lib/slideStepping.js'
 import { computeWinner, formatWinnerLine } from '../../lib/raceMath.js'
+import { mergeWalkoutClip } from '../../lib/walkoutClip.js'
 import { cleanPastedText } from '../../lib/cleanPaste.js'
 
 export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, onDeleteSlide, uploadMedia, getHostPhotos }) {
@@ -2296,7 +2297,7 @@ function PreShowEditor({ data, onChange }) {
       </p>
       <YoutubeClipEditor
         value={data.walkoutSong ?? null}
-        onChange={clip => onChange('walkoutSong', clip)}
+        onChange={clip => onChange('walkoutSong', mergeWalkoutClip(data.walkoutSong, clip))}
       />
     </div>
   )
@@ -2327,7 +2328,7 @@ function StateOfUnionEditor({ data, onChange, getHostPhotos, uploadMedia, usedPh
       </p>
       <YoutubeClipEditor
         value={data.walkoutSong ?? null}
-        onChange={clip => onChange('walkoutSong', clip)}
+        onChange={clip => onChange('walkoutSong', mergeWalkoutClip(data.walkoutSong, clip))}
       />
     </>
   )
