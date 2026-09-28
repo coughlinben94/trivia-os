@@ -21,7 +21,7 @@
 // doesn't qualify. `strength` (roughly 0..1) says how remarkable it is and is
 // only used to pick the 3 shown in Auto mode.
 // ponytail: strength formulas are hand-tuned guesses, retune after a few real nights.
-import { deriveRoundCols, roundScoreTotal, computePlaces, pickableTeams } from './scoreboardMath.js'
+import { deriveRoundCols, roundScoreTotal, computePlaces, pickableTeams, normalizeRoundScore } from './scoreboardMath.js'
 import { ordinal } from './roundClimbers.js'
 
 export const AWARD_POOL = [
@@ -74,11 +74,20 @@ function rankBy(list, key) {
 
 const award = (id, teamNames, statLine, strength) => ({ id, title: TITLE[id], teamNames, statLine, strength })
 
+// A plain number (even 0) is a typed score. The { written, phone } shape with
+// written 0 is the phone fold-in's placeholder before any written score exists.
+const isWritten = raw => raw == null || typeof raw !== 'object' || normalizeRoundScore(raw).written !== 0
+
 // Everything the awards read, computed once.
 function buildBoard(show, teams) {
   const cols = deriveRoundCols(show ?? {}).filter(c => c.key !== 'bonus')
   const named = pickableTeams(teams ?? []).map(t => ({ id: t.id ?? t.name, name: t.name.trim(), scores: t.scores ?? {} }))
-  const played = cols.filter(c => named.some(t => hasScore(t.scores, c.key)))
+  // A round counts once someone has WRITTEN points in it. The phone fold-in
+  // writes { written: 0, phone } into the round as each phone question is
+  // revealed, long before Ben types the written scores; counting that as a
+  // played round would rank everyone on phone points alone and, with the
+  // slide freezing on its first awards, lock that in.
+  const played = cols.filter(c => named.some(t => hasScore(t.scores, c.key) && isWritten(t.scores[c.key])))
   const field = named
     .filter(t => played.some(c => hasScore(t.scores, c.key)))
     .map(t => {
@@ -162,6 +171,8 @@ function mostConsistent(b) {
 // Run of rounds ending now, every one in the top 3, each place the same or
 // better than the round before.
 function hotStreak(b) {
+  // Top 3 means nothing on a tiny board.
+  if (b.field.length < 4) return null
   const n = b.snaps.length
   const cands = b.field.map(t => {
     const p = b.snaps.map(s => s.get(t.id))
@@ -213,6 +224,7 @@ function wireToWire(b) {
 function bruisedApple(b) {
   if (b.field.length < 3) return null
   const last = Math.max(...b.field.map(t => b.now.get(t.id)))
+  if (last === 1) return null // everyone tied for first: nobody is last
   const names = b.field.filter(t => b.now.get(t.id) === last).map(t => t.name)
     .sort((x, y) => x.localeCompare(y)).slice(0, MAX_NAMES)
   return award('bruised-apple', names, `${ordinal(last)} place. Bruised, not beaten.`, 0)

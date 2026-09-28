@@ -21,7 +21,6 @@ const SLIDE_ICON = {
   'pre-show': '📱',
   'title': '🇺🇸', 'state-of-union': '🇺🇸', 'rules': '🚨', 'round-intro': '🎬', 'swing-round-intro': '🎷',
   'question': '❓', 'grading-break': '⏸️', 'scoreboard-reveal': '🏆', 'biggest-climbers': '📈', 'awards': '🏅',
-  'question': '❓', 'grading-break': '⏸️', 'scoreboard-reveal': '🏆', 'biggest-climbers': '📈',
   'last-call': '🔔',
   'custom': '✏️', 'pixelate-series': '🎨', 'multi-question': '📋', 'pyl-reveal': '🎰',
   'winner-reveal': '🥇', 'team-preview': '👥', 'team-picker': '🚀', 'shiny-title': '✨',

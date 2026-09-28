@@ -354,3 +354,33 @@ describe('nightAwards (slide entry point)', () => {
     expect(nightAwards(show, [], undefined)).toEqual([])
   })
 })
+
+describe('computeAwards: phone-only rounds and degenerate boards', () => {
+  const rounds = ['a', 'b', 'c', 'd'].map((id, i) => ({ id, number: i + 1, roundNumber: i + 1 }))
+  const show = { rounds, slides: [] }
+  const t = (name, ...vals) => ({ id: name, name, scores: Object.fromEntries(vals.map((v, i) => [`r_${'abcd'[i]}`, v])) })
+
+  it('does not count a round that only has phone points so far', () => {
+    const teams = [
+      t('A', 10, 10, 10), t('B', 9, 8, 9), t('C', 7, 8, 6), t('D', 5, 4, 5),
+    ].map((x, i) => ({ ...x, scores: { ...x.scores, r_d: { written: 0, phone: { s1: [30, 0, 0, 0][i] } } } }))
+    const withPhone = computeAwards(show, teams)
+    const without = computeAwards(show, teams.map(x => ({ ...x, scores: { r_a: x.scores.r_a, r_b: x.scores.r_b, r_c: x.scores.r_c } })))
+    expect(withPhone).toEqual(without)
+  })
+
+  it('counts the round once written points are entered', () => {
+    const teams = [t('A', 10, 10, 10, 1), t('B', 9, 8, 9, 20), t('C', 7, 8, 6, 2), t('D', 5, 4, 5, 3)]
+    expect(computeAwards(show, teams).length).toBeGreaterThan(0)
+  })
+
+  it('gives no Hot Streak on a board of three', () => {
+    const teams = [t('A', 10, 10, 10), t('B', 9, 8, 9), t('C', 7, 8, 6)]
+    expect(computeAwards(show, teams).find(a => a.id === 'hot-streak')).toBeUndefined()
+  })
+
+  it('gives no Bruised Apple when everyone is tied for first', () => {
+    const teams = [t('A', 5, 5, 5), t('B', 5, 5, 5), t('C', 5, 5, 5), t('D', 5, 5, 5)]
+    expect(computeAwards(show, teams, { bruisedApple: true }).find(a => a.id === 'bruised-apple')).toBeUndefined()
+  })
+})
