@@ -12,6 +12,7 @@ import ScoreboardOverlay from '../components/display/ScoreboardOverlay.jsx'
 import LockCountdownOverlay from '../components/display/LockCountdownOverlay.jsx'
 import JukeboxBreakOverlay from '../components/display/JukeboxBreakOverlay.jsx'
 import WarpTransition from '../components/display/WarpTransition.jsx'
+import LastCallOverlay from '../components/display/LastCallOverlay.jsx'
 import { RING_RETURN } from '../components/display/RingAmbient.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import StageFrame from '../display/StageFrame.jsx'
@@ -1225,6 +1226,13 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
   )
 }
 
+// Dev-only demo trigger: nonce changes after mount, same as a real L press.
+function DemoLastCall() {
+  const [nonce, setNonce] = useState(0)
+  useEffect(() => { setNonce(1) }, [])
+  return <LastCallOverlay showId="demo" nonce={nonce} />
+}
+
 // ─── Root ──────────────────────────────────────────────────────────────────
 
 export default function Display() {
@@ -1831,6 +1839,8 @@ export default function Display() {
           direction={1}
           onBreakAdvance={() => {}}
         />
+        {/* Dev-only: /display?demo=1&lastcall fires the Last Call sign once. */}
+        {import.meta.env.DEV && searchParams.has('lastcall') && <DemoLastCall />}
       </ThemeProvider>
     )
   }
@@ -1913,6 +1923,12 @@ export default function Display() {
         ) : (
           <PreShowScreen show={show} onInstall={canInstall ? handleInstall : null} />
         )}
+        {/* Last Call sign: fixed z-75 — above the jukebox overlay (z-70),
+            below the warp (z-80) and the nav-denied banner (z-200). Its own
+            boundary: a crash here must never take the TV down. */}
+        <ErrorBoundary fallback={null}>
+          <LastCallOverlay showId={show.id} nonce={show.special_event?.lastCall} />
+        </ErrorBoundary>
         <NavDeniedBanner visible={navDenied} />
         <ConnLostBadge visible={connLost} />
         {pinOpen && (

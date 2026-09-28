@@ -17,6 +17,7 @@ import { computeHorseRaceScoreUpdates, DEFAULT_RACE_POINTS } from '../../lib/rac
 import { HUES_CUES_CODE_RE } from '../../lib/huesCuesGrid.js'
 import { nextPressGate } from '../../lib/nextPressCue.js'
 import { planHostCommand } from '../../lib/hostCommands.js'
+import { canTriggerLastCall, LAST_CALL_MS } from '../../lib/lastCall.js'
 import { useRemoteLink } from '../../hooks/useRemoteLink.js'
 import { buildSnapshot, hostChipText } from '../../lib/remoteSnapshot.js'
 import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, unlockPatch, PHONE_MECHANICS, REVEAL_FIELD, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
@@ -1218,6 +1219,24 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     }),
   })
 
+  // Last Call (L key / 🔔 button). Not a planHostCommand command: keyboard +
+  // button only, no remote, no slide state involved. A second press while
+  // the sign is still up (LAST_CALL_MS) is ignored rather than restarting it.
+  // Like S, the key is ignored while a host modal is open; the button isn't.
+  const lastCallAtRef = useRef(null)
+  const [lastCallLive, setLastCallLive] = useState(false)
+  function fireLastCall({ fromKey = false } = {}) {
+    if (fromKey && (scorePanelOpen || themePickerOpen || scoreboardModalOpen)) return
+    const now = Date.now()
+    if (!canTriggerLastCall(lastCallAtRef.current, now)) return
+    lastCallAtRef.current = now
+    setLastCallLive(true)
+    setTimeout(() => setLastCallLive(false), LAST_CALL_MS)
+    actions.triggerLastCall?.()
+  }
+  const fireLastCallRef = useRef(fireLastCall)
+  fireLastCallRef.current = fireLastCall
+
   const handleKeyDown = useCallback((e) => {
     // A reflexive Cmd/Ctrl/Alt shortcut (Cmd+A select-all, Cmd+R reload,
     // Cmd+S save) must never fall through to these single-letter hotkeys —
@@ -1226,6 +1245,10 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     // reveals the answer to the whole room.
     if (e.metaKey || e.ctrlKey || e.altKey) return
     if (e.target.closest?.('input, textarea, select, [contenteditable]')) return
+    if (e.code === 'KeyL') {
+      if (!e.repeat) fireLastCallRef.current({ fromKey: true })
+      return
+    }
     const cmd = { ArrowRight: 'next', ArrowLeft: 'prev', KeyA: 'answer', KeyS: 'scoreboard', KeyR: 'scores-reveal' }[e.code]
     if (!cmd) return
     // Held-key auto-repeat (a long Stream Deck press, or a finger left on
@@ -1380,6 +1403,18 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
           >
             <span style={{ fontSize: '0.85em' }}>📊</span>
             Score
+          </button>
+          <button
+            onClick={() => fireLastCall()}
+            title="Flash LAST CALL + bar bell on the TV for 8s (L)"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ml-1 ${
+              lastCallLive
+                ? 'bg-red-500 text-white hover:bg-red-600'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <span style={{ fontSize: '0.85em' }}>🔔</span>
+            Last Call
           </button>
           {currentSlide?.type === 'flip-em-down' && (
             <div className="flex items-center gap-1 ml-1">
@@ -1782,6 +1817,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                 ['← →', 'Navigate slides'],
                 ['A', 'Toggle answer'],
                 ['S', 'TV scoreboard'],
+                ['L', 'Last Call on TV'],
               ].map(([key, label]) => (
                 <div key={key} className="flex items-center justify-between">
                   <code className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">{key}</code>
