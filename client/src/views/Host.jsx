@@ -10,6 +10,7 @@ import LiveMode from '../components/host/LiveMode.jsx'
 import ScoreboardModal from '../components/host/ScoreboardModal.jsx'
 import HostPinGate from '../components/host/HostPinGate.jsx'
 import { EASE_OUT } from '../lib/easings.js'
+import { initialLiveMode, goLiveAction } from '../lib/goLive.js'
 
 // ─── Show Picker ─────────────────────────────────────────────────────────────
 // Shown when no show is loaded. Clean list — pick one and you're in the builder.
@@ -146,7 +147,7 @@ export default function Host() {
 function HostInner({ showApi }) {
   const { show } = showApi
   const [toasts, setToasts] = useState([])
-  const [isLiveMode, setIsLiveMode] = useState(false)
+  const [isLiveMode, setIsLiveMode] = useState(() => initialLiveMode(show))
   const [showLibrary, setShowLibrary] = useState(false)
   const [goLivePicker, setGoLivePicker] = useState(false)
   const [showScoreboard, setShowScoreboard] = useState(false)
@@ -244,6 +245,10 @@ function HostInner({ showApi }) {
     actions.updateShowMeta({ theme: newThemeId })
   }
 
+  // A different show loaded (library) — follow its live flag. Deliberately keyed on
+  // id only: "Edit" from Live Mode leaves the show live but must stay in Build Mode.
+  useEffect(() => { setIsLiveMode(initialLiveMode(show)) }, [show?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const actions = { ...showApi }
   // Do NOT narrow this to a curated subset for LiveMode — any missing method silently
   // breaks LiveMode features (e.g. updateSlide crashed handlePickAnimation). Pass the
@@ -278,6 +283,11 @@ function HostInner({ showApi }) {
     setIsLiveMode(true)
   }
 
+  function handleResumeLive() {
+    setGoLivePicker(false)
+    setIsLiveMode(true)
+  }
+
   return (
     <div className="relative">
       {showLibrary ? (
@@ -307,6 +317,7 @@ function HostInner({ showApi }) {
           show={show}
           actions={actions}
           onGoLive={handleGoLive}
+          onReturnToLive={handleResumeLive}
           onThemeChange={handleThemeChange}
           onOpenLibrary={() => setShowLibrary(true)}
           onOpenScoreboard={() => setShowScoreboard(true)}
@@ -317,6 +328,7 @@ function HostInner({ showApi }) {
           show={show}
           onFromBeginning={() => handleGoLiveFrom(0)}
           onFromSlide={handleGoLiveFrom}
+          onResume={handleResumeLive}
           onClose={() => setGoLivePicker(false)}
         />
       )}
@@ -368,8 +380,21 @@ function slidePickerLabel(slide) {
   return type
 }
 
-function GoLivePicker({ show, onFromBeginning, onFromSlide, onClose }) {
+function GoLivePicker({ show, onFromBeginning, onFromSlide, onResume, onClose }) {
   const slides = sortedSlides(show)
+  const action = goLiveAction(show.showState, slides)
+  const [confirmRestart, setConfirmRestart] = useState(false)
+  const confirmTimerRef = useRef(null)
+  useEffect(() => () => clearTimeout(confirmTimerRef.current), [])
+  function handleRestart() {
+    if (!confirmRestart) {
+      setConfirmRestart(true)
+      clearTimeout(confirmTimerRef.current)
+      confirmTimerRef.current = setTimeout(() => setConfirmRestart(false), 4000)
+      return
+    }
+    onFromBeginning()
+  }
   const [collapsedRounds, setCollapsedRounds] = useState(() => new Set(show?.rounds?.map(r => r.id) ?? []))
 
   // Build same segment structure as sidebar
@@ -410,15 +435,35 @@ function GoLivePicker({ show, onFromBeginning, onFromSlide, onClose }) {
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 host-button w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100">✕</button>
         </div>
 
-        {/* Start from beginning */}
-        <div className="px-6 py-4 border-b border-gray-100 shrink-0">
-          <button
-            onClick={onFromBeginning}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-baynes-forest text-white font-semibold text-sm hover:bg-green-900 host-button transition-colors"
-          >
-            <span className="text-lg">▶</span>
-            <span>Start from beginning</span>
-          </button>
+        {/* Primary action: resume when already live, otherwise start from the top */}
+        <div className="px-6 py-4 border-b border-gray-100 shrink-0 flex flex-col gap-2">
+          {action.resume ? (
+            <>
+              <button
+                onClick={onResume}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-baynes-forest text-white font-semibold text-sm hover:bg-green-900 host-button transition-colors"
+              >
+                <span className="text-lg">▶</span>
+                <span className="truncate">Resume at #{action.number}{action.slide ? ` · ${slidePickerLabel(action.slide)}` : ''}</span>
+              </button>
+              <button
+                onClick={handleRestart}
+                className={`w-full px-4 py-2 rounded-xl text-sm font-medium host-button transition-colors ${
+                  confirmRestart ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {confirmRestart ? 'Confirm: restart from slide 1' : 'Start from beginning'}
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={onFromBeginning}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-baynes-forest text-white font-semibold text-sm hover:bg-green-900 host-button transition-colors"
+            >
+              <span className="text-lg">▶</span>
+              <span>Start from beginning</span>
+            </button>
+          )}
         </div>
 
         {/* Slide picker */}

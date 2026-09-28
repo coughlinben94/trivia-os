@@ -309,7 +309,7 @@ function PylMenuBox({ button, open, onClose, onSetup, onLotto, onThemePicker }) 
   )
 }
 
-export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOpenScoreboard }) {
+export default function BuildMode({ show, actions, onGoLive, onReturnToLive, onOpenLibrary, onOpenScoreboard }) {
   // Preloaded on dashboard mount (not on modal open) so FormatLibrary and
   // AddSlideWizard never show a blank-then-pop-in flash, and both share one
   // fetch instead of each running its own.
@@ -668,6 +668,7 @@ export default function BuildMode({ show, actions, onGoLive, onOpenLibrary, onOp
         show={show}
         onUpdateMeta={actions.updateShowMeta}
         onGoLive={onGoLive}
+        onReturnToLive={onReturnToLive}
         onExport={actions.exportShow}
         onSyncArchive={actions.syncArchive}
         onOpenLibrary={onOpenLibrary}

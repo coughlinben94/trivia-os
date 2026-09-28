@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onSyncArchive, onOpenLibrary, onOpenScoreboard, onOpenThemePicker, onDashboard, previewSlideId }) {
+export default function HostHeader({ show, onUpdateMeta, onGoLive, onReturnToLive, onExport, onSyncArchive, onOpenLibrary, onOpenScoreboard, onOpenThemePicker, onDashboard, previewSlideId }) {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const [copied, setCopied] = useState(false)
@@ -137,6 +137,15 @@ export default function HostHeader({ show, onUpdateMeta, onGoLive, onExport, onS
           >
             {syncState === 'syncing' ? 'Syncing…' : syncState === 'synced' ? 'Synced ✓' : 'Sync archive'}
           </button>
+          {show.showState?.isLive && onReturnToLive && (
+            <button
+              onClick={onReturnToLive}
+              title="The show is live on the TV. Go back to the live controls."
+              className="bg-red-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-red-700 host-button ml-1"
+            >
+              LIVE · return to controls
+            </button>
+          )}
           <button
             onClick={onGoLive}
             className="bg-baynes-forest text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-green-900 host-button ml-1"
