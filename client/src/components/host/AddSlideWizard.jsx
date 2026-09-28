@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { nanoid } from 'nanoid'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { insertAfterSlideId } from '../../lib/questionNumbering.js'
@@ -279,7 +279,26 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
     setRoundId(id || null)
   }
 
+  // Double-click guard + visible failure. The ref blocks a second click before
+  // React re-renders the disabled state.
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState(null)
+  const creatingRef = useRef(false)
   async function handleCreate() {
+    if (creatingRef.current) return
+    creatingRef.current = true
+    setCreating(true)
+    setCreateError(null)
+    try {
+      await runCreate()
+    } catch (e) {
+      setCreateError(`Couldn't add: ${e?.message ?? 'unknown error'}`)
+    } finally {
+      creatingRef.current = false
+      setCreating(false)
+    }
+  }
+  async function runCreate() {
     const roundSlides = sorted.filter(s => s.roundId === roundId)
     // A round built entirely from one shiny format (2026-08-18, Ben: 6 Drag
     // and Drop questions in a row for Swing Round) shouldn't get that
@@ -853,11 +872,12 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
             <div className="flex flex-col gap-1.5 pt-1">
               <button
                 onClick={handleCreate}
-                disabled={!canAddShiny}
+                disabled={!canAddShiny || creating}
                 className={`w-full bg-yellow-500 text-white text-sm font-semibold py-3 rounded-xl hover:bg-yellow-600 ${BTN} disabled:opacity-40 disabled:cursor-not-allowed`}
               >
                 Add {selectedShinyFmt.name} →
               </button>
+              {createError && <p className="text-xs text-red-500 text-center">{createError}</p>}
               {!canAddShiny && (
                 <p className="text-xs text-gray-400 text-center">
                   {!roundId ? 'Select a round to continue' : 'Pick a song to continue'}
@@ -931,11 +951,12 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
             <div className="mt-auto flex flex-col gap-1.5">
               <button
                 onClick={handleCreate}
-                disabled={!canAddQuestion}
+                disabled={!canAddQuestion || creating}
                 className={`w-full bg-[#1a6b4a] text-white text-sm font-semibold py-3 rounded-xl hover:bg-green-900 ${BTN} disabled:opacity-40 disabled:cursor-not-allowed`}
               >
                 Add question →
               </button>
+              {createError && <p className="text-xs text-red-500 text-center">{createError}</p>}
               {!canAddQuestion && (
                 <p className="text-xs text-gray-400 text-center">
                   {!roundId ? 'Select a round to continue' : !questionText.trim() ? 'Add question text to continue' : 'Add an answer to continue'}
@@ -1226,11 +1247,12 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
             <div className="flex flex-col gap-1.5 pt-1">
               <button
                 onClick={handleCreate}
-                disabled={!canCreate}
+                disabled={!canCreate || creating}
                 className={`w-full bg-[#1a6b4a] text-white text-sm font-semibold py-3 rounded-xl hover:bg-green-900 ${BTN} disabled:opacity-40 disabled:cursor-not-allowed`}
               >
                 Add Slide →
               </button>
+              {createError && <p className="text-xs text-red-500 text-center">{createError}</p>}
               {!canCreate && (
                 <p className="text-xs text-gray-400 text-center">
                   {!roundId
