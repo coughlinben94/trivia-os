@@ -31,6 +31,15 @@ export const REFUSAL_TEXT = {
   busy: 'Laptop is busy — wait a second',
   'laptop-offline': 'Open Live Mode on the laptop',
   'unknown-command': 'Update the remote app',
+  // Phase 2a: jump, unlock, rescore. The iPad splits on " — " (head, then
+  // hint), so no dash ever reaches the screen.
+  'bad-target': 'That slide moved — open Jump again',
+  'nothing-to-fix': 'No phone question on this slide',
+  'nothing-locked': 'Nothing is locked yet',
+  'not-locked': 'Answers are not locked yet — press Next to lock them',
+  'already-revealed': 'The TV already shows the result — unlock first if you need to redo it',
+  'laptop-only': 'Rescore a horse race on the laptop',
+  error: 'Something went wrong on the laptop — check the laptop',
 }
 export const refusalText = reason => REFUSAL_TEXT[reason] ?? 'The laptop said no — check the laptop'
 

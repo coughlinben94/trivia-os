@@ -14,6 +14,7 @@ import {
   bakeTeamPickerParts as bakeParts,
   computeNextStep,
   computePrevStep,
+  computeJumpStep,
   sortSlides,
 } from '../lib/slideStepping.js'
 import { idsToDeleteWith } from '../lib/shinySeries.js'
@@ -123,6 +124,14 @@ export function useShow() {
     localNavRef.current = true
     clearTimeout(localNavTimerRef.current)
     localNavTimerRef.current = setTimeout(() => { localNavRef.current = false }, 1500)
+  }
+
+  // Furthest slide index visited since the last go-live, raised on every nav
+  // (next, prev, jump). jumpTo protects a target at or below it: a jump back
+  // then forward to an already-scored question must keep its locks.
+  const furthestIndexRef = useRef(0)
+  function markFurthest(index) {
+    if (typeof index === 'number') furthestIndexRef.current = Math.max(furthestIndexRef.current, index)
   }
 
   useEffect(() => {
@@ -753,6 +762,7 @@ export function useShow() {
   async function goLive() {
     if (!show) return
     markLocalNav()
+    furthestIndexRef.current = 0
     const sorted = sortedSlides(show)
     const first = sorted[0] ?? null
     const now = new Date().toISOString()
@@ -789,6 +799,7 @@ export function useShow() {
     markLocalNav()
     const sorted = sortedSlides(show)
     const target = Math.max(0, Math.min(index, sorted.length - 1))
+    furthestIndexRef.current = target
     const slide = sorted[target] ?? null
     const now = new Date().toISOString()
     const bakedSlides = await bakeTeamPickerParts(show.slides, slide)
@@ -830,6 +841,7 @@ export function useShow() {
       fetchTeamCount
     )
     if (!patch) return
+    markFurthest(patch.current_slide_index)
     await applyStepPatch(patch)
   }
 
@@ -841,6 +853,29 @@ export function useShow() {
       fetchTeamCount
     )
     if (!patch) return
+    markFurthest(patch.current_slide_index)
+    await applyStepPatch(patch)
+  }
+
+  // iPad remote Jump (spec §6). Mid-show, unlike goLiveFrom: no archiveShow,
+  // no is_live, and updated_at comes from the DB trigger. Only a team-picker
+  // target awaits anything (its teams count) before the optimistic update;
+  // every other target moves local state synchronously, then writes one patch
+  // (non-null current_slide_id, answer_reveal:false, withAudioReset) through
+  // applyStepPatch, the same path Next/Prev use.
+  async function jumpTo(index) {
+    if (!show) return
+    const target = sortedSlides(show)[index]
+    if (!target) return
+    markLocalNav()
+    const furthest = Math.max(furthestIndexRef.current, show.showState.currentSlideIndex ?? 0)
+    const slides = target.type === 'team-picker' ? await bakeTeamPickerParts(show.slides, target) : show.slides
+    const patch = computeJumpStep(
+      { slides: show.slides, currentSlideIndex: show.showState.currentSlideIndex },
+      index, { furthest, slides }
+    )
+    if (!patch) return
+    markFurthest(index)
     await applyStepPatch(patch)
   }
 
@@ -973,6 +1008,7 @@ export function useShow() {
     syncArchive,
     nextSlide,
     prevSlide,
+    jumpTo,
     setScoreboardVisible,
     setAnswerReveal,
     setAudioPlaying,

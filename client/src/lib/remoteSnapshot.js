@@ -29,7 +29,22 @@ export function buildCard(slide) {
   }
 }
 
-export function buildSnapshot({ slides, index, showState, cue, busy = false, paused = false }) {
+// The Jump drawer's list: every slide, labelled like the laptop's Go Live
+// picker, with its round so the iPad can group rows and name the target in
+// its confirm ("Jump to Round 3 Q4?").
+function jumpList(slides, rounds = []) {
+  return slides.map((s, index) => {
+    const i = s.roundId ? rounds.findIndex(r => r.id === s.roundId) : -1
+    const round = i === -1 ? null : rounds[i]
+    return {
+      index, id: s.id, label: slidePickerLabel(s), type: s.type,
+      round: round ? `Round ${round.number ?? i + 1}` : null,
+      roundTitle: round?.title ?? null,
+    }
+  })
+}
+
+export function buildSnapshot({ slides, index, showState, cue, busy = false, paused = false, rounds = [], jumpBusy = false, fix = null }) {
   const slide = slides[index] ?? null
   return {
     type: 'state',
@@ -42,7 +57,8 @@ export function buildSnapshot({ slides, index, showState, cue, busy = false, pau
       scoreboardVisible: !!showState.scoreboardVisible,
       scoresRevealed: !!showState.scoresRevealed,
     },
-    busy, paused,
+    busy, paused, jumpBusy, fix,
+    slides: jumpList(slides, rounds),
   }
 }
 

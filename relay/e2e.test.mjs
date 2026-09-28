@@ -164,6 +164,46 @@ describe('stub host + relay + iPad', () => {
     expect(first.status).toBe('replaced') // never reconnected
   })
 
+  it('jump by slide id lands there; the snapshot carries the jump list', async () => {
+    const s = stub()
+    const p = await ipad()
+    expect(p.state.slides.map(x => x.label)).toEqual(['Q1', '✨ Shiny', 'Q3'])
+    expect(await p.tap('jump', { slideId: 'q3', index: 2 })).toMatchObject({ received: true })
+    await until(() => p.state.slide.id === 'q3')
+    expect(s.ran).toEqual(['jump'])
+  })
+
+  it('jump from a stale view is refused as slide-changed; to a missing slide as bad-target', async () => {
+    const s = stub()
+    const p = await ipad()
+    expect(await p.tap('jump', { slideId: 'q3' }, { expectSlideId: 'w' })).toMatchObject({ refused: 'slide-changed' })
+    expect(await p.tap('jump', { slideId: 'gone' })).toMatchObject({ refused: 'bad-target' })
+    expect(s.ran).toEqual([])
+  })
+
+  it('unlock and rescore follow the fix state in the snapshot', async () => {
+    const slides = [
+      { id: 'm', type: 'question', data: { questionNumber: 1, isShiny: true, shinyInputSchema: { type: 'matching' }, matchingLocked: true } },
+      { id: 'h', type: 'horse-race', data: { raceLocked: true } },
+    ]
+    const s = stub(slides)
+    const p = await ipad()
+    expect(p.state.fix).toMatchObject({ mechanic: 'matching', canUnlock: true, canRescore: true, rescoreLabel: 'Rescore' })
+    expect(await p.tap('rescore')).toMatchObject({ received: true })
+    expect(await p.tap('unlock')).toMatchObject({ received: true })
+    await until(() => p.state.fix.canUnlock === false)
+    expect(p.state.fix).toMatchObject({ unlockRefusal: 'nothing-locked', rescoreRefusal: 'not-locked' })
+    expect(await p.tap('unlock')).toMatchObject({ refused: 'nothing-locked' })
+    expect(await p.tap('rescore')).toMatchObject({ refused: 'not-locked' })
+    // Horse race: unlock yes, rescore stays on the laptop.
+    await p.tap('jump', { slideId: 'h' })
+    await until(() => p.state.slide.id === 'h')
+    expect(await p.tap('rescore')).toMatchObject({ refused: 'laptop-only' })
+    expect(await p.tap('unlock')).toMatchObject({ received: true })
+    await until(() => p.state.fix.canUnlock === false)
+    expect(s.ran).toEqual(['rescore', 'unlock', 'jump', 'unlock'])
+  })
+
   it('no host: laptop-offline, and the iPad is told the host is gone', async () => {
     const s = stub()
     const p = await ipad()

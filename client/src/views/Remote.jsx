@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { motion, MotionConfig } from 'framer-motion'
-import { EASE_OUT, EASE_PANEL } from '../lib/easings.js'
+import { motion, MotionConfig, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { EASE_OUT, EASE_PANEL, EASE_EXIT } from '../lib/easings.js'
 import { DEFAULT_REMOTE_URL, CLOSE_BAD_SECRET, BEAT_MS, STALE_BEAT_MS, GREY_GATES, refusalText, remoteStatus } from '../lib/remoteProtocol.js'
 
 // /remote — the iPad host remote (spec docs/superpowers/specs/2026-09-28-
@@ -98,6 +98,7 @@ export default function Remote() {
   const [beat, setBeat] = useState(null) // { at, visibility } of the last laptop beat
   const [notice, setNotice] = useState(null)
   const [now, setNow] = useState(() => Date.now())
+  const [drawer, setDrawer] = useState(null) // 'jump' | 'fix' | null
   const wsRef = useRef(null)
   const offsetRef = useRef(0) // laptopNow − iPadNow, from the latest beat
   const idRef = useRef(0)
@@ -172,6 +173,11 @@ export default function Remote() {
   const nextOff = !live || snap.paused || snap.busy || GREY_GATES.includes(snap.gate)
   const toggles = snap?.toggles ?? {}
   const revealOwed = snap?.gate === 'reveal-owed'
+  // Jump and Fix go through the laptop's busy gate too: grey them for the
+  // same reasons, and say which one on the button.
+  const fix = snap?.fix ?? null
+  const jumpBlock = !live ? 'Laptop not ready' : snap.paused ? 'Paused on the laptop' : snap.jumpBusy ? 'Jumping…' : snap.busy ? 'Laptop is busy' : null
+  const fixBlock = jumpBlock ?? (!fix?.mechanic ? splitMsg(refusalText('nothing-to-fix'))[0] : null)
 
   function send(cmd, args = {}) {
     const ws = wsRef.current
@@ -255,10 +261,10 @@ export default function Remote() {
       )}
 
       <main className="flex-1 min-h-0 grid gap-3 px-4 pb-4 pt-1
-        portrait:grid-cols-2 portrait:grid-rows-[auto_1fr_auto_auto_auto]
-        landscape:grid-cols-[repeat(4,minmax(0,1fr))_minmax(240px,0.9fr)] landscape:grid-rows-[1fr_auto_auto]">
+        portrait:grid-cols-2 portrait:grid-rows-[auto_1fr_auto_auto_auto_auto]
+        landscape:grid-cols-[repeat(4,minmax(0,1fr))_minmax(240px,0.9fr)] landscape:grid-rows-[1fr_auto_auto_auto]">
         {/* Up Next: reading, not tapping, so it sits away from the thumb */}
-        <aside className="portrait:col-span-2 portrait:order-first landscape:col-start-5 landscape:row-start-1 landscape:row-span-3
+        <aside className="portrait:col-span-2 portrait:order-first landscape:col-start-5 landscape:row-start-1 landscape:row-span-4
           rounded-2xl bg-[#13261a] px-5 py-4 flex portrait:flex-row portrait:items-center landscape:flex-col gap-x-6 gap-y-3 min-h-0 min-w-0">
           <p className="text-[1rem] leading-6 font-semibold text-[#f5f0e8]/75 shrink-0">Up next</p>
           {(snap?.upNext ?? []).map((s, i) => (
@@ -334,7 +340,34 @@ export default function Remote() {
         <BigButton onClick={() => send('scores-reveal', { value: !toggles.scoresRevealed })} disabled={!live || snap?.paused} lit={toggles.scoresRevealed}>
           Phone scores
         </BigButton>
+
+        {/* Jump and fix: rarer, costlier presses, so they open a drawer first */}
+        <DrawerButton onClick={() => setDrawer('jump')} disabled={!!jumpBlock} icon={IconList}
+          hint={jumpBlock ?? (snap?.slide ? `Now on ${snap.slide.label}` : null)}>
+          Jump
+        </DrawerButton>
+        <DrawerButton onClick={() => setDrawer('fix')} disabled={!!fixBlock} icon={IconWrench}
+          hint={fixBlock ?? 'Unlock or rescore'}>
+          Fix
+        </DrawerButton>
       </main>
+
+      <Sheet open={drawer === 'jump'} onClose={() => setDrawer(null)} title="Jump to a slide" tall>
+        <JumpList
+          slides={snap?.slides ?? []}
+          current={snap?.slide?.index ?? -1}
+          blocked={jumpBlock}
+          onJump={s => { send('jump', { slideId: s.id, index: s.index }); setDrawer(null) }}
+        />
+      </Sheet>
+      <Sheet open={drawer === 'fix'} onClose={() => setDrawer(null)} title="Fix this slide" subtitle={snap?.slide?.label}>
+        <FixPanel
+          fix={fix}
+          blocked={jumpBlock}
+          onUnlock={() => { send('unlock'); setDrawer(null) }}
+          onRescore={() => { send('rescore'); setDrawer(null) }}
+        />
+      </Sheet>
 
       {settingsOpen && (
         <motion.div
@@ -449,6 +482,201 @@ function BigButton({ onClick, disabled, lit = false, glow = false, icon: Icon, c
   )
 }
 
+// A wide button that opens a drawer: name, and a hint line that doubles as
+// the reason when it is off.
+function DrawerButton({ onClick, disabled, icon: Icon, hint, children }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`portrait:col-span-1 landscape:col-span-2 min-h-[88px] rounded-2xl px-5 py-3 flex items-center gap-4 text-left
+        transition-transform duration-[120ms] ease-snap enabled:active:scale-[0.97]
+        focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[#f5f0e8] ${
+        disabled
+          ? 'bg-[#13261a] text-[#f5f0e8]/50 border-2 border-dashed border-[#f5f0e8]/20'
+          : 'bg-[#1b3324] text-[#f5f0e8] active:bg-[#244130]'
+      }`}
+    >
+      <Icon className="w-9 h-9 shrink-0" />
+      <span className="flex flex-col min-w-0">
+        <span className="text-2xl font-bold leading-tight">{children}</span>
+        {hint && <span className="text-lg font-semibold truncate opacity-80">{hint}</span>}
+      </span>
+    </button>
+  )
+}
+
+// Bottom sheet. Enter 280ms on the iOS drawer curve, exit faster (200ms);
+// transform and opacity only. Reduced motion: fade only, no slide.
+function Sheet({ open, onClose, title, subtitle, tall = false, children }) {
+  const reduce = useReducedMotion()
+  const hidden = reduce ? { opacity: 0 } : { opacity: 1, transform: 'translateY(100%)' }
+  const shown = reduce ? { opacity: 1 } : { opacity: 1, transform: 'translateY(0%)' }
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          key="scrim"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1, transition: { duration: 0.24, ease: EASE_OUT } }}
+          exit={{ opacity: 0, transition: { duration: 0.18, ease: EASE_EXIT } }}
+          className="fixed inset-0 z-40 bg-black/60 flex items-end justify-center"
+          onClick={onClose}
+        >
+          <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label={title}
+            initial={hidden}
+            animate={{ ...shown, transition: { duration: 0.28, ease: EASE_PANEL } }}
+            exit={{ ...hidden, transition: { duration: 0.2, ease: EASE_EXIT } }}
+            onClick={e => e.stopPropagation()}
+            className={`w-full max-w-3xl ${tall ? 'h-[85dvh]' : 'max-h-[85dvh]'} bg-[#13261a] rounded-t-3xl flex flex-col`}
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          >
+            <div className="flex items-center gap-4 px-6 pt-5 pb-3 shrink-0">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-4xl leading-none" style={{ fontFamily: "'Boogaloo', cursive" }}>{title}</h2>
+                {subtitle && <p className="text-xl font-semibold text-[#f5f0e8]/75 mt-1 truncate">{subtitle}</p>}
+              </div>
+              <button
+                onClick={onClose}
+                className="h-16 px-6 rounded-xl bg-[#1b3324] text-xl font-semibold transition-transform duration-[120ms] ease-snap active:scale-[0.97]"
+              >
+                Close
+              </button>
+            </div>
+            {children}
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
+// Consecutive slides in the same round share a heading.
+function groupByRound(slides) {
+  const groups = []
+  for (const s of slides) {
+    const key = s.round ?? null
+    const last = groups.at(-1)
+    if (last && last.key === key) last.slides.push(s)
+    else groups.push({ key, title: s.round ? [s.round, s.roundTitle].filter(Boolean).join(' · ') : null, slides: [s] })
+  }
+  const seenRound = i => groups.slice(0, i).some(g => g.key)
+  const laterRound = i => groups.slice(i + 1).some(g => g.key)
+  groups.forEach((g, i) => {
+    if (!g.title) g.title = !seenRound(i) ? 'Start of show' : laterRound(i) ? 'Between rounds' : 'End of show'
+  })
+  return groups
+}
+const jumpName = s => (s.round ? `${s.round} ${s.label}` : s.label)
+
+// A jump in front of the room is costly, so the first tap only picks; the
+// confirm bar names the target and a second tap sends it.
+function JumpList({ slides, current, blocked, onJump }) {
+  const [pick, setPick] = useState(null)
+  const hereRef = useRef(null)
+  useEffect(() => { hereRef.current?.scrollIntoView?.({ block: 'center' }) }, [])
+  return (
+    <>
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pb-4">
+        {groupByRound(slides).map((g, gi) => (
+          <section key={gi} className="mt-1">
+            <h3 className="sticky top-0 z-10 bg-[#13261a] px-2 py-2 text-[1rem] leading-6 font-semibold text-[#f5f0e8]/75">{g.title}</h3>
+            <div className="flex flex-col gap-2">
+              {g.slides.map(s => {
+                const here = s.index === current
+                const picked = pick?.id === s.id
+                return (
+                  <button
+                    key={s.id}
+                    data-slide={s.id}
+                    ref={here ? hereRef : undefined}
+                    aria-current={here ? 'true' : undefined}
+                    aria-pressed={picked}
+                    disabled={here}
+                    onClick={() => setPick(s)}
+                    className={`min-h-[72px] rounded-2xl px-5 flex items-center gap-4 text-left
+                      transition-transform duration-[120ms] ease-snap enabled:active:scale-[0.98]
+                      focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[#f5f0e8] ${
+                      here
+                        ? 'bg-[#0a1710] border-[3px] border-[#60c000] text-[#f5f0e8]'
+                        : picked
+                          ? 'bg-[#f5f0e8] text-[#06200a]'
+                          : 'bg-[#1b3324] text-[#f5f0e8] active:bg-[#244130]'
+                    }`}
+                  >
+                    <span className="w-12 shrink-0 text-lg font-semibold tabular-nums opacity-75">{s.index + 1}</span>
+                    <span className="flex-1 min-w-0 text-2xl font-bold truncate">{s.label}</span>
+                    {here && <span className="shrink-0 px-3 py-1 rounded-full bg-[#60c000] text-[#06200a] text-lg font-bold">Showing now</span>}
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        ))}
+      </div>
+      {pick && (
+        <div className="shrink-0 border-t-2 border-[#f5f0e8]/15 px-5 py-4 flex flex-wrap items-center gap-3">
+          <p className="flex-1 min-w-[12rem] text-2xl font-bold">
+            Jump to {jumpName(pick)}?
+            {blocked && <span className="block text-lg font-semibold text-[#f2b632]">{blocked}</span>}
+          </p>
+          <button
+            onClick={() => setPick(null)}
+            className="h-16 px-6 rounded-xl bg-[#1b3324] text-xl font-semibold transition-transform duration-[120ms] ease-snap active:scale-[0.97]"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onJump(pick)}
+            disabled={!!blocked}
+            className="h-16 px-7 rounded-xl text-xl font-bold transition-transform duration-[120ms] ease-snap enabled:active:scale-[0.97]
+              bg-[#60c000] text-[#06200a] active:bg-[#58b000] disabled:bg-[#13261a] disabled:text-[#f5f0e8]/50 disabled:border-2 disabled:border-dashed disabled:border-[#f5f0e8]/20"
+          >
+            Jump there
+          </button>
+        </div>
+      )}
+    </>
+  )
+}
+
+function FixPanel({ fix, blocked, onUnlock, onRescore }) {
+  const why = reason => splitMsg(refusalText(reason))
+  const row = (label, sub, ok, reason, onClick, Icon) => {
+    const [head, hint] = ok ? [sub, null] : blocked ? [blocked, null] : why(reason)
+    const off = !ok || !!blocked
+    return (
+      <button
+        onClick={onClick}
+        disabled={off}
+        className={`min-h-[112px] rounded-2xl px-6 py-4 flex items-center gap-5 text-left
+          transition-transform duration-[120ms] ease-snap enabled:active:scale-[0.98]
+          focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[#f5f0e8] ${
+          off
+            ? 'bg-[#0a1710] text-[#f5f0e8]/60 border-2 border-dashed border-[#f5f0e8]/20'
+            : 'bg-[#1b3324] text-[#f5f0e8] active:bg-[#244130]'
+        }`}
+      >
+        <Icon className="w-10 h-10 shrink-0" />
+        <span className="flex flex-col gap-1 min-w-0">
+          <span className="text-3xl font-bold leading-tight">{label}</span>
+          <span className="text-xl font-semibold">{head}</span>
+          {hint && <span className="text-lg">{hint}</span>}
+        </span>
+      </button>
+    )
+  }
+  return (
+    <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-5 pt-2 flex flex-col gap-3">
+      {row('Unlock', 'Let teams answer again on their phones', fix?.canUnlock, fix?.unlockRefusal ?? 'nothing-to-fix', onUnlock, IconUnlock)}
+      {row(fix?.rescoreLabel ?? 'Rescore', 'Score the locked answers again', fix?.canRescore, fix?.rescoreRefusal ?? 'nothing-to-fix', onRescore, IconRedo)}
+    </div>
+  )
+}
+
 const svg = (paths, fill = false) => function Icon({ className }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden fill={fill ? 'currentColor' : 'none'}
@@ -466,3 +694,8 @@ function IconPause(p) { return svg(<><rect x="6" y="5" width="4" height="14" rx=
 function IconGear(p) {
   return svg(<><circle cx="12" cy="12" r="3.2" /><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" /></>)(p)
 }
+function IconList(p) { return svg(<><path d="M9 6h11M9 12h11M9 18h11" /><path d="M4 6h.01M4 12h.01M4 18h.01" /></>)(p) }
+// Wrench outline after Lucide's (ISC).
+function IconWrench(p) { return svg(<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />)(p) }
+function IconUnlock(p) { return svg(<><rect x="4.5" y="11" width="15" height="10" rx="2" /><path d="M8 11V7.5a4 4 0 0 1 7.6-1.7" /></>)(p) }
+function IconRedo(p) { return svg(<><path d="M20 5v5h-5" /><path d="M20 10a8 8 0 1 0 1.5 5" /></>)(p) }

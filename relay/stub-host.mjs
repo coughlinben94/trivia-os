@@ -1,15 +1,16 @@
 // A fake /host Live Mode peer for protocol tests. It DECIDES with the laptop's
 // real planHostCommand / nextPressGate / buildSnapshot / hostReply / snapshot
 // sender over an in-memory show — no React, no Supabase. What it PERFORMS is a
-// toy (index ±1, a countdown flag); LiveMode.jsx performs the real thing.
+// toy (index ±1 or a jump, a countdown flag, an unlock); LiveMode.jsx performs the real thing.
 import WebSocket from 'ws'
 import { planHostCommand } from '../client/src/lib/hostCommands.js'
 import { nextPressGate } from '../client/src/lib/nextPressCue.js'
-import { pendingLockPhase, pendingReveal } from '../client/src/lib/slideStepping.js'
+import { pendingLockPhase, pendingReveal, unlockPatch } from '../client/src/lib/slideStepping.js'
+import { fixFor } from '../client/src/lib/remoteFix.js'
 import { buildSnapshot, hostReply, makeSnapshotSender } from '../client/src/lib/remoteSnapshot.js'
 import { CLOSE_REPLACED } from '../client/src/lib/remoteProtocol.js'
 
-export function createStubHost({ url, origin, slides, retryMs = 50 }) {
+export function createStubHost({ url, origin, slides, rounds = [], retryMs = 50 }) {
   const show = { index: 0, showState: { answerReveal: false, scoreboardVisible: false, scoresRevealed: false } }
   const stub = { status: 'connecting', paused: false, ran: [], remotes: 0 }
   let ws = null
@@ -23,7 +24,7 @@ export function createStubHost({ url, origin, slides, retryMs = 50 }) {
   const cue = () => nextPressGate({ slide: slide(), nextSlide: slides[show.index + 1] ?? null })
   const busy = () => !!slide()?.data?.lockCountdownStartedAt
   const push = () => sender.offer(JSON.stringify(buildSnapshot({
-    slides, index: show.index, showState: show.showState, cue: cue(), busy: busy(), paused: stub.paused,
+    slides, index: show.index, showState: show.showState, cue: cue(), busy: busy(), paused: stub.paused, fix: fixFor(slide()), rounds,
   })))
 
   function run(cmd) {
@@ -35,12 +36,19 @@ export function createStubHost({ url, origin, slides, retryMs = 50 }) {
       answerReveal: show.showState.answerReveal, revealPending: !!pendingReveal(s), phoneRevealed: false,
       scoreboardVisible: show.showState.scoreboardVisible, scoresRevealed: show.showState.scoresRevealed,
       paused: stub.paused, remoteBusy: busy(), slideId: s?.id ?? null, gate: cue().gate, now: Date.now(),
+      index: show.index, slideIds: slides.map(x => x.id), fix: fixFor(s),
     })
     if (plan.refuse) return plan
     stub.ran.push(plan.run)
     if (plan.run === 'next' || plan.run === 'hide-answer-then-next') show.index = Math.min(show.index + 1, slides.length - 1)
     if (plan.run === 'prev') show.index = Math.max(show.index - 1, 0)
     if (plan.run === 'start-lock-countdown') s.data = { ...s.data, lockCountdownPhase: plan.phase, lockCountdownStartedAt: Date.now() }
+    if (plan.run === 'jump') show.index = plan.index
+    if (plan.run === 'unlock') {
+      const f = fixFor(s)
+      s.data = f.mechanic === 'horse-race' ? { ...s.data, raceLocked: false } : { ...s.data, ...unlockPatch(f.mechanic, s.data) }
+    }
+    // 'rescore' is only recorded: the real one reads and writes Supabase.
     if (plan.run === 'set-answer-reveal') show.showState.answerReveal = plan.value
     if (plan.run === 'set-scoreboard-visible') show.showState.scoreboardVisible = plan.value
     if (plan.run === 'set-scores-revealed') show.showState.scoresRevealed = plan.value

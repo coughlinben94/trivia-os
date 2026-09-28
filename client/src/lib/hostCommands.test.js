@@ -182,7 +182,75 @@ describe('via remote', () => {
     expect(plan({ cmd: 'scoreboard' }, { scoreboardVisible: true })).toEqual({ run: 'set-scoreboard-visible', value: false })
     expect(plan({ cmd: 'answer' }, { answerReveal: true })).toEqual({ run: 'set-answer-reveal', value: false })
   })
-  it('unknown commands (jump is phase 2)', () => {
-    expect(r('jump', { index: 3 })).toEqual({ refuse: 'unknown-command' })
+  it('unknown commands', () => {
+    expect(r('teleport', { index: 3 })).toEqual({ refuse: 'unknown-command' })
+  })
+})
+
+// Phase 2a: jump, unlock, rescore. Same spine: late -> paused -> busy ->
+// modal-open -> slide-changed -> per command.
+describe('via remote: jump / unlock / rescore', () => {
+  const NOW = 10_000
+  const fixOk = { canUnlock: true, unlockRefusal: null, canRescore: true, rescoreRefusal: null }
+  const live = {
+    ...idle, now: NOW, paused: false, remoteBusy: false, slideId: 's1', gate: 'advance', phoneRevealed: false,
+    index: 0, slideIds: ['s1', 's2', 's3', 's4'], fix: fixOk,
+  }
+  const r = (cmd, args = {}, ctx = {}, env = {}) =>
+    planHostCommand({ cmd, via: 'remote', args, expectSlideId: 's1', sentAt: NOW - 10, ...env }, { ...live, ...ctx })
+
+  for (const cmd of ['jump', 'unlock', 'rescore']) {
+    it(`${cmd}: late, paused, busy, modal-open, slide-changed, in that order`, () => {
+      const all = { paused: true, remoteBusy: true, modalOpen: true }
+      const args = { slideId: 's3' }
+      expect(r(cmd, args, all, { sentAt: 0 })).toEqual({ refuse: 'late' })
+      expect(r(cmd, args, all)).toEqual({ refuse: 'paused' })
+      expect(r(cmd, args, { remoteBusy: true, modalOpen: true })).toEqual({ refuse: 'busy' })
+      expect(r(cmd, args, { modalOpen: true }, { expectSlideId: 'old' })).toEqual({ refuse: 'modal-open' })
+      expect(r(cmd, args, {}, { expectSlideId: 'old' })).toEqual({ refuse: 'slide-changed' })
+    })
+    it(`${cmd} is remote-only: the keyboard and buttons never send it`, () => {
+      expect(plan({ cmd, args: { slideId: 's3' } }, live)).toEqual({ refuse: 'unknown-command' })
+      expect(plan({ cmd, via: 'button', args: { slideId: 's3' } }, live)).toEqual({ refuse: 'unknown-command' })
+    })
+  }
+
+  it('jump by slide id wins over a stale index (slides reordered since the list was sent)', () => {
+    expect(r('jump', { slideId: 's3', index: 1 })).toEqual({ run: 'jump', index: 2 })
+  })
+  it('jump by index when no slide id is sent', () => {
+    expect(r('jump', { index: 3 })).toEqual({ run: 'jump', index: 3 })
+  })
+  it('jump to a slide that is gone, or a bad index, is refused as bad-target', () => {
+    expect(r('jump', { slideId: 'nope' })).toEqual({ refuse: 'bad-target' })
+    expect(r('jump', { index: 9 })).toEqual({ refuse: 'bad-target' })
+    expect(r('jump', { index: -1 })).toEqual({ refuse: 'bad-target' })
+    expect(r('jump', { index: 1.5 })).toEqual({ refuse: 'bad-target' })
+    expect(r('jump', {})).toEqual({ refuse: 'bad-target' })
+  })
+  it('jump to the slide already showing is a no-op, not a re-entry', () => {
+    expect(r('jump', { slideId: 's1' })).toEqual({ run: 'noop' })
+  })
+  it('jump is refused while the 280ms deferred advance is pending (it holds the old show)', () => {
+    expect(r('jump', { slideId: 's3' }, { pendingAdvance: true })).toEqual({ refuse: 'pending-advance' })
+  })
+  it('busy covers jumpBusy, scoring, race, PYL, countdown and the phase-3 queue: all arrive as remoteBusy', () => {
+    expect(r('jump', { slideId: 's3' }, { remoteBusy: true })).toEqual({ refuse: 'busy' })
+  })
+
+  it('unlock runs when the fix state allows it, else refuses with its reason', () => {
+    expect(r('unlock')).toEqual({ run: 'unlock' })
+    expect(r('unlock', {}, { fix: { ...fixOk, canUnlock: false, unlockRefusal: 'nothing-locked' } })).toEqual({ refuse: 'nothing-locked' })
+    expect(r('unlock', {}, { fix: { ...fixOk, canUnlock: false, unlockRefusal: 'scoring' } })).toEqual({ refuse: 'scoring' })
+  })
+  it('rescore runs when the fix state allows it, else refuses with its reason', () => {
+    expect(r('rescore')).toEqual({ run: 'rescore' })
+    for (const reason of ['not-locked', 'already-revealed', 'laptop-only', 'scoring', 'locking', 'nothing-to-fix']) {
+      expect(r('rescore', {}, { fix: { ...fixOk, canRescore: false, rescoreRefusal: reason } })).toEqual({ refuse: reason })
+    }
+  })
+  it('no fix state at all refuses rather than running', () => {
+    expect(r('rescore', {}, { fix: undefined })).toEqual({ refuse: 'nothing-to-fix' })
+    expect(r('unlock', {}, { fix: undefined })).toEqual({ refuse: 'nothing-to-fix' })
   })
 })

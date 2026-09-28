@@ -1,7 +1,5 @@
-// The one slide label for the iPad remote's snapshot and Up Next (spec §8).
-// Verbatim copy of Host.jsx's slidePickerLabel (~:350). Host.jsx should import
-// this instead once the other session's uncommitted edit there is committed —
-// it was left untouched on purpose.
+// The one slide label (spec §8): the laptop's Go Live picker (Host.jsx), and
+// the iPad remote's snapshot, Up Next and Jump list all read this function.
 export function slidePickerLabel(slide) {
   const { data, type } = slide
   if (type === 'question' || type === 'pixelate-series') {

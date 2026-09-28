@@ -18,8 +18,34 @@ describe('buildSnapshot', () => {
       cue: 'Show question 1', gate: 'advance',
       upNext: [{ label: 'Q1', type: 'question' }, { label: 'Q2', type: 'question' }],
       toggles: { answerReveal: true, scoreboardVisible: false, scoresRevealed: false },
-      busy: false, paused: true,
+      busy: false, paused: true, jumpBusy: false, fix: null,
+      slides: [
+        { index: 0, id: 'a', label: 'Movies', type: 'round-intro', round: null, roundTitle: null },
+        { index: 1, id: 'b', label: 'Q1', type: 'question', round: null, roundTitle: null },
+        { index: 2, id: 'c', label: 'Q2', type: 'question', round: null, roundTitle: null },
+        { index: 3, id: 'd', label: 'Grading Break', type: 'grading-break', round: null, roundTitle: null },
+      ],
     })
+  })
+  it('the jump list names each slide with slidePickerLabel and its round number and title', () => {
+    const rounds = [{ id: 'r1', number: 1, title: 'Movies' }, { id: 'r2', title: 'Music' }]
+    const inRounds = [
+      { id: 'x', type: 'title', data: { title: 'Welcome' } },
+      { id: 'y', type: 'question', roundId: 'r1', data: { questionNumber: 4 } },
+      { id: 'z', type: 'question', roundId: 'r2', data: { isShiny: true, seriesTheme: 'Name that tune' } },
+    ]
+    expect(buildSnapshot({ slides: inRounds, rounds, index: 0, showState: {}, cue: { label: null, gate: null } }).slides).toEqual([
+      { index: 0, id: 'x', label: 'Welcome', type: 'title', round: null, roundTitle: null },
+      { index: 1, id: 'y', label: 'Q4', type: 'question', round: 'Round 1', roundTitle: 'Movies' },
+      // No stored number: falls back to its place in the rounds list.
+      { index: 2, id: 'z', label: 'Name that tune', type: 'question', round: 'Round 2', roundTitle: 'Music' },
+    ])
+  })
+  it('carries jumpBusy and the fix state for the current slide as given', () => {
+    const fix = { mechanic: 'matching', canUnlock: true, unlockRefusal: null, canRescore: false, rescoreRefusal: 'already-revealed', rescoreLabel: 'Rescore' }
+    const snap = buildSnapshot({ slides, index: 1, showState: {}, cue: { label: null, gate: null }, jumpBusy: true, fix })
+    expect(snap.jumpBusy).toBe(true)
+    expect(snap.fix).toEqual(fix)
   })
   it('Up Next shrinks at the end; slide is null past the end', () => {
     expect(buildSnapshot({ slides, index: 3, showState: {}, cue: { label: null, gate: null } }).upNext).toEqual([])

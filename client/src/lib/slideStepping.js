@@ -621,3 +621,31 @@ export async function computePrevStep(show, fetchTeamCount) {
     answer_reveal: false,
   }
 }
+
+/**
+ * One iPad Jump (spec §6 jumpTo). `show` is { slides, currentSlideIndex };
+ * `target` is an index into the sorted slides. Returns a shows-row patch, or
+ * null when the target doesn't exist. Sync on purpose, so useShow can apply
+ * it before any await: a team-picker target is the one case that needs its
+ * parts baked first, and the caller passes those baked `slides` in.
+ *
+ * protectInProgress = target <= furthest visited (spec: `target < current` is
+ * wrong — jump back to Q3, then forward to an already-scored Q5, and Q5's
+ * locks would clear). `furthest` is floored at the current index so a reload
+ * mid-show (furthest mark lost) still protects everything behind Ben. Past
+ * furthest, it follows computeNextStep's current rule: protect only a fully
+ * locked+revealed slide, fresh-entry reset for anything else.
+ */
+export function computeJumpStep(show, target, { furthest = -1, slides = show?.slides ?? [] } = {}) {
+  const sorted = sortSlides(show?.slides ?? [])
+  const targetSlide = sorted[target]
+  if (!targetSlide || target < 0) return null
+  const resolved = slides.find(s => s.id === targetSlide.id) ?? targetSlide
+  const visited = target <= Math.max(furthest, show?.currentSlideIndex ?? 0)
+  return {
+    slides: withEntryState(slides, resolved, { currentPart: 0, protectInProgress: visited || isScoredOrStarted(resolved) }),
+    current_slide_index: target,
+    current_slide_id: targetSlide.id,
+    answer_reveal: false,
+  }
+}

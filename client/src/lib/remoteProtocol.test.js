@@ -29,6 +29,13 @@ describe('refusalText', () => {
     expect(refusalText('locking')).toBe('Countdown running')
     expect(refusalText('weird')).toMatch(/laptop/)
   })
+  it('phase 2a reasons (jump, unlock, rescore) have their own plain text, no fallback', () => {
+    const fallback = refusalText('weird')
+    for (const r of ['bad-target', 'nothing-to-fix', 'nothing-locked', 'not-locked', 'already-revealed', 'laptop-only', 'error']) {
+      expect(refusalText(r)).not.toBe(fallback)
+    }
+    expect(refusalText('laptop-only')).toMatch(/horse race/i)
+  })
 })
 
 describe('remoteStatus', () => {

@@ -19,6 +19,7 @@ import { nextPressGate } from '../../lib/nextPressCue.js'
 import { planHostCommand } from '../../lib/hostCommands.js'
 import { useRemoteLink } from '../../hooks/useRemoteLink.js'
 import { buildSnapshot, hostChipText } from '../../lib/remoteSnapshot.js'
+import { fixFor } from '../../lib/remoteFix.js'
 import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, unlockPatch, PHONE_MECHANICS, REVEAL_FIELD, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
 
 // Named so the UI can recognize this ONE specific refusal and offer a manual
@@ -279,6 +280,12 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // keyboard's Next, which is not approved (spec §15 Q2).
   const raceSinceRef = useRef(0)
   useEffect(() => { raceSinceRef.current = raceBusy ? Date.now() : 0 }, [raceBusy])
+  // iPad remote only (spec §6): a jump or rescore the remote started and
+  // hasn't finished, capped at 12s like scoringSinceRef. The ref is the gate
+  // (set synchronously, so a second command arriving before React re-renders
+  // is refused); the state only re-renders the snapshot. Never gates the keyboard.
+  const [remoteRun, setRemoteRun] = useState(null) // 'jump' | 'rescore' | null
+  const remoteRunSinceRef = useRef(0)
   const [remoteLinkOn, setRemoteLinkOn] = useState(() => {
     try { return localStorage.getItem(REMOTE_LINK_KEY) === '1' } catch { return false }
   })
@@ -336,6 +343,19 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // the same trap on all four phone mechanics, so it now covers all four.
   const phoneActionShowing = !!phoneMechanic
     && !currentSlide?.data?.[REVEAL_FIELD[phoneMechanic]]
+
+  // The iPad Fix drawer's state for this slide: same busy/error pair the
+  // lock/score panel below reads for each mechanic, horse race's own pair.
+  const [fixBusy, fixError] = currentSlide?.type === 'horse-race'
+    ? [raceBusy, raceScoreError]
+    : ({
+        matching: [matchingBusy, matchingScoreError],
+        order: [orderBusy, orderScoreError],
+        wager: [wagerBusy, wagerError],
+        choice: [choiceBusy, choiceScoreError],
+        huesCues: [huesCuesBusy, huesCuesScoreError],
+      }[phoneMechanic] ?? [false, null])
+  const remoteFix = fixFor(currentSlide, { busy: fixBusy, error: fixError })
 
   const theme = getTheme(show.theme ?? show.theme_id)
 
@@ -1039,6 +1059,35 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     actions.updateSlide(currentSlide.id, { data: { ...currentSlide.data, ...patch } })
   }
 
+  // Horse race's Unlock (not a PHONE_MECHANICS entry, so unlockCurrentSlide
+  // doesn't cover it). Named so the laptop button and the iPad share it.
+  function unlockHorseRace() {
+    actions.updateSlide(currentSlide.id, {
+      data: { ...currentSlide.data, raceLocked: false },
+    })
+  }
+
+  // The lock/score panel's main button, per phone mechanic: lock and score,
+  // or Retry Scoring once locked. Extracted from the panel's inline `act`
+  // closures so the iPad's rescore runs the exact same handler. Wager is the
+  // one two-phase mechanic: before a tier snapshot exists this runs
+  // handleLockWagers (tiers only), after it the shared lock-and-score path —
+  // branching on wagerTiers presence, not the lock flag, is deliberate (see
+  // handleLockAndScoreWagers' preCheck). Horse race is not here: its button
+  // stays laptop-only (spec §6).
+  function scoreActionFor(mechanic, slide) {
+    const d = slide?.data ?? {}
+    return {
+      matching: () => handleLockAndScoreMatching(slide),
+      order: () => handleLockAndScoreOrder(slide),
+      wager: () => (d.wagerTiers != null
+        ? handleLockAndScoreWagers(slide)
+        : handleLockWagers(slide)),
+      choice: () => handleLockAndScoreChoice(slide),
+      huesCues: () => handleLockAndScoreHuesCues(slide),
+    }[mechanic] ?? null
+  }
+
   // Same actionsRef reasoning above, plus: handleLockAndScoreMatching/
   // handleLockWagers/handleLockAndScoreWagers/handleLockAndScoreOrder are
   // ordinary function declarations recreated on every render (they close
@@ -1167,6 +1216,9 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       slideId: currentSlide?.id ?? null,
       gate: nextGate.gate,
       phoneRevealed: !!phoneMechanic && !!currentSlide?.data?.[REVEAL_FIELD[phoneMechanic]],
+      index: currentIndex,
+      slideIds: slides.map(s => s.id),
+      fix: remoteFix,
     })
     if (plan.refuse) return plan
     switch (plan.run) {
@@ -1193,6 +1245,15 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       case 'set-answer-reveal': actions.setAnswerReveal(plan.value); break
       case 'set-scoreboard-visible': actions.setScoreboardVisible(plan.value); break
       case 'set-scores-revealed': actions.setScoresRevealed?.(plan.value); break
+      // iPad only (planHostCommand refuses these for the keyboard and buttons).
+      case 'jump':
+        guardNav(() => runRemote('jump', () => actions.jumpTo(plan.index)))
+        break
+      case 'unlock':
+        if (currentSlide?.type === 'horse-race') unlockHorseRace()
+        else unlockCurrentSlide()
+        break
+      case 'rescore': runRemote('rescore', scoreActionFor(phoneMechanic, currentSlide)); break
     }
     return { ok: true }
   }
@@ -1203,13 +1264,22 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   runHostCommandRef.current = runHostCommand
 
   // The iPad remote's busy gate (spec §6): checked before the lock phase in
-  // planHostCommand. Never gates the keyboard. jumpBusy and the score queue
-  // join it in phases 2-3.
+  // planHostCommand. Never gates the keyboard. Covers next, prev, jump, unlock
+  // and rescore. Phase 3 adds the score write queue here (non-empty = busy).
   function remoteBusyNow() {
     return scoringBlocksNext()
       || (raceBusy && Date.now() - raceSinceRef.current < 12000)
       || pylPickerBusy
       || !!currentSlide?.data?.lockCountdownStartedAt
+      || (!!remoteRunSinceRef.current && Date.now() - remoteRunSinceRef.current < 12000)
+  }
+  function runRemote(kind, fn) {
+    remoteRunSinceRef.current = Date.now()
+    setRemoteRun(kind)
+    Promise.resolve()
+      .then(fn)
+      .catch(e => console.error(`[remote] ${kind} failed`, e))
+      .finally(() => { remoteRunSinceRef.current = 0; setRemoteRun(null) })
   }
   const remoteLink = useRemoteLink({
     enabled: remoteLinkOn,
@@ -1217,6 +1287,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     snapshot: buildSnapshot({
       slides, index: currentIndex, showState: show.showState, cue: nextGate,
       busy: remoteBusyNow(), paused: remotePaused,
+      rounds: show.rounds, jumpBusy: remoteRun === 'jump', fix: remoteFix,
     }),
   })
 
@@ -1500,7 +1571,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                   ? 'Answers locked and scored — press A to reveal them on the TV.'
                   : 'Matching question — teams are submitting on their phones',
                 label: matchingBusy ? 'Scoring…' : d.matchingLocked ? '🔁 Retry Scoring' : '🔒 Lock Answers & Score',
-                act: () => handleLockAndScoreMatching(currentSlide),
+                act: scoreActionFor('matching', currentSlide),
               },
               order: {
                 busy: orderBusy, error: orderScoreError, zeroErr: null,
@@ -1508,7 +1579,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                   ? 'Answers locked and scored — press A to reveal them on the TV.'
                   : 'Order Up question — teams are submitting on their phones',
                 label: orderBusy ? 'Scoring…' : d.orderLocked ? '🔁 Retry Scoring' : '🔒 Lock Answers & Score',
-                act: () => handleLockAndScoreOrder(currentSlide),
+                act: scoreActionFor('order', currentSlide),
               },
               // Wager is the one two-phase mechanic: before a tier snapshot
               // exists the button runs handleLockWagers (tiers only, no
@@ -1529,9 +1600,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                     : d.wagerGuessesLocked
                       ? '🔁 Retry Scoring'
                       : '🔒 Lock Answers & Score',
-                act: () => (d.wagerTiers != null
-                  ? handleLockAndScoreWagers(currentSlide)
-                  : handleLockWagers(currentSlide)),
+                act: scoreActionFor('wager', currentSlide),
                 force: () => handleLockAndScoreWagers(currentSlide, { force: true }),
               },
               choice: {
@@ -1540,7 +1609,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                   ? 'Answers locked and scored — press A to reveal the correct answer on the TV.'
                   : 'Choice question — teams are picking on their phones',
                 label: choiceBusy ? 'Scoring…' : d.choiceLocked ? '🔁 Retry Scoring' : '🔒 Lock Answers & Score',
-                act: () => handleLockAndScoreChoice(currentSlide),
+                act: scoreActionFor('choice', currentSlide),
               },
               huesCues: {
                 busy: huesCuesBusy, error: huesCuesScoreError, zeroErr: null,
@@ -1548,7 +1617,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                   ? 'Guesses locked and scored — press A to reveal the correct square on the TV.'
                   : 'Hues, Cues, and Booze — teams are guessing on their phones',
                 label: huesCuesBusy ? 'Scoring…' : d.huesCuesLocked ? '🔁 Retry Scoring' : '🔒 Lock Guesses & Score',
-                act: () => handleLockAndScoreHuesCues(currentSlide),
+                act: scoreActionFor('huesCues', currentSlide),
               },
             }[phoneMechanic]
             // isLocked (any lockField true) is checked separately from the
@@ -1642,9 +1711,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                 )}
                 {isLocked && (
                   <button
-                    onClick={() => actions.updateSlide(currentSlide.id, {
-                      data: { ...currentSlide.data, raceLocked: false },
-                    })}
+                    onClick={unlockHorseRace}
                     className="w-full mt-2 py-2 rounded-lg border border-gray-200 text-gray-500 text-xs font-semibold hover:bg-gray-50"
                   >
                     🔓 Unlock — let teams resubmit
