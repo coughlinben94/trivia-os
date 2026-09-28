@@ -273,7 +273,7 @@ root package.json    + "relay": "npm --prefix relay start"
   - A throwaway page on the deployed `trivia-os.vercel.app` opens `ws://localhost:8794` to check the LNA prompt with both Allow and Block.
   - A real iPad holds WSS through `tailscale serve` to a 20-line echo server **for 30 minutes**, sleeping and waking the iPad, while counting reconnects and 1001 closes (issue #18827). Too many drops means rethinking the transport.
 - **Phase 1:** relay, plist, pairing, `useRemoteLink` (beat reply, Pause), `/remote` with Next (`cue`/`gate`), Prev, the three toggles, Up Next, strip, chip, wake lock, manifest, and the `nextPressCue` fixes. Rehearse, then one show with the Stream Deck as backup.
-- **Phase 2:** `jumpTo` + `jumpBusy`, then unlock and rescore.
+- **Phase 2:** `jumpTo` + `jumpBusy`, then unlock and rescore. Then **Stream Deck parity (§17)**: jukebox mode through a `/display` relay peer, volume and Duck, and the soundboard.
 - **Phase 3:** score chain (including the `lockAndScore` segment), `score.*`, lock keep-alive and auto-drop.
 - **Phase 4, nice-to-have:** room status; re-check the project id and publication before touching them.
 - **Later:** the tailnet access rule (§4) and the atomic jsonb-set RPC.
@@ -297,6 +297,11 @@ Fallback ladder: **iPad, then the laptop keyboard or Live Mode buttons.** The St
 | Stream Deck focus on /display | Rewind risk (§2) | Keep focus on /host |
 | Something odd from the iPad | | **Pause iPad remote** on the chip |
 | Two /host tabs | Old one gets 4001 and stops | Close it |
+| Jukebox button pressed while the `/display` window is closed or not linked (§17) | Jukebox buttons grey, "TV window not linked" | Stream Deck B / Space with focus on /display |
+| Back to Trivia during the 10s wait, before the jukebox is up | Refused `jukebox-not-open`; the iPad offers "Open jukebox now" instead | None |
+| Relay restarts while ducked | Relay reloads the pre-duck volume from `duck.json`, and the iPad still shows Duck ●; one press restores it | Vol keys |
+| Relay crashes mid-sound | The `afplay` child is orphaned and plays to the end (clips are short); Stop all can't reach it | Wait, or Vol down |
+| Volume keys with the audio output on AirPlay to the TV | Unverified that `set volume` moves the AirPlay volume (§17 Q) | Stream Deck vol keys / TV remote |
 
 ## 15. Cut (YAGNI) and open questions
 
@@ -313,6 +318,7 @@ Fallback ladder: **iPad, then the laptop keyboard or Live Mode buttons.** The St
 1. Which tailnet device is the show iPad (`ipad-air-10-5`, offline 42 days, or one of the `ipad157*`)? Only needed for the later access rule.
 2. **Proposed separate fix, not approved:** add `raceBusy` to LiveMode's `scoringBusy` (~:266) so the keyboard's Next is blocked during horse-race scoring too. The remote gate covers it either way.
 3. Phase 4: is `phone_answers` in the Realtime publication, or should the laptop poll it?
+4. Stream Deck parity questions are in §17.
 
 ## 16. Rejected or narrowed critique items
 
@@ -331,3 +337,102 @@ I checked everything against the code: `pendingLockPhase`, `pendingReveal` and `
 - **S6 (drop the 60s "no iPad socket" rule):** accepted. The phase-1 relay does send the host a `{type:'remotes', count}` message, but only to drive the chip's "no iPad" state; nothing auto-drops on it.
 - **B2 walkout grace:** narrowed. Inside `WALKOUT_INVOKE_GRACE_MS` (4s) after a walkout press, `computeNextStep` makes Next a no-op, but the gate still reads `advance` (the cue is computed on render and has no clock). A remote tap in that window is received and does nothing, the same as the keyboard.
 - **Nit "raceBusy in scoringBusy":** not approved, as the brief says; `raceBusy` is a separate remote-only busy input with its own cap.
+
+## 17. Stream Deck parity (phase 2)
+
+Source: Ben's Stream Deck profile `FFF3BAC3-…sdProfile`, read-only.
+
+**Page 1 keys:** Next (→) ×2, Back (←) ×2, Answer (A) ×2, Scoreboard (S), Back to Trivia (B), Duck (a BetterTouchTool action), Vol −/+ (macOS default output, ±10), Open PowerPoint / Excel / Chrome, and Ctrl+→ (switch macOS Space).
+
+**Page 2:** 10 Play Audio keys that play local files from `~/Desktop/Trivia Sounds`, `~/Documents` and `~/Downloads`.
+
+**Duplicated keys** (two each of Next, Back and Answer) are there for the left and right hand. The iPad needs one of each, and it already has them (§9).
+
+### 17.1 Where each key lives today (checked in code)
+
+| Key | Handled by | Window |
+|---|---|---|
+| → ← A S | `planHostCommand` via LiveMode keydown | `/host` (already in phases 1–2) |
+| B, Back to Trivia | `Jukebox.jsx` keydown `e.key === 'b'` (~:1300-1354): `handoffFiredRef` guard, then if playing `setLibHandoffPending(true)`, `handleStop()`, wait `EXIT_TOTAL_MS`, then `flushPendingWrite()`, then `onExitToShow()`. `JukeboxBreakOverlay` passes `onExitToShow={onExit}`, which is Display's `onBreakAdvance`, which calls `advanceAfterBreak` (`Display.jsx:609`: +1, or the Final Break jump to winner-reveal, through the anon `advance_show` RPC) | `/display` |
+| Space, jukebox play/stop | `Jukebox.jsx` keydown (~:1273-1298): guarded by `modalTrack`, `libHandoffPending` and `liveEnding`; then `handleStop()` or `startShuffle()` | `/display` |
+| Space/→, "skip the 10s wait" | `DisplayInner` effect (~:880-892): `setWarp('out')` while `breakEligible && !breakActive && !warp` | `/display` |
+| Duck | BetterTouchTool named trigger `duck`, read from BTT's data store (read-only). Step 1: `osascript -e 'output volume of (get volume settings)' > /tmp/preduck_vol`. Last step: `osascript -e "set volume output volume $(cat /tmp/preduck_vol)"`. The steps in between (BTT action 366) weren't decoded, so the ducked level is unknown | macOS, **system output volume** |
+| Vol −/+ | Stream Deck built-in, default output ±10 | macOS |
+| Soundboard | Stream Deck Play Audio, default output | macOS |
+
+**The architecture gap:** B and the jukebox Space are only in the `/display` window, and the relay only talks to `/host`. Pressing Next on `/host` during a break is *not* the same as B. The overlay's own comment says a host advance mid-break unmounts the jukebox and "player disconnect cuts any early audio". That path also skips the fade-out, `flushPendingWrite()` and `advanceAfterBreak`'s Final Break jump.
+
+### 17.2 Reaching `/display`: pick a relay peer
+
+| Option | Cost | Verdict |
+|---|---|---|
+| **A. `/display` connects to the relay as a second local peer** (`ws://localhost:8794`, first message `{type:'hello-local', role:'display'}`) | Two small functions pulled out of the two `Jukebox.jsx` handlers, plus a ~40-line hook in Display; the relay adds one role. No schema change. `/display` is a Chrome window on the same laptop (BTT lists the LG TV as an AirPlay display), so it has the same origin and the same LNA permission | **Chosen** |
+| B. `/host` sets a show flag that Display reads | A new `shows` column (a migration and a second show-shape change in both implementations, SKILL.md), RT-1 merge care, and Realtime is at-most-once (the TEAM-2 note in Display.jsx), so a press can be lost. It is also the Supabase command queue that was already cut | Rejected |
+| C. Relay sends a keystroke with `osascript` System Events "b" | Goes to whatever window has focus (the §2 problem) and needs Accessibility permission for node | Rejected |
+
+**Option A in detail:**
+- **Jukebox.jsx.** Lift the two handler bodies into `exitToShow()` and `togglePlay()`, with every existing guard moved inside them. The keydown handlers call these functions, so the keys behave exactly as now. `Jukebox` takes an optional `remoteRef` prop, and `JukeboxBreakOverlay` passes it through; the ref holds `{exitToShow, togglePlay, state}`.
+- **Display.jsx.** A `useDisplayLink` hook connects only when not `isPreview`/`isDemo` and `show.is_live`. It sends `{type:'display-state', breakWaiting, jukeboxOpen, playing, handoffPending}` on change. It answers `relay-beat` from `onmessage`, the same way the host does.
+- **Display commands:**
+  - `jukebox.exit` calls `exitToShow()`. It is refused as `jukebox-not-open` if the overlay isn't mounted.
+  - `jukebox.playStop` calls `togglePlay()`.
+  - `break.skipWait` calls `setWarp('out')`, under the same three conditions as the key.
+- **Relay.** One display socket at a time (4001 on replace). It sends `jukebox.*` and `break.*` to the display socket; everything else still goes to the host. If there is no display socket, it replies `display-offline`, shown as "TV window not linked". The iPad status strip adds a small "TV linked ●/○".
+- **Freshness.** `sentAt` and the 1500ms cut apply as for host commands, and the display's beat reply carries `laptopNow`, so it uses the same clock.
+
+**Jukebox mode on the iPad** applies while host state `slide.type === 'grading-break'`:
+- **Before the warp:** a big "Open jukebox now" (`break.skipWait`).
+- **Once `jukeboxOpen`:** a big **Back to Trivia** (`jukebox.exit`, one tap, like B), Play/Stop (`jukebox.playStop`, lit when `playing`), Duck, and Vol −/+.
+- **Host Next is hidden** behind "Skip the break (no fade)", which needs a confirming second tap. This keeps the iPad from making the cut described in 17.1.
+- Everything greys while `handoffPending`.
+
+### 17.3 Volume and Duck: both are relay-local macOS, not jukebox gain
+
+- **Duck must match today's behaviour, which is system output volume.** The jukebox has its own gain (`useSpotifyPlayer.js` `setVolume` ~:743, which calls `player.setVolume`), but Ben's Duck doesn't use it (checked: no "duck" anywhere in `client/src/jukebox`). A jukebox-only duck would be new behaviour, so it's left as an open question.
+- **`vol.up` / `vol.down`.** The relay reads `output volume of (get volume settings)` and sets it to ±10, clamped to 0–100.
+- **`duck` (toggle).** First press: save the current volume to memory **and** `~/.config/trivia-relay/duck.json`, then set it to `duckLevel`. Second press: restore and delete the file. After a restart, the relay reloads `duck.json`, so a restore is never lost.
+- **Duck level (decided by Ben, 2026-09-28):** ducked volume = 20% of the pre-duck volume (pre 60 gives 12), and the second press restores exactly the saved pre-duck volume. Store the ratio as `duckRatio: 0.2` in the relay config. Ben has not used Duck in a live show yet (his words), so treat it as unproven: it ships behind the phase-2 rehearsal like everything else.
+- The host snapshot doesn't carry these values. The relay sends `{type:'local-state', volume, ducked}` itself.
+
+### 17.4 Soundboard
+
+- **Config:** `~/.config/trivia-relay/sounds.json` is `[{id, label, path}]`, with absolute paths to the 10 Stream Deck files. The relay checks on start that each file exists, and marks missing ones as `missing`.
+- **The iPad only ever sends `{cmd:'sound.play', id}`.** The relay looks up the id and runs `execFile('/usr/bin/afplay', [path])`: no shell, no path from the iPad, and unknown ids are refused. Output is the default device, the same as the Stream Deck.
+- **`sound.stopAll`** kills the `afplay` children the relay is tracking. A new play doesn't stop older ones, which matches Stream Deck overlap. The iPad gets the list (`{id,label,missing}`) on hello and shows it as a Sounds drawer: a grid of 64pt buttons plus a red Stop all.
+
+### 17.5 Not ported
+
+- **App launchers (PowerPoint / Excel / Chrome) and Ctrl+→ Space switch:** these arrange the laptop itself, and a remote can't show what they did. Leave them on the Stream Deck unless Ben says he uses them mid-show (open question).
+
+### 17.6 Security: the relay now runs local commands
+
+- **Fixed commands only.** Every local command is a set `execFile` call (`osascript` with a script built in the relay from a clamped number, or `afplay` with an allowlisted path). There is no shell and no argument text from the iPad.
+- **Secret required.** All of them go through the paired-secret socket (§4). The host and display listeners never accept `vol.*`, `duck` or `sound.*`: the relay routes these only from remote sockets.
+- **Logging.** Each one is logged (time, command, id) to `~/Library/Logs/trivia-relay/out.log`.
+- **Rate limit.** More than 10 local commands per second from one socket closes it with code 4008.
+- **Pause.** "Pause iPad remote" (§7) also blocks these; the relay checks the host's `paused` flag.
+- **CLAUDE.md/SKILL.md scoped exception** (§10): add "and plays allowlisted sounds / sets system volume on the laptop" to the relay wording.
+
+### 17.7 Tests
+
+- **Relay (vitest):**
+  - Unknown sound id refused.
+  - A path in the message is ignored.
+  - `execFile` is called with an argument array, checked with a mock.
+  - Duck, restart, restore brings back the saved volume.
+  - Volume stays within 0–100.
+  - `jukebox.*` with no display socket gives `display-offline`.
+  - The display role is refused on the remote port.
+  - Rate limit gives 4008.
+- **Unit:** `exitToShow`/`togglePlay` keep the old key guards (`handoffFiredRef` double-press, `libHandoffPending`, `liveEnding`).
+- **Rehearsal:**
+  - A full grading break from the iPad only: Open jukebox now, Play/Stop, Duck and restore, Back to Trivia.
+  - A last break, to check the Final Break jump to winner-reveal.
+  - Each soundboard key, and Stop all.
+
+### 17.8 Open questions
+
+1. ~~What volume should Duck drop to?~~ Answered: 20% of the pre-duck volume, restore to the saved level (see 17.3). Duck has not been used in a live show yet.
+2. Should Duck stay system-wide (which also ducks the soundboard and question audio, as today), or become jukebox-only through `setVolume`?
+3. Does `set volume output volume` move the volume when the output is AirPlay to the LG TV? Test this in the phase-0 spike.
+4. Does Ben use PowerPoint / Excel / Chrome / the Space switch mid-show?
