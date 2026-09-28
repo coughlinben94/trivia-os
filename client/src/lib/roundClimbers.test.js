@@ -435,3 +435,37 @@ describe('computeClimbers: excludeTop', () => {
     expect(computeClimbers(show, 'b', six, { excludeTop: '3' }).excludeTop).toBe(3)
   })
 })
+
+describe('computeClimbers: new leader', () => {
+  it('names a team that took first outright', () => {
+    // After R1: A10 B6 C1. After R2: B14 A10 C2.
+    const r = computeClimbers(show, 'b', [team('A', 10, 0), team('B', 6, 8), team('C', 1, 1)])
+    expect(r.newLeader).toBe('B')
+  })
+
+  it('is null when the leader did not change', () => {
+    const r = computeClimbers(show, 'b', [team('A', 10, 5), team('B', 6, 8), team('C', 1, 1)])
+    expect(r.newLeader).toBeNull()
+  })
+
+  it('is null when first is shared', () => {
+    const r = computeClimbers(show, 'b', [team('A', 10, 0), team('B', 6, 4), team('C', 1, 1)])
+    expect(r.newLeader).toBeNull()
+  })
+
+  it('still reports it when skip-top hides the climber row', () => {
+    const r = computeClimbers(show, 'b', [team('A', 10, 0), team('B', 6, 8), team('C', 1, 1), team('D', 0, 0)], { excludeTop: 3 })
+    expect(r.newLeader).toBe('B')
+  })
+
+  it('counts a late joiner who lands on top as the new leader', () => {
+    const r = computeClimbers(show, 'b', [team('A', 10, 5), team('B', 6, 8), team('Late', undefined, 40)])
+    expect(r.newLeader).toBe('Late')
+  })
+
+  it('is null while grading is incomplete', () => {
+    const r = computeClimbers(show, 'b', [team('A', 10, 5), team('B', 6)])
+    expect(r.status).toBe('incomplete')
+    expect(r.newLeader).toBeNull()
+  })
+})

@@ -213,6 +213,7 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
               <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Slide Content</p>
               {slide.type === 'title' && <TitleEditor data={data} onChange={change} />}
               {slide.type === 'last-call' && <LastCallEditor data={data} onChange={change} />}
+              {slide.type === 'biggest-climbers' && <ClimbersEditor data={data} onChange={change} />}
               {slide.type === 'shiny-title' && (
                 <ShinyTitleEditor data={data} onChange={change} uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} usedPhotoUrls={usedPhotoUrls} />
               )}
@@ -2284,6 +2285,31 @@ function AwardsEditor({ data, onChange }) {
           onChange={e => onChange('bruisedApple', e.target.checked)} />
         Bruised Apple (last place, takes the last card)
       </label>
+    </div>
+  )
+}
+
+// Which places to leave out of the list. The round is the one this slide sits
+// in, so moving the slide to another round changes what it compares.
+function ClimbersEditor({ data, onChange }) {
+  const skip = Number.isInteger(Number(data.excludeTop)) && Number(data.excludeTop) > 0 ? Number(data.excludeTop) : 0
+  return (
+    <div className="flex flex-col gap-2 py-2">
+      <label className="flex flex-col gap-1 text-sm text-gray-700">
+        Leave out teams now in the top
+        <select
+          id="climbers-exclude-top"
+          className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white"
+          value={skip}
+          onChange={e => onChange('excludeTop', Number(e.target.value))}
+        >
+          <option value={0}>Nobody (show every climber)</option>
+          {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>Top {n}</option>)}
+        </select>
+      </label>
+      <p className="text-xs text-gray-400 leading-relaxed">
+        Compares the round this slide sits in with the one before it, so it needs a round with scores. A team that takes first place gets its own line at the bottom either way.
+      </p>
     </div>
   )
 }
