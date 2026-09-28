@@ -905,15 +905,34 @@ describe('computeNextStep re-entry of scored slides', () => {
     expect(dataOf(fwd, 'b').choiceLocked).toBe(false)
   })
 
-  it('keeps Flip Em Down elimStep and horse race raceStartedAt on re-entry', async () => {
+  it('still resets Flip Em Down elimStep and horse race raceStartedAt on fresh entry', async () => {
     const slides = [
       slide('a', 0),
       slide('f', 1, 'flip-em-down', { elimStep: 2 }),
       slide('h', 2, 'horse-race', { raceStartedAt: 123 }),
     ]
     const toF = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
-    expect(dataOf(toF, 'f').elimStep).toBe(2)
+    expect(dataOf(toF, 'f').elimStep).toBe(0)
     const toH = await computeNextStep({ slides, currentSlideIndex: 1, currentSlideId: 'f' }, noTeams)
-    expect(dataOf(toH, 'h').raceStartedAt).toBe(123)
+    expect(dataOf(toH, 'h').raceStartedAt).toBe(null)
+  })
+
+  const wager = extra => slide('w', 1, 'question', { isShiny: true, shinyInputSchema: { type: 'wager' }, ...extra })
+  it('wager: blind-tier lock alone does not protect', async () => {
+    const slides = [slide('a', 0), wager({ wagerTiersLocked: true, wagerRevealed: true })]
+    const fwd = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(dataOf(fwd, 'w').wagerTiersLocked).toBe(false)
+  })
+  it('wager: both locks + reveal protect', async () => {
+    const slides = [slide('a', 0), wager({ wagerTiersLocked: true, wagerGuessesLocked: true, wagerRevealed: true })]
+    const fwd = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(dataOf(fwd, 'w').wagerGuessesLocked).toBe(true)
+    expect(dataOf(fwd, 'w').wagerRevealed).toBe(true)
+  })
+  it('order: locked+revealed protected', async () => {
+    const slides = [slide('a', 0), slide('o', 1, 'question', { isShiny: true, shinyInputSchema: { type: 'order' }, orderLocked: true, orderRevealed: true })]
+    const fwd = await computeNextStep({ slides, currentSlideIndex: 0, currentSlideId: 'a' }, noTeams)
+    expect(dataOf(fwd, 'o').orderLocked).toBe(true)
+    expect(dataOf(fwd, 'o').orderRevealed).toBe(true)
   })
 })
