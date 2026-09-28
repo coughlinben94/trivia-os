@@ -83,7 +83,7 @@ export default async function globalSetup(config) {
   const pinHeading = page.getByRole('heading', { name: 'Enter host PIN' })
   await pinHeading.waitFor({ state: 'visible', timeout: 15_000 })
 
-  await page.getByPlaceholder('••••').fill(PIN)
+  await page.getByPlaceholder('Enter PIN').fill(PIN)
   await page.getByRole('button', { name: 'Unlock' }).click()
 
   // Round-trips through verify-host-pin (Edge Function) + refreshSession —

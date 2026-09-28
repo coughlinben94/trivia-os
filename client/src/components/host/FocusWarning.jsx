@@ -23,7 +23,7 @@ export default function FocusWarning() {
   return (
     <div
       role="alert"
-      className="fixed inset-x-0 top-0 z-50 bg-red-600 text-white text-center text-sm font-bold py-2 px-4 shadow-lg"
+      className="pointer-events-none fixed inset-x-0 top-0 z-50 bg-red-600 text-white text-center text-sm font-bold py-2 px-4 shadow-lg"
     >
       Stream Deck and arrow keys are going to another window, not this one. Click anywhere here first.
     </div>
