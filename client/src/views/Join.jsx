@@ -628,6 +628,7 @@ function FollowToggle({ mode, onChange, theme }) {
 const OFF_PHONE_COPY = {
   'winner-reveal':  'Eyes on the screen — results coming in 🏆',
   'biggest-climbers': 'Look up. Somebody made a move 📈',
+  'awards':         'Awards time. Eyes on the screen 🏅',
   'team-picker':    'Watch the screen — Ben is picking 👀',
   'team-preview':   'Watch the screen — Ben is picking 👀',
   'pre-show':       "Hang tight — we're about to start 🍺",

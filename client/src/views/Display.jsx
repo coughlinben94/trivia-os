@@ -97,7 +97,7 @@ function isStaleTimestamp(candidate, lastApplied) {
 // snap between it and the content slide that follows. ShinyIntroScreen sizes
 // its title in cqw, which only makes it larger at full bleed, same as grid's
 // caption above.
-const FULL_BLEED_SLIDE_TYPES = new Set(['state-of-union', 'winner-reveal', 'rules', 'team-picker', 'question', 'team-preview', 'grading-break', 'pre-show', 'scoreboard-reveal', 'biggest-climbers', 'round-intro', 'swing-round-intro', 'pyl-reveal', 'grid', 'venn', 'flip-em-down', 'horse-race', 'shiny-title', 'custom'])
+const FULL_BLEED_SLIDE_TYPES = new Set(['state-of-union', 'winner-reveal', 'rules', 'team-picker', 'question', 'team-preview', 'grading-break', 'pre-show', 'scoreboard-reveal', 'biggest-climbers', 'awards', 'round-intro', 'swing-round-intro', 'pyl-reveal', 'grid', 'venn', 'flip-em-down', 'horse-race', 'shiny-title', 'custom'])
 
 // ─── No-show holding screen (before any show goes live) ────────────────────
 

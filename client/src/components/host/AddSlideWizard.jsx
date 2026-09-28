@@ -20,6 +20,7 @@ export const TYPE_CARDS = [
   { type: 'grading-break',  icon: '⏸️', name: 'Grading Break',       desc: 'While Ben grades papers' },
   { type: 'scoreboard-reveal', icon: '🏆', name: 'Scoreboard Reveal', desc: 'Round standings — also unlocks phone scores for this round' },
   { type: 'biggest-climbers', icon: '📈', name: 'Biggest Climbers', desc: 'Who jumped the most places since last round' },
+  { type: 'awards',         icon: '🏅', name: 'Awards',              desc: 'Three end-of-night awards — place between Bonus 1 and Bonus 2' },
   { type: 'winner-reveal',  icon: '🥇', name: 'Winner Reveal',       desc: 'Drum roll → winner + confetti' },
   // hidden 2026-08-19 — folded into a popup off the Press Your Luck tile in
   // BuildMode.jsx (Ben: board was "messy") instead of standing alone here.

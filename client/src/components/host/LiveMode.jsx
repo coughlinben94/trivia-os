@@ -60,6 +60,7 @@ const SLIDE_META = {
   'question':          { label: 'Question',    color: 'bg-gray-100 text-gray-600' },
   'grading-break':     { label: 'Break',       color: 'bg-amber-100 text-amber-700' },
   'scoreboard-reveal': { label: 'Scoreboard',  color: 'bg-yellow-100 text-yellow-800' },
+  'awards':            { label: 'Awards',      color: 'bg-amber-100 text-amber-700' },
   'custom':            { label: 'Custom',      color: 'bg-green-100 text-green-700' },
   'pixelate-series':   { label: 'Pixelate',    color: 'bg-cyan-100 text-cyan-700' },
   'multi-question':    { label: 'Multi-Q',     color: 'bg-orange-100 text-orange-700' },
