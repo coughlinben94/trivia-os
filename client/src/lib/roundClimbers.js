@@ -58,6 +58,20 @@ function closeChase(field) {
   return gap <= CLOSE_CHASE_GAP ? { leader: first.name, chaser: second.name, gap } : null
 }
 
+// Someone who now holds first ALONE and did not hold it before. The rows rank
+// by places climbed, so a 3rd-to-1st jump is easy to miss (or is filtered out
+// by skip-top); this is the headline the rows can't carry. Both ranks use the
+// full field on the board's own totals, so it matches the scoreboard.
+function newLeader(field) {
+  if (field.length < 2) return null
+  const now = rankBy(field, 'now')
+  const before = rankBy(field, 'prev')
+  const top = field.filter(t => now.get(t.id) === 1)
+  if (top.length !== 1) return null
+  const [t] = top
+  return before.get(t.id) === 1 ? null : t.name
+}
+
 // Slide data is host-set JSON, so anything that isn't a positive whole
 // number (absent, 0, NaN, negative, 2.5) means "skip nobody".
 function normalizeExcludeTop(v) {
@@ -81,6 +95,7 @@ export function computeClimbers(show, roundId, teams, { excludeTop } = {}) {
     prevRoundLabel: idx > 0 ? roundCols[idx - 1].label : null,
     climbers: [],
     chase: null,
+    newLeader: null,
     missing: [],
     excludeTop: skipTop,
   }
@@ -115,8 +130,9 @@ export function computeClimbers(show, roundId, teams, { excludeTop } = {}) {
   if (missing.length) return { ...result, status: 'incomplete', missing }
 
   const chase = skipTop ? null : closeChase(field)
+  const leader = newLeader(field)
   const comparable = field.filter(t => t.comparable)
-  if (comparable.length < 2 || field.length <= skipTop) return { ...result, status: 'too-few', chase }
+  if (comparable.length < 2 || field.length <= skipTop) return { ...result, status: 'too-few', chase, newLeader: leader }
   const boardPlace = rankBy(field, 'now')
 
   const placeBefore = rankBy(comparable, 'prev')
@@ -132,9 +148,9 @@ export function computeClimbers(show, roundId, teams, { excludeTop } = {}) {
     }))
     .filter(c => c.climb > 0 && boardPlace.get(c.id) > skipTop)
     .sort((a, b) => b.climb - a.climb || a.to - b.to || a.name.localeCompare(b.name))
-  if (!moved.length) return { ...result, status: 'no-movement', chase }
+  if (!moved.length) return { ...result, status: 'no-movement', chase, newLeader: leader }
 
   const cutClimb = moved[Math.min(TARGET_CLIMBERS, moved.length) - 1].climb
   const climbers = moved.filter(c => c.climb >= cutClimb).slice(0, MAX_CLIMBERS)
-  return { ...result, climbers, chase }
+  return { ...result, climbers, chase, newLeader: leader }
 }

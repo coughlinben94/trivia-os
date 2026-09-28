@@ -204,9 +204,13 @@ export default function BiggestClimbersSlide({ slide, show, isPreview = false })
     lineHeight: 1.14,
   })
 
-  const chaseText = result?.chase
-    ? `${result.chase.chaser} trails ${result.chase.leader} by ${result.chase.gap} ${result.chase.gap === 1 ? 'point' : 'points'}`
-    : ''
+  // The bottom line carries ONE note. A new leader is bigger news than a close
+  // race, so it wins the slot.
+  const chaseText = result?.newLeader
+    ? `${result.newLeader} takes the lead`
+    : result?.chase
+      ? `${result.chase.chaser} trails ${result.chase.leader} by ${result.chase.gap} ${result.chase.gap === 1 ? 'point' : 'points'}`
+      : ''
   const chaseRef = useRef(null)
   const chaseSize = useFitToBox(chaseRef, chaseText, {
     family: theme.fonts.body,
@@ -314,7 +318,7 @@ export default function BiggestClimbersSlide({ slide, show, isPreview = false })
         )}
       </div>
 
-      {/* Close race for first. Always reserves its line so the rows above
+      {/* New leader, else close race for first. Always reserves its line so the rows above
           never shift when it appears. */}
       <div ref={chaseRef} className="shrink-0 flex items-center justify-center" style={{ width: '80cqw', height: '8cqh' }}>
         {chaseText && (
