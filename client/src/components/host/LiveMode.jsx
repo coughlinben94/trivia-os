@@ -69,6 +69,7 @@ const SLIDE_META = {
   'state-of-union':    { label: 'State of Union', color: 'bg-slate-100 text-slate-700' },
   'rules':             { label: 'Rules',          color: 'bg-red-100 text-red-700' },
   'shiny-title':       { label: 'Shiny Title',    color: 'bg-yellow-100 text-yellow-800' },
+  'last-call':         { label: 'Last Call',      color: 'bg-rose-100 text-rose-700' },
 }
 
 function typeMeta(type) {

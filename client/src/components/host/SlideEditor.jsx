@@ -28,6 +28,7 @@ import { sortSlides } from '../../lib/slideStepping.js'
 import { computeWinner, formatWinnerLine } from '../../lib/raceMath.js'
 import { cleanPastedText } from '../../lib/cleanPaste.js'
 import { AWARD_POOL, AWARDS_SHOWN } from '../../lib/nightAwards.js'
+import { LAST_CALL_DEFAULT_TITLE, LAST_CALL_DEFAULT_SUBTITLE } from '../display/slides/LastCallSlide.jsx'
 
 export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, onDeleteSlide, uploadMedia, getHostPhotos }) {
   const { theme } = useTheme()
@@ -211,6 +212,7 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
             <div className="space-y-3">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Slide Content</p>
               {slide.type === 'title' && <TitleEditor data={data} onChange={change} />}
+              {slide.type === 'last-call' && <LastCallEditor data={data} onChange={change} />}
               {slide.type === 'shiny-title' && (
                 <ShinyTitleEditor data={data} onChange={change} uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} usedPhotoUrls={usedPhotoUrls} />
               )}
@@ -429,6 +431,15 @@ function TitleEditor({ data, onChange }) {
     <>
       <Field label="Title"><TextInput value={data.title} onChange={v => onChange('title', v)} placeholder="Baynes Apple Valley" /></Field>
       <Field label="Subtitle"><TextInput value={data.subtitle} onChange={v => onChange('subtitle', v)} placeholder="Trivia Night" /></Field>
+    </>
+  )
+}
+
+function LastCallEditor({ data, onChange }) {
+  return (
+    <>
+      <Field label="Title"><TextInput value={data.title} onChange={v => onChange('title', v)} placeholder={LAST_CALL_DEFAULT_TITLE} /></Field>
+      <Field label="Subtitle"><TextInput value={data.subtitle} onChange={v => onChange('subtitle', v)} placeholder={LAST_CALL_DEFAULT_SUBTITLE} /></Field>
     </>
   )
 }

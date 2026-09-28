@@ -7,6 +7,7 @@ import GradingBreakSlide from './slides/GradingBreakSlide.jsx'
 import ScoreboardRevealSlide from './slides/ScoreboardRevealSlide.jsx'
 import BiggestClimbersSlide from './slides/BiggestClimbersSlide.jsx'
 import AwardsSlide from './slides/AwardsSlide.jsx'
+import LastCallSlide from './slides/LastCallSlide.jsx'
 import CustomSlide from './slides/CustomSlide.jsx'
 import BonusSlide from './slides/BonusSlide.jsx'
 import PixelateSeriesSlide from './slides/PixelateSeriesSlide.jsx'
@@ -189,6 +190,7 @@ const SLIDE_COMPONENTS = {
   'scoreboard-reveal': ScoreboardRevealSlide,
   'biggest-climbers':  BiggestClimbersSlide,
   'awards':            AwardsSlide,
+  'last-call':         LastCallSlide,
   'custom':            CustomSlide,
   'bonus':             BonusSlide,
   'pixelate-series':   PixelateSeriesSlide,

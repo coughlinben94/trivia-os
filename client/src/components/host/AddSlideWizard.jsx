@@ -21,6 +21,7 @@ export const TYPE_CARDS = [
   { type: 'scoreboard-reveal', icon: '🏆', name: 'Scoreboard Reveal', desc: 'Round standings — also unlocks phone scores for this round' },
   { type: 'biggest-climbers', icon: '📈', name: 'Biggest Climbers', desc: 'Who jumped the most places since last round' },
   { type: 'awards',         icon: '🏅', name: 'Awards',              desc: 'Three end-of-night awards — place between Bonus 1 and Bonus 2' },
+  { type: 'last-call',      icon: '🔔', name: 'Last Call',           desc: 'Neon bar sign + bell — grab a drink before the next round' },
   { type: 'winner-reveal',  icon: '🥇', name: 'Winner Reveal',       desc: 'Drum roll → winner + confetti' },
   // hidden 2026-08-19 — folded into a popup off the Press Your Luck tile in
   // BuildMode.jsx (Ben: board was "messy") instead of standing alone here.
@@ -516,6 +517,9 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
 
     } else if (type === 'biggest-climbers') {
       data = { excludeTop: skipTop3 ? 3 : 0 }
+
+    } else if (type === 'last-call') {
+      data = { title: '', subtitle: '' }
 
     } else if (type === 'custom') {
       data = { title: '', body: '', mediaUrl: null, mediaType: null }
