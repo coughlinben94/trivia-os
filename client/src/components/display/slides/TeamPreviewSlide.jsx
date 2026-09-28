@@ -13,7 +13,7 @@ export default function TeamPreviewSlide({ slide, show }) {
     if (!show?.id) return
     supabase
       .from('teams')
-      .select('id, name')
+      .select('id, name, color')
       .eq('show_id', show.id)
       .order('registered_at', { ascending: true })
       .then(({ data }) => { if (data) setTeams(data) })
@@ -82,8 +82,18 @@ export default function TeamPreviewSlide({ slide, show }) {
               color: theme.colors.text,
               fontWeight: 600,
               whiteSpace: 'nowrap',
+              display: 'flex', alignItems: 'center', gap: '0.5em',
             }}
           >
+            {/* The table's picked color — a mark beside the name, never the
+                name's own color, so the text stays legible on every theme.
+                em-sized so it tracks the pill's text size. */}
+            {team.color && (
+              <span aria-hidden style={{
+                width: '0.6em', height: '0.6em', borderRadius: '50%', flexShrink: 0,
+                background: team.color, boxShadow: '0 0 0 0.08em rgba(0,0,0,0.45)',
+              }} />
+            )}
             {team.name}
           </motion.div>
         ))}
