@@ -14,6 +14,10 @@ import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TI
 import { scoreHuesCuesRound, computeHuesCuesScoreUpdates } from '../../lib/huesCuesScoring.js'
 import { computeHorseRaceScoreUpdates, DEFAULT_RACE_POINTS } from '../../lib/raceScoring.js'
 import { HUES_CUES_CODE_RE } from '../../lib/huesCuesGrid.js'
+import { nextPressGate } from '../../lib/nextPressCue.js'
+import { planHostCommand } from '../../lib/hostCommands.js'
+import { useRemoteLink } from '../../hooks/useRemoteLink.js'
+import { buildSnapshot, hostChipText } from '../../lib/remoteSnapshot.js'
 import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, unlockPatch, PHONE_MECHANICS, REVEAL_FIELD, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
 
 // Named so the UI can recognize this ONE specific refusal and offer a manual
@@ -25,6 +29,11 @@ import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, u
 // this same wall forever with no way to actually score the round (Ben,
 // 2026-08-17: "idk why that keeps popping up ... something different" —
 // found while investigating: this is the one message with no path forward).
+// localStorage switch for the iPad remote link (spec §7). Off unless set to
+// '1' from the chip below, so /host never opens a localhost socket (and Chrome
+// never shows its local-network prompt) until Ben opts in on this laptop.
+const REMOTE_LINK_KEY = 'trivia-os:ipad-remote'
+
 const WAGER_ZERO_ANSWERS_ERROR = 'No wager answers came back — check connection and retry before scoring'
 
 // PYL "Pick animation" tiles — same visual language as BuildMode's CARD_STYLE
@@ -264,6 +273,20 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   const scoringBusy = matchingBusy || orderBusy || wagerBusy || choiceBusy || huesCuesBusy
   const scoringSinceRef = useRef(0)
   useEffect(() => { scoringSinceRef.current = scoringBusy ? Date.now() : 0 }, [scoringBusy])
+  // iPad remote only (spec §6): horse-race scoring with its own 12s cap.
+  // Deliberately NOT folded into scoringBusy — that would change the
+  // keyboard's Next, which is not approved (spec §15 Q2).
+  const raceSinceRef = useRef(0)
+  useEffect(() => { raceSinceRef.current = raceBusy ? Date.now() : 0 }, [raceBusy])
+  const [remoteLinkOn, setRemoteLinkOn] = useState(() => {
+    try { return localStorage.getItem(REMOTE_LINK_KEY) === '1' } catch { return false }
+  })
+  const [remotePaused, setRemotePaused] = useState(false)
+  function toggleRemoteLink() {
+    const on = !remoteLinkOn
+    try { localStorage.setItem(REMOTE_LINK_KEY, on ? '1' : '0') } catch { /* private mode: session-only */ }
+    setRemoteLinkOn(on)
+  }
 
   const slides = sortedSlides(show)
   const currentIndex = show.showState.currentSlideIndex ?? 0
@@ -271,6 +294,15 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   const nextSlides = slides.slice(currentIndex + 1, currentIndex + 3)
   const atStart = currentIndex === 0
   const atEnd = currentIndex >= slides.length - 1
+
+  // One call gives the cue text and the machine gate the iPad echoes back as
+  // expectGate (spec §8), so the two can't disagree.
+  const nextGate = nextPressGate({
+    slide: currentSlide, nextSlide: slides[currentIndex + 1] ?? null,
+    audioPending: audioPlayPending(),
+    scoringBusy: scoringBlocksNext(),
+  })
+  const nextCue = nextGate.label
 
   // wagerError/matchingScoreError used to persist across a slide change —
   // advancing off a wager slide that hit WAGER_ZERO_ANSWERS_ERROR left the
@@ -880,31 +912,27 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // from either window (only completing it is host-only, see the effect
   // below).
   //
-  // Returns true if it handled the press (started the countdown, or no-op'd
-  // because one is already running) — callers must return/bail on true
-  // instead of falling through to their normal advance. Already-running is
-  // checked off currentSlide.data.lockCountdownStartedAt, not local state,
-  // so it reads correctly no matter which window's press started it.
-  function maybeStartLockCountdown() {
-    const phase = pendingLockPhase(currentSlide)
-    if (phase) {
-      if (!currentSlide.data?.lockCountdownStartedAt) {
-        guardNav(async () => {
-          actions.updateSlide(currentSlide.id, {
-            data: { ...currentSlide.data, lockCountdownPhase: phase, lockCountdownStartedAt: Date.now() },
-          })
-          // updateSlide is a debounced ~600ms write — without flushing here,
-          // the ~600ms debounce plus realtime lag meant /display didn't
-          // actually show "3" until ~800-1000ms had already elapsed, making
-          // the first beat of the countdown nearly invisible (2026-08-25
-          // review). Same pattern the lock handlers themselves already use
-          // for the same reason (handleLockAndScoreMatching etc., above).
-          await actions.flushSlides()
-        })
-      }
-      return true
-    }
-    // pendingLockPhase goes false the INSTANT the lock+score handler's first
+  // planHostCommand (lib/hostCommands.js) decides: an open phase starts the
+  // countdown, or no-ops if one is already running — either way the press
+  // does not advance. Already-running is checked off
+  // currentSlide.data.lockCountdownStartedAt, not local state, so it reads
+  // correctly no matter which window's press started it.
+  function startLockCountdown(phase) {
+    guardNav(async () => {
+      actions.updateSlide(currentSlide.id, {
+        data: { ...currentSlide.data, lockCountdownPhase: phase, lockCountdownStartedAt: Date.now() },
+      })
+      // updateSlide is a debounced ~600ms write — without flushing here,
+      // the ~600ms debounce plus realtime lag meant /display didn't
+      // actually show "3" until ~800-1000ms had already elapsed, making
+      // the first beat of the countdown nearly invisible (2026-08-25
+      // review). Same pattern the lock handlers themselves already use
+      // for the same reason (handleLockAndScoreMatching etc., above).
+      await actions.flushSlides()
+    })
+  }
+  // Checked by planHostCommand only when no lock phase is open.
+  // pendingLockPhase goes false the INSTANT the lock+score handler's first
     // write flips e.g. orderLocked to true (React state, synchronous) — long
     // before that same handler's phone_answers/teams/scoreboard_teams fetch
     // and score upsert (the actually-slow, network-bound part) has finished.
@@ -928,6 +956,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     // press landing there can still advance mid-scoring (both pre-existing,
     // not a regression from this fix). Capped at 12s (scoringSinceRef,
     // above) so a genuinely stalled write can't leave Next dead all night.
+  function scoringBlocksNext() {
     return scoringBusy && Date.now() - scoringSinceRef.current < 12000
   }
 
@@ -943,19 +972,17 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   //
   // Checked off show.audio_playing itself, not local state, so it reads
   // correctly no matter which window's press fired it — same rationale
-  // maybeStartLockCountdown's own comment gives for pendingLockPhase.
+  // startLockCountdown's own comment gives for pendingLockPhase.
   //
-  // Returns true if it handled the press — callers must return/bail on true,
-  // same contract as maybeStartLockCountdown above.
-  function maybeStartAudioPlay() {
+  // True when the next press should play the clip; runHostCommand then
+  // bails instead of advancing.
+  function audioPlayPending() {
     if (!currentSlide || currentSlide.type !== 'question') return false
     // Bendle's audio isn't mediaUrl-shaped (it's a Tone.js stem mix keyed
     // by bendleSongId) — resolveShinyPart/hasAudio below don't apply to
     // it, so it's handled as its own branch ahead of the generic checks.
     if (isBendleShiny(currentSlide.data)) {
-      if (show.audio_playing?.slideId === currentSlide.id) return false
-      guardNav(() => actions.setAudioPlaying({ slideId: currentSlide.id, playing: true }))
-      return true
+      return show.audio_playing?.slideId !== currentSlide.id
     }
     if (currentSlide.data?.isShiny) {
       // A shiny audio question (2026-09-01, P1 live, Round 2's "One Hit
@@ -970,9 +997,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     const part = resolveShinyPart(currentSlide.data)
     const hasAudio = !!part.youtubeId || (!!part.mediaUrl && String(part.mediaType ?? '').startsWith('audio'))
     if (!hasAudio) return false
-    if (show.audio_playing?.slideId === currentSlide.id) return false
-    guardNav(() => actions.setAudioPlaying({ slideId: currentSlide.id, playing: true }))
-    return true
+    return show.audio_playing?.slideId !== currentSlide.id
   }
 
   // The A press, for a phone-scored question that's locked but still holding
@@ -1107,6 +1132,91 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     return () => clearTimeout(t)
   }, [currentSlide?.id, currentSlide?.data?.lockCountdownPhase, currentSlide?.data?.lockCountdownStartedAt])
 
+  // One dispatcher for every host command (iPad remote spec §5): the keydown
+  // wrapper and the on-screen Next/Prev buttons call it today, the remote's
+  // socket will later. planHostCommand (lib/hostCommands.js) decides; this
+  // performs. Returns {ok:true} | {refuse: reason}.
+  function runHostCommand(cmd) {
+    const plan = planHostCommand(cmd, {
+      modalOpen: scorePanelOpen || themePickerOpen || scoreboardModalOpen,
+      pendingAdvance: !!pendingAdvanceRef.current,
+      // "Next locks answers": a phone-scored question with an open lock
+      // phase starts the countdown instead of advancing — see
+      // startLockCountdown above. Checked before the answerReveal dance
+      // since starting a countdown isn't an advance at all.
+      lockPhase: pendingLockPhase(currentSlide),
+      lockCountdownRunning: !!currentSlide?.data?.lockCountdownStartedAt,
+      scoringBlocked: scoringBlocksNext(),
+      audioPending: audioPlayPending(),
+      answerReveal: show.showState.answerReveal,
+      scoringBusy,
+      // A on a locked-but-unrevealed phone-scored question reveals THAT
+      // slide's own result instead of toggling the show-level plain-question
+      // answer overlay (unrelated flag, unrelated mechanism — see
+      // revealCurrentSlide). Every other slide keeps the original toggle.
+      revealPending: !!pendingReveal(currentSlide),
+      scoreboardVisible: show.showState.scoreboardVisible,
+      scoresRevealed: show.showState.scoresRevealed,
+      // via:'remote' only (the keyboard and buttons never read these).
+      now: Date.now(),
+      paused: remotePaused,
+      remoteBusy: remoteBusyNow(),
+      slideId: currentSlide?.id ?? null,
+      gate: nextGate.gate,
+      phoneRevealed: !!phoneMechanic && !!currentSlide?.data?.[REVEAL_FIELD[phoneMechanic]],
+    })
+    if (plan.refuse) return plan
+    switch (plan.run) {
+      case 'start-lock-countdown': startLockCountdown(plan.phase); break
+      case 'play-audio':
+        guardNav(() => actions.setAudioPlaying({ slideId: currentSlide.id, playing: true }))
+        break
+      case 'hide-answer-then-next':
+        actions.setAnswerReveal(false)
+        pendingAdvanceRef.current = setTimeout(() => {
+          guardNav(actions.nextSlide)
+          pendingAdvanceRef.current = null
+        }, 280)
+        break
+      case 'next': guardNav(actions.nextSlide); break
+      case 'prev':
+        if (plan.cancelPending && pendingAdvanceRef.current) {
+          clearTimeout(pendingAdvanceRef.current)
+          pendingAdvanceRef.current = null
+        }
+        guardNav(actions.prevSlide)
+        break
+      case 'reveal-slide': revealCurrentSlide(); break
+      case 'set-answer-reveal': actions.setAnswerReveal(plan.value); break
+      case 'set-scoreboard-visible': actions.setScoreboardVisible(plan.value); break
+      case 'set-scores-revealed': actions.setScoresRevealed?.(plan.value); break
+    }
+    return { ok: true }
+  }
+  // Reassigned every render, same as actionsRef/lockHandlersRef, so a caller
+  // holding the ref (the keydown listener now, the remote socket later) never
+  // runs a stale copy closed over an old `show`.
+  const runHostCommandRef = useRef(runHostCommand)
+  runHostCommandRef.current = runHostCommand
+
+  // The iPad remote's busy gate (spec §6): checked before the lock phase in
+  // planHostCommand. Never gates the keyboard. jumpBusy and the score queue
+  // join it in phases 2-3.
+  function remoteBusyNow() {
+    return scoringBlocksNext()
+      || (raceBusy && Date.now() - raceSinceRef.current < 12000)
+      || pylPickerBusy
+      || !!currentSlide?.data?.lockCountdownStartedAt
+  }
+  const remoteLink = useRemoteLink({
+    enabled: remoteLinkOn,
+    runCommandRef: runHostCommandRef,
+    snapshot: buildSnapshot({
+      slides, index: currentIndex, showState: show.showState, cue: nextGate,
+      busy: remoteBusyNow(), paused: remotePaused,
+    }),
+  })
+
   const handleKeyDown = useCallback((e) => {
     // A reflexive Cmd/Ctrl/Alt shortcut (Cmd+A select-all, Cmd+R reload,
     // Cmd+S save) must never fall through to these single-letter hotkeys —
@@ -1115,47 +1225,18 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     // reveals the answer to the whole room.
     if (e.metaKey || e.ctrlKey || e.altKey) return
     if (e.target.closest?.('input, textarea, select, [contenteditable]')) return
-    if (scorePanelOpen || themePickerOpen || scoreboardModalOpen) return
+    const cmd = { ArrowRight: 'next', ArrowLeft: 'prev', KeyA: 'answer', KeyS: 'scoreboard', KeyR: 'scores-reveal' }[e.code]
+    if (!cmd) return
     // Held-key auto-repeat (a long Stream Deck press, or a finger left on
     // the arrow key) must not fire the advance/back logic once per repeat —
-    // ArrowRight's own reveal-then-advance sequence below is especially
-    // sensitive to this, see advancingRef.
+    // ArrowRight's own reveal-then-advance sequence is especially
+    // sensitive to this, see pendingAdvanceRef.
     if (e.repeat) return
-    if (e.code === 'ArrowRight') {
-      e.preventDefault()
-      if (pendingAdvanceRef.current) return
-      // "Next locks answers": a phone-scored question with an open lock
-      // phase starts the countdown instead of advancing — see
-      // maybeStartLockCountdown above. Checked before the answerReveal
-      // dance below since starting a countdown isn't an advance at all.
-      if (maybeStartLockCountdown()) return
-      if (maybeStartAudioPlay()) return
-      if (show.showState.answerReveal) {
-        actions.setAnswerReveal(false)
-        pendingAdvanceRef.current = setTimeout(() => {
-          guardNav(actions.nextSlide)
-          pendingAdvanceRef.current = null
-        }, 280)
-      } else {
-        guardNav(actions.nextSlide)
-      }
-    }
-    if (e.code === 'ArrowLeft') {
-      e.preventDefault()
-      if (pendingAdvanceRef.current) {
-        clearTimeout(pendingAdvanceRef.current)
-        pendingAdvanceRef.current = null
-      }
-      guardNav(actions.prevSlide)
-    }
-    if (e.code === 'KeyS')       actions.setScoreboardVisible(!show.showState.scoreboardVisible)
-    // A on a locked-but-unrevealed phone-scored question reveals THAT slide's
-    // own result instead of toggling the show-level plain-question answer
-    // overlay (unrelated flag, unrelated mechanism — see revealCurrentSlide).
-    // Every other slide keeps the original toggle, untouched.
-    if (e.code === 'KeyA' && !scoringBusy && !revealCurrentSlide()) actions.setAnswerReveal(!show.showState.answerReveal)
-    if (e.code === 'KeyR')       actions.setScoresRevealed?.(!show.showState.scoresRevealed)
-  }, [scorePanelOpen, themePickerOpen, scoreboardModalOpen, actions, show.showState.answerReveal, show.showState.scoresRevealed, guardNav, currentSlide])
+    const result = runHostCommandRef.current({ cmd })
+    // Arrows only, and not when a modal swallowed the key — same as before
+    // the extraction, where the modal guard returned ahead of preventDefault.
+    if ((cmd === 'next' || cmd === 'prev') && result.refuse !== 'modal-open') e.preventDefault()
+  }, [])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
@@ -1171,21 +1252,17 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // dropped — see guardNav's own comment above for why that window is
   // 120ms, not the 350ms originally here (350ms turned out NOT invisible to
   // deliberately fast clicking, just to accidental double-clicking).
-  // Wrapped here rather than inside actions.nextSlide so the keyboard path,
-  // which has its own protection, is untouched.
   // Same pendingAdvanceRef bail ArrowRight has: an ArrowRight that cleared an
   // active answer reveal defers its nextSlide() by 280ms, and the timestamp
   // guard alone can't see that — click Next inside that window and both fire,
-  // advancing two slides.
+  // advancing two slides. via:'button' keeps the buttons' own rules (no
+  // modal guard, no answer-hide dance, Prev doesn't cancel a pending
+  // advance) — see planHostCommand.
   function handleNextClick() {
-    if (pendingAdvanceRef.current) return
-    // "Next locks answers" — same check as the ArrowRight branch above.
-    if (maybeStartLockCountdown()) return
-    if (maybeStartAudioPlay()) return
-    guardNav(actions.nextSlide)
+    runHostCommand({ cmd: 'next', via: 'button' })
   }
   function handlePrevClick() {
-    guardNav(actions.prevSlide)
+    runHostCommand({ cmd: 'prev', via: 'button' })
   }
 
   return (
@@ -1253,7 +1330,10 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
               "Scoring…" button in the score panel, so without this the only
               feedback for why Next isn't responding was that small label on
               a control they're not touching. Still enabled, not disabled —
-              maybeStartLockCountdown is what actually blocks the press. */}
+              runHostCommand is what actually blocks the press. */}
+          {nextCue && (
+            <span className="text-xs font-medium text-gray-500 mr-1 whitespace-nowrap">{nextCue}</span>
+          )}
           <NavButton onClick={handleNextClick} disabled={atEnd} label={scoringBusy ? 'Scoring…' : 'Next ▶'} title="Next (→)" primary />
           {onThemeChange && (
             <div className="relative ml-1">
@@ -1654,6 +1734,42 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
               <p className="text-sm font-semibold text-gray-800 truncate">{theme.name}</p>
               <p className="text-xs text-gray-400 font-mono truncate">{theme.colors.bg}</p>
             </div>
+          </div>
+
+          {/* iPad remote (spec §7). Switches are buttons, not checkboxes:
+              handleKeyDown ignores keys while an <input> has focus, which
+              would swallow the Stream Deck's arrows after a click. */}
+          <div className="bg-white border border-gray-100 rounded-2xl px-5 py-4 shrink-0">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-gray-400">iPad remote</p>
+              <button
+                role="switch"
+                aria-checked={remoteLinkOn}
+                onClick={toggleRemoteLink}
+                title="Lets the iPad remote drive this Live Mode through the relay on this laptop"
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                  remoteLinkOn ? 'bg-baynes-forest text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {remoteLinkOn ? 'On' : 'Off'}
+              </button>
+            </div>
+            <p className="text-sm text-gray-700 mt-2">
+              {hostChipText({ enabled: remoteLinkOn, status: remoteLink.status, remotes: remoteLink.remotes, paused: remotePaused })}
+            </p>
+            {remoteLinkOn && (
+              <button
+                role="switch"
+                aria-checked={remotePaused}
+                onClick={() => setRemotePaused(p => !p)}
+                title="Refuse every iPad command until switched back"
+                className={`w-full mt-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                  remotePaused ? 'bg-red-600 border-red-600 text-white' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {remotePaused ? 'iPad remote paused — tap to resume' : 'Pause iPad remote'}
+              </button>
+            )}
           </div>
 
           {/* Keyboard shortcuts */}

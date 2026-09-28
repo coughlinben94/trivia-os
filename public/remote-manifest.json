@@ -1,0 +1,16 @@
+{
+  "name": "Trivia Remote",
+  "short_name": "Remote",
+  "description": "Baynes Trivia — host remote for Live Mode",
+  "start_url": "/remote",
+  "scope": "/remote",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#030712",
+  "theme_color": "#030712",
+  "icons": [
+    { "src": "/join-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/join-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/join-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

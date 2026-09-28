@@ -1,0 +1,12 @@
+{
+  "name": "trivia-relay",
+  "private": true,
+  "type": "module",
+  "description": "Laptop-local relay: iPad remote <-> /host Live Mode. Never deployed, never imported by client/.",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

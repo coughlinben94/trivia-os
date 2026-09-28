@@ -6,6 +6,8 @@ export default defineConfig({
     // shouldn't pay for a DOM. The one that renders a component opts in with a
     // `// @vitest-environment jsdom` docblock at the top of the file.
     environment: 'node',
-    include: ['client/src/**/*.test.js', 'client/src/**/*.test.jsx'],
+    // relay/ (the laptop-local iPad remote relay) is plain Node + ws, tested
+    // here too; its `ws` import resolves from relay/node_modules.
+    include: ['client/src/**/*.test.js', 'client/src/**/*.test.jsx', 'relay/**/*.test.mjs'],
   },
 })

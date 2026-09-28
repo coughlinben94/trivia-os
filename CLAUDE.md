@@ -42,7 +42,7 @@ Local: /Users/bencoughlin/Projects/baynes-trivia/trivia-os
 - **Next-session test (not yet tried):** instead of symlinking `SKILL.md`/`references` individually inside `.agents`, point `~/.agents/skills/trivia-questions` itself (the whole directory) at this repo's `trivia-questions/` dir, same for `trivia-os` at the repo root. That makes the full chain `.claude → .agents → repo`, all directory symlinks — the same shape `trivia-jukebox` already proves resolves, cleaner than symlinking two files individually. Verify with a real `Skill` tool call in a fresh session before trusting it; if it doesn't resolve, fall back to a small sync script instead.
 
 ## Key Rules
-- Never use Socket.io, Express, or local file storage
+- Never use Socket.io, Express, or local file storage — one scoped exception: `relay/` is the one place plain Node + `ws` is allowed (laptop-local iPad remote relay + its pairing-secret file; never carries show state to /display or /join)
 - Supabase is the only backend
 - Boogaloo + DM Sans are the only fonts
 - Read SKILL.md Section 18 build order before starting any new step

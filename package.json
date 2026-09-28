@@ -9,6 +9,8 @@
     "preview": "vite preview",
     "ship": "bash scripts/ship.sh",
     "test:unit": "vitest run",
+    "relay": "npm --prefix relay start --",
+    "relay:serve": "tailscale serve --bg --https=8795 http://127.0.0.1:8796",
     "backup": "node scripts/backup-db.mjs",
     "test:e2e": "playwright test",
     "test:smoke": "playwright test e2e/host-smoke.spec.js",
