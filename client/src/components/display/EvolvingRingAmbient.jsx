@@ -37,11 +37,12 @@ import { getTheme } from '../../themes/index.js'
 // duo's recolored world never changes (DUO_PALETTES is static), so this
 // only ever computes 17 entries total across the whole app lifetime.
 const duoWorldCache = new Map()
-function worldForDuo(duoId) {
-  if (!duoWorldCache.has(duoId)) {
-    duoWorldCache.set(duoId, recolorWorld(midnightGalaxyRing, DUO_PALETTES[duoId], getTheme('midnight-galaxy')))
+function worldForDuo(duoId, arrangement) {
+  const key = duoId + '|' + arrangement.stations.map(s => s.key).join(',')
+  if (!duoWorldCache.has(key)) {
+    duoWorldCache.set(key, recolorWorld(arrangement, DUO_PALETTES[duoId], getTheme('midnight-galaxy')))
   }
-  return duoWorldCache.get(duoId)
+  return duoWorldCache.get(key)
 }
 
 // Wraps RingAmbient with a mount-once camera sync. RingAmbient's own
@@ -137,7 +138,7 @@ function DuoLayer({ role, children }) {
   )
 }
 
-export default function EvolvingRingAmbient({ showId, slideIndex, stationOverride, showStationDebug, forceSnap }) {
+export default function EvolvingRingAmbient({ showId, slideIndex, arrangement = midnightGalaxyRing, stationOverride, showStationDebug, forceSnap }) {
   const [current, incoming] = visibleDuosAt(showId, slideIndex)
 
   // Also keep the duos shown one slide either side mounted, hidden. Every
@@ -168,7 +169,7 @@ export default function EvolvingRingAmbient({ showId, slideIndex, stationOverrid
         return (
           <DuoLayer key={duo} role={role}>
             <SyncedRingAmbient
-              worldData={worldForDuo(duo)} showId={showId} slideIndex={slideIndex}
+              worldData={worldForDuo(duo, arrangement)} showId={showId} slideIndex={slideIndex}
               stationOverride={stationOverride} showStationDebug={showStationDebug} forceSnap={forceSnap}
               exposeDebugGlobal={role === 'current'}
             />

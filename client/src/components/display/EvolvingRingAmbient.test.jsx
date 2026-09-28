@@ -15,20 +15,23 @@ import { act, forwardRef, useEffect, useImperativeHandle, useState } from 'react
 import { createRoot } from 'react-dom/client'
 import { DUO_PALETTES, DUO_GRAPH } from '../../lib/duoGraph.js'
 import { outgoingAndIncomingDuo, isTransitionSlide } from '../../lib/duoTransition.js'
+import { drawStations } from '../../lib/ringDraw.js'
+import { RING_POOL } from '../../worlds/ringPool.js'
+import { midnightGalaxyRing } from '../../worlds/midnightGalaxy.ring.js'
 
 const mounts = []
 const jumpToCalls = []
 let nextInstanceId = 0
 
 vi.mock('../../lib/ringRecolor.js', () => ({
-  recolorWorld: (_world, palette) => ({ palette, sky: ['#000'] }),
+  recolorWorld: (world, palette) => ({ palette, sky: ['#000'], stations: world.stations }),
 }))
 
 vi.mock('./RingAmbient.jsx', () => ({
   default: forwardRef(function MockRingAmbient({ worldData }, ref) {
     const [m] = useState(() => {
       const duo = Object.keys(DUO_PALETTES).find(k => DUO_PALETTES[k] === worldData.palette)
-      const rec = { id: nextInstanceId++, duo, alive: true }
+      const rec = { id: nextInstanceId++, duo, alive: true, worldData }
       mounts.push(rec)
       return rec
     })
@@ -107,6 +110,24 @@ describe('EvolvingRingAmbient', () => {
     const want = [...new Set([6, 7, 8].flatMap(i => onScreen('show_b', i)))].sort()
     expect(alive().map(m => m.duo).sort()).toEqual(want)
     expect(onScreen('show_b', 7).every(d => !onScreen('show_b', 1).includes(d))).toBe(true) // really a new duo
+
+    await act(async () => { root.unmount() })
+  })
+
+  it('recolors the arrangement it is given, not always the fixed authored order', async () => {
+    const drawn = {
+      ...midnightGalaxyRing,
+      stations: drawStations(RING_POOL, { seed: 12345, slots: midnightGalaxyRing.stations.length, pinKey: 'eclipse', pinAt: 10 }),
+    }
+    const drawnKeys = drawn.stations.map(s => s.key)
+    expect(drawnKeys).not.toEqual(midnightGalaxyRing.stations.map(s => s.key)) // really a different order
+    const root = createRoot(document.createElement('div'))
+
+    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={1} arrangement={drawn} />) })
+    // Every mounted world (current + preloaded neighbor) must carry the
+    // drawn station order, not the authored midnightGalaxyRing order.
+    expect(alive().length).toBeGreaterThan(0)
+    for (const m of alive()) expect(m.worldData.stations.map(s => s.key)).toEqual(drawnKeys)
 
     await act(async () => { root.unmount() })
   })
