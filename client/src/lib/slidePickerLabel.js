@@ -13,6 +13,8 @@ export function slidePickerLabel(slide) {
   if (type === 'grading-break') return 'Grading Break'
   if (type === 'scoreboard-reveal') return data.title || 'Scoreboard'
   if (type === 'biggest-climbers') return 'Biggest Climbers'
+  if (type === 'awards') return 'Awards'
+  if (type === 'last-call') return data.title || 'Last Call'
   if (type === 'title') return data.title || 'Title'
   if (type === 'rules') return 'Rules'
   if (type === 'multi-question') return data.seriesTitle || 'Multi-Q'

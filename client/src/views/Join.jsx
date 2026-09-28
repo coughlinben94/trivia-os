@@ -18,6 +18,7 @@ import ShrinkToFit from '../components/join/ShrinkToFit.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import { PRESHOW_BEN_PHOTO } from '../components/shared/BenPhoto.jsx'
 import { EASE_OUT, EASE_PANEL, EASE_BAR } from '../lib/easings.js'
+import { TEAM_COLORS, TEAM_COLOR_NAMES, freeColors, pickFreeColor, normalizeTeamName } from '../lib/teamColors.js'
 
 // ─── localStorage ─────────────────────────────────────────────────────────────
 function getTeamKey(showId) { return `trivia-os:team:${showId}` }
@@ -25,8 +26,29 @@ function loadStoredTeam(showId) {
   try { return JSON.parse(localStorage.getItem(getTeamKey(showId))) ?? null }
   catch { return null }
 }
+// Wrapped like saveLastTeam: private browsing / a full quota throws here AFTER
+// the team row is inserted, which used to leave the phone on the register
+// screen for a team that already exists. Without storage the phone just
+// won't auto-restore on reload.
 function saveStoredTeam(showId, team) {
-  localStorage.setItem(getTeamKey(showId), JSON.stringify(team))
+  try { localStorage.setItem(getTeamKey(showId), JSON.stringify(team)) }
+  catch { /* private browsing */ }
+}
+
+// Welcome back — the last team this phone registered, across ALL shows, so
+// next week's registration can prefill name + color. Prefill only: the team
+// still taps Join, nothing ever auto-registers. Every access is wrapped —
+// private browsing / a full quota must never break registration itself.
+const LAST_TEAM_KEY = 'trivia-os:last-team'
+function loadLastTeam() {
+  try {
+    const t = JSON.parse(localStorage.getItem(LAST_TEAM_KEY))
+    return typeof t?.name === 'string' && t.name.trim() ? t : null
+  } catch { return null }
+}
+function saveLastTeam(team) {
+  try { localStorage.setItem(LAST_TEAM_KEY, JSON.stringify({ name: team.name, color: team.color })) }
+  catch { /* private browsing */ }
 }
 
 // Realtime's payload and PostgREST's .select() are two independently
@@ -37,11 +59,6 @@ function saveStoredTeam(showId, team) {
 function isStaleTimestamp(candidate, lastApplied) {
   return !!candidate && !!lastApplied && new Date(candidate).getTime() <= new Date(lastApplied).getTime()
 }
-
-const TEAM_COLORS = [
-  '#f5c842','#e02020','#60c000','#4a90d9','#c96fff',
-  '#ff8c00','#00bcd4','#e91e8c','#8bc34a','#ff5722',
-]
 
 // ─── Rotate gate ──────────────────────────────────────────────────────────────
 // /join is landscape-only (see the join-* rules in index.css — landscape was
@@ -226,16 +243,38 @@ function AddToHomeScreenBanner({ text, accent }) {
 
 // ─── Registration ─────────────────────────────────────────────────────────────
 function RegistrationScreen({ onRegister, show, theme }) {
-  const [name, setName]           = useState('')
+  const [lastTeam]                = useState(loadLastTeam)
+  const [name, setName]           = useState(lastTeam?.name ?? '')
+  const [color, setColor]         = useState(() => pickFreeColor([], lastTeam?.color))
+  const [takenColors, setTakenColors] = useState([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError]         = useState(null)
   const inputRef = useRef(null)
   const pref = useReducedMotion()
 
+  // A returning team's name is already filled in — popping the keyboard
+  // would only cover the swatches and the Join button they came to tap.
   useEffect(() => {
+    if (lastTeam) return
     const t = setTimeout(() => inputRef.current?.focus(), 150)
     return () => clearTimeout(t)
   }, [])
+
+  // Colors other teams already hold tonight gray out. Snapshot on mount is
+  // enough: handleRegister re-checks at submit and silently moves to the
+  // next free color if this one got taken in the meantime.
+  useEffect(() => {
+    if (!show?.id) return
+    let cancelled = false
+    supabase.from('teams').select('color').eq('show_id', show.id).then(({ data }) => {
+      if (cancelled || !data) return
+      const taken = data.map(r => r.color)
+      setTakenColors(taken)
+      setColor(prev => pickFreeColor(taken, prev))
+    })
+    return () => { cancelled = true }
+  }, [show?.id])
+  const free = new Set(freeColors(takenColors))
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -244,7 +283,7 @@ function RegistrationScreen({ onRegister, show, theme }) {
     if (trimmed.length > 30) { setError('Keep it under 30 characters'); return }
     setSubmitting(true)
     setError(null)
-    try { await onRegister(trimmed) }
+    try { await onRegister(trimmed, color) }
     catch (err) { setError(err.message); setSubmitting(false) }
   }
 
@@ -267,7 +306,12 @@ function RegistrationScreen({ onRegister, show, theme }) {
       padding: '1.5rem', fontFamily: 'DM Sans, sans-serif',
     }}>
       <ShrinkToFit>
-      <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+      {/* Two blocks that sit side by side in landscape (the only orientation
+          /join allows) and wrap to one column when narrow. Side by side keeps
+          the column short enough that ShrinkToFit doesn't scale the color
+          swatches below a 48px tap target on a short landscape phone. */}
+      <div style={{ width: '100%', maxWidth: 840, margin: '0 auto', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: '1.5rem 2.5rem' }}>
+        <div style={{ flex: '1 1 240px', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
         {/* Ben photo — container reserves 100px so heading doesn't shift when photo loads */}
         <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -290,15 +334,20 @@ function RegistrationScreen({ onRegister, show, theme }) {
             Trivia Night
           </h1>
           <p style={{ color: `${text}b3`, fontSize: '1rem', margin: '0.5rem 0 0', lineHeight: 1.4 }}>
-            Enter your team name to join
+            {/* Greets only while the prefilled name is still there — a
+                different table borrowing the phone clears the greeting. */}
+            {lastTeam && normalizeTeamName(name) === normalizeTeamName(lastTeam.name)
+              ? `Welcome back, ${lastTeam.name}`
+              : 'Enter your team name to join'}
           </p>
           {show?.title && (
             <p style={{ color: `${text}b3`, fontSize: '0.8rem', marginTop: '0.3rem' }}>{show.title}</p>
           )}
         </div>
+        </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <form onSubmit={handleSubmit} style={{ flex: '1 1 280px', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           <input
             ref={inputRef}
             type="text"
@@ -323,6 +372,40 @@ function RegistrationScreen({ onRegister, show, theme }) {
             onFocus={e  => { e.target.style.borderColor = `${accent}aa` }}
             onBlur={e   => { e.target.style.borderColor = error ? 'rgba(255,100,100,0.6)' : 'rgba(255,255,255,0.20)' }}
           />
+
+          {/* Team color — the mark next to the team's name on the TV. Taken
+              colors gray out; once every color is taken, repeats are allowed. */}
+          <div role="radiogroup" aria-label="Team color" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
+            {TEAM_COLORS.map(c => {
+              const selected = c === color
+              const blocked  = free.size > 0 && !free.has(c)
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  aria-label={`${TEAM_COLOR_NAMES[c]}${blocked ? ', taken' : ''}`}
+                  disabled={blocked}
+                  onClick={() => setColor(c)}
+                  style={{
+                    width: 48, height: 48, borderRadius: '50%', padding: 0,
+                    background: c, border: 'none', flexShrink: 0,
+                    boxShadow: selected ? `0 0 0 3px ${bg}, 0 0 0 5px ${text}` : 'none',
+                    opacity: blocked ? 0.2 : 1,
+                    transform: selected && !pref ? 'scale(1.06)' : 'scale(1)',
+                    transition: pref ? 'none' : 'transform 150ms cubic-bezier(0.23,1,0.32,1), opacity 150ms ease',
+                    cursor: blocked ? 'not-allowed' : 'pointer',
+                    color: '#0a0a0a', fontSize: '1.3rem', fontWeight: 800, lineHeight: 1,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation',
+                  }}
+                >
+                  {selected ? '✓' : ''}
+                </button>
+              )
+            })}
+          </div>
 
           <AnimatePresence>
             {error && (
@@ -362,11 +445,13 @@ function RegistrationScreen({ onRegister, show, theme }) {
           </button>
         </form>
 
+        <div style={{ flexBasis: '100%', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         <p style={{ textAlign: 'center', color: `${text}b3`, fontSize: '0.7rem', margin: 0 }}>
           Have fun out there — and don't yell at me, I'm not a professional
         </p>
 
         <AddToHomeScreenBanner text={text} accent={accent} />
+        </div>
       </div>
       </ShrinkToFit>
     </div>
@@ -548,6 +633,8 @@ function FollowToggle({ mode, onChange, theme }) {
 const OFF_PHONE_COPY = {
   'winner-reveal':  'Eyes on the screen — results coming in 🏆',
   'biggest-climbers': 'Look up. Somebody made a move 📈',
+  'awards':         'Awards time. Eyes on the screen 🏅',
+  'last-call':      'Last call — grab a drink before the next round 🍺',
   'team-picker':    'Watch the screen — Ben is picking 👀',
   'team-preview':   'Watch the screen — Ben is picking 👀',
   'pre-show':       "Hang tight — we're about to start 🍺",
@@ -883,14 +970,17 @@ function SlideBody({ slide, show, theme, team, onInteractiveAnswered, overridePa
 }
 
 // ─── Scores Drawer ───────────────────────────────────────────────────────────
-function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
+function ScoresDrawer({ teams, loading, myTeamName, myTeamColor, onClose, theme }) {
   const pref      = useReducedMotion()
   const text      = theme?.colors?.text      ?? '#ffffff'
   const accent    = theme?.colors?.accent   ?? '#1a6b4a'
   const highlight = theme?.colors?.highlight ?? '#4dffc3'
   const bg        = theme?.colors?.bg       ?? '#050505'
 
-  const myNameNorm = (myTeamName ?? '').trim().toLowerCase()
+  const myNameNorm = normalizeTeamName(myTeamName)
+  // The own-row outline wears the team's picked color (gold for teams from
+  // before colors were picked — same as it always was).
+  const myColor = myTeamColor ?? '#f5c842'
 
   // Mirrors the panel's own CSS width (`min(86vw, 340px)`) so the left drag
   // constraint stops the panel exactly at fully-closed instead of leaving it
@@ -987,7 +1077,7 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
               </p>
             )
             : teams.map((t, i) => {
-                const isMe     = t.name.trim().toLowerCase() === myNameNorm
+                const isMe     = normalizeTeamName(t.name) === myNameNorm
                 const medal    = MEDALS[(t.place ?? i + 1) - 1] ?? null
                 const isLeader = (t.place ?? i + 1) === 1
                 // A 2% floor keeps a zero-score row from reading as a render
@@ -1011,8 +1101,8 @@ function ScoresDrawer({ teams, loading, myTeamName, onClose, theme }) {
                     style={{
                       borderRadius: 10, padding: '0.75rem 0.875rem',
                       background: isMe ? `${accent}25` : 'rgba(255,255,255,0.05)',
-                      border: `1px solid ${isMe ? `#f5c842` : 'transparent'}`,
-                      boxShadow: isMe ? `0 0 0 1px #f5c84222` : 'none',
+                      border: `1px solid ${isMe ? myColor : 'transparent'}`,
+                      boxShadow: isMe ? `0 0 0 1px ${myColor}22, inset 4px 0 0 ${myColor}` : 'none',
                       position: 'relative', overflow: 'hidden',
                       // Row sits in a flex-column scroll container. Without this,
                       // the browser's default flex-shrink:1 crushes every row to
@@ -2287,7 +2377,7 @@ export default function Join() {
   }, [team?.id])
 
   // ── Register ──────────────────────────────────────────────────────────
-  async function handleRegister(name) {
+  async function handleRegister(name, preferredColor) {
     const actualShowId = show.id
 
     // RLS ties this team's row (and its phone_answers) to this browser's own
@@ -2325,6 +2415,7 @@ export default function Join() {
         const recoveredTeam = { id: existingTeam.id, name: existingTeam.name, color: existingTeam.color, showId: actualShowId }
         setTeam(recoveredTeam)
         saveStoredTeam(actualShowId, recoveredTeam)
+        saveLastTeam(recoveredTeam)
         setPowerupUsed(false)
         setPhase(show.is_live ? 'live' : 'waiting')
         return
@@ -2338,7 +2429,7 @@ export default function Join() {
     // ~100ms window could both pass it), so the actual enforcement is the
     // teams_show_id_lower_name_key unique index (show_id, lower(name));
     // the 23505 catch below is what closes the race for real.
-    const { data: allTeams } = await supabase.from('teams').select('name').eq('show_id', actualShowId)
+    const { data: allTeams } = await supabase.from('teams').select('name, color').eq('show_id', actualShowId)
     const taken = (allTeams ?? []).some(t => t.name.toLowerCase() === name.toLowerCase())
     if (taken) throw new Error("That name's taken — try another")
 
@@ -2364,7 +2455,11 @@ export default function Join() {
       }
     }
 
-    const color  = TEAM_COLORS[Math.floor(Math.random() * TEAM_COLORS.length)]
+    // Re-check the pick against the fresh roster: if another table grabbed
+    // this color since the screen loaded, silently take the next free one.
+    // Two phones submitting in the same instant can still share a color —
+    // harmless (no uniqueness constraint; it's a visual mark, not a key).
+    const color  = pickFreeColor((allTeams ?? []).map(t => t.color), preferredColor)
     const teamId = `team_${nanoid(8)}`
     const { error } = await supabase.from('teams').insert({ id: teamId, show_id: actualShowId, name, color, is_connected: true, powerup_used: false, owner_uid: ownerUid })
     if (error) {
@@ -2390,6 +2485,7 @@ export default function Join() {
         const recoveredTeam = { id: recovered.id, name: recovered.name, color: recovered.color, showId: actualShowId }
         setTeam(recoveredTeam)
         saveStoredTeam(actualShowId, recoveredTeam)
+        saveLastTeam(recoveredTeam)
         setPowerupUsed(false)
         setPhase(show.is_live ? 'live' : 'waiting')
         return
@@ -2401,6 +2497,7 @@ export default function Join() {
     const newTeam = { id: teamId, name, color, showId: actualShowId }
     setTeam(newTeam)
     saveStoredTeam(actualShowId, newTeam)
+    saveLastTeam(newTeam)
     setPowerupUsed(false)
     setPhase(show.is_live ? 'live' : 'waiting')
   }
@@ -2516,6 +2613,7 @@ export default function Join() {
               teams={scoresDrawerTeams}
               loading={scoresDrawerLoading}
               myTeamName={team?.name ?? ''}
+              myTeamColor={team?.color}
               onClose={() => setScoresDrawerOpen(false)}
               theme={theme}
             />

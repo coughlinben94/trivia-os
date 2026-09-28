@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import { deriveRoundCols, computeTotal, computePlaces, normalizeRoundScore, MEDALS, SPLIT_TEAM_THRESHOLD, splitByRank } from '../../lib/scoreboardMath.js'
 import { EASE_OUT, EASE_DROP } from '../../lib/easings.js'
+import { colorsByName, normalizeTeamName } from '../../lib/teamColors.js'
 
 // ─── Layout math ───────────────────────────────────────────────────────────
 // The stage is a `container-type: size` box (see StageFrame), so every size
@@ -112,7 +113,7 @@ function CountUp({ value, reduce, style }) {
 }
 
 // ─── Single team row ───────────────────────────────────────────────────────
-function TeamRow({ team, rank, cols, template, metrics, delay, isTop, zebra, reduce }) {
+function TeamRow({ team, rank, cols, template, metrics, delay, isTop, zebra, reduce, color, showDot }) {
   const { theme } = useTheme()
   const c = theme.colors
   const medal = MEDALS[rank - 1] ?? null
@@ -183,8 +184,25 @@ function TeamRow({ team, rank, cols, template, metrics, delay, isTop, zebra, red
       </div>
 
       {/* Team name */}
-      <div style={{ minWidth: 0, paddingLeft: '0.8cqw', position: 'relative' }}>
+      {/* showDot off (no team on the board has a color: host-typed walk-ins,
+          every older show) = the exact pre-colors markup, so those boards
+          render pixel-identical to before. */}
+      <div style={showDot
+        ? { minWidth: 0, paddingLeft: '0.8cqw', position: 'relative', display: 'flex', alignItems: 'center', gap: '0.6cqw' }
+        : { minWidth: 0, paddingLeft: '0.8cqw', position: 'relative' }}>
+        {/* The table's picked color (joined by name — see ScoreboardContent).
+            A mark only; the name keeps the theme text color for legibility.
+            Once any team has a color the slot is reserved on every row so
+            unmatched names stay aligned. */}
+        {showDot && (
+          <span aria-hidden style={{
+            width: `${metrics.name * 0.5}cqh`, height: `${metrics.name * 0.5}cqh`,
+            borderRadius: '50%', flexShrink: 0, background: color ?? 'transparent',
+            boxShadow: color ? '0 0 0 0.15cqh rgba(0,0,0,0.45)' : 'none',
+          }} />
+        )}
         <p style={{
+          minWidth: 0,
           fontFamily: displayFont,
           fontSize: `${metrics.name * (isTop ? 1.14 : 1)}cqh`,
           color: isTop ? c.highlight : c.text,
@@ -243,6 +261,7 @@ function ScoreboardContent({ show }) {
   const c = theme.colors
   const reduce = useReducedMotion()
   const [ranked, setRanked] = useState([])
+  const [teamColors, setTeamColors] = useState(() => new Map())
   const cols = deriveRoundCols(show)
   // load() is a closure created once per show.id (see the effect's deps
   // below, kept narrow on purpose so the realtime channel doesn't
@@ -288,6 +307,20 @@ function ScoreboardContent({ show }) {
     return () => { cancelled = true; supabase.removeChannel(channel) }
   }, [show.id])
 
+  // scoreboard_teams has no color column — the color lives on the phone's
+  // `teams` row, so join by normalized name. One fetch per show (per board
+  // open), not per row; a scoreboard name with no matching team (a host-typed
+  // walk-in, a renamed row) simply gets no mark.
+  useEffect(() => {
+    let cancelled = false
+    supabase.from('teams').select('name, color').eq('show_id', show.id).then(({ data }) => {
+      if (!cancelled && data) setTeamColors(colorsByName(data))
+    })
+    return () => { cancelled = true }
+  }, [show.id])
+
+  const colorOf = team => teamColors.get(normalizeTeamName(team.name))
+  const hasColors = ranked.some(colorOf)
   const isSplit = ranked.length > SPLIT_TEAM_THRESHOLD
   const splitCols = isSplit ? [] : cols
   // Split mode ranks each half independently by its own row index within that
@@ -414,6 +447,8 @@ function ScoreboardContent({ show }) {
                 isTop={rank === 1}
                 zebra={i % 2 === 1}
                 reduce={reduce}
+                color={colorOf(team)}
+                showDot={hasColors}
               />
             )
           })}

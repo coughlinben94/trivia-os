@@ -21,7 +21,8 @@ const BTN = 'host-button'
 const SLIDE_ICON = {
   'pre-show': '📱',
   'title': '🇺🇸', 'state-of-union': '🇺🇸', 'rules': '🚨', 'round-intro': '🎬', 'swing-round-intro': '🎷',
-  'question': '❓', 'grading-break': '⏸️', 'scoreboard-reveal': '🏆', 'biggest-climbers': '📈',
+  'question': '❓', 'grading-break': '⏸️', 'scoreboard-reveal': '🏆', 'biggest-climbers': '📈', 'awards': '🏅',
+  'last-call': '🔔',
   'custom': '✏️', 'pixelate-series': '🎨', 'multi-question': '📋', 'pyl-reveal': '🎰',
   'winner-reveal': '🥇', 'team-preview': '👥', 'team-picker': '🚀', 'shiny-title': '✨',
 }
@@ -44,6 +45,8 @@ function getSlideLabel(slide) {
   if (type === 'team-picker') return 'Team Intro'
   if (type === 'winner-reveal') return '🥇 Winner Reveal'
   if (type === 'biggest-climbers') return 'Biggest Climbers'
+  if (type === 'awards') return 'Awards'
+  if (type === 'last-call') return data.title || 'Last Call'
   if (type === 'pre-show') return 'Pre-Show'
   return type
 }
@@ -85,6 +88,8 @@ const CARD_STYLE = {
   'swing-round-intro': 'bg-gradient-to-br from-red-50 to-rose-100  border-red-200    hover:border-red-400',
   'scoreboard-reveal': 'bg-gradient-to-br from-violet-50 to-purple-100 border-violet-200 hover:border-violet-400',
   'biggest-climbers': 'bg-gradient-to-br from-violet-50 to-purple-100 border-violet-200 hover:border-violet-400',
+  'awards':        'bg-gradient-to-br from-amber-50  to-yellow-100  border-amber-200  hover:border-amber-400',
+  'last-call':     'bg-gradient-to-br from-rose-50   to-amber-100   border-rose-200   hover:border-rose-400',
   'pyl-reveal':    'bg-gradient-to-br from-teal-50   to-blue-100    border-teal-200   hover:border-blue-400',
   'grading-break': 'bg-gradient-to-br from-violet-50 to-purple-100  border-violet-200 hover:border-violet-400',
   'winner-reveal': 'bg-[linear-gradient(135deg,#fecaca,#fed7aa,#fef08a,#bbf7d0,#bfdbfe,#ddd6fe)] border-purple-200 hover:border-purple-400',

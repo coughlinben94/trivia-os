@@ -28,6 +28,8 @@ import { sortSlides } from '../../lib/slideStepping.js'
 import { computeWinner, formatWinnerLine } from '../../lib/raceMath.js'
 import { mergeWalkoutClip } from '../../lib/walkoutClip.js'
 import { cleanPastedText } from '../../lib/cleanPaste.js'
+import { AWARD_POOL, AWARDS_SHOWN } from '../../lib/nightAwards.js'
+import { LAST_CALL_DEFAULT_TITLE, LAST_CALL_DEFAULT_SUBTITLE } from '../display/slides/LastCallSlide.jsx'
 
 export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, onDeleteSlide, uploadMedia, getHostPhotos }) {
   const { theme } = useTheme()
@@ -211,6 +213,8 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
             <div className="space-y-3">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Slide Content</p>
               {slide.type === 'title' && <TitleEditor data={data} onChange={change} />}
+              {slide.type === 'last-call' && <LastCallEditor data={data} onChange={change} />}
+              {slide.type === 'biggest-climbers' && <ClimbersEditor data={data} onChange={change} />}
               {slide.type === 'shiny-title' && (
                 <ShinyTitleEditor data={data} onChange={change} uploadMedia={uploadMedia} getHostPhotos={getHostPhotos} usedPhotoUrls={usedPhotoUrls} />
               )}
@@ -269,6 +273,9 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
               )}
               {slide.type === 'horse-race' && (
                 <RaceEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} onMediaUpload={handleMediaUpload} />
+              )}
+              {slide.type === 'awards' && (
+                <AwardsEditor data={data} onChange={change} />
               )}
               {slide.type === 'winner-reveal' && (
                 <WinnerRevealEditor data={data} onChange={change} />
@@ -426,6 +433,15 @@ function TitleEditor({ data, onChange }) {
     <>
       <Field label="Title"><TextInput value={data.title} onChange={v => onChange('title', v)} placeholder="Baynes Apple Valley" /></Field>
       <Field label="Subtitle"><TextInput value={data.subtitle} onChange={v => onChange('subtitle', v)} placeholder="Trivia Night" /></Field>
+    </>
+  )
+}
+
+function LastCallEditor({ data, onChange }) {
+  return (
+    <>
+      <Field label="Title"><TextInput value={data.title} onChange={v => onChange('title', v)} placeholder={LAST_CALL_DEFAULT_TITLE} /></Field>
+      <Field label="Subtitle"><TextInput value={data.subtitle} onChange={v => onChange('subtitle', v)} placeholder={LAST_CALL_DEFAULT_SUBTITLE} /></Field>
     </>
   )
 }
@@ -2240,6 +2256,62 @@ function GradingBreakEditor({ data, onChange, roundSlides, uploadMedia, getHostP
         onSelectPhoto={url => onChange('hostPhotoUrl', url)}
       />
     </>
+  )
+}
+
+// Pin up to 3 awards, or leave all unchecked for Auto. A pin that doesn't
+// qualify on the night is swapped for the next best Auto pick.
+function AwardsEditor({ data, onChange }) {
+  const pinned = Array.isArray(data.awardIds) ? data.awardIds : []
+  // Bruised Apple takes the last card, so it leaves one fewer pin slot.
+  const maxPins = AWARDS_SHOWN - (data.bruisedApple ? 1 : 0)
+  const toggle = id => onChange('awardIds', pinned.includes(id) ? pinned.filter(x => x !== id) : [...pinned, id])
+  return (
+    <div className="flex flex-col gap-2 py-2">
+      <p className="text-xs text-gray-400 leading-relaxed">
+        {pinned.length ? `Pinned ${Math.min(pinned.length, maxPins)} of ${maxPins}.` : `Auto: the ${AWARDS_SHOWN} most remarkable awards, spread across teams.`} Place between Bonus 1 and Bonus 2.
+      </p>
+      {pinned.length > maxPins && (
+        <p className="text-xs text-amber-600">Bruised Apple is on, so only your first {maxPins} pins will show.</p>
+      )}
+      {AWARD_POOL.filter(a => a.id !== 'bruised-apple').map(a => (
+        <label key={a.id} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+          <input type="checkbox" className="h-4 w-4 accent-[#1a6b4a]" checked={pinned.includes(a.id)}
+            disabled={!pinned.includes(a.id) && pinned.length >= maxPins} onChange={() => toggle(a.id)} />
+          {a.title}
+        </label>
+      ))}
+      <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer border-t border-gray-100 pt-2">
+        <input type="checkbox" className="h-4 w-4 accent-[#1a6b4a]" checked={!!data.bruisedApple}
+          onChange={e => onChange('bruisedApple', e.target.checked)} />
+        Bruised Apple (last place, takes the last card)
+      </label>
+    </div>
+  )
+}
+
+// Which places to leave out of the list. The round is the one this slide sits
+// in, so moving the slide to another round changes what it compares.
+function ClimbersEditor({ data, onChange }) {
+  const skip = Number.isInteger(Number(data.excludeTop)) && Number(data.excludeTop) > 0 ? Number(data.excludeTop) : 0
+  return (
+    <div className="flex flex-col gap-2 py-2">
+      <label className="flex flex-col gap-1 text-sm text-gray-700">
+        Leave out teams now in the top
+        <select
+          id="climbers-exclude-top"
+          className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white"
+          value={skip}
+          onChange={e => onChange('excludeTop', Number(e.target.value))}
+        >
+          <option value={0}>Nobody (show every climber)</option>
+          {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>Top {n}</option>)}
+        </select>
+      </label>
+      <p className="text-xs text-gray-400 leading-relaxed">
+        Compares the round this slide sits in with the one before it, so it needs a round with scores. A team that takes first place gets its own line at the bottom either way.
+      </p>
+    </div>
   )
 }
 
