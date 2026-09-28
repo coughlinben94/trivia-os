@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
-const INPUT_TYPES = ['image', 'audio', 'video', 'text', 'list', 'grid', 'matching', 'wager', 'venn', 'order', 'bendle', 'choice', 'hues-cues', 'elimination']
+const INPUT_TYPES = ['image', 'audio', 'video', 'text', 'list', 'grid', 'matching', 'wager', 'venn', 'order', 'bendle', 'choice', 'hues-cues', 'elimination', 'race']
 
 const EMPTY_FORMAT = {
   name: '',
@@ -33,15 +33,38 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState(null)
   const [draft, setDraft] = useState(EMPTY_FORMAT)
+  // Snapshot of the draft as loaded/saved, to tell unsaved edits from none.
+  const baselineRef = useRef(JSON.stringify(EMPTY_FORMAT))
+  // A discard-confirm waiting on the host: { run } re-runs the blocked action.
+  const [pendingDiscard, setPendingDiscard] = useState(null)
+  const dirty = (creating || !!editing) && JSON.stringify(draft) !== baselineRef.current
+
+  function guard(action) {
+    if (dirty) setPendingDiscard({ run: action })
+    else action()
+  }
+
+  // Escape closes the modal (capture phase + stopPropagation, like OV-3) so it
+  // never also reaches the editor underneath. Dirty -> confirm first.
+  const escRef = useRef()
+  escRef.current = () => (pendingDiscard ? setPendingDiscard(null) : guard(onClose))
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); escRef.current() } }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [])
 
   function startCreate() {
+    baselineRef.current = JSON.stringify(EMPTY_FORMAT)
     setDraft(EMPTY_FORMAT)
     setCreating(true)
     setEditing(null)
   }
 
   function startEdit(fmt) {
-    setDraft({ name: fmt.name, description: fmt.description, icon: fmt.icon, default_subtitle: fmt.default_subtitle ?? '', input_schema: fmt.input_schema })
+    const next = { name: fmt.name, description: fmt.description, icon: fmt.icon, default_subtitle: fmt.default_subtitle ?? '', input_schema: fmt.input_schema }
+    baselineRef.current = JSON.stringify(next)
+    setDraft(next)
     setEditing(fmt.id)
     setCreating(false)
   }
@@ -51,9 +74,11 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
     try {
       if (editing) {
         await updateFormat(editing, draft)
+        baselineRef.current = JSON.stringify(draft)
         setEditing(null)
       } else {
         await createFormat(draft)
+        baselineRef.current = JSON.stringify(draft)
         setCreating(false)
       }
     } catch (err) {
@@ -74,8 +99,21 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h2 className="text-lg font-semibold text-gray-900">Add Shiny</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+          <button onClick={() => guard(onClose)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
         </div>
+
+        {pendingDiscard && (
+          <div className="flex items-center justify-between px-6 py-2 bg-red-50 border-b border-red-100">
+            <span className="text-sm text-red-600">Discard unsaved changes?</span>
+            <div className="flex gap-4">
+              <button
+                onClick={() => { const { run } = pendingDiscard; setPendingDiscard(null); run() }}
+                className="text-sm font-semibold text-red-600 hover:text-red-800"
+              >Discard</button>
+              <button onClick={() => setPendingDiscard(null)} className="text-sm text-gray-500 hover:text-gray-700">Keep editing</button>
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-1 min-h-0">
 
@@ -89,7 +127,7 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
               <div
                 key={fmt.id}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer group ${editing === fmt.id ? 'bg-gray-100' : 'hover:bg-gray-50'}`}
-                onClick={() => onSelectFormat ? onSelectFormat(fmt) : startEdit(fmt)}
+                onClick={() => onSelectFormat ? onSelectFormat(fmt) : editing === fmt.id ? null : guard(() => startEdit(fmt))}
               >
                 <span className="text-lg">{fmt.icon}</span>
                 <div className="flex-1 min-w-0">
@@ -111,7 +149,7 @@ export default function FormatLibrary({ onClose, onSelectFormat, formats, loadin
               </div>
             ))}
             <button
-              onClick={startCreate}
+              onClick={() => guard(startCreate)}
               className="mt-2 flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-200 text-sm text-gray-400 hover:text-gray-600 hover:border-gray-300"
             >
               <span>＋</span> New Format
