@@ -9,6 +9,23 @@ export const DEFAULT_REMOTE_URL = 'wss://macbook-pro.tail13050c.ts.net:8795'
 
 export const CLOSE_REPLACED = 4001   // a newer /host tab took over
 export const CLOSE_BAD_SECRET = 4003 // wrong, missing or late pairing hello
+export const CLOSE_TOO_FAST = 4008   // more than 10 laptop-local commands in a second
+
+// Phase 2b (spec §17). /display joins the relay's local listener on this
+// path as the third peer role; only jukebox.* reaches it.
+export const DISPLAY_PATH = '/display'
+export const DISPLAY_RELAY_URL = `${HOST_RELAY_URL}${DISPLAY_PATH}`
+export const DISPLAY_COMMANDS = new Set(['jukebox.open', 'jukebox.exit', 'jukebox.playStop'])
+// Run by the relay itself on the laptop (system volume, Duck, soundboard).
+export const LOCAL_COMMANDS = new Set(['vol.up', 'vol.down', 'duck', 'sound.play', 'sound.stopAll'])
+export const LOCAL_RATE_PER_SEC = 10
+
+// The one default-off switch for the laptop's relay links (/host's chip
+// toggle writes it; /display reads it). Private mode or no storage: off.
+export const REMOTE_LINK_KEY = 'trivia-os:ipad-remote'
+export function readRemoteLinkFlag(storage = globalThis.localStorage) {
+  try { return storage?.getItem(REMOTE_LINK_KEY) === '1' } catch { return false }
+}
 
 export const MAX_INBOUND_BYTES = 8192
 export const COMMAND_TTL_MS = 1500
@@ -40,6 +57,14 @@ export const REFUSAL_TEXT = {
   'already-revealed': 'The TV already shows the result — unlock first if you need to redo it',
   'laptop-only': 'Rescore a horse race on the laptop',
   error: 'Something went wrong on the laptop — check the laptop',
+  // Phase 2b: jukebox (through /display), volume, Duck, soundboard.
+  'display-offline': 'TV window not linked — open /display on the laptop, or use the Stream Deck',
+  'jukebox-not-open': 'The jukebox is not up yet — tap Open jukebox now',
+  'not-at-break': 'Not at a grading break',
+  'unknown-sound': 'That sound is not set up on the laptop',
+  'sound-missing': 'That sound file is gone from the laptop',
+  'local-failed': 'The laptop would not change that — use the Stream Deck',
+  'local-unavailable': 'Volume and sounds are off on this relay — use the Stream Deck',
 }
 export const refusalText = reason => REFUSAL_TEXT[reason] ?? 'The laptop said no — check the laptop'
 
@@ -67,4 +92,13 @@ export function remoteStatus({ socket, closeCode, hostConnected, beatAge, visibi
   if (beatAge == null || beatAge > STALE_BEAT_MS) return { tone: 'orange', live: false, text: 'Laptop not responding' }
   if (visibility === 'hidden') return { tone: 'orange', live: true, text: 'Laptop screen hidden — timers slowed, bring /host to the front' }
   return { tone: 'green', live: true, text: 'Laptop connected' }
+}
+
+// Jukebox mode on the iPad (spec §17.2): only while the laptop is on a
+// grading-break slide. `jukebox` is the relay's {type:'jukebox'} message.
+export function jukeboxView({ snap, jukebox }) {
+  if (snap?.slide?.type !== 'grading-break') return null
+  if (!jukebox?.linked) return { phase: 'unlinked' }
+  if (jukebox.open) return { phase: 'open', playing: !!jukebox.playing, handoffPending: !!jukebox.handoffPending }
+  return { phase: jukebox.waiting ? 'waiting' : 'opening' }
 }

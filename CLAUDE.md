@@ -44,6 +44,6 @@ Local: /Users/bencoughlin/Projects/baynes-trivia/trivia-os
 ## Key Rules
 - Never use Socket.io, Express, or local file storage — one scoped exception: `relay/` is the one place plain Node + `ws` is allowed (laptop-local iPad remote relay + its pairing-secret file; never carries show state to /display or /join)
 - Supabase is the only backend
-- Boogaloo + DM Sans are the only fonts
+- Boogaloo + DM Sans are the only fonts (one scoped exception: /remote, the host-only iPad page, uses Lilita One + Nunito, set in client/src/lib/remoteLook.js)
 - Read SKILL.md Section 18 build order before starting any new step
 - Clean build required before every deploy

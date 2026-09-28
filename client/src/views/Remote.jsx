@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, MotionConfig, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { EASE_OUT, EASE_PANEL, EASE_EXIT } from '../lib/easings.js'
-import { DEFAULT_REMOTE_URL, CLOSE_BAD_SECRET, BEAT_MS, STALE_BEAT_MS, GREY_GATES, refusalText, remoteStatus } from '../lib/remoteProtocol.js'
+import { REMOTE_LOOK, lookCssVars, lookFontsHref, LOOK_DERIVED } from '../lib/remoteLook.js'
+import { DEFAULT_REMOTE_URL, CLOSE_BAD_SECRET, BEAT_MS, STALE_BEAT_MS, GREY_GATES, refusalText, remoteStatus, jukeboxView } from '../lib/remoteProtocol.js'
 
 // /remote — the iPad host remote (spec docs/superpowers/specs/2026-09-28-
 // ipad-remote-design.md §9). A remote control only: it never touches
 // Supabase. It pairs with the laptop relay, shows what the laptop's Live Mode
 // says, and sends commands the laptop may refuse. The laptop is the engine.
+
+// Applied once, on the root element.
+const lookVars = { ...lookCssVars(REMOTE_LOOK), ...LOOK_DERIVED }
 
 const CFG_KEY = 'trivia-remote:cfg'
 function loadCfg() {
@@ -20,15 +24,12 @@ function saveCfg(cfg) {
   try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)) } catch { /* private mode */ }
 }
 
-// "Midnight orchard" palette for a dark bar: a forest-tinted night, cream ink,
-// Bright Leaf for the one button that matters. Contrast (measured):
-// cream/night 16.2, ink/leaf 7.4, muted/surface 7.9, ink/amber 10.2, cream/red 5.8.
-// NIGHT #0a1710 · SURFACE #13261a · RAISED #1b3324 · CREAM #f5f0e8
-// LEAF #60c000 · INK #06200a · AMBER #f2b632 · RED #b8161a
+// Colours, fonts, sizes and radius all come from lib/remoteLook.js as
+// --rl-* CSS vars set on the root below; nothing here hard-codes the look.
 const TONE = {
-  green: { icon: IconCheck, color: 'text-[#60c000]' },
-  orange: { icon: IconAlert, color: 'text-[#f2b632]' },
-  red: { icon: IconCross, color: 'text-[#ff6b5e]' },
+  green: { icon: IconCheck, color: 'text-[color:var(--rl-next)]' },
+  orange: { icon: IconAlert, color: 'text-[color:var(--rl-amber)]' },
+  red: { icon: IconCross, color: 'text-[color:var(--rl-red-bright)]' },
 }
 
 // Protocol strings read "what happened — what to do". Split them so the
@@ -50,7 +51,10 @@ function useHeadTags() {
       { tag: 'meta', name: 'apple-mobile-web-app-capable', content: 'yes' },
       { tag: 'meta', name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' },
       { tag: 'meta', name: 'apple-mobile-web-app-title', content: 'Remote' },
-      { tag: 'meta', name: 'theme-color', content: '#0a1710' },
+      { tag: 'meta', name: 'theme-color', content: REMOTE_LOOK.colors.night },
+      { tag: 'link', rel: 'preconnect', href: 'https://fonts.googleapis.com' },
+      { tag: 'link', rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
+      { tag: 'link', rel: 'stylesheet', href: lookFontsHref(REMOTE_LOOK) },
     ]
     const added = tags.map(({ tag, ...attrs }) => {
       const el = document.createElement(tag)
@@ -98,7 +102,11 @@ export default function Remote() {
   const [beat, setBeat] = useState(null) // { at, visibility } of the last laptop beat
   const [notice, setNotice] = useState(null)
   const [now, setNow] = useState(() => Date.now())
-  const [drawer, setDrawer] = useState(null) // 'jump' | 'fix' | null
+  const [drawer, setDrawer] = useState(null) // 'jump' | 'fix' | 'sounds' | null
+  // Phase 2b, both straight from the relay (not the laptop's Live Mode):
+  const [local, setLocal] = useState(null)     // {type:'local-state', available, volume, ducked, sounds}
+  const [jukebox, setJukebox] = useState(null) // {type:'jukebox', linked, waiting, open, playing, handoffPending}
+  const [skipArmed, setSkipArmed] = useState(false)
   const wsRef = useRef(null)
   const offsetRef = useRef(0) // laptopNow − iPadNow, from the latest beat
   const idRef = useRef(0)
@@ -142,6 +150,8 @@ export default function Remote() {
         }
         else if (m.type === 'host') setHostConnected(!!m.connected)
         else if (m.type === 'state') setSnap(m)
+        else if (m.type === 'local-state') setLocal(m)
+        else if (m.type === 'jukebox') setJukebox(m)
         else if (m.type === 'result' && m.refused) setNotice(refusalText(m.refused))
       }
       ws.onclose = e => {
@@ -150,6 +160,8 @@ export default function Remote() {
         setSocket('closed')
         setCloseCode(e.code)
         setHostConnected(false)
+        setLocal(null)
+        setJukebox(null)
         if (stopped || e.code === CLOSE_BAD_SECRET) return
         retry = setTimeout(connect, delay)
         delay = Math.min(delay * 2, 10000)
@@ -179,9 +191,27 @@ export default function Remote() {
   const jumpBlock = !live ? 'Laptop not ready' : snap.paused ? 'Paused on the laptop' : snap.jumpBusy ? 'Jumping…' : snap.busy ? 'Laptop is busy' : null
   const fixBlock = jumpBlock ?? (!fix?.mechanic ? splitMsg(refusalText('nothing-to-fix'))[0] : null)
 
-  function send(cmd, args = {}) {
+  // Jukebox mode (spec §17.2): the laptop is on a grading-break slide.
+  const jb = jukeboxView({ snap, jukebox })
+  // A second tap arms-then-sends; the arm lapses after 4s or off the break.
+  useEffect(() => {
+    if (!skipArmed) return undefined
+    const t = setTimeout(() => setSkipArmed(false), 4000)
+    return () => clearTimeout(t)
+  }, [skipArmed])
+  const atBreak = !!jb
+  useEffect(() => { if (!atBreak) setSkipArmed(false) }, [atBreak])
+  // Volume, Duck and sounds run on the relay itself, so they work without
+  // Live Mode; local-state only arrives once paired. Pause still blocks them.
+  const localBlock = !local ? 'Waiting for the laptop…'
+    : !local.available ? splitMsg(refusalText('local-unavailable'))[0]
+      : snap?.paused ? 'Paused on the laptop' : null
+  // The jukebox commands go to the TV window, not Live Mode.
+  const jukeboxOk = socket === 'open' && !!jukebox?.linked && !snap?.paused
+
+  function send(cmd, args = {}, ok = live) {
     const ws = wsRef.current
-    if (!ws || ws.readyState !== WebSocket.OPEN || !live) return
+    if (!ws || ws.readyState !== WebSocket.OPEN || !ok) return
     setNotice(null)
     ws.send(JSON.stringify({
       type: 'cmd', id: String(++idRef.current), cmd, args,
@@ -219,9 +249,10 @@ export default function Remote() {
   return (
     <MotionConfig reducedMotion="user">
     <div
-      className="h-[100dvh] overflow-hidden bg-[#0a1710] text-[#f5f0e8] flex flex-col select-none touch-manipulation"
+      className="h-[100dvh] overflow-hidden bg-[color:var(--rl-night)] text-[color:var(--rl-text)] flex flex-col select-none touch-manipulation"
       style={{
-        fontFamily: "'DM Sans', system-ui, sans-serif",
+        ...lookVars,
+        fontFamily: 'var(--rl-body)',
         paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)',
         paddingLeft: pad, paddingRight: padR,
       }}
@@ -240,60 +271,86 @@ export default function Remote() {
           <span className="text-xl font-bold truncate">{statusHead}</span>
         </motion.span>
         {snap?.slide && (
-          <span className="text-xl font-semibold text-[#f5f0e8]/75 tabular-nums whitespace-nowrap truncate min-w-0 max-w-[45%]">
+          <span className="text-xl font-semibold text-[color:var(--rl-text-75)] tabular-nums whitespace-nowrap truncate min-w-0 max-w-[45%]">
             {snap.slide.label} · {snap.slide.index + 1} / {snap.slide.total}
           </span>
         )}
         <button
           onClick={() => setSettingsOpen(true)}
           aria-label="Settings"
-          className="w-16 h-16 shrink-0 grid place-items-center rounded-2xl text-[#f5f0e8]/80 transition-transform duration-[120ms] ease-snap active:scale-[0.94] active:bg-[#1b3324]"
+          className="w-16 h-16 shrink-0 grid place-items-center rounded-[var(--rl-r)] text-[color:var(--rl-text-80)] active:bg-[color:var(--rl-raised)]"
         >
           <IconGear className="w-8 h-8" />
         </button>
       </header>
 
       {snap?.paused && (
-        <div className="mx-4 mb-1 px-5 py-3 rounded-xl bg-[#b8161a] text-xl font-bold flex items-center gap-3 shrink-0">
+        <div className="mx-4 mb-1 px-5 py-3 rounded-[var(--rl-r)] bg-[color:var(--rl-red)] text-xl font-bold flex items-center gap-3 shrink-0">
           <IconPause className="w-7 h-7 shrink-0" />
           Remote paused on the laptop
         </div>
       )}
 
       <main className="flex-1 min-h-0 grid gap-3 px-4 pb-4 pt-1
-        portrait:grid-cols-2 portrait:grid-rows-[auto_1fr_auto_auto_auto_auto]
-        landscape:grid-cols-[repeat(4,minmax(0,1fr))_minmax(240px,0.9fr)] landscape:grid-rows-[1fr_auto_auto_auto]">
+        portrait:grid-cols-2 portrait:grid-rows-[auto_1fr_auto_auto]
+        landscape:grid-cols-[repeat(4,minmax(0,1fr))_minmax(240px,0.9fr)] landscape:grid-rows-[1fr_auto_auto]">
         {/* Up Next: reading, not tapping, so it sits away from the thumb */}
-        <aside className="portrait:col-span-2 portrait:order-first landscape:col-start-5 landscape:row-start-1 landscape:row-span-4
-          rounded-2xl bg-[#13261a] px-5 py-4 flex portrait:flex-row portrait:items-center landscape:flex-col gap-x-6 gap-y-3 min-h-0 min-w-0">
-          <p className="text-[1rem] leading-6 font-semibold text-[#f5f0e8]/75 shrink-0">Up next</p>
+        <aside className="portrait:col-span-2 portrait:order-first landscape:col-start-5 landscape:row-start-1 landscape:row-span-3
+          rounded-[var(--rl-r)] bg-[color:var(--rl-surface)] px-5 py-4 flex portrait:flex-row portrait:items-center landscape:flex-col gap-x-6 gap-y-3 min-h-0 min-w-0">
+          <p className="text-[1rem] leading-6 font-semibold text-[color:var(--rl-text-75)] shrink-0">Up next</p>
           {(snap?.upNext ?? []).map((s, i) => (
-            <p key={i} className={`text-2xl font-bold truncate min-w-0 ${i ? 'text-[#f5f0e8]/75' : ''}`}>› {s.label}</p>
+            <p key={i} className={`text-2xl font-bold truncate min-w-0 ${i ? 'text-[color:var(--rl-text-75)]' : ''}`}>› {s.label}</p>
           ))}
-          {snap && snap.upNext.length === 0 && <p className="text-2xl font-bold text-[#f5f0e8]/75">End of show</p>}
-          {!snap && <p className="text-xl text-[#f5f0e8]/75">Nothing yet</p>}
+          {snap && snap.upNext.length === 0 && <p className="text-2xl font-bold text-[color:var(--rl-text-75)]">End of show</p>}
+          {!snap && <p className="text-xl text-[color:var(--rl-text-75)]">Nothing yet</p>}
+          {/* Volume, Duck, Sounds: on the relay, so they work even without Live Mode */}
+          <AudioBar
+            local={local}
+            block={localBlock}
+            onVolDown={() => send('vol.down', {}, !localBlock)}
+            onVolUp={() => send('vol.up', {}, !localBlock)}
+            onDuck={() => send('duck', {}, !localBlock)}
+            onSounds={() => setDrawer('sounds')}
+          />
         </aside>
 
+        {jb ? (
+          <JukeboxPanel
+            view={jb}
+            ok={jukeboxOk}
+            skipArmed={skipArmed}
+            skipOff={nextOff}
+            onOpen={() => send('jukebox.open', {}, jukeboxOk)}
+            onExit={() => send('jukebox.exit', {}, jukeboxOk)}
+            onPlay={() => send('jukebox.playStop', {}, jukeboxOk)}
+            onSkip={() => {
+              if (!skipArmed) { setSkipArmed(true); return }
+              setSkipArmed(false)
+              send('next', { expectGate: snap?.gate ?? null })
+            }}
+          />
+        ) : (
         <button
           onClick={() => send('next', { expectGate: snap?.gate ?? null })}
           disabled={nextOff}
-          className={`portrait:col-span-2 landscape:col-span-4 landscape:row-start-1 min-h-[240px] rounded-[20px] px-6 flex flex-col items-center justify-center gap-2 text-center
+          className={`portrait:col-span-2 landscape:col-span-4 landscape:row-start-1 min-h-[240px] rounded-[var(--rl-r)] px-6 flex flex-col items-center justify-center gap-2 text-center
             transition-transform duration-[120ms] ease-snap enabled:active:scale-[0.97]
-            focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-[#f5f0e8] ${
+            focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-[color:var(--rl-text)] ${
             nextOff
-              ? 'bg-[#13261a] text-[#f5f0e8]/75 border-[3px] border-dashed border-[#f5f0e8]/30'
-              : 'bg-[#60c000] text-[#06200a] active:bg-[#58b000]'
+              ? 'bg-[color:var(--rl-surface)] text-[color:var(--rl-text-75)] border-[3px] border-dashed border-[color:var(--rl-text-30)]'
+              : 'bg-[color:var(--rl-next)] text-[color:var(--rl-nextink)] active:bg-[color:var(--rl-next-press)]'
           }`}
         >
-          <span className="flex items-center gap-4 leading-none" style={{ fontFamily: "'Boogaloo', cursive", fontSize: 'clamp(4rem, 10vmin, 6rem)' }}>
+          <span className="flex items-center gap-4 leading-none" style={{ fontFamily: 'var(--rl-display)', fontSize: 'var(--rl-word)' }}>
             NEXT
             {nextOff ? <IconPause className="w-[0.7em] h-[0.7em]" /> : <IconArrow className="w-[0.7em] h-[0.7em]" />}
           </span>
-          <span className="font-bold leading-tight max-w-full [text-wrap:balance]" style={{ fontSize: 'clamp(2.5rem, 6.2vmin, 3.75rem)' }} data-cue>
+          <span className="font-bold leading-tight max-w-full [text-wrap:balance]" style={{ fontSize: 'var(--rl-cue)' }} data-cue>
             {cueHead}
           </span>
           {cueHint && <span className="text-2xl font-semibold max-w-full [text-wrap:balance]">{cueHint}</span>}
         </button>
+        )}
 
         {/* Refusals: a reserved slot, so the buttons never jump under a thumb */}
         <div className="portrait:col-span-2 landscape:col-span-4 min-h-[64px] flex" role="status">
@@ -303,7 +360,7 @@ export default function Remote() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.18, ease: EASE_OUT }}
-              className="flex-1 flex items-center gap-3 px-5 py-2 rounded-xl bg-[#f2b632] text-[#1a1206]"
+              className="flex-1 flex items-center gap-3 px-5 py-2 rounded-[var(--rl-r)] bg-[color:var(--rl-amber)] text-[color:var(--rl-amber-ink)]"
             >
               <IconAlert className="w-8 h-8 shrink-0" />
               <span className="text-2xl font-bold">{noticeHead}</span>
@@ -317,14 +374,16 @@ export default function Remote() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.18, ease: EASE_OUT }}
-              className="flex-1 flex items-center gap-3 px-5 py-2 rounded-xl border-2 border-[#f2b632] text-[#f5f0e8]"
+              className="flex-1 flex items-center gap-3 px-5 py-2 rounded-[var(--rl-r)] border-2 border-[color:var(--rl-amber)] text-[color:var(--rl-text)]"
             >
-              <IconAlert className="w-8 h-8 shrink-0 text-[#f2b632]" />
+              <IconAlert className="w-8 h-8 shrink-0 text-[color:var(--rl-amber)]" />
               <span className="text-xl font-semibold">{statusHint}</span>
             </motion.p>
           )}
         </div>
 
+        {/* One row of six from 1280pt wide (a 12.9in iPad); narrower, "Scoreboard" at 130pt tall no longer fits a sixth of the row, so two rows of three */}
+        <div className="portrait:col-span-2 landscape:col-span-4 grid grid-cols-3 min-[1280px]:grid-cols-6 gap-3">
         <BigButton onClick={() => send('prev')} disabled={!live || snap?.paused || snap?.busy} icon={IconBack}>Prev</BigButton>
         <BigButton
           onClick={() => send('answer', { value: revealOwed ? true : !toggles.answerReveal })}
@@ -350,6 +409,7 @@ export default function Remote() {
           hint={fixBlock ?? 'Unlock or rescore'}>
           Fix
         </DrawerButton>
+        </div>
       </main>
 
       <Sheet open={drawer === 'jump'} onClose={() => setDrawer(null)} title="Jump to a slide" tall>
@@ -369,6 +429,15 @@ export default function Remote() {
         />
       </Sheet>
 
+      <Sheet open={drawer === 'sounds'} onClose={() => setDrawer(null)} title="Sounds" subtitle={localBlock ?? 'Plays on the laptop speakers'}>
+        <SoundGrid
+          sounds={local?.sounds ?? []}
+          off={!!localBlock}
+          onPlay={id => send('sound.play', { id }, !localBlock)}
+          onStopAll={() => send('sound.stopAll', {}, !localBlock)}
+        />
+      </Sheet>
+
       {settingsOpen && (
         <motion.div
           initial={{ opacity: 0 }}
@@ -383,16 +452,16 @@ export default function Remote() {
             transition={{ duration: 0.26, ease: EASE_PANEL }}
             onSubmit={saveSettings}
             onClick={e => e.stopPropagation()}
-            className="w-full max-w-xl max-h-full overflow-y-auto bg-[#13261a] rounded-t-2xl landscape:rounded-2xl p-6 flex flex-col gap-5"
+            className="w-full max-w-xl max-h-full overflow-y-auto bg-[color:var(--rl-surface)] rounded-t-[calc(var(--rl-r)*1.4)] landscape:rounded-[var(--rl-r)] p-6 flex flex-col gap-5"
             style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
           >
             <div className="flex items-center justify-between gap-4">
-              <h2 className="text-4xl leading-none" style={{ fontFamily: "'Boogaloo', cursive" }}>Remote settings</h2>
+              <h2 className="text-4xl leading-none" style={{ fontFamily: 'var(--rl-display)' }}>Remote settings</h2>
               {cfg.secret && (
                 <button
                   type="button"
                   onClick={() => setSettingsOpen(false)}
-                  className="h-14 px-5 rounded-xl bg-[#1b3324] text-xl font-semibold transition-transform duration-[120ms] ease-snap active:scale-[0.97]"
+                  className="h-14 px-5 rounded-[var(--rl-r)] bg-[color:var(--rl-raised)] text-xl font-semibold"
                 >
                   Close
                 </button>
@@ -400,7 +469,7 @@ export default function Remote() {
             </div>
             <label className="flex flex-col gap-2">
               <span className="text-xl font-semibold">Pairing code</span>
-              <span className="text-[1rem] leading-6 text-[#f5f0e8]/75">
+              <span className="text-[1rem] leading-6 text-[color:var(--rl-text-75)]">
                 On the laptop, run <code className="font-mono">npm run relay -- --init</code> and type the code it prints.
               </span>
               <input
@@ -410,12 +479,12 @@ export default function Remote() {
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
-                className="h-16 px-4 rounded-xl bg-[#0a1710] border-2 border-[#f5f0e8]/25 focus:border-[#60c000] outline-none text-2xl text-[#f5f0e8] tracking-widest font-mono"
+                className="h-16 px-4 rounded-[var(--rl-r)] bg-[color:var(--rl-night)] border-2 border-[color:var(--rl-text-25)] focus:border-[color:var(--rl-next)] outline-none text-2xl text-[color:var(--rl-text)] tracking-widest font-mono"
               />
             </label>
             <label className="flex flex-col gap-2">
               <span className="text-xl font-semibold">Laptop address</span>
-              <span className="text-[1rem] leading-6 text-[#f5f0e8]/75">Leave this alone unless the laptop changed.</span>
+              <span className="text-[1rem] leading-6 text-[color:var(--rl-text-75)]">Leave this alone unless the laptop changed.</span>
               <input
                 name="url"
                 defaultValue={cfg.url}
@@ -423,16 +492,16 @@ export default function Remote() {
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
-                className="h-16 px-4 rounded-xl bg-[#0a1710] border-2 border-[#f5f0e8]/25 focus:border-[#60c000] outline-none text-lg text-[#f5f0e8] font-mono"
+                className="h-16 px-4 rounded-[var(--rl-r)] bg-[color:var(--rl-night)] border-2 border-[color:var(--rl-text-25)] focus:border-[color:var(--rl-next)] outline-none text-lg text-[color:var(--rl-text)] font-mono"
               />
             </label>
             <button
               type="submit"
-              className="h-16 rounded-xl bg-[#60c000] text-[#06200a] text-2xl font-bold transition-transform duration-[120ms] ease-snap active:scale-[0.97] active:bg-[#58b000]"
+              className="h-16 rounded-[var(--rl-r)] bg-[color:var(--rl-next)] text-[color:var(--rl-nextink)] text-2xl font-bold active:bg-[color:var(--rl-next-press)]"
             >
               Save
             </button>
-            <p className="text-[1rem] leading-6 text-[#f5f0e8]/75">
+            <p className="text-[1rem] leading-6 text-[color:var(--rl-text-75)]">
               If the remote acts up, press Pause iPad remote on the laptop and run the show from there.
               The laptop checks in every {BEAT_MS / 1000} seconds.
             </p>
@@ -452,15 +521,14 @@ function BigButton({ onClick, disabled, lit = false, glow = false, icon: Icon, c
       onClick={onClick}
       disabled={disabled}
       aria-pressed={toggle ? lit : undefined}
-      className={`relative min-h-[104px] rounded-2xl px-4 py-3 flex flex-col justify-center gap-1 text-left
-        transition-transform duration-[120ms] ease-snap enabled:active:scale-[0.97]
-        focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[#f5f0e8] ${
+      className={`relative min-h-[var(--rl-bh)] min-w-0 rounded-[var(--rl-r)] px-4 py-3 flex flex-col justify-center gap-1 text-left
+        focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--rl-text)] ${
         disabled
-          ? 'bg-[#13261a] text-[#f5f0e8]/50 border-2 border-dashed border-[#f5f0e8]/20'
+          ? 'bg-[color:var(--rl-surface)] text-[color:var(--rl-text-50)] border-2 border-dashed border-[color:var(--rl-text-20)]'
           : lit
-            ? 'bg-[#f5f0e8] text-[#06200a] active:bg-[#e4dfd6]'
-            : 'bg-[#1b3324] text-[#f5f0e8] active:bg-[#244130]'
-      } ${glow && !disabled ? 'ring-[5px] ring-[#f2b632] ring-offset-2 ring-offset-[#0a1710]' : ''}`}
+            ? 'bg-[color:var(--rl-text)] text-[color:var(--rl-nextink)] active:bg-[color:var(--rl-text-press)]'
+            : 'bg-[color:var(--rl-raised)] text-[color:var(--rl-text)] active:bg-[color:var(--rl-raised-press)]'
+      } ${glow && !disabled ? 'ring-[5px] ring-[color:var(--rl-amber)] ring-offset-2 ring-offset-[color:var(--rl-night)]' : ''}`}
     >
       <span className="flex items-center gap-2 text-2xl font-bold leading-tight">
         {Icon && <Icon className="w-7 h-7 shrink-0" />}
@@ -469,7 +537,7 @@ function BigButton({ onClick, disabled, lit = false, glow = false, icon: Icon, c
       {toggle && (
         <span className="flex items-center gap-2 text-lg font-semibold">
           {glow && !disabled && !lit ? (
-            <span className="text-[#f2b632] motion-safe:animate-pulse">Tap to reveal</span>
+            <span className="text-[color:var(--rl-amber)] motion-safe:animate-pulse">Tap to reveal</span>
           ) : (
             <>
               <span className={`w-4 h-4 rounded-full border-[3px] border-current ${lit ? 'bg-current' : ''}`} aria-hidden />
@@ -489,19 +557,18 @@ function DrawerButton({ onClick, disabled, icon: Icon, hint, children }) {
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`portrait:col-span-1 landscape:col-span-2 min-h-[88px] rounded-2xl px-5 py-3 flex items-center gap-4 text-left
-        transition-transform duration-[120ms] ease-snap enabled:active:scale-[0.97]
-        focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[#f5f0e8] ${
+      className={`min-h-[var(--rl-bh)] min-w-0 rounded-[var(--rl-r)] px-4 py-3 flex flex-col justify-center gap-1 text-left
+        focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--rl-text)] ${
         disabled
-          ? 'bg-[#13261a] text-[#f5f0e8]/50 border-2 border-dashed border-[#f5f0e8]/20'
-          : 'bg-[#1b3324] text-[#f5f0e8] active:bg-[#244130]'
+          ? 'bg-[color:var(--rl-surface)] text-[color:var(--rl-text-50)] border-2 border-dashed border-[color:var(--rl-text-20)]'
+          : 'bg-[color:var(--rl-raised)] text-[color:var(--rl-text)] active:bg-[color:var(--rl-raised-press)]'
       }`}
     >
-      <Icon className="w-9 h-9 shrink-0" />
-      <span className="flex flex-col min-w-0">
-        <span className="text-2xl font-bold leading-tight">{children}</span>
-        {hint && <span className="text-lg font-semibold truncate opacity-80">{hint}</span>}
+      <span className="flex items-center gap-2 text-2xl font-bold leading-tight">
+        <Icon className="w-7 h-7 shrink-0" />
+        {children}
       </span>
+      {hint && <span className="text-[1rem] leading-5 font-semibold opacity-80 [overflow-wrap:anywhere]">{hint}</span>}
     </button>
   )
 }
@@ -531,17 +598,17 @@ function Sheet({ open, onClose, title, subtitle, tall = false, children }) {
             animate={{ ...shown, transition: { duration: 0.28, ease: EASE_PANEL } }}
             exit={{ ...hidden, transition: { duration: 0.2, ease: EASE_EXIT } }}
             onClick={e => e.stopPropagation()}
-            className={`w-full max-w-3xl ${tall ? 'h-[85dvh]' : 'max-h-[85dvh]'} bg-[#13261a] rounded-t-3xl flex flex-col`}
+            className={`w-full max-w-3xl ${tall ? 'h-[85dvh]' : 'max-h-[85dvh]'} bg-[color:var(--rl-surface)] rounded-t-[calc(var(--rl-r)*1.4)] flex flex-col`}
             style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
           >
             <div className="flex items-center gap-4 px-6 pt-5 pb-3 shrink-0">
               <div className="flex-1 min-w-0">
-                <h2 className="text-4xl leading-none" style={{ fontFamily: "'Boogaloo', cursive" }}>{title}</h2>
-                {subtitle && <p className="text-xl font-semibold text-[#f5f0e8]/75 mt-1 truncate">{subtitle}</p>}
+                <h2 className="text-4xl leading-none" style={{ fontFamily: 'var(--rl-display)' }}>{title}</h2>
+                {subtitle && <p className="text-xl font-semibold text-[color:var(--rl-text-75)] mt-1 truncate">{subtitle}</p>}
               </div>
               <button
                 onClick={onClose}
-                className="h-16 px-6 rounded-xl bg-[#1b3324] text-xl font-semibold transition-transform duration-[120ms] ease-snap active:scale-[0.97]"
+                className="h-16 px-6 rounded-[var(--rl-r)] bg-[color:var(--rl-raised)] text-xl font-semibold"
               >
                 Close
               </button>
@@ -583,7 +650,7 @@ function JumpList({ slides, current, blocked, onJump }) {
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pb-4">
         {groupByRound(slides).map((g, gi) => (
           <section key={gi} className="mt-1">
-            <h3 className="sticky top-0 z-10 bg-[#13261a] px-2 py-2 text-[1rem] leading-6 font-semibold text-[#f5f0e8]/75">{g.title}</h3>
+            <h3 className="sticky top-0 z-10 bg-[color:var(--rl-surface)] px-2 py-2 text-[1rem] leading-6 font-semibold text-[color:var(--rl-text-75)]">{g.title}</h3>
             <div className="flex flex-col gap-2">
               {g.slides.map(s => {
                 const here = s.index === current
@@ -597,19 +664,18 @@ function JumpList({ slides, current, blocked, onJump }) {
                     aria-pressed={picked}
                     disabled={here}
                     onClick={() => setPick(s)}
-                    className={`min-h-[72px] rounded-2xl px-5 flex items-center gap-4 text-left
-                      transition-transform duration-[120ms] ease-snap enabled:active:scale-[0.98]
-                      focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[#f5f0e8] ${
+                    className={`min-h-[72px] rounded-[var(--rl-r)] px-5 flex items-center gap-4 text-left
+                      focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--rl-text)] ${
                       here
-                        ? 'bg-[#0a1710] border-[3px] border-[#60c000] text-[#f5f0e8]'
+                        ? 'bg-[color:var(--rl-night)] border-[3px] border-[color:var(--rl-next)] text-[color:var(--rl-text)]'
                         : picked
-                          ? 'bg-[#f5f0e8] text-[#06200a]'
-                          : 'bg-[#1b3324] text-[#f5f0e8] active:bg-[#244130]'
+                          ? 'bg-[color:var(--rl-text)] text-[color:var(--rl-nextink)]'
+                          : 'bg-[color:var(--rl-raised)] text-[color:var(--rl-text)] active:bg-[color:var(--rl-raised-press)]'
                     }`}
                   >
                     <span className="w-12 shrink-0 text-lg font-semibold tabular-nums opacity-75">{s.index + 1}</span>
                     <span className="flex-1 min-w-0 text-2xl font-bold truncate">{s.label}</span>
-                    {here && <span className="shrink-0 px-3 py-1 rounded-full bg-[#60c000] text-[#06200a] text-lg font-bold">Showing now</span>}
+                    {here && <span className="shrink-0 px-3 py-1 rounded-full bg-[color:var(--rl-next)] text-[color:var(--rl-nextink)] text-lg font-bold">Showing now</span>}
                   </button>
                 )
               })}
@@ -618,22 +684,22 @@ function JumpList({ slides, current, blocked, onJump }) {
         ))}
       </div>
       {pick && (
-        <div className="shrink-0 border-t-2 border-[#f5f0e8]/15 px-5 py-4 flex flex-wrap items-center gap-3">
+        <div className="shrink-0 border-t-2 border-[color:var(--rl-text-15)] px-5 py-4 flex flex-wrap items-center gap-3">
           <p className="flex-1 min-w-[12rem] text-2xl font-bold">
             Jump to {jumpName(pick)}?
-            {blocked && <span className="block text-lg font-semibold text-[#f2b632]">{blocked}</span>}
+            {blocked && <span className="block text-lg font-semibold text-[color:var(--rl-amber)]">{blocked}</span>}
           </p>
           <button
             onClick={() => setPick(null)}
-            className="h-16 px-6 rounded-xl bg-[#1b3324] text-xl font-semibold transition-transform duration-[120ms] ease-snap active:scale-[0.97]"
+            className="h-16 px-6 rounded-[var(--rl-r)] bg-[color:var(--rl-raised)] text-xl font-semibold"
           >
             Cancel
           </button>
           <button
             onClick={() => onJump(pick)}
             disabled={!!blocked}
-            className="h-16 px-7 rounded-xl text-xl font-bold transition-transform duration-[120ms] ease-snap enabled:active:scale-[0.97]
-              bg-[#60c000] text-[#06200a] active:bg-[#58b000] disabled:bg-[#13261a] disabled:text-[#f5f0e8]/50 disabled:border-2 disabled:border-dashed disabled:border-[#f5f0e8]/20"
+            className="h-16 px-7 rounded-[var(--rl-r)] text-xl font-bold
+              bg-[color:var(--rl-next)] text-[color:var(--rl-nextink)] active:bg-[color:var(--rl-next-press)] disabled:bg-[color:var(--rl-surface)] disabled:text-[color:var(--rl-text-50)] disabled:border-2 disabled:border-dashed disabled:border-[color:var(--rl-text-20)]"
           >
             Jump there
           </button>
@@ -652,12 +718,11 @@ function FixPanel({ fix, blocked, onUnlock, onRescore }) {
       <button
         onClick={onClick}
         disabled={off}
-        className={`min-h-[112px] rounded-2xl px-6 py-4 flex items-center gap-5 text-left
-          transition-transform duration-[120ms] ease-snap enabled:active:scale-[0.98]
-          focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[#f5f0e8] ${
+        className={`min-h-[112px] rounded-[var(--rl-r)] px-6 py-4 flex items-center gap-5 text-left
+          focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--rl-text)] ${
           off
-            ? 'bg-[#0a1710] text-[#f5f0e8]/60 border-2 border-dashed border-[#f5f0e8]/20'
-            : 'bg-[#1b3324] text-[#f5f0e8] active:bg-[#244130]'
+            ? 'bg-[color:var(--rl-night)] text-[color:var(--rl-text-60)] border-2 border-dashed border-[color:var(--rl-text-20)]'
+            : 'bg-[color:var(--rl-raised)] text-[color:var(--rl-text)] active:bg-[color:var(--rl-raised-press)]'
         }`}
       >
         <Icon className="w-10 h-10 shrink-0" />
@@ -674,6 +739,181 @@ function FixPanel({ fix, blocked, onUnlock, onRescore }) {
       {row('Unlock', 'Let teams answer again on their phones', fix?.canUnlock, fix?.unlockRefusal ?? 'nothing-to-fix', onUnlock, IconUnlock)}
       {row(fix?.rescoreLabel ?? 'Rescore', 'Score the locked answers again', fix?.canRescore, fix?.rescoreRefusal ?? 'nothing-to-fix', onRescore, IconRedo)}
     </div>
+  )
+}
+
+// Jukebox mode (spec §17.2): takes Next's place while the laptop sits on a
+// grading break. Back to Trivia is the b key (music fades, jukebox saves,
+// Final Break jumps to the winner); plain Next would cut all of that, so it
+// hides behind a second, confirming tap.
+function JukeboxPanel({ view, ok, skipArmed, skipOff, onOpen, onExit, onPlay, onSkip }) {
+  const big = 'flex-[2] min-w-0 min-h-[200px] rounded-[var(--rl-r)] px-6 flex flex-col items-center justify-center gap-2 text-center focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-[color:var(--rl-text)]'
+  const on = 'bg-[color:var(--rl-next)] text-[color:var(--rl-nextink)] active:bg-[color:var(--rl-next-press)]'
+  const offCls = 'bg-[color:var(--rl-surface)] text-[color:var(--rl-text-75)] border-[3px] border-dashed border-[color:var(--rl-text-30)]'
+  const title = t => <span className="leading-none" style={{ fontFamily: 'var(--rl-display)', fontSize: 'clamp(3rem, 8vmin, 5rem)' }}>{t}</span>
+  const sub = t => <span className="text-2xl font-bold leading-tight [text-wrap:balance]">{t}</span>
+  let main
+  if (view.phase === 'open') {
+    main = (
+      <button data-k="jukebox-exit" onClick={onExit} disabled={!ok} className={`${big} ${ok ? on : offCls}`}>
+        {title('Back to Trivia')}
+        {sub(ok ? 'Fades the music, then the next slide' : 'Paused on the laptop')}
+      </button>
+    )
+  } else if (view.phase === 'waiting') {
+    main = (
+      <button data-k="jukebox-open" onClick={onOpen} disabled={!ok} className={`${big} ${ok ? on : offCls}`}>
+        {title('Open jukebox now')}
+        {sub('Skips the 10 second wait')}
+      </button>
+    )
+  } else {
+    const [head, hint] = view.phase === 'unlinked'
+      ? splitMsg(refusalText('display-offline'))
+      : ['Jukebox opening…', null]
+    main = (
+      <div className={`${big} ${offCls}`} role="status">
+        {title(view.phase === 'unlinked' ? 'Jukebox' : 'Music')}
+        {sub(head)}
+        {hint && <span className="text-xl font-semibold">{hint}</span>}
+      </div>
+    )
+  }
+  const playOff = !ok || view.phase !== 'open' || view.handoffPending
+  const playing = view.phase === 'open' && view.playing
+  return (
+    <div className="portrait:col-span-2 landscape:col-span-4 landscape:row-start-1 min-h-[240px] flex gap-3">
+      {main}
+      <div className="flex-1 min-w-[180px] flex flex-col gap-3">
+        <button
+          data-k="jukebox-play"
+          onClick={onPlay}
+          disabled={playOff}
+          aria-pressed={playing}
+          className={`flex-1 min-h-[104px] rounded-[var(--rl-r)] px-5 py-3 flex flex-col justify-center gap-1 text-left
+            focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--rl-text)] ${
+            playOff
+              ? 'bg-[color:var(--rl-surface)] text-[color:var(--rl-text-50)] border-2 border-dashed border-[color:var(--rl-text-20)]'
+              : playing ? 'bg-[color:var(--rl-text)] text-[color:var(--rl-nextink)] active:bg-[color:var(--rl-text-press)]' : 'bg-[color:var(--rl-raised)] text-[color:var(--rl-text)] active:bg-[color:var(--rl-raised-press)]'
+          }`}
+        >
+          <span className="flex items-center gap-2 text-2xl font-bold leading-tight">
+            {playing ? <IconStop className="w-7 h-7 shrink-0" /> : <IconArrow className="w-7 h-7 shrink-0" />}
+            {playing ? 'Stop' : 'Play'}
+          </span>
+          <span className="flex items-center gap-2 text-lg font-semibold">
+            <span className={`w-4 h-4 rounded-full border-[3px] border-current ${playing ? 'bg-current' : ''}`} aria-hidden />
+            {view.phase === 'open' && view.handoffPending ? 'Starting…' : playing ? 'Playing' : 'Stopped'}
+          </span>
+        </button>
+        <button
+          data-k="skip-break"
+          onClick={onSkip}
+          disabled={skipOff}
+          className={`min-h-[72px] rounded-[var(--rl-r)] px-4 py-2 text-left text-lg font-bold leading-tight
+            focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--rl-text)] ${
+            skipOff
+              ? 'bg-[color:var(--rl-surface)] text-[color:var(--rl-text-50)] border-2 border-dashed border-[color:var(--rl-text-20)]'
+              : skipArmed ? 'bg-[color:var(--rl-amber)] text-[color:var(--rl-amber-ink)]' : 'bg-[color:var(--rl-surface)] text-[color:var(--rl-text)] border-2 border-[color:var(--rl-text-30)] active:bg-[color:var(--rl-raised)]'
+          }`}
+        >
+          {skipArmed ? 'Tap again to skip. No fade, no save' : 'Skip the break (no fade)'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// System volume, Duck and the Sounds drawer, run by the relay on the laptop
+// (macOS output, the same as the Stream Deck keys). Compact on the main
+// screen, taller in jukebox mode.
+function AudioBar({ local, block, onVolDown, onVolUp, onDuck, onSounds }) {
+  const off = !!block
+  const btn = `min-h-[72px] rounded-[var(--rl-r)] px-3 flex items-center justify-center gap-2 text-2xl font-bold
+    focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--rl-text)]`
+  const idle = off ? 'bg-[color:var(--rl-night)] text-[color:var(--rl-text-50)] border-2 border-dashed border-[color:var(--rl-text-20)]' : 'bg-[color:var(--rl-raised)] text-[color:var(--rl-text)] active:bg-[color:var(--rl-raised-press)]'
+  const ducked = !!local?.ducked
+  return (
+    <div className="landscape:mt-auto portrait:ml-auto portrait:w-[22rem] flex flex-col gap-2 min-w-0 shrink-0">
+      <p className="text-[1rem] leading-6 font-semibold text-[color:var(--rl-text-75)]">
+        {off && local ? block : 'Laptop sound'}
+      </p>
+      <div className="flex gap-2 min-w-0">
+        <button data-k="vol-down" aria-label="Volume down" onClick={onVolDown} disabled={off} className={`${btn} ${idle} w-16 shrink-0`}>
+          <IconMinus className="w-8 h-8" />
+        </button>
+        <div data-k="vol-level" aria-label="Laptop volume" className="min-h-[72px] flex-1 min-w-0 flex items-center justify-center text-3xl font-bold tabular-nums">
+          {local?.volume ?? '–'}
+        </div>
+        <button data-k="vol-up" aria-label="Volume up" onClick={onVolUp} disabled={off} className={`${btn} ${idle} w-16 shrink-0`}>
+          <IconPlus className="w-8 h-8" />
+        </button>
+      </div>
+      <button
+        data-k="duck"
+        onClick={onDuck}
+        disabled={off}
+        aria-pressed={ducked}
+        className={`${btn} flex-col !gap-0 ${off ? idle : ducked ? 'bg-[color:var(--rl-text)] text-[color:var(--rl-nextink)] active:bg-[color:var(--rl-text-press)]' : idle}`}
+      >
+        <span>Duck</span>
+        <span className="flex items-center gap-2 text-lg font-semibold">
+          <span className={`w-4 h-4 rounded-full border-[3px] border-current ${ducked ? 'bg-current' : ''}`} aria-hidden />
+          {ducked ? 'On, tap to restore' : 'Off'}
+        </span>
+      </button>
+      <button data-k="sounds" onClick={onSounds} disabled={off} className={`${btn} ${idle}`}>
+        <IconSpeaker className="w-8 h-8 shrink-0" />
+        Sounds
+      </button>
+    </div>
+  )
+}
+
+// The Stream Deck's soundboard page. Only the id ever leaves the iPad; the
+// relay looks the file up in its own list. The drawer stays open between
+// taps, like the Stream Deck page.
+function SoundGrid({ sounds, off, onPlay, onStopAll }) {
+  return (
+    <>
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 pb-3 pt-1 grid grid-cols-2 landscape:grid-cols-3 gap-3 content-start">
+        {sounds.length === 0 && (
+          <p className="col-span-full text-xl text-[color:var(--rl-text-75)]">
+            No sounds set up. On the laptop, run <code className="font-mono">npm run relay -- --init-sounds</code>.
+          </p>
+        )}
+        {sounds.map(snd => {
+          const dead = off || snd.missing
+          return (
+            <button
+              key={snd.id}
+              data-sound={snd.id}
+              onClick={() => onPlay(snd.id)}
+              disabled={dead}
+              className={`min-h-[96px] rounded-[var(--rl-r)] px-5 py-3 flex flex-col justify-center gap-1 text-left
+                focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--rl-text)] ${
+                dead ? 'bg-[color:var(--rl-night)] text-[color:var(--rl-text-50)] border-2 border-dashed border-[color:var(--rl-text-20)]' : 'bg-[color:var(--rl-raised)] text-[color:var(--rl-text)] active:bg-[color:var(--rl-raised-press)]'
+              }`}
+            >
+              <span className="text-2xl font-bold leading-tight">{snd.label}</span>
+              {snd.missing && <span className="text-lg font-semibold">File missing on the laptop</span>}
+            </button>
+          )
+        })}
+      </div>
+      <div className="shrink-0 border-t-2 border-[color:var(--rl-text-15)] px-5 py-4">
+        <button
+          data-k="stop-all"
+          onClick={onStopAll}
+          disabled={off}
+          className="w-full min-h-[80px] rounded-[var(--rl-r)] text-2xl font-bold flex items-center justify-center gap-3
+            bg-[color:var(--rl-red)] text-[color:var(--rl-text)] active:bg-[color:var(--rl-red-press)] disabled:bg-[color:var(--rl-surface)] disabled:text-[color:var(--rl-text-50)] disabled:border-2 disabled:border-dashed disabled:border-[color:var(--rl-text-20)]"
+        >
+          <IconStop className="w-8 h-8" />
+          Stop all sounds
+        </button>
+      </div>
+    </>
   )
 }
 
@@ -699,3 +939,7 @@ function IconList(p) { return svg(<><path d="M9 6h11M9 12h11M9 18h11" /><path d=
 function IconWrench(p) { return svg(<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />)(p) }
 function IconUnlock(p) { return svg(<><rect x="4.5" y="11" width="15" height="10" rx="2" /><path d="M8 11V7.5a4 4 0 0 1 7.6-1.7" /></>)(p) }
 function IconRedo(p) { return svg(<><path d="M20 5v5h-5" /><path d="M20 10a8 8 0 1 0 1.5 5" /></>)(p) }
+function IconStop(p) { return svg(<rect x="6" y="6" width="12" height="12" rx="1.5" />, true)(p) }
+function IconPlus(p) { return svg(<path d="M12 5v14M5 12h14" />)(p) }
+function IconMinus(p) { return svg(<path d="M5 12h14" />)(p) }
+function IconSpeaker(p) { return svg(<><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z" /><path d="M15.5 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11" /></>)(p) }

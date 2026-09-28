@@ -9,6 +9,7 @@ import { prefetchPalette } from '../hooks/usePalette'
 import { hasOverrides, TUNING_EVENT } from '../lib/gradientTuning'
 import Player from './Player'
 import LiveScreen, { EXIT_TOTAL_MS } from './LiveScreen'
+import { togglePlay, exitToShow } from '../lib/jukeboxControls.js'
 import TestScreen from './TestScreen'
 import SongDetailModal from './SongDetailModal'
 
@@ -76,7 +77,7 @@ function mergeLocalDelta(baseline, outgoing, remote) {
 // minus the handoff.
 // revealed: pass-through to LiveScreen (see its prop comment) — the break
 // overlay's "actually visible on the TV" signal. Default true = /music.
-export default function Jukebox({ onLogout, initialLib, onExitToShow, ringMode = false, revealed = true }) {
+export default function Jukebox({ onLogout, initialLib, onExitToShow, ringMode = false, revealed = true, remoteRef = null, onRemoteState = null }) {
   const [sets, setSets] = useState(loadSets)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
@@ -1286,17 +1287,22 @@ export default function Jukebox({ onLogout, initialLib, onExitToShow, ringMode =
       // effect runs it would handleStop() a handoff mid-confirm. Both wrong;
       // the handoff owns playback until it resolves or gives up (every
       // give-up path clears libHandoffPending, re-arming this key).
-      if (libHandoffPending) return
+      // Body lives in togglePlay (jukeboxControls.js) so the iPad remote runs
+      // the same guards: libHandoffPending as above, and while LiveScreen is
+      // animating out (liveEnding) play is ignored — starting a track mid-exit
+      // would fight the transition. Stop is already a no-op there.
+      const r = togglePlay({ modalTrack, libHandoffPending, isPlaying, liveEnding, handleStop, startShuffle })
+      if (r === 'modal' || r === 'handoff') return
       e.preventDefault()
-      if (isPlaying) handleStop()
-      // While LiveScreen is animating out (liveEnding), ignore play — starting
-      // a track mid-exit would fight the transition. Stop is already a no-op here.
-      else if (!liveEnding) startShuffle()
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [isPlaying, handleStop, startShuffle, modalTrack, liveEnding, libHandoffPending])
 
+  const exitArgs = () => ({
+    modalTrack, firedRef: handoffFiredRef, isPlaying, showLive, setLibHandoffPending, handleStop,
+    wait: () => new Promise(r => setTimeout(r, EXIT_TOTAL_MS)), flushPendingWrite, onExitToShow,
+  })
   useEffect(() => {
     const onDown = (e) => {
       if (e.repeat) return
@@ -1311,47 +1317,42 @@ export default function Jukebox({ onLogout, initialLib, onExitToShow, ringMode =
         // drops keyboard auto-repeat; handoffFiredRef below is the guard
         // against a real second keydown (a flaky Stream Deck bounce) firing
         // this twice concurrently, same job the setTimeout ref used to do.
-        if (handoffFiredRef.current) return
-        handoffFiredRef.current = true
-        ;(async () => {
-          if (isPlaying || showLive) {
-            // Re-cover the library (same black layer the grading-break
-            // handoff itself renders behind, see libHandoffPending's
-            // declaration) — Ben, live: "the 'back to trivia' reshows the
-            // library for a split second." handleStop()'s exit animation
-            // ends by setting showLive false (LiveScreen's onClose ->
-            // closeLive), which un-hides the plain library grid underneath
-            // for however long the flush + slide-advance round trip below
-            // takes before Display.jsx actually unmounts this component.
-            // Never explicitly cleared: the component unmounts once
-            // onExitToShow's advance lands, same as the grading-break
-            // handoff's own cover never needing an exit-side clear either.
-            setLibHandoffPending(true)
-            // Play the same stop-and-animate exit spacebar uses (fade audio,
-            // LiveScreen tonearm lift + record fly-up) instead of cutting to
-            // trivia-os mid-song. Wait matches LiveScreen's exit sequence
-            // exactly — imports EXIT_TOTAL_MS instead of a second hardcoded
-            // number (2026-08-04, fable review) — previously nothing kept
-            // this in sync with a retune of LiveScreen's ending effect.
-            handleStop()
-            await new Promise(r => setTimeout(r, EXIT_TOTAL_MS))
-          }
-          // Flush any pending debounced Supabase write first — otherwise an edit
-          // made just before handing back to trivia-os (add/reorder/trim/rename)
-          // gets silently dropped when the tab navigates mid-debounce.
-          await flushPendingWrite()
-          // trivia-os port: same tab now — hand control back to the show via
-          // the overlay's callback (which advances the slide) instead of a
-          // full-page navigation. No-op on the /music manager page.
-          onExitToShow?.()
-        })()
+        // The body (fired guard, re-cover, stop-and-animate exit, wait
+        // EXIT_TOTAL_MS, flush, hand back) is exitToShow in
+        // jukeboxControls.js, shared with the iPad remote. The re-cover
+        // matters because (Ben, live) "the 'back to trivia' reshows the
+        // library for a split second"; the flush because an edit made just
+        // before handing back would otherwise be dropped mid-debounce.
+        exitToShow(exitArgs())
       }
     }
     window.addEventListener('keydown', onDown)
     return () => {
       window.removeEventListener('keydown', onDown)
     }
-  }, [modalTrack, flushPendingWrite, isPlaying, showLive, handleStop, onExitToShow])
+  }, [modalTrack, flushPendingWrite, isPlaying, showLive, handleStop, onExitToShow]) // exitArgs reads exactly these
+
+  // The iPad remote's handle on the two handlers above (spec §17.2), via
+  // /display's relay peer. Refreshed every render so it never acts on stale
+  // state; absent (no remoteRef) everywhere but the grading-break overlay.
+  useEffect(() => {
+    if (!remoteRef) return
+    remoteRef.current = {
+      togglePlay: () => togglePlay({ modalTrack, libHandoffPending, isPlaying, liveEnding, handleStop, startShuffle }),
+      exitToShow: () => exitToShow(exitArgs()).result,
+    }
+  })
+  useEffect(() => {
+    if (!remoteRef) return undefined
+    return () => { remoteRef.current = null }
+  }, [remoteRef])
+  useEffect(() => {
+    onRemoteState?.({ playing: isPlaying, handoffPending: libHandoffPending })
+  }, [onRemoteState, isPlaying, libHandoffPending])
+  useEffect(() => {
+    if (!onRemoteState) return undefined
+    return () => onRemoteState({ playing: false, handoffPending: false })
+  }, [onRemoteState])
 
   const handleDragStart = (i) => { dragIdxRef.current = i }
   const handleDragOver = (e, i) => {

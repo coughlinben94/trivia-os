@@ -6,7 +6,9 @@ import os from 'node:os'
 import path from 'node:path'
 import WebSocket from 'ws'
 import { createRelay, initSecret, devRefused, PROD_ORIGIN, DEV_ORIGIN } from './server.mjs'
-import { CLOSE_BAD_SECRET, CLOSE_REPLACED } from '../client/src/lib/remoteProtocol.js'
+import { CLOSE_BAD_SECRET, CLOSE_REPLACED, CLOSE_TOO_FAST } from '../client/src/lib/remoteProtocol.js'
+import { createLocal } from './local.mjs'
+import { fakeRunner } from './fake-runner.mjs'
 
 const SECRET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 const quiet = { log() {}, warn() {}, error() {} }
@@ -28,8 +30,8 @@ afterEach(async () => {
   fs.rmSync(dir, { recursive: true, force: true })
 })
 
-function open(port, origin = PROD_ORIGIN) {
-  const ws = new WebSocket(`ws://127.0.0.1:${port}`, { origin })
+function open(port, origin = PROD_ORIGIN, pathname = '') {
+  const ws = new WebSocket(`ws://127.0.0.1:${port}${pathname}`, { origin })
   ws.inbox = []
   ws.on('message', d => ws.inbox.push(JSON.parse(String(d))))
   ws.closed = new Promise(r => ws.once('close', code => r(code)))
@@ -211,5 +213,140 @@ describe('RELAY_DEV guard', () => {
     expect(devRefused({ RELAY_DEV: '1', XPC_SERVICE_NAME: '0' })).toBe(false)
     expect(devRefused({ RELAY_DEV: '1' })).toBe(false)
     expect(devRefused({ XPC_SERVICE_NAME: 'com.baynes.trivia-relay' })).toBe(false)
+  })
+})
+
+// ── Phase 2b: Stream Deck parity (spec §17) ─────────────────────────────────
+// A FAKE local runner everywhere: nothing here moves the real volume or plays audio.
+describe('local commands and the display peer', () => {
+  let cfgDir, runner
+  beforeEach(async () => {
+    cfgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-cfg-'))
+    const snd = path.join(cfgDir, 'turtles.mp3')
+    fs.writeFileSync(snd, '')
+    fs.writeFileSync(path.join(cfgDir, 'sounds.json'), JSON.stringify([{ id: 'turtles', label: 'I Like Turtles', path: snd }]))
+    runner = fakeRunner({ volume: 60 })
+    await relay.close()
+    await startRelay({ local: createLocal({ configDir: cfgDir, runner, log: quiet }) })
+  })
+  afterEach(() => fs.rmSync(cfgDir, { recursive: true, force: true }))
+
+  const openDisplay = () => open(ports.hostPort, PROD_ORIGIN, '/display')
+  const local = (id, c, args = {}) => JSON.stringify({ type: 'cmd', id, cmd: c, args, expectSlideId: null, sentAt: Date.now() })
+
+  it('a paired iPad gets local-state (volume, ducked, sounds) on hello', async () => {
+    const ipad = await pairedIpad()
+    const st = await find(ipad, m => m.type === 'local-state' && m.volume === 60)
+    expect(st).toMatchObject({ ducked: false, available: true, sounds: [{ id: 'turtles', label: 'I Like Turtles', missing: false }] })
+    expect(await find(ipad, m => m.type === 'jukebox')).toEqual({ type: 'jukebox', linked: false })
+  })
+  it('vol.up runs locally (never reaches the host), replies received and pushes the new local-state', async () => {
+    const host = await openHost()
+    const ipad = await pairedIpad()
+    ipad.send(local('v1', 'vol.up'))
+    expect(await find(ipad, m => m.type === 'result' && m.id === 'v1')).toEqual({ type: 'result', id: 'v1', received: true })
+    await find(ipad, m => m.type === 'local-state' && m.volume === 70)
+    expect(runner.volume).toBe(70)
+    expect(host.inbox.some(m => m.type === 'cmd')).toBe(false)
+  })
+  it('works with no host connected (laptop-local, not laptop-offline)', async () => {
+    const ipad = await pairedIpad()
+    ipad.send(local('d1', 'duck'))
+    expect(await find(ipad, m => m.id === 'd1')).toMatchObject({ received: true })
+    expect(runner.volume).toBe(12)
+  })
+  it('sound.play takes only an id; an unknown id is refused', async () => {
+    const ipad = await pairedIpad()
+    ipad.send(local('s1', 'sound.play', { id: 'turtles', path: '/etc/passwd' }))
+    await find(ipad, m => m.id === 's1' && m.received)
+    expect(runner.calls.at(-1)).toEqual(['/usr/bin/afplay', [path.join(cfgDir, 'turtles.mp3')]])
+    ipad.send(local('s2', 'sound.play', { id: 'nope' }))
+    expect(await find(ipad, m => m.id === 's2')).toMatchObject({ refused: 'unknown-sound' })
+  })
+  it('unpaired sockets cannot run a local command (secret required)', async () => {
+    const ipad = await open(ports.remotePort)
+    ipad.send(local('x', 'vol.up'))
+    expect(await ipad.closed).toBe(CLOSE_BAD_SECRET)
+    expect(runner.calls).toEqual([])
+  })
+  it('the host and display sockets can never send vol/duck/sound or jukebox commands', async () => {
+    const host = await openHost()
+    const display = await openDisplay()
+    const ipad = await pairedIpad()
+    for (const ws of [host, display]) {
+      for (const c of ['vol.up', 'duck', 'sound.play', 'sound.stopAll', 'jukebox.exit']) ws.send(local('h', c, { id: 'turtles' }))
+    }
+    await new Promise(r => setTimeout(r, 100))
+    expect(runner.calls.filter(([f]) => f === '/usr/bin/afplay' || f === '/usr/bin/osascript').length).toBe(1) // only the hello's volume read
+    expect(display.inbox.some(m => m.type === 'cmd')).toBe(false)
+    expect(ipad.inbox.some(m => m.type === 'result' && m.id === 'h')).toBe(false)
+  })
+  it('Pause on the laptop blocks local and jukebox commands', async () => {
+    const host = await openHost()
+    const display = await openDisplay()
+    const ipad = await pairedIpad()
+    host.send(JSON.stringify({ type: 'state', paused: true }))
+    await find(ipad, m => m.type === 'state')
+    ipad.send(local('p1', 'vol.up'))
+    ipad.send(local('p2', 'jukebox.playStop'))
+    expect(await find(ipad, m => m.id === 'p1')).toMatchObject({ refused: 'paused' })
+    expect(await find(ipad, m => m.id === 'p2')).toMatchObject({ refused: 'paused' })
+    expect(runner.volume).toBe(60)
+    expect(display.inbox.some(m => m.type === 'cmd')).toBe(false)
+  })
+  it('more than 10 local commands in a second closes the iPad with 4008', async () => {
+    const ipad = await pairedIpad()
+    for (let i = 0; i < 12; i++) ipad.send(local(`r${i}`, 'sound.stopAll'))
+    expect(await ipad.closed).toBe(CLOSE_TOO_FAST)
+  })
+  it('logs the command name and id only', async () => {
+    const lines = []
+    await relay.close()
+    await startRelay({ local: createLocal({ configDir: cfgDir, runner, log: quiet }), log: { ...quiet, log: s => lines.push(s) } })
+    const ipad = await pairedIpad()
+    ipad.send(local('L1', 'sound.play', { id: 'turtles', path: '/secret/place' }))
+    await find(ipad, m => m.id === 'L1')
+    expect(lines.some(l => /sound\.play/.test(l) && /turtles/.test(l))).toBe(true)
+    expect(lines.join('\n')).not.toMatch(/secret\/place|ABCDEFGHIJ/)
+  })
+  it('jukebox.* goes only to the display peer; with none it is display-offline', async () => {
+    const host = await openHost()
+    const ipad = await pairedIpad()
+    ipad.send(local('j1', 'jukebox.exit'))
+    expect(await find(ipad, m => m.id === 'j1')).toMatchObject({ refused: 'display-offline' })
+    const display = await openDisplay()
+    await find(ipad, m => m.type === 'jukebox' && m.linked === true)
+    ipad.send(local('j2', 'jukebox.playStop'))
+    expect(await find(display, m => m.type === 'cmd')).toMatchObject({ id: 'j2', cmd: 'jukebox.playStop' })
+    expect(host.inbox.some(m => m.type === 'cmd')).toBe(false)
+    display.send(JSON.stringify({ type: 'result', id: 'j2', received: true }))
+    expect(await find(ipad, m => m.id === 'j2')).toEqual({ type: 'result', id: 'j2', received: true })
+  })
+  it('display-state reaches the iPad as jukebox state, replayed on hello; display close unlinks', async () => {
+    const display = await openDisplay()
+    display.send(JSON.stringify({ type: 'display-state', breakWaiting: false, jukeboxOpen: true, playing: true, handoffPending: false, junk: 1 }))
+    const ipad = await pairedIpad()
+    expect(await find(ipad, m => m.type === 'jukebox' && m.open)).toEqual({ type: 'jukebox', linked: true, waiting: false, open: true, playing: true, handoffPending: false })
+    display.close()
+    await find(ipad, m => m.type === 'jukebox' && m.linked === false)
+  })
+  it('a display socket never takes the host slot, and a second display replaces the first (4001)', async () => {
+    const host = await openHost()
+    const d1 = await openDisplay()
+    const d2 = await openDisplay()
+    expect(await d1.closed).toBe(CLOSE_REPLACED)
+    const ipad = await pairedIpad()
+    ipad.send(cmd('n1'))
+    await find(host, m => m.type === 'cmd' && m.id === 'n1')
+    expect(d2.inbox.some(m => m.type === 'cmd')).toBe(false)
+  })
+  it('the display gets relay-beats', async () => {
+    const display = await openDisplay()
+    await find(display, m => m.type === 'relay-beat')
+  })
+  it('the remote port has no display role', async () => {
+    const ws = await open(ports.remotePort, PROD_ORIGIN, '/display')
+    ws.send(JSON.stringify({ type: 'display-state', jukeboxOpen: true }))
+    expect(await ws.closed).toBe(CLOSE_BAD_SECRET)
   })
 })

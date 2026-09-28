@@ -8,6 +8,9 @@ import path from 'node:path'
 import WebSocket from 'ws'
 import { createRelay, PROD_ORIGIN } from './server.mjs'
 import { createStubHost } from './stub-host.mjs'
+import { createStubDisplay } from './stub-display.mjs'
+import { createLocal } from './local.mjs'
+import { fakeRunner } from './fake-runner.mjs'
 
 const SECRET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 const quiet = { log() {}, warn() {}, error() {} }
@@ -19,8 +22,10 @@ const makeSlides = () => [
   { id: 'q3', type: 'question', data: { questionNumber: 3 } },
 ]
 
+let runner
 async function startRelay(p = { hostPort: 0, remotePort: 0 }) {
-  relay = createRelay({ ...p, secretFile, helloMs: 500, beatMs: 50, log: quiet })
+  runner = fakeRunner({ volume: 50 }) // never the real volume or speakers
+  relay = createRelay({ ...p, secretFile, helloMs: 500, beatMs: 50, log: quiet, local: createLocal({ configDir: dir, runner, log: quiet }) })
   ports = await relay.start()
 }
 function stub(slides = makeSlides()) {
@@ -56,10 +61,12 @@ async function until(fn, ms = 2000) {
 // shown slide id + gate and a laptop-time sentAt.
 async function ipad() {
   const ws = new WebSocket(`ws://127.0.0.1:${ports.remotePort}`, { origin: PROD_ORIGIN })
-  const pad = { ws, state: null, results: {}, host: null, ids: 0 }
+  const pad = { ws, state: null, results: {}, host: null, ids: 0, jukebox: null, local: null }
   ws.on('message', d => {
     const m = JSON.parse(String(d))
     if (m.type === 'state') pad.state = m
+    if (m.type === 'jukebox') pad.jukebox = m
+    if (m.type === 'local-state') pad.local = m
     if (m.type === 'host') pad.host = m.connected
     if (m.type === 'result') pad.results[m.id] = m
   })
@@ -210,5 +217,81 @@ describe('stub host + relay + iPad', () => {
     s.stop()
     await until(() => p.host === false)
     expect(await p.next()).toMatchObject({ refused: 'laptop-offline' })
+  })
+})
+
+describe('stub display + relay + iPad (Stream Deck parity)', () => {
+  const breakSlides = () => [
+    { id: 'q1', type: 'question', data: { questionNumber: 1 } },
+    { id: 'gb', type: 'grading-break', data: {} },
+    { id: 'q2', type: 'question', data: { questionNumber: 2 } },
+  ]
+  function display(opts = {}) {
+    const d = createStubDisplay({ url: `ws://127.0.0.1:${ports.hostPort}`, origin: PROD_ORIGIN, retryMs: 30, ...opts })
+    stubs.push(d)
+    return d
+  }
+  const tapJ = (p, cmd) => p.tap(cmd, {}, { expectSlideId: null })
+
+  it('a full break from the iPad: open now, play, stop, back to trivia (once)', async () => {
+    stub(breakSlides())
+    const d = display()
+    const p = await ipad()
+    await until(() => p.jukebox?.linked && p.jukebox.waiting)
+    expect(await tapJ(p, 'jukebox.exit')).toMatchObject({ refused: 'jukebox-not-open' })
+    expect(await tapJ(p, 'jukebox.open')).toMatchObject({ received: true })
+    await until(() => p.jukebox.open)
+    expect(await tapJ(p, 'jukebox.playStop')).toMatchObject({ received: true })
+    await until(() => p.jukebox.playing)
+    expect(await tapJ(p, 'jukebox.playStop')).toMatchObject({ received: true })
+    await until(() => p.jukebox.playing === false)
+    expect(await tapJ(p, 'jukebox.exit')).toMatchObject({ received: true })
+    await until(() => p.jukebox.handoffPending)
+    expect(await tapJ(p, 'jukebox.exit')).toMatchObject({ received: true }) // second press: guard, nothing runs
+    expect(d.ran).toEqual(['open', 'shuffle', 'stop', 'exit'])
+  })
+
+  it('the host never sees jukebox commands; the display never sees host commands', async () => {
+    const h = stub(breakSlides())
+    const d = display()
+    const p = await ipad()
+    await until(() => p.jukebox?.linked)
+    await tapJ(p, 'jukebox.open')
+    await p.next()
+    expect(h.ran).toEqual(['next'])
+    expect(d.ran).toEqual(['open'])
+  })
+
+  it('no display window: jukebox commands are display-offline, host commands still work', async () => {
+    stub(breakSlides())
+    const p = await ipad()
+    expect(p.jukebox).toEqual({ type: 'jukebox', linked: false })
+    expect(await tapJ(p, 'jukebox.open')).toMatchObject({ refused: 'display-offline' })
+    expect(await p.next()).toMatchObject({ received: true })
+  })
+
+  it('a stale jukebox tap is dropped as late by the display', async () => {
+    stub(breakSlides())
+    const d = display()
+    const p = await ipad()
+    await until(() => p.jukebox?.linked)
+    expect(await p.tap('jukebox.open', {}, { sentAt: Date.now() - 5000 })).toMatchObject({ refused: 'late' })
+    expect(d.ran).toEqual([])
+  })
+
+  it('Duck from the iPad drops to 20% and restores; volume keys; Pause blocks them', async () => {
+    const h = stub(breakSlides())
+    const p = await ipad()
+    await until(() => p.local?.volume === 50)
+    expect(await p.tap('duck')).toMatchObject({ received: true })
+    await until(() => p.local.ducked && p.local.volume === 10)
+    expect(await p.tap('duck')).toMatchObject({ received: true })
+    await until(() => !p.local.ducked && p.local.volume === 50)
+    await p.tap('vol.up')
+    await until(() => p.local.volume === 60)
+    h.setPaused(true)
+    await until(() => p.state.paused)
+    expect(await p.tap('vol.up')).toMatchObject({ refused: 'paused' })
+    expect(runner.volume).toBe(60)
   })
 })

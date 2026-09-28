@@ -42,7 +42,10 @@ const disconnectedBanner = (
 // overlay from visibility:hidden to visible. Threaded down to LiveScreen so
 // the turntable entrance waits for that moment instead of playing out
 // unseen during the head-start pre-mount (2026-09-14).
-export default function JukeboxBreakOverlay({ lib, onExit, revealed = true }) {
+// remoteRef / onRemoteState: the iPad remote's reach into this Jukebox
+// (spec §17.2), passed through untouched. Both absent unless /display's relay
+// peer is on.
+export default function JukeboxBreakOverlay({ lib, onExit, revealed = true, remoteRef, onRemoteState }) {
   return (
     // data-break-overlay: Display.jsx's click/key step-through handlers bail
     // while this is mounted — the break's own b-hold is the advance path here,
@@ -50,7 +53,7 @@ export default function JukeboxBreakOverlay({ lib, onExit, revealed = true }) {
     <div className="fixed inset-0 z-[70]" data-break-overlay>
       <SpotifyConnectGate renderDisconnected={disconnectedBanner}>
         <div className="absolute inset-0 bg-black">
-          <Jukebox initialLib={lib} onExitToShow={onExit} onLogout={() => {}} ringMode revealed={revealed} />
+          <Jukebox initialLib={lib} onExitToShow={onExit} onLogout={() => {}} ringMode revealed={revealed} remoteRef={remoteRef} onRemoteState={onRemoteState} />
         </div>
       </SpotifyConnectGate>
     </div>

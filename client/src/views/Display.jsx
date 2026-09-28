@@ -30,6 +30,9 @@ import {
 } from '../lib/slideStepping.js'
 import { warmYoutubeAudio } from '../lib/youtubeWarmAudio.js'
 import { keepAwake } from '../lib/keepAwake.js'
+import { useRemoteLink } from '../hooks/useRemoteLink.js'
+import { DISPLAY_RELAY_URL, readRemoteLinkFlag } from '../lib/remoteProtocol.js'
+import { runDisplayCommand, displayState } from '../lib/displayCommands.js'
 
 // Realtime's payload and PostgREST's .select() are two independently
 // maintained serializers for the same Postgres timestamptz — lexicographic
@@ -739,7 +742,7 @@ const SHINY_WARP_MS = 1100
 // of truth.
 const SHINY_WARP_COVER_AT = 0.24
 
-function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRingStateChange }) {
+function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRingStateChange, remoteLinkOn = false }) {
   const { theme, showId } = useTheme()
   const reduce = useReducedMotion()
   const sortedSlides = sortSlides(show.slides)
@@ -891,6 +894,28 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
     window.addEventListener('keydown', onKey)
     return () => { clearTimeout(timer); window.removeEventListener('keydown', onKey) }
   }, [breakEligible, breakActive, warp, currentSlide?.id])
+
+  // ── iPad remote reach (spec §17.2), default OFF ──
+  // With remoteLinkOn false (the flag unset, preview, demo, not live) the
+  // link builds no socket and sets no timer, and the Jukebox gets no
+  // remoteRef/onRemoteState — every path below is exactly as before.
+  // On, /display joins the laptop relay as the `display` peer: the iPad's
+  // jukebox.* commands run the same functions as Space/→ (skip the wait),
+  // b and Space (inside the Jukebox), and this window reports the break
+  // state back. Same socket code as /host's link (useRemoteLink), other path.
+  const jukeboxRemoteRef = useRef(null)
+  const [jukeboxPlay, setJukeboxPlay] = useState(null)
+  const displayRunRef = useRef(null)
+  displayRunRef.current = c => runDisplayCommand(c, {
+    now: Date.now(), breakEligible, breakActive, warp,
+    jukebox: jukeboxRemoteRef.current, openJukebox: () => setWarp('out'),
+  })
+  useRemoteLink({
+    enabled: remoteLinkOn && !isPreview,
+    snapshot: displayState({ breakEligible, breakActive, warp, jukebox: jukeboxPlay }),
+    runCommandRef: displayRunRef,
+    url: DISPLAY_RELAY_URL,
+  })
 
   // Return trip. breakActive can only fall by the show moving to another slide
   // (activeBreakId is cleared below, on that same slide change), so the slide
@@ -1217,6 +1242,8 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
               lib={currentSlide?.data?.jukeboxLib ?? 'random'}
               onExit={onBreakAdvance}
               revealed={breakActive}
+              remoteRef={remoteLinkOn ? jukeboxRemoteRef : undefined}
+              onRemoteState={remoteLinkOn ? setJukeboxPlay : undefined}
             />
           </div>
         </ErrorBoundary>
@@ -1246,6 +1273,9 @@ export default function Display() {
     if (isPreview || isDemo) return undefined
     return keepAwake()
   }, [isPreview, isDemo])
+  // The iPad remote's /display peer: same default-off flag as /host's link
+  // (same origin, so one Chrome local-network Allow covers both). Read once.
+  const [remoteLinkFlag] = useState(readRemoteLinkFlag)
   // A display nav write was denied (RLS, network, anything) — the host must
   // advance from /host. Cleared when any show update lands (someone advanced
   // successfully) or a later nav write succeeds. Guard the RESULT, not the
@@ -1909,7 +1939,8 @@ export default function Display() {
           forceSnap={sortedForRing?.[show.current_slide_index ?? 0]?.type === 'team-picker' || ringState.forceSnap}
         />
         {show.is_live && show.current_slide_id !== null ? (
-          <DisplayInner show={show} direction={direction} onBreakAdvance={handleBreakAdvance} onRingStateChange={setRingState} />
+          <DisplayInner show={show} direction={direction} onBreakAdvance={handleBreakAdvance} onRingStateChange={setRingState}
+            remoteLinkOn={remoteLinkFlag && !isPreview && !isDemo && !!show.is_live && typeof WebSocket !== 'undefined'} />
         ) : (
           <PreShowScreen show={show} onInstall={canInstall ? handleInstall : null} />
         )}

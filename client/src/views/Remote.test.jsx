@@ -228,3 +228,144 @@ describe('/remote Jump and Fix drawers', () => {
     expect(text()).not.toContain('—')
   })
 })
+
+describe('/remote Stream Deck parity (jukebox mode, volume, Duck, sounds)', () => {
+  const BREAK = { ...STATE, slide: { index: 5, total: 20, id: 'gb', label: 'Grading Break', type: 'grading-break' }, cue: 'Show question 4', gate: 'advance' }
+  const LOCAL = {
+    type: 'local-state', available: true, volume: 60, ducked: false,
+    sounds: [
+      { id: 'turtles', label: 'I Like Turtles', missing: false },
+      { id: 'jackass', label: 'Ya Jackass', missing: false },
+      { id: 'gone', label: 'Weather Boy', missing: true },
+    ],
+  }
+  const key = k => host.querySelector(`[data-k="${k}"]`)
+  const drawer = () => host.querySelector('[role="dialog"]')
+  const setup = (state = BREAK, jukebox = { type: 'jukebox', linked: true, open: true, playing: false, handoffPending: false }) => {
+    localStorage.setItem('trivia-remote:cfg', JSON.stringify({ url: 'wss://relay.test', secret: 'ABC' }))
+    mount()
+    const ws = liveSocket()
+    act(() => { ws.msg(state); ws.msg(LOCAL); ws.msg(jukebox) })
+    return ws
+  }
+  const last = ws => ws.sent.at(-1)
+
+  it('jukebox open: Back to Trivia in one tap, Play/Stop lit when playing, no plain Next', () => {
+    const ws = setup()
+    expect(button('NEXT')).toBeUndefined()
+    click(key('jukebox-exit'))
+    expect(last(ws)).toMatchObject({ type: 'cmd', cmd: 'jukebox.exit', args: {} })
+    expect(key('jukebox-play').getAttribute('aria-pressed')).toBe('false')
+    act(() => ws.msg({ type: 'jukebox', linked: true, open: true, playing: true, handoffPending: false }))
+    expect(key('jukebox-play').getAttribute('aria-pressed')).toBe('true')
+    click(key('jukebox-play'))
+    expect(last(ws)).toMatchObject({ cmd: 'jukebox.playStop' })
+  })
+
+  it('skipping the break with plain Next needs a second, confirming tap', () => {
+    const ws = setup()
+    const n = ws.sent.length
+    click(key('skip-break'))
+    expect(ws.sent.length).toBe(n)
+    expect(key('skip-break').textContent).toMatch(/again/i)
+    click(key('skip-break'))
+    expect(last(ws)).toMatchObject({ cmd: 'next', args: { expectGate: 'advance' }, expectSlideId: 'gb' })
+  })
+
+  it('the handoff in flight greys Play/Stop but leaves Back to Trivia (the b key works then too)', () => {
+    setup(BREAK, { type: 'jukebox', linked: true, open: true, playing: false, handoffPending: true })
+    expect(key('jukebox-play').disabled).toBe(true)
+    expect(key('jukebox-exit').disabled).toBe(false)
+  })
+
+  it('before the jukebox is up: Open jukebox now sends jukebox.open', () => {
+    const ws = setup(BREAK, { type: 'jukebox', linked: true, waiting: true, open: false })
+    expect(key('jukebox-exit')).toBeNull()
+    click(key('jukebox-open'))
+    expect(last(ws)).toMatchObject({ cmd: 'jukebox.open' })
+  })
+
+  it('no TV window linked: jukebox buttons off and says so; skip still offered', () => {
+    setup(BREAK, { type: 'jukebox', linked: false })
+    expect(text()).toContain('TV window not linked')
+    expect(key('jukebox-open')).toBeNull()
+    expect(key('skip-break').disabled).toBe(false)
+  })
+
+  it('leaves jukebox mode when the laptop moves off the break', () => {
+    const ws = setup()
+    act(() => ws.msg(STATE))
+    expect(button('NEXT')).toBeTruthy()
+    expect(key('jukebox-exit')).toBeNull()
+  })
+
+  it('volume and Duck on the main screen: shows the level, sends vol.up/vol.down/duck, Duck lit when ducked', () => {
+    const ws = setup(STATE)
+    expect(key('vol-level').textContent).toContain('60')
+    click(key('vol-up'))
+    expect(last(ws)).toMatchObject({ cmd: 'vol.up' })
+    click(key('vol-down'))
+    expect(last(ws)).toMatchObject({ cmd: 'vol.down' })
+    expect(key('duck').getAttribute('aria-pressed')).toBe('false')
+    click(key('duck'))
+    expect(last(ws)).toMatchObject({ cmd: 'duck' })
+    act(() => ws.msg({ ...LOCAL, ducked: true, volume: 12 }))
+    expect(key('duck').getAttribute('aria-pressed')).toBe('true')
+    expect(key('duck').textContent).toMatch(/restore/i)
+  })
+
+  it('volume, Duck and sounds need only the relay, not Live Mode', () => {
+    localStorage.setItem('trivia-remote:cfg', JSON.stringify({ url: 'wss://relay.test', secret: 'ABC' }))
+    mount()
+    const ws = FakeWS.all.at(-1)
+    act(() => { ws.open(); ws.msg({ type: 'host', connected: false }); ws.msg(LOCAL) })
+    expect(key('vol-up').disabled).toBe(false)
+    click(key('vol-up'))
+    expect(last(ws)).toMatchObject({ cmd: 'vol.up' })
+  })
+
+  it('Pause on the laptop greys volume, Duck and sounds', () => {
+    const ws = setup(STATE)
+    act(() => ws.msg({ ...STATE, paused: true }))
+    expect(key('vol-up').disabled).toBe(true)
+    expect(key('duck').disabled).toBe(true)
+    expect(key('sounds').disabled).toBe(true)
+  })
+
+  it('relay without local commands: controls off with a plain reason', () => {
+    const ws = setup(STATE)
+    act(() => ws.msg({ type: 'local-state', available: false, volume: null, ducked: false, sounds: [] }))
+    expect(key('vol-up').disabled).toBe(true)
+    expect(text()).toContain('Volume and sounds are off on this relay')
+  })
+
+  it('Sounds drawer: a labelled grid, taps send only the id, a missing file is off, Stop all', () => {
+    const ws = setup(STATE)
+    click(key('sounds'))
+    const labels = [...drawer().querySelectorAll('[data-sound]')].map(b => b.textContent)
+    expect(labels.map(l => l.replace(/File missing.*/, ''))).toEqual(['I Like Turtles', 'Ya Jackass', 'Weather Boy'])
+    click(drawer().querySelector('[data-sound="turtles"]'))
+    expect(last(ws)).toMatchObject({ cmd: 'sound.play', args: { id: 'turtles' } })
+    expect(Object.keys(last(ws).args)).toEqual(['id'])
+    expect(drawer().querySelector('[data-sound="gone"]').disabled).toBe(true)
+    click(drawer().querySelector('[data-k="stop-all"]'))
+    expect(last(ws)).toMatchObject({ cmd: 'sound.stopAll' })
+    expect(drawer()).not.toBeNull() // stays open for the next one
+  })
+
+  it('refusals from the new commands show in the amber bar, no em dash', () => {
+    const ws = setup()
+    act(() => ws.msg({ type: 'result', id: '1', refused: 'display-offline' }))
+    expect(text()).toContain('TV window not linked')
+    expect(text()).not.toContain('—')
+    act(() => ws.msg({ type: 'result', id: '2', refused: 'local-failed' }))
+    expect(text()).toContain('The laptop would not change that')
+  })
+
+  it('no em dash anywhere in jukebox mode or the sounds drawer', () => {
+    setup()
+    expect(text()).not.toContain('—')
+    click(key('sounds'))
+    expect(text()).not.toContain('—')
+  })
+})

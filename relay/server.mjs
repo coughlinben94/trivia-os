@@ -4,6 +4,9 @@
 // go to the paired iPads. No queue — with no host, a command is refused.
 //
 //   npm run relay -- --init [--force]   write the pairing code
+//   npm run relay -- --init-sounds [--force]  write ~/.config/trivia-relay/sounds.json
+//                                       from Ben's 10 Stream Deck sounds found on disk
+//   duck level: ~/.config/trivia-relay/config.json {"duckRatio": 0.2} (0.2 if absent)
 //   npm run relay                       run (RELAY_DEV=1 also allows localhost:5173)
 import http from 'node:http'
 import crypto from 'node:crypto'
@@ -13,8 +16,10 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { WebSocketServer } from 'ws'
 import {
-  HOST_PORT, REMOTE_PORT, CLOSE_REPLACED, CLOSE_BAD_SECRET, MAX_INBOUND_BYTES, BEAT_MS, parseRemoteMessage,
+  HOST_PORT, REMOTE_PORT, CLOSE_REPLACED, CLOSE_BAD_SECRET, CLOSE_TOO_FAST, MAX_INBOUND_BYTES, BEAT_MS, parseRemoteMessage,
+  DISPLAY_PATH, DISPLAY_COMMANDS, LOCAL_COMMANDS, LOCAL_RATE_PER_SEC,
 } from '../client/src/lib/remoteProtocol.js'
+import { createLocal, initSounds, DEFAULT_CONFIG_DIR } from './local.mjs'
 
 export const PROD_ORIGIN = 'https://trivia-os.vercel.app'
 export const DEV_ORIGIN = 'http://localhost:5173'
@@ -47,14 +52,24 @@ export const devRefused = env =>
 
 export function createRelay({
   hostPort = HOST_PORT, remotePort = REMOTE_PORT, secretFile = DEFAULT_SECRET_FILE,
-  dev = false, helloMs = 3000, beatMs = BEAT_MS, pingMs = 10000, log = console,
+  dev = false, devOrigin = DEV_ORIGIN, helloMs = 3000, beatMs = BEAT_MS, pingMs = 10000, log = console,
+  // Laptop-local commands (local.mjs). null = refused as local-unavailable;
+  // main() passes the real one, tests pass one with a fake runner.
+  local = null,
 } = {}) {
-  const origins = new Set([PROD_ORIGIN, ...(dev ? [DEV_ORIGIN] : [])])
+  const origins = new Set([PROD_ORIGIN, ...(dev ? [devOrigin] : [])])
   const hostWss = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 })
+  const displayWss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 })
   const remoteWss = new WebSocketServer({ noServer: true, maxPayload: MAX_INBOUND_BYTES })
   const paired = new Set()
   let host = null
+  let display = null
   let lastState = null // raw text of the host's last `state`, replayed on every hello
+  // The laptop's Pause switch, from its last state. Kept after the host
+  // closes: a paused remote stays paused until the laptop says otherwise.
+  let hostPaused = false
+  let jukebox = { type: 'jukebox', linked: false } // what the /display peer last said
+  const localState = () => local?.state() ?? { type: 'local-state', available: false, volume: null, ducked: false, sounds: [] }
 
   const send = (ws, msg) => { if (ws?.readyState === 1) ws.send(typeof msg === 'string' ? msg : JSON.stringify(msg)) }
   const toRemotes = msg => {
@@ -86,7 +101,7 @@ export function createRelay({
       const text = String(data)
       let m
       try { m = JSON.parse(text) } catch { return }
-      if (m?.type === 'state') { lastState = text; toRemotes(text) }
+      if (m?.type === 'state') { lastState = text; hostPaused = !!m.paused; toRemotes(text) }
       else if (m?.type === 'result' || m?.type === 'beat') toRemotes(text)
     })
     ws.on('close', () => {
@@ -96,8 +111,56 @@ export function createRelay({
     })
   })
 
+  // /display: the third peer role (spec §17.2). It only ever receives
+  // jukebox.* and only ever sends its jukebox state, results and beats; a
+  // `cmd` from it (or from the host) is ignored, so neither can reach the
+  // local volume/sound commands.
+  displayWss.on('connection', ws => {
+    watch(ws)
+    if (display) display.close(CLOSE_REPLACED, 'replaced')
+    display = ws
+    jukebox = { type: 'jukebox', linked: true }
+    toRemotes(jukebox)
+    ws.on('message', data => {
+      if (ws !== display) return
+      let m
+      try { m = JSON.parse(String(data)) } catch { return }
+      if (m?.type === 'display-state') {
+        jukebox = {
+          type: 'jukebox', linked: true, waiting: !!m.breakWaiting, open: !!m.jukeboxOpen,
+          playing: !!m.playing, handoffPending: !!m.handoffPending,
+        }
+        toRemotes(jukebox)
+      } else if (m?.type === 'result' && typeof m.id === 'string') {
+        toRemotes(m.refused ? { type: 'result', id: m.id, refused: String(m.refused) } : { type: 'result', id: m.id, received: true })
+      }
+    })
+    ws.on('close', () => {
+      if (display !== ws) return
+      display = null
+      jukebox = { type: 'jukebox', linked: false }
+      toRemotes(jukebox)
+    })
+  })
+
+  async function runLocal(ws, m) {
+    // Name and id only: never args, never a path, never the secret.
+    log.log(`[relay] ${new Date().toISOString()} ${m.cmd} ${m.id}${m.cmd === 'sound.play' ? ` ${String(m.args.id).slice(0, 64)}` : ''}`)
+    const res = local ? await local.run(m.cmd, m.args) : { refuse: 'local-unavailable' }
+    send(ws, res.refuse ? { type: 'result', id: m.id, refused: res.refuse } : { type: 'result', id: m.id, received: true })
+    toRemotes(localState())
+  }
+
   remoteWss.on('connection', ws => {
     watch(ws)
+    const localTimes = []
+    // More than LOCAL_RATE_PER_SEC local commands inside one second: 4008.
+    const tooFast = () => {
+      const now = Date.now()
+      while (localTimes.length && now - localTimes[0] > 1000) localTimes.shift()
+      localTimes.push(now)
+      return localTimes.length > LOCAL_RATE_PER_SEC
+    }
     const helloTimer = setTimeout(() => { if (!paired.has(ws)) ws.close(CLOSE_BAD_SECRET, 'no hello') }, helloMs)
     ws.on('message', data => {
       try {
@@ -111,10 +174,23 @@ export function createRelay({
           paired.add(ws)
           send(ws, { type: 'host', connected: !!host })
           if (lastState) send(ws, lastState)
+          send(ws, jukebox)
+          send(ws, localState())
+          // Fresh volume reading, then everyone gets it.
+          local?.refresh().then(() => toRemotes(localState()))
           tellHostCount()
           return
         }
         if (m?.type !== 'cmd') return
+        const isLocal = LOCAL_COMMANDS.has(m.cmd)
+        if (isLocal || DISPLAY_COMMANDS.has(m.cmd)) {
+          if (isLocal && tooFast()) { ws.close(CLOSE_TOO_FAST, 'too many commands'); return }
+          if (hostPaused) { send(ws, { type: 'result', id: m.id, refused: 'paused' }); return }
+          if (isLocal) { runLocal(ws, m); return }
+          if (!display) { send(ws, { type: 'result', id: m.id, refused: 'display-offline' }); return }
+          send(display, m)
+          return
+        }
         if (!host) { send(ws, { type: 'result', id: m.id, refused: 'laptop-offline' }); return }
         send(host, m)
       } catch (e) {
@@ -128,22 +204,26 @@ export function createRelay({
     })
   })
 
-  const onUpgrade = wss => (req, socket, head) => {
+  // pickWss(req) chooses the role. The local listener: /display is the
+  // display peer, anything else the host. The remote listener has one role.
+  const onUpgrade = pickWss => (req, socket, head) => {
     socket.on('error', () => {})
     if (!origins.has(req.headers.origin)) {
       socket.write('HTTP/1.1 403 Forbidden\r\n\r\n')
       socket.destroy()
       return
     }
+    const wss = pickWss(req)
     wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req))
   }
-  const makeServer = wss => {
+  const makeServer = pickWss => {
     const server = http.createServer((_req, res) => { res.writeHead(426); res.end() })
-    server.on('upgrade', onUpgrade(wss))
+    server.on('upgrade', onUpgrade(pickWss))
     return server
   }
-  const hostServer = makeServer(hostWss)
-  const remoteServer = makeServer(remoteWss)
+  const localPath = req => { try { return new URL(req.url, 'ws://localhost').pathname } catch { return '/' } }
+  const hostServer = makeServer(req => (localPath(req) === DISPLAY_PATH ? displayWss : hostWss))
+  const remoteServer = makeServer(() => remoteWss)
   const timers = []
 
   return {
@@ -156,10 +236,11 @@ export function createRelay({
       const ports = { hostPort: await listen(hostServer, hostPort), remotePort: await listen(remoteServer, remotePort) }
       timers.push(setInterval(() => {
         send(host, { type: 'relay-beat' })
+        send(display, { type: 'relay-beat' })
         toRemotes({ type: 'relay-beat' })
       }, beatMs))
       timers.push(setInterval(() => {
-        for (const ws of [...hostWss.clients, ...remoteWss.clients]) {
+        for (const ws of [...hostWss.clients, ...displayWss.clients, ...remoteWss.clients]) {
           if (!ws.isAlive) { ws.terminate(); continue }
           ws.isAlive = false
           ws.ping()
@@ -169,7 +250,7 @@ export function createRelay({
     },
     close() {
       timers.forEach(clearInterval)
-      for (const ws of [...hostWss.clients, ...remoteWss.clients]) ws.terminate()
+      for (const ws of [...hostWss.clients, ...displayWss.clients, ...remoteWss.clients]) ws.terminate()
       return Promise.all([hostServer, remoteServer].map(s => new Promise(r => s.close(() => r()))))
     },
   }
@@ -177,6 +258,17 @@ export function createRelay({
 
 function main() {
   const args = process.argv.slice(2)
+  if (args.includes('--init-sounds')) {
+    try {
+      const r = initSounds(DEFAULT_CONFIG_DIR, { force: args.includes('--force') })
+      console.log(`Wrote ${r.sounds.length} sound(s) to ${r.file}`)
+      if (r.missing.length) console.log(`Not found in ~/Desktop/Trivia Sounds, ~/Documents or ~/Downloads (add them by hand): ${r.missing.join(', ')}`)
+    } catch (e) {
+      console.error(e.message)
+      process.exit(1)
+    }
+    return
+  }
   if (args.includes('--init')) {
     try {
       const secret = initSecret(DEFAULT_SECRET_FILE, { force: args.includes('--force') })
@@ -193,7 +285,9 @@ function main() {
     process.exit(1)
   }
   if (dev) console.warn(`\n[relay] WARNING: RELAY_DEV=1 — also accepting ${DEV_ORIGIN}. Never leave this on for a show.\n`)
-  createRelay({ dev }).start().then(
+  // Volume, Duck and sounds run on macOS only; elsewhere they are refused.
+  const local = process.platform === 'darwin' ? createLocal({ configDir: DEFAULT_CONFIG_DIR }) : null
+  createRelay({ dev, local }).start().then(
     p => console.log(`[relay] host ws://127.0.0.1:${p.hostPort}  remote ws://127.0.0.1:${p.remotePort}`),
     e => { console.error('[relay] could not start:', e.message); process.exit(1) },
   )

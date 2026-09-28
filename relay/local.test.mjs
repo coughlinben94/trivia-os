@@ -1,0 +1,169 @@
+// The relay's laptop-local commands (spec §17.3-§17.6) with a FAKE runner:
+// no test here ever runs osascript or afplay, so the real volume never moves
+// and no sound plays.
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { createLocal, findSounds, SOUND_NAMES } from './local.mjs'
+import { fakeRunner } from './fake-runner.mjs'
+
+const quiet = { log() {}, warn() {}, error() {} }
+let dir
+beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-local-')) })
+afterEach(() => fs.rmSync(dir, { recursive: true, force: true }))
+
+function writeSounds(list) {
+  fs.writeFileSync(path.join(dir, 'sounds.json'), JSON.stringify(list))
+}
+function audio(name) {
+  const p = path.join(dir, name)
+  fs.writeFileSync(p, 'not really audio')
+  return p
+}
+const make = (runner, extra = {}) => createLocal({ configDir: dir, runner, log: quiet, ...extra })
+
+describe('volume', () => {
+  it('vol.up / vol.down move by 10 through osascript with a fixed argument array', async () => {
+    const r = fakeRunner({ volume: 60 })
+    const local = make(r)
+    expect(await local.run('vol.up')).toEqual({ ok: true })
+    expect(r.volume).toBe(70)
+    expect(await local.run('vol.down')).toEqual({ ok: true })
+    expect(await local.run('vol.down')).toEqual({ ok: true })
+    expect(r.volume).toBe(50)
+    for (const [file, args] of r.calls) {
+      expect(file).toBe('/usr/bin/osascript')
+      expect(Array.isArray(args)).toBe(true)
+      expect(args[0]).toBe('-e')
+    }
+    expect(local.state()).toMatchObject({ type: 'local-state', volume: 50, ducked: false, available: true })
+  })
+  it('clamps to 0-100', async () => {
+    const hi = fakeRunner({ volume: 95 })
+    await make(hi).run('vol.up')
+    expect(hi.volume).toBe(100)
+    const lo = fakeRunner({ volume: 4 })
+    await make(lo).run('vol.down')
+    expect(lo.volume).toBe(0)
+  })
+  it('osascript failing is refused as local-failed, not thrown', async () => {
+    const local = make(fakeRunner({ failWith: 'execution error' }))
+    expect(await local.run('vol.up')).toEqual({ refuse: 'local-failed' })
+    expect(await local.run('duck')).toEqual({ refuse: 'local-failed' })
+    expect(local.state().ducked).toBe(false)
+  })
+  it('with no runner the commands are unavailable', async () => {
+    const local = make(null)
+    expect(await local.run('vol.up')).toEqual({ refuse: 'local-unavailable' })
+    expect(local.state().available).toBe(false)
+  })
+})
+
+describe('duck', () => {
+  it('first press saves the volume to memory and duck.json and drops to 20%; second restores exactly and deletes it', async () => {
+    const r = fakeRunner({ volume: 60 })
+    const local = make(r)
+    await local.run('duck')
+    expect(r.volume).toBe(12)
+    expect(JSON.parse(fs.readFileSync(path.join(dir, 'duck.json'), 'utf8'))).toEqual({ pre: 60 })
+    expect(local.state()).toMatchObject({ ducked: true, volume: 12 })
+    await local.run('duck')
+    expect(r.volume).toBe(60)
+    expect(fs.existsSync(path.join(dir, 'duck.json'))).toBe(false)
+    expect(local.state()).toMatchObject({ ducked: false, volume: 60 })
+  })
+  it('rounds the ducked level (pre 55 -> 11, pre 7 -> 1)', async () => {
+    const a = fakeRunner({ volume: 55 })
+    await make(a).run('duck')
+    expect(a.volume).toBe(11)
+    fs.rmSync(path.join(dir, 'duck.json'))
+    const b = fakeRunner({ volume: 7 })
+    await make(b).run('duck')
+    expect(b.volume).toBe(1)
+  })
+  it('a relay restart reloads duck.json, so one press still restores the saved volume', async () => {
+    const r = fakeRunner({ volume: 80 })
+    await make(r).run('duck')
+    expect(r.volume).toBe(16)
+    const after = make(r) // the "restarted" relay
+    expect(after.state().ducked).toBe(true)
+    r.volume = 30 // someone nudged the volume while ducked
+    await after.run('duck')
+    expect(r.volume).toBe(80)
+    expect(fs.existsSync(path.join(dir, 'duck.json'))).toBe(false)
+  })
+  it('reads duckRatio from config.json', async () => {
+    fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ duckRatio: 0.5 }))
+    const r = fakeRunner({ volume: 60 })
+    await make(r).run('duck')
+    expect(r.volume).toBe(30)
+  })
+  it('a junk duck.json is ignored rather than crashing', () => {
+    fs.writeFileSync(path.join(dir, 'duck.json'), '{nope')
+    expect(make(fakeRunner()).state().ducked).toBe(false)
+  })
+})
+
+describe('sounds', () => {
+  it('plays an allowlisted id with afplay and the configured path; missing files are marked', async () => {
+    const ok = audio('turtles.mp3')
+    writeSounds([{ id: 'turtles', label: 'I Like Turtles', path: ok }, { id: 'gone', label: 'Gone', path: path.join(dir, 'nope.mp3') }])
+    const r = fakeRunner()
+    const local = make(r)
+    expect(local.state().sounds).toEqual([
+      { id: 'turtles', label: 'I Like Turtles', missing: false },
+      { id: 'gone', label: 'Gone', missing: true },
+    ])
+    expect(await local.run('sound.play', { id: 'turtles', path: '/etc/passwd' })).toEqual({ ok: true })
+    expect(r.calls.at(-1)).toEqual(['/usr/bin/afplay', [ok]])
+    expect(await local.run('sound.play', { id: 'gone' })).toEqual({ refuse: 'sound-missing' })
+  })
+  it('an unknown id is refused and nothing runs', async () => {
+    writeSounds([{ id: 'turtles', label: 'T', path: audio('t.mp3') }])
+    const r = fakeRunner()
+    const local = make(r)
+    expect(await local.run('sound.play', { id: 'rm -rf' })).toEqual({ refuse: 'unknown-sound' })
+    expect(await local.run('sound.play', {})).toEqual({ refuse: 'unknown-sound' })
+    expect(r.calls).toEqual([])
+  })
+  it('overlapping plays are allowed; stopAll kills only the relay-spawned children still running', async () => {
+    writeSounds([{ id: 'a', label: 'A', path: audio('a.mp3') }])
+    const r = fakeRunner()
+    const local = make(r)
+    await local.run('sound.play', { id: 'a' })
+    await local.run('sound.play', { id: 'a' })
+    r.children[0].exits.forEach(f => f()) // the first one finished on its own
+    await local.run('sound.stopAll')
+    expect(r.children.map(c => c.killed)).toEqual([false, true])
+  })
+  it('no sounds.json: empty list, any id refused', async () => {
+    const local = make(fakeRunner())
+    expect(local.state().sounds).toEqual([])
+    expect(await local.run('sound.play', { id: 'x' })).toEqual({ refuse: 'unknown-sound' })
+  })
+  it('bad sounds.json entries (no id, relative path, not a list) are dropped', () => {
+    writeSounds([{ label: 'no id', path: '/x.mp3' }, { id: 'rel', label: 'Rel', path: 'x.mp3' }, { id: 'ok', label: 'OK', path: audio('ok.mp3') }])
+    expect(make(fakeRunner()).state().sounds.map(s => s.id)).toEqual(['ok'])
+    writeSounds({ id: 'nope' })
+    expect(make(fakeRunner()).state().sounds).toEqual([])
+  })
+})
+
+describe('findSounds (--init-sounds)', () => {
+  it('matches Ben\'s ten Stream Deck sounds by name in the given folders, only if they exist', () => {
+    const a = path.join(dir, 'Desktop', 'Trivia Sounds')
+    fs.mkdirSync(a, { recursive: true })
+    const docs = path.join(dir, 'Documents')
+    fs.mkdirSync(docs)
+    fs.writeFileSync(path.join(a, 'I Like Turtles.mp3'), '')
+    fs.writeFileSync(path.join(docs, 'ya-jackass.m4a'), '')
+    fs.writeFileSync(path.join(docs, 'ya jackass notes.txt'), '')
+    const { sounds, missing } = findSounds([a, docs, path.join(dir, 'Downloads')])
+    expect(sounds).toEqual([
+      { id: 'i-like-turtles', label: 'I Like Turtles', path: path.join(a, 'I Like Turtles.mp3') },
+      { id: 'ya-jackass', label: 'Ya Jackass', path: path.join(docs, 'ya-jackass.m4a') },
+    ])
+    expect(missing).toHaveLength(SOUND_NAMES.length - 2)
+  })
+})

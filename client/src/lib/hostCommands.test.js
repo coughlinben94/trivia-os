@@ -254,3 +254,15 @@ describe('via remote: jump / unlock / rescore', () => {
     expect(r('unlock', {}, { fix: undefined })).toEqual({ refuse: 'nothing-to-fix' })
   })
 })
+
+// Phase 2b: the relay runs vol/duck/sound itself and sends jukebox.* only to
+// /display, so the laptop's Live Mode must never act on them if one arrives.
+describe('Stream Deck parity commands never run on /host', () => {
+  it('jukebox.*, vol.*, duck and sound.* are unknown-command on every path', () => {
+    const now = 10_000
+    for (const cmd of ['jukebox.open', 'jukebox.exit', 'jukebox.playStop', 'vol.up', 'vol.down', 'duck', 'sound.play', 'sound.stopAll']) {
+      expect(plan({ cmd, via: 'remote', sentAt: now, args: { id: 'x' } }, { now, slideId: 's1' })).toEqual({ refuse: 'unknown-command' })
+      expect(plan({ cmd })).toEqual({ refuse: 'unknown-command' })
+    }
+  })
+})

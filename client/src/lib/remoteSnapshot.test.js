@@ -144,3 +144,22 @@ describe('hostChipText', () => {
     expect(hostChipText({ enabled: true, status: 'open', remotes: 1, paused: true })).toBe('iPad remote: paused')
   })
 })
+
+describe('phase 2b', () => {
+  it('carries slide.type and paused, which the iPad jukebox mode and the relay Pause check read', () => {
+    const slides = [{ id: 'gb', type: 'grading-break', data: {} }]
+    const snap = buildSnapshot({ slides, index: 0, showState: {}, cue: { label: null, gate: 'advance' }, paused: true })
+    expect(snap.slide.type).toBe('grading-break')
+    expect(snap.paused).toBe(true)
+  })
+  it('the display peer reuses hostReply: its commands, beats and throws answer the same way', () => {
+    const run = vi.fn(() => ({ ok: true }))
+    expect(hostReply({ type: 'cmd', id: '7', cmd: 'jukebox.exit', sentAt: 5 }, { run, now: 1, visibility: 'visible' }))
+      .toEqual({ type: 'result', id: '7', received: true })
+    expect(run).toHaveBeenCalledWith({ cmd: 'jukebox.exit', via: 'remote', args: {}, expectSlideId: null, sentAt: 5 })
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(hostReply({ type: 'cmd', id: '8', cmd: 'jukebox.exit' }, { run: () => { throw new Error('x') }, now: 1 }))
+      .toEqual({ type: 'result', id: '8', refused: 'error' })
+    err.mockRestore()
+  })
+})
