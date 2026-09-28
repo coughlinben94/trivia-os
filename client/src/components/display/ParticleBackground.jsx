@@ -3,7 +3,8 @@ import ErrorBoundary from '../ErrorBoundary.jsx'
 import { getTheme } from '../../themes/index.js'
 import BreathingGradient from './BreathingGradient'
 import RingAmbient from './RingAmbient.jsx'
-import { RING_WORLDS, ringWorldFor } from '../../lib/ringWorldFor.js'
+import EvolvingRingAmbient from './EvolvingRingAmbient.jsx'
+import { RING_WORLDS, ringWorldFor, resolveArrangement } from '../../lib/ringWorldFor.js'
 import { deriveTint, hexToRgba } from '../../lib/colorTint.js'
 
 // ─── Keyframes ────────────────────────────────────────────────────────────
@@ -1204,7 +1205,12 @@ export default function ParticleBackground({ theme, showId, slideIndex, stationO
   // changes.
   const ringWorldRef = useRef(null)
   if (ringWorldRef.current === null) {
-    ringWorldRef.current = ringWorldFor(theme, showId) ?? false
+    // colorEvolution only means something for a theme that HAS a ring world;
+    // on any other theme it is ignored (the bespoke/gradient ambient stays),
+    // rather than swapping in EvolvingRingAmbient's default midnight ring.
+    ringWorldRef.current = theme.colorEvolution && RING_WORLDS[theme.id]
+      ? { evolving: true, arrangement: resolveArrangement(theme, showId) }
+      : (ringWorldFor(theme, showId) ?? false)
   }
   const ringWorld = ringWorldRef.current || null
   const v = theme.vignette ?? {}
@@ -1244,9 +1250,11 @@ export default function ParticleBackground({ theme, showId, slideIndex, stationO
         <ErrorBoundary fallback={<></>}>
           {gradientMood
             ? <BreathingGradient palette={theme.colors} mood={gradientMood} />
-            : ringWorld
-              ? <RingAmbient worldData={ringWorld} showId={showId} slideIndex={slideIndex} stationOverride={stationOverride} showStationDebug={showStationDebug} forceSnap={forceSnap} />
-              : AmbientComponent && <AmbientComponent tint={tint} />}
+            : ringWorld?.evolving
+              ? <EvolvingRingAmbient arrangement={ringWorld.arrangement} showId={showId} slideIndex={slideIndex} stationOverride={stationOverride} showStationDebug={showStationDebug} forceSnap={forceSnap} />
+              : ringWorld
+                ? <RingAmbient worldData={ringWorld} showId={showId} slideIndex={slideIndex} stationOverride={stationOverride} showStationDebug={showStationDebug} forceSnap={forceSnap} />
+                : AmbientComponent && <AmbientComponent tint={tint} />}
         </ErrorBoundary>
         <Vignette
           r={v.r ?? 0}
