@@ -27,6 +27,7 @@ import { useShinyFormats } from '../../hooks/useShinyFormats.js'
 import { sortSlides } from '../../lib/slideStepping.js'
 import { computeWinner, formatWinnerLine } from '../../lib/raceMath.js'
 import { cleanPastedText } from '../../lib/cleanPaste.js'
+import { AWARD_POOL, AWARDS_SHOWN } from '../../lib/nightAwards.js'
 
 export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, onDeleteSlide, uploadMedia, getHostPhotos }) {
   const { theme } = useTheme()
@@ -268,6 +269,9 @@ export default function SlideEditor({ slide, initialPart, show, onUpdateSlide, o
               )}
               {slide.type === 'horse-race' && (
                 <RaceEditor data={data} onChange={change} setData={setData} scheduleSave={scheduleSave} onMediaUpload={handleMediaUpload} />
+              )}
+              {slide.type === 'awards' && (
+                <AwardsEditor data={data} onChange={change} />
               )}
               {slide.type === 'winner-reveal' && (
                 <WinnerRevealEditor data={data} onChange={change} />
@@ -2239,6 +2243,37 @@ function GradingBreakEditor({ data, onChange, roundSlides, uploadMedia, getHostP
         onSelectPhoto={url => onChange('hostPhotoUrl', url)}
       />
     </>
+  )
+}
+
+// Pin up to 3 awards, or leave all unchecked for Auto. A pin that doesn't
+// qualify on the night is swapped for the next best Auto pick.
+function AwardsEditor({ data, onChange }) {
+  const pinned = Array.isArray(data.awardIds) ? data.awardIds : []
+  // Bruised Apple takes the last card, so it leaves one fewer pin slot.
+  const maxPins = AWARDS_SHOWN - (data.bruisedApple ? 1 : 0)
+  const toggle = id => onChange('awardIds', pinned.includes(id) ? pinned.filter(x => x !== id) : [...pinned, id])
+  return (
+    <div className="flex flex-col gap-2 py-2">
+      <p className="text-xs text-gray-400 leading-relaxed">
+        {pinned.length ? `Pinned ${Math.min(pinned.length, maxPins)} of ${maxPins}.` : `Auto: the ${AWARDS_SHOWN} most remarkable awards, spread across teams.`} Place between Bonus 1 and Bonus 2.
+      </p>
+      {pinned.length > maxPins && (
+        <p className="text-xs text-amber-600">Bruised Apple is on, so only your first {maxPins} pins will show.</p>
+      )}
+      {AWARD_POOL.filter(a => a.id !== 'bruised-apple').map(a => (
+        <label key={a.id} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+          <input type="checkbox" className="h-4 w-4 accent-[#1a6b4a]" checked={pinned.includes(a.id)}
+            disabled={!pinned.includes(a.id) && pinned.length >= maxPins} onChange={() => toggle(a.id)} />
+          {a.title}
+        </label>
+      ))}
+      <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer border-t border-gray-100 pt-2">
+        <input type="checkbox" className="h-4 w-4 accent-[#1a6b4a]" checked={!!data.bruisedApple}
+          onChange={e => onChange('bruisedApple', e.target.checked)} />
+        Bruised Apple (last place, takes the last card)
+      </label>
+    </div>
   )
 }
 

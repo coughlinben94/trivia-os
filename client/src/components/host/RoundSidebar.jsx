@@ -48,6 +48,7 @@ const SLIDE_TYPE_META = {
   'grading-break':     { label: 'Grading Break',     icon: '⏸️' },
   'scoreboard-reveal': { label: 'Scoreboard',        icon: '🏆' },
   'biggest-climbers':  { label: 'Biggest Climbers',  icon: '📈' },
+  'awards':            { label: 'Awards',            icon: '🏅' },
   'custom':            { label: 'Custom Slide',      icon: '✏️' },
   'bonus':             { label: 'Bonus',              icon: '🎁' },
   'pixelate-series':   { label: 'Pixelate Series',   icon: '🎨' },
