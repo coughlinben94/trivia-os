@@ -47,11 +47,14 @@
     75%{transform:translate(0,1px) rotate(0deg)}
     87.5%{transform:translate(-3px,5px) rotate(-.18deg)}
     100%{transform:translate(0,0) rotate(0deg)}}
-  #cam.bob{animation:bob var(--walk) ease-in-out}
+  @keyframes bob2{0%{transform:translate(0,0) rotate(0deg)}12.5%{transform:translate(3px,6px) rotate(.2deg)}25%{transform:translate(0,1px) rotate(0deg)}37.5%{transform:translate(-5px,10px) rotate(-.35deg)}50%{transform:translate(0,1px) rotate(0deg)}62.5%{transform:translate(5px,10px) rotate(.35deg)}75%{transform:translate(0,1px) rotate(0deg)}87.5%{transform:translate(-3px,5px) rotate(-.18deg)}100%{transform:translate(0,0) rotate(0deg)}}
+  /* two names for the same motion: swapping them restarts it without forcing a synchronous layout */
+  #cam.bobA{animation:bob var(--walk) ease-in-out}#cam.bobB{animation:bob2 var(--walk) ease-in-out}
   /* the flashlight is held, not bolted to the eye: it lags the footfalls a little */
   @keyframes beamSway{0%{transform:translateX(0);opacity:1}12.5%{transform:translateX(-6px);opacity:.985}37.5%{transform:translateX(12px);opacity:.97}62.5%{transform:translateX(-12px);opacity:.99}87.5%{transform:translateX(6px);opacity:.975}100%{transform:translateX(0);opacity:1}}
   #light{position:absolute;inset:0}
-  #light.sway{animation:beamSway var(--walk) ease-in-out}
+  @keyframes beamSway2{0%{transform:translateX(0);opacity:1}12.5%{transform:translateX(-6px);opacity:.985}37.5%{transform:translateX(12px);opacity:.97}62.5%{transform:translateX(-12px);opacity:.99}87.5%{transform:translateX(6px);opacity:.975}100%{transform:translateX(0);opacity:1}}
+  #light.swayA{animation:beamSway var(--walk) ease-in-out}#light.swayB{animation:beamSway2 var(--walk) ease-in-out}
   /* lantern flame: small (<=12%), slow (under 3 Hz) and eased, never a strobe */
   @keyframes flick{0%{opacity:1}22%{opacity:.88}46%{opacity:.97}72%{opacity:.9}100%{opacity:1}}
   .flick{animation:flick 2.7s ease-in-out infinite}
@@ -120,7 +123,7 @@ const W=1920, H=1080, VX=960, VY=700;      // vanishing point = horizon, low in 
 const F=1371, E=1.7;                        // focal length px, eye height m
 const D=6, NS=13, L=NS*D, REST=9;           // metres per station, 13 stations, loop length, landmark rest distance
 const ZFAR=42, FADE=7, ZMIN=0.45, M=48, KCAP=6, ZG0=6.1, ZG1=34;
-const DUR=4000, STOPS=40, AUTO_MS=7000, CAPFADE=400;   // DUR: one station-to-station walk; AUTO_MS keeps a 3s pause between walks
+const DUR=4000, STOPS=24, AUTO_MS=7000, CAPFADE=400;   // DUR: one station-to-station walk; AUTO_MS keeps a 3s pause between walks
 const EASE=bez(.45,.05,.25,1);
 const NAMES=['forest edge, broken fence gate','lantern on a post','scarecrow with a pumpkin head','leaning gravestone row','row of jack-o\'-lanterns','crow on a stump','stone well, glowing green','abandoned cart','fallen log, glowing mushrooms','will-o\'-wisps over a bog','harvest moon through the canopy','cabin with a lit window','signpost with a skull'];
 
@@ -179,7 +182,7 @@ function treeItem(Z,X,w,r){
   // bark furrows: dark vertical ribbons across the lit side, below 6 m
   const fur=[0.1,0.2,0.29].slice(0,2+Math.floor(r()*2)).map(f=>{const ph=r()*6,h0=rr(r,0.5,1.4),h1=rr(r,3.5,6);const at2=h=>{let i=0;while(i<sh.HS.length-2&&sh.HS[i+1]<h)i++;const t=(h-sh.HS[i])/(sh.HS[i+1]-sh.HS[i]);return[sh.cx[i]+(sh.cx[i+1]-sh.cx[i])*t,sh.ww[i]+(sh.ww[i+1]-sh.ww[i])*t]};
     return [...Array(9)].map((_,i)=>{const t=i/8,h=h0+(h1-h0)*t,[c,ww]=at2(h);return[c+inner*ww*(0.5-f)+Math.sin(h*2.1+ph)*ww*0.03,h,w*0.05*Math.sin(Math.PI*(0.08+t*0.84))]})});
-  return {grp:'w',Z,X,kind:'tree',op:z=>clamp((ZFAR-z)/FADE),
+  return {grp:'w',Z,X,kind:'tree',fastDim:2,op:z=>clamp((ZFAR-z)/FADE),
     lops:[null,z=>fogAmt(z),z=>litAmt(X,z)*(1-fogAmt(z))],
     geom(z,id){
       const pr=p=>P(X+p[0],p[1],z);
@@ -304,13 +307,14 @@ function lanternItem(Z,X){
   const glass=[[lx-0.15,2.12],[lx+0.15,2.12],[lx+0.16,2.55],[lx-0.16,2.55]];const base=[[lx-0.2,2.05],[lx+0.2,2.05],[lx+0.17,2.13],[lx-0.17,2.13]];
   const bars=[ribbon([[lx-0.15,2.12,0.05],[lx-0.16,2.55,0.05]]),ribbon([[lx+0.15,2.12,0.05],[lx+0.16,2.55,0.05]])];
   const dark=[post,arm,brace,cap,hook,base,...bars];
-  return {grp:'w',Z,X,kind:'lm',op:z=>clamp((ZFAR-z)/FADE),lops:[null,z=>fogAmt(z)*0.95,z=>clamp(1.15-fogAmt(z)*1.4)],flick:[0,0,'flick'],
+  return {grp:'w',Z,X,kind:'lm',op:z=>clamp((ZFAR-z)/FADE),lops:[null,z=>fogAmt(z)*0.95,z=>clamp((14.5-z)/4.5),z=>clamp((16.5-z)/6)],flick:[0,0,'flick',0],fastDim:3,
     geom(z,id){const pr=p=>P(X+p[0],p[1],z);const s=F/z;const gc=pr([lx,2.33]);const ps=dark.map(p=>p.map(pr));const gp=glass.map(pr);
       const halo=1.05*s;
       return{bb:bbox([...ps,[[gc[0]-halo,gc[1]-halo],[gc[0]+halo,gc[1]+halo]]]),layers:[
-        `<defs>${lgrad(id+'p',...pr([0.09,0]),...pr([-0.09,0]),[[0,'#5a4a36'],[.5,'#1c1712'],[1,'#0a0908']])}${lgrad(id+'g',0,gp[2][1],0,gp[0][1],[[0,'#ffe9b8'],[.6,'#ffc56a'],[1,'#e08a30']])}</defs><path d="${ps.map(dPoly).join('')}" fill="url(#${id}p)"/><path d="${dPoly(gp)}" fill="url(#${id}g)"/>${ps.slice(6).map(p=>`<path d="${dPoly(p)}" fill="#141008"/>`).join('')}`,
+        `<defs>${lgrad(id+'p',...pr([0.09,0]),...pr([-0.09,0]),[[0,'#5a4a36'],[.5,'#1c1712'],[1,'#0a0908']])}</defs><path d="${ps.map(dPoly).join('')}" fill="url(#${id}p)"/><path d="${dPoly(gp)}" fill="#1c150d"/>${ps.slice(6).map(p=>`<path d="${dPoly(p)}" fill="#141008"/>`).join('')}`,
         `<path d="${ps.map(dPoly).join('')+dPoly(gp)}" fill="#242527"/>`,
-        `<defs>${rgrad(id+'h',gc[0],gc[1],halo,[[0,'#ffcf8a',.55],[.25,'#ffb060',.2],[1,'#ff9a40',0]])}</defs><circle cx="${fm(gc[0])}" cy="${fm(gc[1])}" r="${fm(halo)}" fill="url(#${id}h)"/>`]};}};
+        `<defs>${rgrad(id+'h',gc[0],gc[1],halo,[[0,'#ffcf8a',.55],[.25,'#ffb060',.2],[1,'#ff9a40',0]])}</defs><circle cx="${fm(gc[0])}" cy="${fm(gc[1])}" r="${fm(halo)}" fill="url(#${id}h)"/>`,
+        `<defs>${lgrad(id+'g',0,gp[2][1],0,gp[0][1],[[0,'#ffe9b8'],[.6,'#ffc56a'],[1,'#e08a30']])}</defs><path d="${dPoly(gp)}" fill="url(#${id}g)"/>${ps.slice(6).map(p=>`<path d="${dPoly(p)}" fill="#141008"/>`).join('')}`]};}};
 }
 function lanternPool(Z,X){
   return {grp:'w',Z,X,kind:'lm',op:z=>clamp((ZFAR-z)/FADE),lops:[z=>clamp(1.1-fogAmt(z)*1.5)],
@@ -342,13 +346,16 @@ function moonPool(Z){
 // hole = even-odd inner polygon. Layers: 0 back light (rim glow behind a silhouette), 1 colours, 2 fog veil, 3 light (emissive shapes + glows)
 const ell=(cx,h,rx,ry,n=18)=>[...Array(n)].map((_,i)=>{const a=i/n*TAU;return[cx+Math.cos(a)*rx,h+Math.sin(a)*ry]});
 const rotS=(sh,a,ox,oy)=>Object.assign({},sh,sh.s?{s:sh.s.map(([x,h,w])=>{const[q]=rot([[x,h]],a,ox,oy);return[q[0],q[1],w]})}:{p:rot(sh.p,a,ox,oy),hole:sh.hole&&rot(sh.hole,a,ox,oy)});
+// while a prop's main light passes behind the text box on the approach, it dims (reads as a thicker patch of fog)
+const boxDim=(X,h,z)=>{const u=Math.abs(X*F/z),v=Math.abs(VY+(E-h)*F/z-539.5);return 1-0.55*clamp((616-u)/80)*clamp((277.5-v)/80)};
 function prop(Z,X,body,lit,opts={}){
-  const zr=opts.zr||REST;
+  const zr=opts.zr||REST;const g0=(opts.glows||[]).find(g=>!g.back)||{x:0,h:1};
+  const lightOp=z=>clamp((zr+5.5-z)/4.5)*boxDim(X+g0.x,g0.h,z);
   const norm=sh=>sh.e?Object.assign({},sh,{p:ell(...sh.e)}):sh;
   body=body.map(norm);lit=lit.map(norm);const glows=opts.glows||[];
   return {grp:'w',Z,X,kind:'lm',op:z=>clamp((ZFAR-z)/FADE),
     // the light switches on as you come out of the fog, so a landmark two stations ahead never lights up the text box
-    lops:[z=>clamp((zr+5.5-z)/4.5),null,z=>fogAmt(z)*0.95,z=>clamp((zr+5.5-z)/4.5)],flick:opts.flick?[0,0,0,'flick']:null,drift:opts.drift?[null,null,null,opts.drift]:null,
+    lops:[lightOp,null,z=>fogAmt(z)*0.95,lightOp],flick:opts.flick?[0,0,0,'flick']:null,drift:opts.drift?[null,null,null,opts.drift]:null,
     geom(z,id){
       const pts=sh=>sh.s?wRib(sh.s,X,z):sh.p.map(([x,h])=>P(X+x,h,z));
       const path=sh=>`<path d="${dPoly(pts(sh))}${sh.hole?dPoly(sh.hole.map(([x,h])=>P(X+x,h,z))):''}"${sh.hole?' fill-rule="evenodd"':''} fill="${sh.c}"${sh.o?` opacity="${sh.o}"`:''}/>`;
@@ -513,13 +520,13 @@ const EXCL=[]; // keep-clear boxes around landmarks, absolute world coords [xmin
 (function buildWorld(){
   const lm=(it,box)=>{ITEMS.push(it);if(box)EXCL.push(box)};
   lm(fenceItem(0*D+6.6));   // the gate is walked through: close enough (6.6 m) that it is gone by station 1
-  lm(lanternPool(1*D+REST+0.05,-3.3));lm(lanternItem(1*D+REST,-4.9),[-6.8,-1.8,1*D+REST-2.5,1*D+REST+2.5]);
+  lm(lanternPool(1*D+REST+0.05,-4.1));lm(lanternItem(1*D+REST,-5.7),[-7.6,-2.6,1*D+REST-2.5,1*D+REST+2.5]);   // far enough out that the lit glass never crosses the text box on the approach
   const rgv=rngFor(3,55);[[-2.3,9],[-3.1,9.8],[-4.0,10.5],[-5.0,11.3],[-6.1,12],[-7.2,12.7]].forEach(([X,o],i)=>ITEMS.push(graveItem(3*D+o,X,rgv,i%4)));
   EXCL.push([-8.5,-1.6,3*D+7,3*D+14]);lm(moonPool(3*D+11));
   const R=s=>s*D+REST;
   // no trunk may stand between the viewer and a landmark at its own station: screen window [xa,xb] at rest
   const occ=(s,X,hw,zr=REST)=>OCC.push({Z0:s*D,zr,xa:VX+(X-hw)*F/zr-30,xb:VX+(X+hw)*F/zr+30});
-  occ(1,-4.6,.9);occ(2,4.9,1.1);occ(3,-4.7,2.6,11);occ(4,-4.6,1.3);occ(5,4.4,.8);occ(6,-4.8,1.0);occ(7,5.0,1.2);occ(8,-4.6,1.6);occ(9,4.6,1.8);occ(11,-7.1,1.7,13);occ(12,4.8,.9);
+  occ(1,-5.3,.9);occ(2,4.9,1.1);occ(3,-4.7,2.6,11);occ(4,-4.6,1.3);occ(5,4.4,.8);occ(6,-4.8,1.0);occ(7,5.0,1.2);occ(8,-4.6,1.6);occ(9,4.6,1.8);occ(11,-7.1,1.7,13);occ(12,4.8,.9);
   lm(scarecrow(R(2),4.9),keep(4.9,R(2)));
   lm(jackRow(R(4),-4.6),keep(-4.6,R(4)));
   lm(crowStump(R(5),4.4),keep(4.4,R(5)));
@@ -617,7 +624,7 @@ function mount(it,z,frag,anim,css){
   g.layers.forEach((body,i)=>{const lop=it.lops[i];const dr=it.drift&&it.drift[i];const fl=it.flick&&it.flick[i];
     const v0=lop?lop(z):1,v1=lop?(anim?lop(z1):v0):1;
     if(Math.max(v0,v1)<0.01)return;
-    const la=!!(anim&&lop&&Math.abs(v1-v0)>=0.04);if(la)animL.push(i);
+    const la=!!(anim&&lop&&(Math.abs(v1-v0)>=0.04||i===it.fastDim));if(la)animL.push(i);
     if(!la&&!dr&&!fl){html+=`<svg ${vb}${lop?` style="opacity:${fm4(v0)}"`:''}>${body}</svg>`;return}
     let inner=`<svg ${vb}>${body}</svg>`;
     if(dr)inner=`<div class="ly drift" style="--dx:${dr.dx}px;--d:${dr.d}s;--dl:${dr.dl}s">${inner}</div>`;
@@ -635,7 +642,9 @@ function mount(it,z,frag,anim,css){
     // a near object still in frame at the cap (e.g. the gate we walk through) fades over the 400 ms before it,
     // instead of popping out in one keyframe step
     const ft=CAPFADE/DUR;
-    const stops=ks.map(([t,k,zz])=>{const m=tcap<0?1:clamp((tcap-t)/ft);for(const j of animL)lstops[j].push(`${fm(t*100)}%{opacity:${fm4(it.lops[j](zz))}}`);
+    // anti-strobe: a bright layer (lit bark, lantern glass) dims while it crosses the screen faster than ~7px a frame at 60 Hz
+    const fpS=DUR/STOPS/16.67,sp=ks.map(([t,k,zz],i)=>{const n=ks[Math.min(i+1,ks.length-1)],pv=ks[Math.max(i-1,0)];return Math.abs(it.X)*F*Math.abs(1/n[2]-1/pv[2])/((n[0]===pv[0]?1:2)*fpS)});
+    const stops=ks.map(([t,k,zz],si)=>{const m=tcap<0?1:clamp((tcap-t)/ft);for(const j of animL)lstops[j].push(`${fm(t*100)}%{opacity:${fm4(it.lops[j](zz)*(j===it.fastDim?clamp(1-(sp[si]-7)/10,0.35,1):1))}}`);
       return `${fm(t*100)}%{transform:scale(${fm4(k)});opacity:${fm4(it.op(zz)*m)}}`});
     css.push(`@keyframes ${anim}{${stops.join('')}}`);lstops.forEach((s,j)=>{if(s.length)css.push(`@keyframes ${anim}l${j}{${s.join('')}}`)});
     el.style.animation=`${anim} ${DUR}ms linear forwards`;
@@ -682,10 +691,10 @@ function advance(){
   walking=true;walkId++;
   build(c,true);
   for(const el of cam.querySelectorAll('.sl')){const s=+el.dataset.st;el.classList.remove('fIn','fOut');el.style.opacity='';if(s===n)el.classList.add('fIn');else if(s===c)el.classList.add('fOut');else el.style.opacity=0}
-  cam.classList.remove('bob');light.classList.remove('sway');void cam.offsetWidth;cam.classList.add('bob');light.classList.add('sway');
+  const ab=walkId%2?'A':'B';cam.className='bob'+ab;light.className='sway'+ab;
   setCreep(false);
   station=n;ui();
-  setTimeout(()=>{render();cam.classList.remove('bob');light.classList.remove('sway');walking=false;setCreep(true)},DUR+40);
+  setTimeout(()=>{render();cam.className='';light.className='';walking=false;setCreep(true)},DUR+40);
 }
 function jump(s){if(walking)return;station=((s%NS)+NS)%NS;setCreep(false);render();setTimeout(()=>setCreep(true),30)}
 function ui(){
