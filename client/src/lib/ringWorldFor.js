@@ -66,7 +66,7 @@ const AUTO_DRAW_MAX_ATTEMPTS = 20
 // Never throws: any failure (drawStations running out of valid seeds) falls
 // back to the tier below, same "never blank the TV" contract every tier in
 // this file already keeps.
-function autoDrawWorld(base, showId) {
+export function autoDrawWorld(base, showId) {
   const showSeed = seedFrom(showId)
   for (let attempt = 0; attempt < AUTO_DRAW_MAX_ATTEMPTS; attempt++) {
     try {
@@ -87,6 +87,20 @@ function autoDrawWorld(base, showId) {
 // decision can't drift between them (gap C's own root cause was two places
 // deciding the same thing; Task 7 then had to add forceFixedArrangement in
 // both).
+// 2026-09-29: auto-draw disabled by default. Confirmed live, through the
+// real trusted gate (runChecks, not an ad hoc script — see
+// references/ring-world-mistakes.md Rule Zero), that a random draw can put
+// a bright headline object where its glow reaches the safe box: 4 of 6 real
+// draws FAILED the safe-box cap, one at p99.5=111 against a 68 limit. The
+// authored order is hand-placed so this never happens; the draw only
+// randomizes WHICH station sits where and has no equivalent placement
+// constraint. Root cause not yet fixed (needs a real adjacency/placement
+// rule in drawStations, which needs a threshold/heuristic call — out of
+// scope for this patch). This flag is the safe stopgap: fall back to the
+// one arrangement proven safe. Flip back to true only after that placement
+// fix ships and is re-verified through the real gate, not before.
+const AUTO_DRAW_ENABLED = false
+
 function arrangementKind(theme, showId) {
   // Host's "Fixed layout" pick (ThemePickerModal): no draw, no saved order.
   // colorEvolution gets the same rule worldPalette gets: duos were only ever
@@ -98,7 +112,7 @@ function arrangementKind(theme, showId) {
   // A host-picked palette was only ever certified against the fixed order
   // (palette-sweep.mjs's shelf rows carry stations=null) — never auto-draw
   // under one (2026-09-28, "gap C").
-  if (showId && !theme.worldPalette) return 'drawn'
+  if (AUTO_DRAW_ENABLED && showId && !theme.worldPalette) return 'drawn'
   return 'fixed'
 }
 
