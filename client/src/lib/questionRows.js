@@ -78,6 +78,8 @@ export function slideToArchiveRow(slide, show) {
       // Flat question — regular, most shiny formats, and swing/PYL round items
       // (which reuse the plain 'question' slide type — the round they belong
       // to, not data.isShiny, decides the archived `type`).
+      // Pin It's true spot lives in data.pinAnswer, which the bank has no column for.
+      if (data.shinyInputSchema?.type === 'pin') return null
       if (blank(data.text) && blank(data.answer)) return null
       const type = data.isShiny
         ? 'shiny'

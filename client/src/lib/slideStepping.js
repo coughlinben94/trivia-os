@@ -153,7 +153,7 @@ export function withEntryState(slides, slide, { currentPart, protectInProgress =
         if (slide.data?.[f]) patch[f] = false
       }
       if (slide.data?.[m.revealField]) patch[m.revealField] = false
-      for (const f of m.clearFields ?? []) {
+      for (const f of [...(m.clearFields ?? []), ...(m.freshClearFields ?? [])]) {
         if (slide.data?.[f] != null) patch[f] = null
       }
     }
@@ -380,7 +380,9 @@ export const PHONE_MECHANICS = {
   order:    { guard: isOrderShiny,    lockFields: ['orderLocked'], revealField: 'orderRevealed' },
   choice:   { guard: isChoiceShiny,   lockFields: ['choiceLocked'], revealField: 'choiceRevealed' },
   huesCues: { guard: isHuesCuesShiny, lockFields: ['huesCuesLocked'], revealField: 'huesCuesRevealed' },
-  pin:      { guard: isPinShiny,      lockFields: ['pinLocked'], revealField: 'pinRevealed', clearFields: ['pinRoomSize', 'pinResults'] },
+  pin:      { guard: isPinShiny,      lockFields: ['pinLocked'], revealField: 'pinRevealed', clearFields: ['pinRoomSize', 'pinResults'],
+            // fresh entry only (withEntryState); Unlock keeps the host's override
+            freshClearFields: ['pinRoomSizeOverride'] },
 }
 
 // Wager is the only mechanic with TWO lock phases on one slide (blind tiers
