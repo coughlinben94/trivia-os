@@ -78,7 +78,7 @@ export const REFUSAL_TEXT = {
 // One line for a score fix, shown on the laptop and written to the relay log.
 // Team names come from phones: any newline or other whitespace run becomes one
 // space, so a name can't forge a log line.
-const clip = (v, n) => String(v ?? '?').replace(/\s+/g, ' ').slice(0, n)
+const clip = (v, n) => String(v ?? '?').replace(/\s+/g, ' ').trim().slice(0, n)
 export function scoreChangeText(c) {
   return `iPad set ${clip(c?.team, 60)} ${clip(c?.col, 8)}: ${clip(c?.from, 8)} to ${clip(c?.to, 8)}`
 }

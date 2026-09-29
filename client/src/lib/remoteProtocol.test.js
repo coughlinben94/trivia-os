@@ -124,7 +124,8 @@ describe('phase 3: Scores drawer', () => {
   it('scoreChangeText folds newlines and every other run of whitespace in a phone-typed name', () => {
     const line = scoreChangeText({ team: 'Bears\n[relay] 2026 iPad set Evil R1: 0 to 99\r\nX', col: 'R\n1', from: '1\r', to: 2 })
     expect(line).not.toMatch(/[\n\r\t]/)
-    expect(line).toBe('iPad set Bears [relay] 2026 iPad set Evil R1: 0 to 99 X R 1: 1  to 2')
+    expect(line).toBe('iPad set Bears [relay] 2026 iPad set Evil R1: 0 to 99 X R 1: 1 to 2')
+    expect(scoreChangeText({ team: '  Bears \n', col: 'R1', from: 1, to: 2 })).toBe('iPad set Bears R1: 1 to 2')
   })
   it('the modal-close guard reads as plain English', () => {
     expect(REFUSAL_TEXT['modal-just-closed']).toBe('The score table just closed. Try again in a second.')

@@ -35,6 +35,11 @@ const TONE = {
 
 // Protocol strings read "what happened — what to do". Split them so the
 // glance line is short and the fix sits under it, without the dash.
+// The drawer's scores.get refused as modal-just-closed: shown while it asks
+// again by itself (hostCommands holds scores.get for 1s after the modal closes).
+const SCORES_RETRY_MSG = 'The score table just closed. One moment.'
+const SCORES_RETRY_MS = 1200
+
 function splitMsg(text) {
   if (!text) return [null, null]
   const [head, ...rest] = String(text).split(' — ')
@@ -109,8 +114,10 @@ export default function Remote() {
   // 'unsure': the link dropped mid-save, so the outcome never came.
   const [scoreSend, setScoreSend] = useState(null)
   const scoreSendIdRef = useRef(null)
-  // The drawer's scores.get: its id while in flight, 'refused', or null.
+  // The drawer's scores.get: its id until the scores arrive, 'refused',
+  // 'retry' (waiting to ask again after modal-just-closed), or null.
   const scoresGetRef = useRef(null)
+  const scoresRetryRef = useRef(null)
   // Phase 2b, both straight from the relay (not the laptop's Live Mode):
   const [local, setLocal] = useState(null)     // {type:'local-state', available, volume, ducked, sounds}
   const [jukebox, setJukebox] = useState(null) // {type:'jukebox', linked, waiting, open, playing, handoffPending}
@@ -178,18 +185,31 @@ export default function Remote() {
         }
         else if (m.type === 'host') {
           setHostConnected(!!m.connected)
-          if (!m.connected) linkLost()
+          // connected:true too: a newer /host tab replaced the old one (the
+          // relay sends no connected:false then), so the old tab's answers are lost.
+          linkLost()
         }
-        else if (m.type === 'state') setSnap(m)
+        else if (m.type === 'state') {
+          if (m.scores != null) scoresGetRef.current = null // answered
+          setSnap(m)
+        }
         else if (m.type === 'local-state') setLocal(m)
         else if (m.type === 'jukebox') setJukebox(m)
         else if (m.type === 'result') {
           if (!mine(m.id)) return
-          if (m.refused) setNotice(refusalText(m.refused))
-          if (m.id === scoresGetRef.current) {
-            if (m.refused) scoresGetRef.current = 'refused'
-            else if (m.done) scoresGetRef.current = null
+          const retry = m.id === scoresGetRef.current && m.refused === 'modal-just-closed'
+          if (m.refused) setNotice(retry ? SCORES_RETRY_MSG : refusalText(m.refused))
+          // `done` is not the end of a scores.get: the scores come in a later
+          // snapshot, so the id stays until then (no second ask in the gap).
+          if (retry) {
+            scoresGetRef.current = 'retry'
+            clearTimeout(scoresRetryRef.current)
+            scoresRetryRef.current = setTimeout(() => {
+              if (scoresGetRef.current === 'retry') scoresGetRef.current = null
+              setNow(Date.now()) // re-render so the resync effect asks again
+            }, SCORES_RETRY_MS)
           }
+          else if (m.id === scoresGetRef.current && m.refused) scoresGetRef.current = 'refused'
           if (m.id === scoreSendIdRef.current) {
             if (m.done) setScoreSend({ id: m.id, state: 'saved', scoreSet: m.scoreSet })
             else if (m.refused) setScoreSend({ id: m.id, state: 'refused', reason: m.refused })
@@ -221,6 +241,7 @@ export default function Remote() {
       stopped = true
       clearTimeout(retry)
       clearTimeout(watchdog)
+      clearTimeout(scoresRetryRef.current)
       ws?.close()
     }
   }, [cfg.url, cfg.secret])
@@ -276,10 +297,12 @@ export default function Remote() {
     setScoreSend(null)
     scoreSendIdRef.current = null
     setDrawer('scores')
+    clearTimeout(scoresRetryRef.current)
     scoresGetRef.current = send('scores.get')
   }
   function closeScores() {
     setDrawer(null)
+    clearTimeout(scoresRetryRef.current)
     scoresGetRef.current = null
     send('scores.hide', {}, true)
   }
@@ -896,9 +919,11 @@ function ScoresPanel({ scores, blocked, notice, send, onSet, onClearSend }) {
     return (
       <>
         {noticeBox}
-        <p className="px-6 py-4 text-2xl font-semibold text-[color:var(--rl-text-75)]">
-          {notice ? 'Close this and try again in a moment.' : 'Getting scores from the laptop…'}
-        </p>
+        {notice !== SCORES_RETRY_MSG && (
+          <p className="px-6 py-4 text-2xl font-semibold text-[color:var(--rl-text-75)]">
+            {notice ? 'Close this and try again in a moment.' : 'Getting scores from the laptop…'}
+          </p>
+        )}
       </>
     )
   }
