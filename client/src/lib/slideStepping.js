@@ -153,6 +153,9 @@ export function withEntryState(slides, slide, { currentPart, protectInProgress =
         if (slide.data?.[f]) patch[f] = false
       }
       if (slide.data?.[m.revealField]) patch[m.revealField] = false
+      for (const f of m.clearFields ?? []) {
+        if (slide.data?.[f] != null) patch[f] = null
+      }
     }
   }
   // Fresh entry always re-arms invoke-gated audio too — a stale `invoked:
