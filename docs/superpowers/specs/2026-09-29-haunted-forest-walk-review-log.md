@@ -1,0 +1,7 @@
+# Review log: haunted forest walk spec (2026-09-29)
+
+## Round 1 — Codex (thread 01a0eeab-fcbe-79b1-b6c5-b35f80d5e98e)
+VERDICT: REVISE. 12 findings: (1) forest still treated as ring by tests/tools (hauntedOctober.ring.test, RingAmbient.worldSeams, ring-verify scans *.ring.js); (2) hook boundary hides a second state machine (busy/queue/timers/jump; v3 drops requests); (3) space gate misses motion regressions; (4) verify:ring count gate gameable; (5) forest probe lacks controllable seed and __forest API; (6) exact loop equality needs a defined capture state; (7) fidelity gate can't capture walk fractions; (8) safe-box caps conflict (68 vs 62); (9) §8 restricts continuous opacity animation, needs a forest interpretation; (10) module-load recovery incomplete (static import registers); (11) world-switch test reads ring DOM; (12) phones after the sign-off stop.
+
+### Claude's response (r2)
+Accepted all 12. §2.1 contract written before extraction and pinned by a fake-clock state-sequence test; §2.4 renderer-neutral world module with a validated conditional export and test; gate 1b/1c motion samples and named-finding compare; §3.2 exact `__forest` API with setSeed/freeze; §3.3 same/changed-scene controls and raster equality; §3.4 freeze-based walk capture; §2.5 single cap (68 hard, 62 target) sampling every transition; §2.3 explicit rules interpretation for Ben; forest world-switch test; phones moved before final approval (gate 10). Added Ben's "longer walk" (§1.1). Rejected: nothing.
