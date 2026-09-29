@@ -1,5 +1,8 @@
-import { useEffect, useRef, useMemo } from 'react'
-import { ringWorldFor } from '../../lib/ringWorldFor.js'
+import { useEffect, useRef, useMemo, useState } from 'react'
+import { ringWorldFor, resolveArrangement, isEvolving } from '../../lib/ringWorldFor.js'
+import { outgoingAndIncomingDuo } from '../../lib/duoTransition.js'
+import { DUO_GRAPH } from '../../lib/duoGraph.js'
+import { worldForDuo } from './EvolvingRingAmbient.jsx'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import { midnightGalaxyRing } from '../../worlds/midnightGalaxy.ring.js'
 import { withHueOf } from '../../lib/weightedPalette.js'
@@ -203,7 +206,7 @@ const isReduced = () =>
 // Only 'out' consults it; 'back' opens opaque and unwinds on its own curve.
 const COVER_AT = 0.94
 
-export default function WarpTransition({ dir = 'out', onDone, durationMs = DURATION_MS, coverAt = COVER_AT }) {
+export default function WarpTransition({ dir = 'out', onDone, durationMs = DURATION_MS, coverAt = COVER_AT, slideIndex }) {
   const canvasRef = useRef(null)
   // onDone is an inline arrow in Display's JSX (new identity every render) —
   // held in a ref so the loop below never restarts because of it.
@@ -211,14 +214,24 @@ export default function WarpTransition({ dir = 'out', onDone, durationMs = DURAT
   doneRef.current = onDone
 
   const { theme, showId } = useTheme()
-  // The same recoloured (or base, or auto-drawn) world ParticleBackground
-  // froze at mount — ringWorldFor's own cache means this is the identical
-  // object, not a second recolour/draw computed from scratch. Must pass the
-  // same showId ParticleBackground used, or a cache-key mismatch would
-  // silently compute a DIFFERENT auto-drawn arrangement here (still
-  // deterministic, just not the one already on screen). Recomputed only if
-  // theme/palette/showId identity changes (it doesn't mid-warp; this
-  // component remounts per warp).
+  // The same world ParticleBackground has on screen. Plain path: the
+  // recoloured (or base, or auto-drawn) world it froze at mount —
+  // ringWorldFor's own cache means this is the identical object, not a
+  // second recolour/draw computed from scratch. Must pass the same showId
+  // ParticleBackground used, or a cache-key mismatch would silently compute
+  // a DIFFERENT auto-drawn arrangement here (still deterministic, just not
+  // the one already on screen). Color-evolution path (theme.colorEvolution
+  // on a ring-world theme, slideIndex known): ParticleBackground renders
+  // EvolvingRingAmbient instead, whose worlds are the arrangement repainted
+  // per duo — so this reads the CURRENT (incoming) duo's world through
+  // EvolvingRingAmbient's own worldForDuo cache, the identical object it
+  // mounted. Same isEvolving guard ParticleBackground uses: colorEvolution
+  // on a non-ring theme is ignored. slideIndex is FROZEN at mount: a host
+  // CAN advance during a warp (Display.jsx), but the canvas loop below reads
+  // BANDS/WARM once at mount, so following the live prop would repaint the
+  // CSS ground in the new duo while the trails stay in the old one — a
+  // visible split. This component remounts per warp, so the frozen index is
+  // always the one the warp started on.
   // Fallback to midnightGalaxyRing: the grading-break warp fires on EVERY
   // theme (Display.jsx's breakEligible has no theme check), but RING_WORLDS
   // only has a midnight-galaxy entry — ringWorldFor returns undefined for
@@ -226,7 +239,18 @@ export default function WarpTransition({ dir = 'out', onDone, durationMs = DURAT
   // to hardcode midnightGalaxyRing unconditionally; this preserves that,
   // rather than throwing (a throw here is swallowed by Display.jsx's
   // ErrorBoundary, but onDone never fires and the grading break gets stuck).
-  const world = useMemo(() => ringWorldFor(theme, showId) ?? midnightGalaxyRing, [theme, showId])
+  const [frozenSlideIndex] = useState(slideIndex)
+  const world = useMemo(() => {
+    if (isEvolving(theme) && Number.isInteger(frozenSlideIndex)) {
+      try {
+        const { incoming } = outgoingAndIncomingDuo(showId, DUO_GRAPH, frozenSlideIndex)
+        return worldForDuo(incoming, resolveArrangement(theme, showId))
+      } catch {
+        return midnightGalaxyRing
+      }
+    }
+    return ringWorldFor(theme, showId) ?? midnightGalaxyRing
+  }, [theme, showId, frozenSlideIndex])
   // Same stop RingAmbient paints its stage ground with — the world's own
   // terminal sky, not a second near-black to keep in sync by hand.
   const BG = world.sky[world.sky.length - 1]

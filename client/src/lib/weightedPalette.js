@@ -175,6 +175,55 @@ export function driftPlan(anchorDeg, requestedArc) {
   return { dir, arc: Math.max(0, Math.min(requestedArc, room)) }
 }
 
+// A palette's own dead-band safety (driftPlan, above) only keeps ONE colour
+// away from the yellow band — nothing stops two colours in the SAME palette
+// from drifting toward each other. Verified 2026-09-28: 7 of the 17 curated
+// duos drop below 15deg apart somewhere in their drift cycle with driftPlan's
+// independent per-colour plans. This scales every colour's plan down by the
+// SAME factor (never up, never a direction change) until no pair of drifted
+// ANCHOR hues (hueAnchorsAt) comes within MIN_SEPARATION at any station —
+// arcs only ever shrink, so each individual colour's own dead-band safety
+// (driftPlan's own `room` cap) is untouched by construction.
+// ANCHOR-LEVEL ONLY: the hues actually drawn per station add ladder offsets
+// on top of these anchors, so two stations of DIFFERENT colours can still
+// render closer than MIN_SEPARATION (2026-09-28 final review: purple_blue
+// ~9deg, spring_lilac ~15deg). Separate, also still open: same-colour
+// neighbours can render identical (drift-shading cancellation, 11 of 17
+// duos) — neither is fixed here.
+const MIN_SEPARATION = 20 // degrees — 5deg of margin above the loosest observed collapse
+
+export function safeDriftPlans(anchorsDeg, requestedArc, stationCount) {
+  const basePlans = anchorsDeg.map(a => driftPlan(a, requestedArc))
+  if (anchorsDeg.length < 2) return basePlans
+
+  const hueAt = (plan, anchor, i) =>
+    ((anchor + plan.dir * plan.arc * (1 - Math.cos(2 * Math.PI * i / stationCount)) / 2) % 360 + 360) % 360
+
+  const minSeparation = (scale) => {
+    let min = Infinity
+    for (let i = 0; i < stationCount; i++) {
+      const hues = basePlans.map((p, c) => hueAt({ ...p, arc: p.arc * scale }, anchorsDeg[c], i))
+      for (let a = 0; a < hues.length; a++) {
+        for (let b = a + 1; b < hues.length; b++) {
+          const d = hueDelta(hues[a], hues[b])
+          if (d < min) min = d
+        }
+      }
+    }
+    return min
+  }
+
+  if (minSeparation(1) >= MIN_SEPARATION) return basePlans
+
+  let lo = 0, hi = 1
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2
+    if (minSeparation(mid) >= MIN_SEPARATION) lo = mid
+    else hi = mid
+  }
+  return basePlans.map(p => ({ dir: p.dir, arc: p.arc * lo }))
+}
+
 // In-gamut check by round-trip: oklabToRgb clamps out-of-range channels,
 // so a colour survives the round trip unchanged iff it fits in sRGB.
 // Reuses the proven conversions rather than reimplementing OKLab.
@@ -297,7 +346,7 @@ export function derivePalette({ colors, weights, stationCount = 13, baseTheme, c
   // colour get the FURTHEST-APART offsets (outside-in alternation). Two
   // neighbours forced to share a colour at least read as two distinct
   // shades of it rather than as one 2-station-wide smear.
-  const plans = colors.map(hex => driftPlan(Math.round(hexToHslHue(hex)), drift.arc))
+  const plans = safeDriftPlans(anchors.map(a => a.deg), drift.arc, stationCount)
   const rot = (c, i) => plans[c].dir * plans[c].arc * (1 - Math.cos(2 * Math.PI * i / stationCount)) / 2
   const ladders = counts.map((k, c) =>
     hueLadder(k, LADDER_HALF).map(off => projectLadderOffset(colors[c], off)))

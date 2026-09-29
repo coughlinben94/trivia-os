@@ -982,6 +982,11 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
     </div>
   )
 
+  // Named once: ParticleBackground (standalone paths) and both WarpTransitions
+  // below read the same station index, so the warp paints the same duo the
+  // ring has on screen under color evolution.
+  const ringSlideIndex = ringVisibleStationIndex(sortedSlides, ringPeekIndex(sortedSlides, show.current_slide_index ?? 0), isRingVisible)
+
   return (
     <div
       className="w-screen h-screen overflow-hidden relative select-none"
@@ -1000,7 +1005,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
         <ParticleBackground
           theme={theme}
           showId={showId}
-          slideIndex={ringVisibleStationIndex(sortedSlides, ringPeekIndex(sortedSlides, show.current_slide_index ?? 0), isRingVisible)}
+          slideIndex={ringSlideIndex}
           stationOverride={breakActive ? MUSIC_STATION : (warp === 'back' ? RING_RETURN : null)}
           showStationDebug={isPreview}
           forceSnap={sortedSlides[show.current_slide_index ?? 0]?.type === 'team-picker' || shinyWarp != null}
@@ -1167,6 +1172,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
           <WarpTransition
             key={warp}
             dir={warp}
+            slideIndex={ringSlideIndex}
             onDone={() => {
               if (warp === 'out') setActiveBreakId(currentSlide?.id)
               setWarp(null)
@@ -1190,6 +1196,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
           <WarpTransition
             key={shinyWarp}
             dir={shinyWarp}
+            slideIndex={ringSlideIndex}
             durationMs={SHINY_WARP_MS}
             coverAt={SHINY_WARP_COVER_AT}
             onDone={() => setShinyWarp(null)}

@@ -33,7 +33,7 @@ const ROOT = join(__dirname, '..', '..')
 // plumbing is broken (wrong URL shape, dead server, whatever) and every row
 // it's about to write would be a lie. Reuses certifyPalette (below) —
 // never a second, hand-rolled check path.
-async function knownAnswerProbe(browser) {
+export async function knownAnswerProbe(browser) {
   const { passed, summary } = await certifyPalette(browser, { ...BASE_PALETTE, drift: { arc: 0 } })
   if (!passed) {
     throw new Error(`palette-sweep: known-answer probe FAILED — the BASE palette has ${summary.regression_fail_count} regression FAIL(s) (${summary.regression_fail_names.join(', ')}). The sweep's own plumbing is broken; fix it before certifying anything.`)
@@ -56,8 +56,8 @@ const EXPECTED_PROJECT = 'qwtbgusqfoypvehnungr'
 if (!env.VITE_SUPABASE_URL?.includes(EXPECTED_PROJECT)) {
   throw new Error(`palette-sweep: refusing to run — VITE_SUPABASE_URL is not the Baynes Trivia project.`)
 }
-const sb = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_ANON_KEY, { auth: { persistSession: false } })
-async function elevateIfNeeded() {
+export const sb = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_ANON_KEY, { auth: { persistSession: false } })
+export async function elevateIfNeeded() {
   if (env.SUPABASE_SERVICE_ROLE_KEY) return // bypasses RLS already
   const pin = env.TRIVIA_HOST_PIN || env.PLAYWRIGHT_HOST_PIN
   if (!pin) throw new Error('palette-sweep: need SUPABASE_SERVICE_ROLE_KEY or TRIVIA_HOST_PIN in the environment')
@@ -82,12 +82,12 @@ async function elevateIfNeeded() {
 // `http://host:port/ambient?ring=1` path (`proc` is `null` when it reused
 // an already-running dev server instead of spawning one — guard the kill).
 let staticServer, staticPort, viteServer
-async function startServers() {
+export async function startServers() {
   staticServer = await startStaticServer(ROOT)
   staticPort = staticServer.address().port
   viteServer = await ensureViteServer()
 }
-async function stopServers() {
+export async function stopServers() {
   await new Promise(resolve => staticServer.close(resolve))
   viteServer?.proc?.kill?.()
 }
@@ -96,7 +96,7 @@ function paletteQuery({ colors, weights, drift }) {
   return `colors=${colors.map(encodeURIComponent).join(',')}&weights=${weights.join(',')}&drift=${drift.arc}`
 }
 
-async function certifyPalette(browser, { colors, weights, drift }) {
+export async function certifyPalette(browser, { colors, weights, drift }) {
   // Renders BOTH builds via the URL-param routes Session 1 added, exactly
   // like a host's picker preview does — reuses runChecks, never re-derives
   // pass/fail logic.

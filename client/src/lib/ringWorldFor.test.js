@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { ringWorldFor, RING_WORLDS } from './ringWorldFor.js'
+import { describe, it, expect, vi } from 'vitest'
+import { ringWorldFor, RING_WORLDS, resolveArrangement, isEvolving } from './ringWorldFor.js'
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
 import { RING_VERSION } from './ringCertification.js'
 import { RING_POOL } from '../worlds/ringPool.js'
@@ -217,5 +217,102 @@ describe('ringWorldFor — auto-draw (no explicit ringWorld, showId present)', (
     expect(() => ringWorldFor(BASE_THEME, '')).not.toThrow()
     const world = ringWorldFor(BASE_THEME, '')
     expect(world.stations.length).toBeGreaterThan(0)
+  })
+})
+
+describe('resolveArrangement', () => {
+  it('returns the fixed authored order when no showId and no ringWorld', () => {
+    const arrangement = resolveArrangement(BASE_THEME, undefined)
+    expect(arrangement.stations.map(s => s.key)).toEqual(AUTHORED_KEYS)
+    expect(arrangement.stations.map(s => s.hue)).toEqual(midnightGalaxyRing.stations.map(s => s.hue))
+  })
+
+  it('draws a per-show arrangement when showId is set and no worldPalette', () => {
+    const arrangement = resolveArrangement(BASE_THEME, 'show_arrangement_test')
+    expect(arrangement.stations.map(s => s.key)).not.toEqual(AUTHORED_KEYS)
+    expect(new Set(arrangement.stations.map(s => s.key)).size).toBe(AUTHORED_KEYS.length)
+  })
+
+  it('stays on the fixed order when a worldPalette is set, even with a showId', () => {
+    const theme = { ...BASE_THEME, worldPalette: { colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35] } }
+    const arrangement = resolveArrangement(theme, 'show_arrangement_test_2')
+    expect(arrangement.stations.map(s => s.key)).toEqual(AUTHORED_KEYS)
+  })
+
+  it('forceFixedArrangement keeps the fixed authored order even with a showId (both resolvers)', () => {
+    const theme = { ...BASE_THEME, forceFixedArrangement: true }
+    expect(resolveArrangement(theme, 'show_force_fixed').stations.map(s => s.key)).toEqual(AUTHORED_KEYS)
+    expect(ringWorldFor(theme, 'show_force_fixed').stations.map(s => s.key)).toEqual(AUTHORED_KEYS)
+  })
+
+  it('forceFixedArrangement + a current saved ringWorld + worldPalette: fixed order, palette colors, no false fallback warning', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const worldPalette = { colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35] }
+    const theme = {
+      ...BASE_THEME, forceFixedArrangement: true, worldPalette,
+      ringWorld: { rowId: 'row-ff', seed: 'x', ringVersion: RING_VERSION, stations: SWAPPED_KEYS, palette: { colors: ['#22c55e', '#eab308'], weights: [0.5, 0.5], drift: { arc: 30 } } },
+    }
+    const world = ringWorldFor(theme, 'show_force_fixed_ringworld')
+    expect(world.stations.map(s => s.key)).toEqual(AUTHORED_KEYS)
+    expect(world).toBe(ringWorldFor({ ...BASE_THEME, worldPalette })) // same paletteOnly result
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  // Final-review finding 1: colorEvolution + the UI's default "Random draw"
+  // painted duo colors onto an uncertified drawn arrangement (gap C again,
+  // measured 80.9 vs the 68 brightness cap). Duos are only certified on the
+  // fixed order, so evolution must ALWAYS resolve to it.
+  it('colorEvolution always resolves to the fixed authored order, whatever the showId', () => {
+    const theme = { ...BASE_THEME, colorEvolution: true }
+    for (const showId of [undefined, '', 'show_evo_1', 'show_evo_2', 'show_evo_3', 'show_arrangement_test']) {
+      expect(resolveArrangement(theme, showId)).toBe(midnightGalaxyRing)
+    }
+  })
+
+  it('colorEvolution ignores even a current saved ringWorld (its drawn order was never duo-certified)', () => {
+    const theme = {
+      ...BASE_THEME, colorEvolution: true,
+      ringWorld: { rowId: 'row-evo', seed: 'x', ringVersion: RING_VERSION, stations: SWAPPED_KEYS, palette: { colors: ['#22c55e', '#eab308'], weights: [0.5, 0.5], drift: { arc: 30 } } },
+    }
+    expect(resolveArrangement(theme, 'show_evo_saved')).toBe(midnightGalaxyRing)
+  })
+
+  // Final-review finding 2: parity across every arrangement combination this
+  // plan introduced, not just auto-draw.
+  const SAVED = { rowId: 'row-parity', seed: 'parity', ringVersion: RING_VERSION, stations: SWAPPED_KEYS, palette: { colors: ['#22c55e', '#eab308'], weights: [0.5, 0.5], drift: { arc: 30 } } }
+  const PALETTE = { colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35] }
+  const PARITY_CASES = [
+    ['auto-draw', {}, 'show_arrangement_parity'],
+    ['no showId', {}, undefined],
+    ['worldPalette + showId', { worldPalette: PALETTE }, 'show_parity_palette'],
+    ['saved ringWorld (SWAPPED_KEYS)', { ringWorld: SAVED }, 'show_parity_saved'],
+    ['saved ringWorld + worldPalette', { ringWorld: SAVED, worldPalette: PALETTE }, 'show_parity_saved_pal'],
+    ['stale saved ringWorld', { ringWorld: { ...SAVED, ringVersion: 'v0-stale' } }, 'show_parity_stale'],
+    ['forceFixedArrangement', { forceFixedArrangement: true }, 'show_parity_ff'],
+    ['forceFixedArrangement + saved ringWorld + worldPalette', { forceFixedArrangement: true, ringWorld: SAVED, worldPalette: PALETTE }, 'show_parity_ff_saved'],
+    ['colorEvolution', { colorEvolution: true }, 'show_parity_evo'],
+  ]
+  for (const [label, extra, showId] of PARITY_CASES) {
+    it(`resolveArrangement and ringWorldFor agree on arrangement — ${label}`, () => {
+      const theme = { ...BASE_THEME, ...extra }
+      const arrangement = resolveArrangement(theme, showId)
+      const full = ringWorldFor(theme, showId)
+      expect(full.stations.map(s => s.key)).toEqual(arrangement.stations.map(s => s.key))
+    })
+  }
+
+  it('parity fixtures actually hit each arrangement kind (guards the table above from going vacuous)', () => {
+    expect(resolveArrangement({ ...BASE_THEME, ringWorld: SAVED }, 'x').stations.map(s => s.key)).toEqual(SWAPPED_KEYS)
+    expect(resolveArrangement(BASE_THEME, 'show_arrangement_parity').stations.map(s => s.key)).not.toEqual(AUTHORED_KEYS)
+    expect(resolveArrangement({ ...BASE_THEME, forceFixedArrangement: true, ringWorld: SAVED }, 'x')).toBe(midnightGalaxyRing)
+  })
+})
+
+describe('isEvolving', () => {
+  it('is true only for colorEvolution on a theme with a ring world', () => {
+    expect(isEvolving({ ...BASE_THEME, colorEvolution: true })).toBe(true)
+    expect(isEvolving(BASE_THEME)).toBe(false)
+    expect(isEvolving({ id: 'pure-michigan', colorEvolution: true })).toBe(false)
   })
 })
