@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { hauntedOctoberRing } from './hauntedOctober.ring.js'
-import { RING_WORLDS, isPickableWorld } from '../lib/ringWorldFor.js'
+import { RING_WORLDS, isPickableWorld, ringWorldFor } from '../lib/ringWorldFor.js'
+import { RING_VERSION } from '../lib/ringCertification.js'
 import { THEMES, getTheme } from '../themes/index.js'
 import { contrastRatio } from '../lib/contrast.js'
 
@@ -25,6 +26,19 @@ describe('haunted-october registration (Phase 1 stub)', () => {
     const h = THEMES.find(t => t.id === 'halloween')
     expect(h.colors).toEqual({ bg: '#060008', bgDeep: '#030005', accent: '#380858', highlight: '#a000ff', text: '#e0c0f8', textMuted: '#604080', shinyBg: '#0a0010', shinyAccent: '#ff6800' })
     expect(RING_WORLDS.halloween).toBeUndefined()
+  })
+})
+
+describe('ringWorldFor: autoDraw off keeps the fixed authored order', () => {
+  const keys = w => w.stations.map(s => s.key)
+  const authored = keys(hauntedOctoberRing)
+  const theme = getTheme('haunted-october')
+  it.each([undefined, 'a', 'show-1', 'trivia-2026-10-31'])('showId=%s', (showId) => {
+    expect(ringWorldFor(theme, showId)).toBe(hauntedOctoberRing)
+  })
+  it('ignores a saved ringWorld arrangement', () => {
+    const saved = { ...theme, ringWorld: { ringVersion: RING_VERSION, stations: [...authored].reverse(), palette: { colors: ['#ff2200'], weights: [1] } } }
+    expect(keys(ringWorldFor(saved, 'show-1'))).toEqual(authored)
   })
 })
 

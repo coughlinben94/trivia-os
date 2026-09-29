@@ -81,7 +81,10 @@ function autoDrawWorld(base, showId) {
   for (let attempt = 0; attempt < AUTO_DRAW_MAX_ATTEMPTS; attempt++) {
     try {
       const seed = hash32(showSeed, AUTO_DRAW_SALT ^ attempt)
-      const stations = drawStations(RING_POOL, { seed, slots: base.stations.length, pinKey: 'eclipse', pinAt: 10 })
+      // Pool/pin come from the world; unset = the space world's shipped
+      // values (its object is pinned by ringWorldFor.snapshot.test.js, so it
+      // can't grow these fields).
+      const stations = drawStations(base.pool ?? RING_POOL, { seed, slots: base.stations.length, pinKey: base.pinKey ?? 'eclipse', pinAt: base.pinAt ?? 10 })
       return { ...base, stations }
     } catch {
       // Try the next deterministic seed.
@@ -105,8 +108,12 @@ function autoDrawWorld(base, showId) {
 export function ringWorldFor(theme, showId) {
   const base = RING_WORLDS[theme.id]
   if (!base) return base
+  // `autoDraw: false` (haunted-october): fixed authored order only — no
+  // per-show draw and no saved station arrangement (spec §3; the draw pool
+  // and every saved ringWorld are space-only).
+  const drawable = base.autoDraw !== false
 
-  if (theme.ringWorld && theme.ringWorld.ringVersion === RING_VERSION) {
+  if (drawable && theme.ringWorld && theme.ringWorld.ringVersion === RING_VERSION) {
     const key = theme.id + '|world|' + JSON.stringify(theme.ringWorld)
     if (!worldCache.has(key)) {
       try {
@@ -115,7 +122,7 @@ export function ringWorldFor(theme, showId) {
         // reduced projection. Before 2026-09-24, a reduced {key,prim,hue,accent,
         // family} pool silently dropped those fields at render time — see
         // references/ring-world-mistakes.md.
-        const stations = resolveStations(RING_POOL, theme.ringWorld.stations)
+        const stations = resolveStations(base.pool ?? RING_POOL, theme.ringWorld.stations)
         // Structural crash-safety: a stations array that resolves cleanly
         // but is the wrong length or has a duplicate key still reaches
         // RingAmbient.jsx (fixed station count, no such check), which can
@@ -142,7 +149,7 @@ export function ringWorldFor(theme, showId) {
     return worldCache.get(key)
   }
 
-  if (showId && !theme.worldPalette) {
+  if (drawable && showId && !theme.worldPalette) {
     const key = theme.id + '|autodraw|' + showId
     if (!worldCache.has(key)) {
       worldCache.set(key, autoDrawWorld(base, showId))
