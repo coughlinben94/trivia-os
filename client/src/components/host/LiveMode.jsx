@@ -19,6 +19,7 @@ import { HUES_CUES_CODE_RE } from '../../lib/huesCuesGrid.js'
 import { nextPressGate } from '../../lib/nextPressCue.js'
 import { planHostCommand } from '../../lib/hostCommands.js'
 import { useRemoteLink } from '../../hooks/useRemoteLink.js'
+import { REMOTE_LINK_KEY } from '../../lib/remoteProtocol.js'
 import { buildSnapshot, hostChipText } from '../../lib/remoteSnapshot.js'
 import { createScoreChain, createScoreRemote } from '../../lib/scoreCellWrite.js'
 import { scoreChangeText } from '../../lib/remoteProtocol.js'
@@ -35,10 +36,10 @@ import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, u
 // this same wall forever with no way to actually score the round (Ben,
 // 2026-08-17: "idk why that keeps popping up ... something different" —
 // found while investigating: this is the one message with no path forward).
-// localStorage switch for the iPad remote link (spec §7). Off unless set to
-// '1' from the chip below, so /host never opens a localhost socket (and Chrome
-// never shows its local-network prompt) until Ben opts in on this laptop.
-const REMOTE_LINK_KEY = 'trivia-os:ipad-remote'
+// localStorage switch for the iPad remote link (spec §7), REMOTE_LINK_KEY
+// from remoteProtocol.js. Off unless set to '1' from the chip below, so /host
+// never opens a localhost socket (and Chrome never shows its local-network
+// prompt) until Ben opts in on this laptop.
 
 const WAGER_ZERO_ANSWERS_ERROR = 'No wager answers came back — check connection and retry before scoring'
 

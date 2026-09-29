@@ -430,6 +430,12 @@ Source: Ben's Stream Deck profile `FFF3BAC3-…sdProfile`, read-only.
   - A last break, to check the Final Break jump to winner-reveal.
   - Each soundboard key, and Stop all.
 
+Known limits, intended for now:
+
+- Pause does not survive a /host reload or a 4001 takeover.
+- Pause mid-Duck leaves the volume ducked, and the iPad cannot undo it while paused (use the laptop's volume keys, or unpause).
+- Skip the break on the Final Break goes to +1, not the winner-reveal jump that `advanceAfterBreak` does.
+
 ### 17.8 Open questions
 
 1. ~~What volume should Duck drop to?~~ Answered: 20% of the pre-duck volume, restore to the saved level (see 17.3). Duck has not been used in a live show yet.

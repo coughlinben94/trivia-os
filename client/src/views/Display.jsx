@@ -30,8 +30,8 @@ import {
 } from '../lib/slideStepping.js'
 import { warmYoutubeAudio } from '../lib/youtubeWarmAudio.js'
 import { keepAwake } from '../lib/keepAwake.js'
-import { useRemoteLink } from '../hooks/useRemoteLink.js'
-import { DISPLAY_RELAY_URL, readRemoteLinkFlag } from '../lib/remoteProtocol.js'
+import { useRemoteLink, useRemoteLinkFlag } from '../hooks/useRemoteLink.js'
+import { DISPLAY_RELAY_URL } from '../lib/remoteProtocol.js'
 import { runDisplayCommand, displayState } from '../lib/displayCommands.js'
 
 // Realtime's payload and PostgREST's .select() are two independently
@@ -1276,8 +1276,9 @@ export default function Display() {
     return keepAwake()
   }, [isPreview, isDemo])
   // The iPad remote's /display peer: same default-off flag as /host's link
-  // (same origin, so one Chrome local-network Allow covers both). Read once.
-  const [remoteLinkFlag] = useState(readRemoteLinkFlag)
+  // (same origin, so one Chrome local-network Allow covers both). Follows the
+  // /host chip live through the storage event.
+  const remoteLinkFlag = useRemoteLinkFlag()
   // A display nav write was denied (RLS, network, anything) — the host must
   // advance from /host. Cleared when any show update lands (someone advanced
   // successfully) or a later nav write succeeds. Guard the RESULT, not the

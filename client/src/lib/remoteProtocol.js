@@ -58,7 +58,7 @@ export const REFUSAL_TEXT = {
   'laptop-only': 'Rescore a horse race on the laptop',
   error: 'Something went wrong on the laptop — check the laptop',
   // Phase 2b: jukebox (through /display), volume, Duck, soundboard.
-  'display-offline': 'TV window not linked — open /display on the laptop, or use the Stream Deck',
+  'display-offline': 'TV window not linked. Reload /display on the laptop.',
   'jukebox-not-open': 'The jukebox is not up yet — tap Open jukebox now',
   'not-at-break': 'Not at a grading break',
   'unknown-sound': 'That sound is not set up on the laptop',
@@ -100,6 +100,7 @@ export function parseRemoteMessage(raw) {
 // The iPad status strip (spec §7). `live` = the buttons may send.
 export function remoteStatus({ socket, closeCode, hostConnected, beatAge, visibility }) {
   if (closeCode === CLOSE_BAD_SECRET) return { tone: 'red', live: false, text: 'Pairing code wrong — re-enter it in ⚙' }
+  if (closeCode === CLOSE_TOO_FAST && socket !== 'open') return { tone: 'orange', live: false, text: 'Too many taps. Reconnecting.' }
   if (socket !== 'open') return { tone: 'red', live: false, text: 'Can’t reach the laptop — check Tailscale' }
   if (!hostConnected) return { tone: 'orange', live: false, text: 'Open Live Mode on the laptop' }
   if (beatAge == null || beatAge > STALE_BEAT_MS) return { tone: 'orange', live: false, text: 'Laptop not responding' }

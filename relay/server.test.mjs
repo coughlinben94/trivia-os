@@ -299,6 +299,26 @@ describe('local commands and the display peer', () => {
     for (let i = 0; i < 12; i++) ipad.send(local(`r${i}`, 'sound.stopAll'))
     expect(await ipad.closed).toBe(CLOSE_TOO_FAST)
   })
+  it('a local command older than 1500ms, or with no sentAt, is refused late and never runs', async () => {
+    const ipad = await pairedIpad()
+    await find(ipad, m => m.type === 'local-state' && m.volume === 60)
+    ipad.send(JSON.stringify({ type: 'cmd', id: 'o1', cmd: 'vol.up', args: {}, sentAt: Date.now() - 2000 }))
+    ipad.send(JSON.stringify({ type: 'cmd', id: 'o2', cmd: 'duck', args: {} }))
+    expect(await find(ipad, m => m.id === 'o1')).toEqual({ type: 'result', id: 'o1', refused: 'late' })
+    expect(await find(ipad, m => m.id === 'o2')).toEqual({ type: 'result', id: 'o2', refused: 'late' })
+    expect(runner.volume).toBe(60)
+  })
+  it('logs a newline in the id as JSON, never a raw line break', async () => {
+    const lines = []
+    await relay.close()
+    await startRelay({ local: createLocal({ configDir: cfgDir, runner, log: quiet }), log: { ...quiet, log: s => lines.push(s) } })
+    const ipad = await pairedIpad()
+    ipad.send(local('a\nFAKE', 'sound.stopAll'))
+    await find(ipad, m => m.id === 'a\nFAKE')
+    const line = lines.find(l => l.includes('sound.stopAll'))
+    expect(line).not.toContain('\n')
+    expect(line).toContain('"a\\nFAKE"')
+  })
   it('logs the command name and id only', async () => {
     const lines = []
     await relay.close()

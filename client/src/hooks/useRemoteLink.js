@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { HOST_RELAY_URL, CLOSE_REPLACED } from '../lib/remoteProtocol.js'
+import { HOST_RELAY_URL, CLOSE_REPLACED, REMOTE_LINK_KEY, readRemoteLinkFlag } from '../lib/remoteProtocol.js'
 import { hostReply, makeSnapshotSender } from '../lib/remoteSnapshot.js'
 
 // /host's side of the iPad remote (spec §5-§8). OFF unless `enabled`: with it
@@ -8,6 +8,18 @@ import { hostReply, makeSnapshotSender } from '../lib/remoteSnapshot.js'
 //
 // Commands run through runCommandRef.current (LiveMode's runHostCommandRef,
 // reassigned every render), so they never act on a stale `show`.
+// The chip flag for a tab that did not write it (/display, pinned open all
+// night): the /host tab's localStorage write fires `storage` here.
+export function useRemoteLinkFlag() {
+  const [on, setOn] = useState(readRemoteLinkFlag)
+  useEffect(() => {
+    const onStorage = e => { if (e.key === REMOTE_LINK_KEY) setOn(readRemoteLinkFlag()) }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+  return on
+}
+
 export function useRemoteLink({ enabled, snapshot, runCommandRef, url = HOST_RELAY_URL }) {
   const [status, setStatus] = useState('off') // off | connecting | open | down | replaced
   const [remotes, setRemotes] = useState(0)

@@ -98,6 +98,25 @@ describe('useShow.jumpTo', () => {
     expect(c.data.matchingLocked).toBe(true)
   })
 
+  it('after a /host reload mid-show (furthest mark back at 0), jump back then forward keeps a locked, unrevealed question locked', async () => {
+    // Host.jsx auto-resumes Live Mode without goLiveFrom, so the ref starts
+    // at 0 while the row is already on slide 4: a locked matching question
+    // whose answers are not revealed yet.
+    act(() => root.unmount())
+    db.row = {
+      ...db.row,
+      slides: [...structuredClone(SLIDES).slice(0, 4), { id: 'e', order: 4, type: 'question', data: match({ matchingLocked: true }) }],
+      current_slide_index: 4, current_slide_id: 'e',
+    }
+    root = createRoot(host)
+    await act(async () => root.render(<Probe />))
+    await flush()
+    expect(api.show.showState.currentSlideIndex).toBe(4)
+    await act(async () => { await api.jumpTo(1) })
+    await act(async () => { await api.jumpTo(4) })
+    expect(lastShowWrite().slides.find(s => s.id === 'e').data.matchingLocked).toBe(true)
+  })
+
   it('goLiveFrom resets the furthest mark', async () => {
     for (let i = 0; i < 3; i++) await act(async () => { await api.nextSlide() })
     await act(async () => { await api.goLiveFrom(0) })

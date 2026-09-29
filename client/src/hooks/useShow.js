@@ -868,7 +868,11 @@ export function useShow() {
     const target = sortedSlides(show)[index]
     if (!target) return
     markLocalNav()
-    const furthest = Math.max(furthestIndexRef.current, show.showState.currentSlideIndex ?? 0)
+    // Store the floor first: after a /host reload the ref restarts at 0, and
+    // the slide we are on now was reached, so a later jump back here keeps
+    // its locks.
+    markFurthest(show.showState.currentSlideIndex ?? 0)
+    const furthest = furthestIndexRef.current
     const slides = target.type === 'team-picker' ? await bakeTeamPickerParts(show.slides, target) : show.slides
     const patch = computeJumpStep(
       { slides: show.slides, currentSlideIndex: show.showState.currentSlideIndex },
