@@ -177,6 +177,10 @@ export function partsToGridView(data) {
   return {
     columns,
     columnLabels: false,
+    // Tiles sit on the screen's vertical middle; two rows are capped so the
+    // bottom row still clears the caption (298 => bottom edge at y=852 of 1080).
+    screenCentered: true,
+    tileMax: twoRows ? 298 : undefined,
     intraGap: twoRows ? 24 : 0,
     interGap: twoRows ? 24 : 84,
     text: data.text,

@@ -363,6 +363,13 @@ describe('partsToGridView', () => {
     expect(view.columns.map(c => c.map(t => t.mediaUrl))).toEqual([['1.jpg', '4.jpg'], ['2.jpg', '5.jpg'], ['3.jpg', '6.jpg']])
   })
 
+  it('anchors on the screen middle and caps two-row tiles so the caption clears', () => {
+    const many = partsToGridView({ parts: Array.from({ length: 6 }, () => media('x.jpg')) })
+    expect(many.screenCentered).toBe(true)
+    expect(many.tileMax).toBe(298)
+    expect(partsToGridView({ parts: [media('1.jpg')] }).tileMax).toBeUndefined()
+  })
+
   it('odd counts leave the last slot empty, not a phantom tile', () => {
     const view = partsToGridView({ parts: ['1','2','3','4','5'].map(n => media(n + '.jpg')) })
     expect(view.columns.map(c => c.length)).toEqual([2, 2, 1])
