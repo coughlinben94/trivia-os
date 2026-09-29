@@ -3,7 +3,8 @@
 // returned step — so the keyboard, the on-screen buttons and the iPad remote
 // all share one decision (iPad remote spec §5).
 //
-// cmd: { cmd: 'next'|'prev'|'answer'|'scoreboard'|'scores-reveal'|'jump'|'unlock'|'rescore', via?, args?, expectSlideId?, sentAt? }
+// cmd: { cmd: 'next'|'prev'|'answer'|'scoreboard'|'scores-reveal'|'jump'|'unlock'|'rescore'
+//        |'scores.get'|'score.set'|'scores.hide', via?, args?, expectSlideId?, sentAt? }
 // jump/unlock/rescore are remote-only (phase 2a): the keyboard and buttons
 // never send them, so for those they stay unknown-command.
 // via: 'button' reproduces the on-screen Next/Prev buttons, which never had the
@@ -15,13 +16,16 @@
 // Returns { run: step, ... } or { refuse: reason }. run 'noop' = received,
 // nothing to do (an end-state command that already matches).
 import { COMMAND_TTL_MS } from './remoteProtocol.js'
+import { validScoreValue } from './scoreCellWrite.js'
 
 // Commands whose meaning depends on which slide the sender was looking at.
 const SLIDE_BOUND = new Set(['next', 'prev', 'answer', 'jump', 'unlock', 'rescore'])
 // Commands the remote busy gate refuses (spec §6: jump/unlock/rescore carry
 // "expectSlideId + busy gate").
-const BUSY_GATED = new Set(['next', 'prev', 'jump', 'unlock', 'rescore'])
-const REMOTE_ONLY = new Set(['jump', 'unlock', 'rescore'])
+// Phase 3 adds the Scores drawer's scores.get / score.set (not slide-bound: a
+// dispute fix is about a team, not the slide on screen).
+const BUSY_GATED = new Set(['next', 'prev', 'jump', 'unlock', 'rescore', 'scores.get', 'score.set'])
+const REMOTE_ONLY = new Set(['jump', 'unlock', 'rescore', 'scores.get', 'score.set', 'scores.hide'])
 
 // args.slideId wins over args.index: the iPad's list may be a snapshot old,
 // and an id still names the slide Ben tapped if slides moved since.
@@ -38,6 +42,8 @@ const setTo = (run, value, current) => (value === current ? { run: 'noop' } : { 
 export function planHostCommand({ cmd, via, args = {}, expectSlideId = null, sentAt = null }, ctx) {
   const button = via === 'button'
   const remote = via === 'remote'
+  // Only stops the laptop attaching scores to its snapshot: never refused.
+  if (remote && cmd === 'scores.hide') return { run: 'scores-hide' }
   if (remote) {
     if (typeof sentAt !== 'number' || ctx.now - sentAt > COMMAND_TTL_MS) return { refuse: 'late' }
     if (ctx.paused) return { refuse: 'paused' }
@@ -102,6 +108,22 @@ export function planHostCommand({ cmd, via, args = {}, expectSlideId = null, sen
       return ctx.fix?.canUnlock ? { run: 'unlock' } : { refuse: ctx.fix?.unlockRefusal ?? 'nothing-to-fix' }
     case 'rescore':
       return ctx.fix?.canRescore ? { run: 'rescore' } : { refuse: ctx.fix?.rescoreRefusal ?? 'nothing-to-fix' }
+    // Phase 3 (reduced): read the scoreboard, or fix one cell. Conservative:
+    // any scoring at all (uncapped, unlike Next's 12s cap), a countdown, a
+    // jump, or (score.set) anything already on the score chain refuses.
+    case 'scores.get':
+    case 'score.set': {
+      if (ctx.anyScoring) return { refuse: 'scoring' }
+      if (ctx.lockCountdownRunning) return { refuse: 'locking' }
+      if (ctx.jumpBusy) return { refuse: 'busy' }
+      if (cmd === 'scores.get') return { run: 'scores-get' }
+      if (ctx.scoreQueueDepth > 0) return { refuse: 'saving-scores' }
+      const { teamId, colKey, value, expectOld } = args
+      if (typeof teamId !== 'string' || !teamId || teamId.length > 64) return { refuse: 'no-team' }
+      if (!(ctx.scoreCols ?? []).some(c => c.key === colKey)) return { refuse: 'bad-column' }
+      if (!validScoreValue(value) || typeof expectOld !== 'number' || !Number.isFinite(expectOld)) return { refuse: 'bad-score' }
+      return { run: 'score-set', teamId, colKey, value, expectOld }
+    }
     default:
       return { refuse: 'unknown-command' }
   }

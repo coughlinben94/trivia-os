@@ -18,7 +18,7 @@ describe('buildSnapshot', () => {
       cue: 'Show question 1', gate: 'advance',
       upNext: [{ label: 'Q1', type: 'question' }, { label: 'Q2', type: 'question' }],
       toggles: { answerReveal: true, scoreboardVisible: false, scoresRevealed: false },
-      busy: false, paused: true, jumpBusy: false, fix: null,
+      busy: false, paused: true, jumpBusy: false, fix: null, scoreQueueDepth: 0, scores: null,
       slides: [
         { index: 0, id: 'a', label: 'Movies', type: 'round-intro', round: null, roundTitle: null },
         { index: 1, id: 'b', label: 'Q1', type: 'question', round: null, roundTitle: null },
@@ -161,5 +161,36 @@ describe('phase 2b', () => {
     expect(hostReply({ type: 'cmd', id: '8', cmd: 'jukebox.exit' }, { run: () => { throw new Error('x') }, now: 1 }))
       .toEqual({ type: 'result', id: '8', refused: 'error' })
     err.mockRestore()
+  })
+})
+
+describe('phase 3: scores in the snapshot and the late score.set result', () => {
+  const cue = { label: 'x', gate: 'advance' }
+  it('carries scoreQueueDepth, and scores only when given (drawer open)', () => {
+    const scores = { cols: [{ key: 'bonus', label: '?' }], teams: [], last: null }
+    const snap = buildSnapshot({ slides, index: 1, showState: {}, cue, scoreQueueDepth: 2, scores })
+    expect(snap.scoreQueueDepth).toBe(2)
+    expect(snap.scores).toBe(scores)
+    expect(buildSnapshot({ slides, index: 1, showState: {}, cue }).scores).toBe(null)
+  })
+  it('a command with a `later` promise replies received now, then posts its outcome under the same id', async () => {
+    const post = vi.fn()
+    let finish
+    const later = new Promise(r => { finish = r })
+    const msg = { type: 'cmd', id: '9', cmd: 'score.set', args: {}, sentAt: 1 }
+    expect(hostReply(msg, { run: () => ({ ok: true, later }), now: 1, post })).toEqual({ type: 'result', id: '9', received: true })
+    expect(post).not.toHaveBeenCalled()
+    finish({ done: { team: 'A', col: 'R1', from: 1, to: 2 } })
+    await new Promise(r => setTimeout(r, 0))
+    expect(post).toHaveBeenCalledWith({ type: 'result', id: '9', done: true, scoreSet: { team: 'A', col: 'R1', from: 1, to: 2 } })
+  })
+  it('a later refusal posts refused; a later throw posts error, never unhandled', async () => {
+    const post = vi.fn()
+    const msg = { type: 'cmd', id: '3', cmd: 'score.set', sentAt: 1 }
+    hostReply(msg, { run: () => ({ ok: true, later: Promise.resolve({ refuse: 'changed-underneath' }) }), now: 1, post })
+    hostReply({ ...msg, id: '4' }, { run: () => ({ ok: true, later: Promise.reject(new Error('x')) }), now: 1, post })
+    await new Promise(r => setTimeout(r, 0))
+    expect(post).toHaveBeenCalledWith({ type: 'result', id: '3', refused: 'changed-underneath' })
+    expect(post).toHaveBeenCalledWith({ type: 'result', id: '4', refused: 'error' })
   })
 })

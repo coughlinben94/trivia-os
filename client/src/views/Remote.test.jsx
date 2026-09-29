@@ -369,3 +369,178 @@ describe('/remote Stream Deck parity (jukebox mode, volume, Duck, sounds)', () =
     expect(text()).not.toContain('—')
   })
 })
+
+describe('/remote Scores drawer (dispute fixes)', () => {
+  const SCORES = {
+    cols: [{ key: 'r_a', label: 'R1' }, { key: 'r_b', label: 'R2' }, { key: 'bonus', label: '?' }],
+    teams: [
+      { id: 't1', name: 'Quizzly Bears', total: 12, place: 1, cells: [
+        { key: 'r_a', label: 'R1', value: 5, phone: 0 }, { key: 'r_b', label: 'R2', value: 7, phone: 3 }, { key: 'bonus', label: '?', value: 0, phone: 0 }] },
+      { id: 't2', name: 'Trivia Newton John', total: 9, place: 2, cells: [
+        { key: 'r_a', label: 'R1', value: 9, phone: 0 }, { key: 'r_b', label: 'R2', value: 0, phone: 0 }, { key: 'bonus', label: '?', value: 0, phone: 0 }] },
+    ],
+  }
+  let ws
+  const drawer = () => host.querySelector('[role="dialog"]')
+  const inDrawer = label => [...drawer().querySelectorAll('button')].find(b => b.textContent.includes(label))
+  const exact = label => [...drawer().querySelectorAll('button')].find(b => b.textContent.trim() === label)
+  const cmds = name => ws.sent.filter(m => m.type === 'cmd' && m.cmd === name)
+  const open = () => {
+    localStorage.setItem('trivia-remote:cfg', JSON.stringify({ url: 'wss://relay.test', secret: 'ABC' }))
+    mount()
+    ws = liveSocket()
+    click(button('Scores'))
+    act(() => ws.msg({ ...STATE, scores: SCORES }))
+  }
+  const toEditor = () => {
+    open()
+    click(drawer().querySelector('[data-team="t1"]'))
+    click(drawer().querySelector('[data-col="r_b"]'))
+  }
+
+  it('closed by default: nothing asked for; opening asks the laptop once', () => {
+    localStorage.setItem('trivia-remote:cfg', JSON.stringify({ url: 'wss://relay.test', secret: 'ABC' }))
+    mount()
+    ws = liveSocket()
+    expect(cmds('scores.get')).toHaveLength(0)
+    expect(button('Scores')).toBeTruthy()
+    click(button('Scores'))
+    expect(cmds('scores.get')).toHaveLength(1)
+    expect(text()).toContain('Getting scores from the laptop')
+  })
+
+  it('level 1: teams by place with total and place', () => {
+    open()
+    const rows = [...drawer().querySelectorAll('[data-team]')]
+    expect(rows.map(r => r.dataset.team)).toEqual(['t1', 't2'])
+    expect(rows[0].textContent).toContain('Quizzly Bears')
+    expect(rows[0].textContent).toContain('12')
+    expect(rows[0].textContent).toContain('1st')
+  })
+
+  it('level 2: a team\'s rounds, named in plain words, with the value', () => {
+    open()
+    click(drawer().querySelector('[data-team="t1"]'))
+    const cells = [...drawer().querySelectorAll('[data-col]')]
+    expect(cells.map(c => c.dataset.col)).toEqual(['r_a', 'r_b', 'bonus'])
+    expect(cells[1].textContent).toContain('Round 2')
+    expect(cells[1].textContent).toContain('7')
+    expect(cells[2].textContent).toContain('Bonus')
+  })
+
+  it('level 3: the editor names the cell; Save is off until the number changes', () => {
+    toEditor()
+    expect(drawer().textContent).toContain('Quizzly Bears, Round 2: 7')
+    expect(drawer().textContent).toContain('3 of these came from phones')
+    expect(exact('Save').disabled).toBe(true)
+    click(exact('+1'))
+    click(exact('+1'))
+    expect(drawer().querySelector('[data-draft]').textContent).toBe('9')
+    expect(exact('Save').disabled).toBe(false)
+    click(exact('−1'))
+    click(exact('−1'))
+    expect(exact('Save').disabled).toBe(true)
+  })
+
+  it('the number pad types a fresh number; +5/-5 step; backspace and sign work', () => {
+    toEditor()
+    click(exact('1'))
+    click(exact('2'))
+    expect(drawer().querySelector('[data-draft]').textContent).toBe('12')
+    click(exact('+5'))
+    expect(drawer().querySelector('[data-draft]').textContent).toBe('17')
+    click(drawer().querySelector('[aria-label="Delete"]'))
+    expect(drawer().querySelector('[data-draft]').textContent).toBe('1')
+    click(drawer().querySelector('[aria-label="Minus sign"]'))
+    expect(drawer().querySelector('[data-draft]').textContent).toBe('−1')
+  })
+
+  it('Save asks first, naming the change; only the second tap sends, with the old value', () => {
+    toEditor()
+    click(exact('+1')); click(exact('+1'))
+    click(exact('Save'))
+    expect(drawer().textContent).toContain('Change Quizzly Bears Round 2 from 7 to 9?')
+    expect(cmds('score.set')).toHaveLength(0)
+    click(inDrawer('Yes, change it'))
+    expect(cmds('score.set')).toHaveLength(1)
+    expect(cmds('score.set')[0].args).toEqual({ teamId: 't1', colKey: 'r_b', value: 9, expectOld: 7 })
+  })
+
+  it('after saving, shows the number the laptop read back, not the local guess', () => {
+    toEditor()
+    click(exact('+1')); click(exact('+1'))
+    click(exact('Save'))
+    click(inDrawer('Yes, change it'))
+    const id = cmds('score.set')[0].id
+    expect(drawer().textContent).toContain('Saving')
+    act(() => ws.msg({ type: 'result', id, received: true }))
+    act(() => ws.msg({ type: 'result', id, done: true, scoreSet: { team: 'Quizzly Bears', col: 'R2', from: 7, to: 10, teamId: 't1', colKey: 'r_b' } }))
+    expect(drawer().textContent).toContain('Saved. Quizzly Bears Round 2 is now 10')
+  })
+
+  it('a refusal shows in plain English inside the drawer, no dash', () => {
+    toEditor()
+    click(exact('+1'))
+    click(exact('Save'))
+    click(inDrawer('Yes, change it'))
+    const id = cmds('score.set')[0].id
+    act(() => ws.msg({ type: 'result', id, refused: 'changed-underneath' }))
+    expect(drawer().textContent).toContain('That score just changed on the laptop')
+    expect(drawer().textContent).not.toMatch(/[—–]/)
+  })
+
+  it('Back walks up confirm, editor, team, list; Close tells the laptop to stop sending', () => {
+    toEditor()
+    click(exact('+1'))
+    click(exact('Save'))
+    click(exact('Back'))
+    expect(drawer().textContent).toContain('Quizzly Bears, Round 2: 7')
+    click(exact('Back'))
+    expect(drawer().querySelector('[data-col="r_b"]')).toBeTruthy()
+    click(exact('Back'))
+    expect(drawer().querySelector('[data-team="t1"]')).toBeTruthy()
+    click(exact('Close'))
+    expect(cmds('scores.hide')).toHaveLength(1)
+  })
+
+  it('Scores is off while paused or busy, like Jump', () => {
+    localStorage.setItem('trivia-remote:cfg', JSON.stringify({ url: 'wss://relay.test', secret: 'ABC' }))
+    mount()
+    ws = liveSocket()
+    act(() => ws.msg({ ...STATE, paused: true }))
+    expect(button('Scores').disabled).toBe(true)
+    act(() => ws.msg({ ...STATE, busy: true }))
+    expect(button('Scores').disabled).toBe(true)
+  })
+
+  it('no em dash anywhere in the Scores drawer', () => {
+    toEditor()
+    click(exact('+1'))
+    click(exact('Save'))
+    expect(text()).not.toContain('—')
+  })
+})
+
+describe('/remote Scores drawer after a refusal', () => {
+  it('Back from a changed-underneath refusal reopens the editor on the laptop\'s new number', () => {
+    const SC = { cols: [{ key: 'r_a', label: 'R1' }], teams: [{ id: 't1', name: 'Bears', total: 5, place: 1, cells: [{ key: 'r_a', label: 'R1', value: 5, phone: 0 }] }] }
+    localStorage.setItem('trivia-remote:cfg', JSON.stringify({ url: 'wss://relay.test', secret: 'ABC' }))
+    mount()
+    const ws = liveSocket()
+    click(button('Scores'))
+    act(() => ws.msg({ ...STATE, scores: SC }))
+    const dlg = () => host.querySelector('[role="dialog"]')
+    const exact = l => [...dlg().querySelectorAll('button')].find(b => b.textContent.trim() === l)
+    click(dlg().querySelector('[data-team="t1"]'))
+    click(dlg().querySelector('[data-col="r_a"]'))
+    click(exact('+1'))
+    click(exact('Save'))
+    click(exact('Yes, change it'))
+    const id = ws.sent.filter(m => m.cmd === 'score.set')[0].id
+    act(() => ws.msg({ type: 'result', id, refused: 'changed-underneath' }))
+    act(() => ws.msg({ ...STATE, scores: { ...SC, teams: [{ ...SC.teams[0], total: 8, cells: [{ key: 'r_a', label: 'R1', value: 8, phone: 0 }] }] } }))
+    click(exact('Back'))
+    expect(dlg().textContent).toContain('Bears, Round 1: 8')
+    expect(dlg().querySelector('[data-draft]').textContent).toBe('8')
+  })
+})

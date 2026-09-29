@@ -266,3 +266,74 @@ describe('Stream Deck parity commands never run on /host', () => {
     }
   })
 })
+
+// Phase 3 (reduced): the iPad's Scores drawer. Same late -> paused -> busy ->
+// modal-open front as every remote command, then the score-only checks.
+// Not slide-bound: a slide change must not block a dispute fix.
+describe('scores.get / score.set / scores.hide (remote only)', () => {
+  const NOW = 10_000
+  const COLS = [{ key: 'r_a', label: 'R1' }, { key: 'bonus', label: '?' }]
+  const live = {
+    ...idle, now: NOW, paused: false, remoteBusy: false, slideId: 's1', gate: 'advance',
+    anyScoring: false, jumpBusy: false, scoreQueueDepth: 0, scoreCols: COLS,
+  }
+  const good = { teamId: 't1', colKey: 'r_a', value: 9, expectOld: 7 }
+  const r = (cmd, args = {}, ctx = {}, env = {}) =>
+    planHostCommand({ cmd, via: 'remote', args, expectSlideId: 's1', sentAt: NOW - 10, ...env }, { ...live, ...ctx })
+
+  it('score.set: the exact refusal order', () => {
+    const all = { paused: true, remoteBusy: true, modalOpen: true, anyScoring: true, lockCountdownRunning: true, jumpBusy: true, scoreQueueDepth: 1 }
+    const bad = { ...good, value: 1.5 }
+    const steps = [
+      [{ ...all }, { sentAt: 0 }, 'late'],
+      [{ ...all }, {}, 'paused'],
+      [{ ...all, paused: false }, {}, 'busy'],
+      [{ ...all, paused: false, remoteBusy: false }, {}, 'modal-open'],
+      [{ anyScoring: true, lockCountdownRunning: true, jumpBusy: true, scoreQueueDepth: 1 }, {}, 'scoring'],
+      [{ lockCountdownRunning: true, jumpBusy: true, scoreQueueDepth: 1 }, {}, 'locking'],
+      [{ jumpBusy: true, scoreQueueDepth: 1 }, {}, 'busy'],
+      [{ scoreQueueDepth: 1 }, {}, 'saving-scores'],
+    ]
+    for (const [ctx, env, reason] of steps) expect(r('score.set', bad, ctx, env)).toEqual({ refuse: reason })
+    expect(r('score.set', { ...good, colKey: 'r_gone', value: 1.5 })).toEqual({ refuse: 'bad-column' })
+    expect(r('score.set', bad)).toEqual({ refuse: 'bad-score' })
+    expect(r('score.set', good)).toEqual({ run: 'score-set', ...good })
+  })
+  it('score.set is not refused for a slide change (the drawer is not about this slide)', () => {
+    expect(r('score.set', good, {}, { expectSlideId: 'old' })).toEqual({ run: 'score-set', ...good })
+  })
+  it('score.set value table: only a whole number from -999 to 999', () => {
+    for (const value of [NaN, Infinity, -Infinity, 1.5, '7', null, undefined, 1000, -1000, 1e12, true]) {
+      expect(r('score.set', { ...good, value })).toEqual({ refuse: 'bad-score' })
+    }
+    for (const value of [-999, -1, 0, 999]) expect(r('score.set', { ...good, value }).run).toBe('score-set')
+  })
+  it('score.set needs the old value the iPad showed, and a team id', () => {
+    for (const expectOld of [undefined, null, '7', NaN, Infinity]) {
+      expect(r('score.set', { ...good, expectOld })).toEqual({ refuse: 'bad-score' })
+    }
+    expect(r('score.set', { ...good, expectOld: 2.5 }).run).toBe('score-set') // half points from phones are real
+    for (const teamId of [undefined, 7, '', 'x'.repeat(65)]) {
+      expect(r('score.set', { ...good, teamId })).toEqual({ refuse: 'no-team' })
+    }
+  })
+  it('scores.get: same front checks, then scoring / countdown / jump; never the queue', () => {
+    expect(r('scores.get', {}, {}, { sentAt: 0 })).toEqual({ refuse: 'late' })
+    expect(r('scores.get', {}, { paused: true })).toEqual({ refuse: 'paused' })
+    expect(r('scores.get', {}, { remoteBusy: true })).toEqual({ refuse: 'busy' })
+    expect(r('scores.get', {}, { modalOpen: true })).toEqual({ refuse: 'modal-open' })
+    expect(r('scores.get', {}, { anyScoring: true })).toEqual({ refuse: 'scoring' })
+    expect(r('scores.get', {}, { lockCountdownRunning: true })).toEqual({ refuse: 'locking' })
+    expect(r('scores.get', {}, { jumpBusy: true })).toEqual({ refuse: 'busy' })
+    expect(r('scores.get', {}, { scoreQueueDepth: 1 })).toEqual({ run: 'scores-get' })
+  })
+  it('scores.hide always runs (it only stops sending scores), even late or paused', () => {
+    expect(r('scores.hide', {}, { paused: true, remoteBusy: true, modalOpen: true }, { sentAt: 0 })).toEqual({ run: 'scores-hide' })
+  })
+  it('keyboard and buttons never send them', () => {
+    for (const cmd of ['scores.get', 'score.set', 'scores.hide']) {
+      expect(plan({ cmd, args: good })).toEqual({ refuse: 'unknown-command' })
+      expect(plan({ cmd, via: 'button', args: good })).toEqual({ refuse: 'unknown-command' })
+    }
+  })
+})

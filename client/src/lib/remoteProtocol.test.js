@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   parseRemoteMessage, refusalText, remoteStatus, CLOSE_BAD_SECRET, GREY_GATES,
-  DISPLAY_COMMANDS, LOCAL_COMMANDS, DISPLAY_RELAY_URL, readRemoteLinkFlag, jukeboxView, REFUSAL_TEXT,
+  DISPLAY_COMMANDS, LOCAL_COMMANDS, DISPLAY_RELAY_URL, readRemoteLinkFlag, jukeboxView, REFUSAL_TEXT, scoreChangeText,
 } from './remoteProtocol.js'
 
 describe('parseRemoteMessage', () => {
@@ -93,5 +93,27 @@ describe('phase 2b: Stream Deck parity', () => {
     expect(jukeboxView({ snap: at('grading-break'), jukebox: { linked: true } })).toEqual({ phase: 'opening' })
     expect(jukeboxView({ snap: at('grading-break'), jukebox: { linked: true, open: true, playing: true, handoffPending: false } }))
       .toEqual({ phase: 'open', playing: true, handoffPending: false })
+  })
+})
+
+describe('phase 3: Scores drawer', () => {
+  const REASONS = ['changed-underneath', 'no-team', 'bad-column', 'bad-score', 'scores-unreadable', 'score-not-saved', 'save-unconfirmed', 'saving-scores']
+  it('plain English for every score refusal, no fallback, no dash of any kind', () => {
+    for (const r of REASONS) {
+      expect(REFUSAL_TEXT[r], r).toBeTruthy()
+      expect(REFUSAL_TEXT[r]).not.toMatch(/[—–]/)
+    }
+  })
+  it('score.set args survive parsing as sent; the laptop validates them', () => {
+    const args = { teamId: 't1', colKey: 'r_a', value: 9, expectOld: 7 }
+    expect(parseRemoteMessage(JSON.stringify({ type: 'cmd', id: '1', cmd: 'score.set', args, sentAt: 5 })))
+      .toEqual({ type: 'cmd', id: '1', cmd: 'score.set', args, expectSlideId: null, sentAt: 5 })
+  })
+  it('scoreChangeText: the one line the laptop notice and the relay log both print', () => {
+    expect(scoreChangeText({ team: 'Quizzly Bears', col: 'R2', from: 7, to: 9 })).toBe('iPad set Quizzly Bears R2: 7 to 9')
+  })
+  it('scoreChangeText caps a long team name and never throws on junk', () => {
+    expect(scoreChangeText({ team: 'x'.repeat(200), col: 'R1', from: 1, to: 2 }).length).toBeLessThan(120)
+    expect(scoreChangeText(null)).toBe('iPad set ? ?: ? to ?')
   })
 })

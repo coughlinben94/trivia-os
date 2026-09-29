@@ -23,13 +23,15 @@ const makeSlides = () => [
 ]
 
 let runner
+let relayLines = []
 async function startRelay(p = { hostPort: 0, remotePort: 0 }) {
   runner = fakeRunner({ volume: 50 }) // never the real volume or speakers
-  relay = createRelay({ ...p, secretFile, helloMs: 500, beatMs: 50, log: quiet, local: createLocal({ configDir: dir, runner, log: quiet }) })
+  relayLines = []
+  relay = createRelay({ ...p, secretFile, helloMs: 500, beatMs: 50, log: { ...quiet, log: s => relayLines.push(s) }, local: createLocal({ configDir: dir, runner, log: quiet }) })
   ports = await relay.start()
 }
-function stub(slides = makeSlides()) {
-  const s = createStubHost({ url: `ws://127.0.0.1:${ports.hostPort}`, origin: PROD_ORIGIN, slides, retryMs: 30 })
+function stub(slides = makeSlides(), extra = {}) {
+  const s = createStubHost({ url: `ws://127.0.0.1:${ports.hostPort}`, origin: PROD_ORIGIN, slides, retryMs: 30, ...extra })
   stubs.push(s)
   return s
 }
@@ -61,14 +63,14 @@ async function until(fn, ms = 2000) {
 // shown slide id + gate and a laptop-time sentAt.
 async function ipad() {
   const ws = new WebSocket(`ws://127.0.0.1:${ports.remotePort}`, { origin: PROD_ORIGIN })
-  const pad = { ws, state: null, results: {}, host: null, ids: 0, jukebox: null, local: null }
+  const pad = { ws, state: null, results: {}, all: {}, host: null, ids: 0, jukebox: null, local: null }
   ws.on('message', d => {
     const m = JSON.parse(String(d))
     if (m.type === 'state') pad.state = m
     if (m.type === 'jukebox') pad.jukebox = m
     if (m.type === 'local-state') pad.local = m
     if (m.type === 'host') pad.host = m.connected
-    if (m.type === 'result') pad.results[m.id] = m
+    if (m.type === 'result') { pad.results[m.id] ??= m; (pad.all[m.id] ??= []).push(m) }
   })
   await new Promise((res, rej) => { ws.once('open', res); ws.once('error', rej) })
   ws.send(JSON.stringify({ type: 'hello', secret: SECRET }))
@@ -293,5 +295,109 @@ describe('stub display + relay + iPad (Stream Deck parity)', () => {
     await until(() => p.state.paused)
     expect(await p.tap('vol.up')).toMatchObject({ refused: 'paused' })
     expect(runner.volume).toBe(60)
+  })
+})
+
+// Phase 3 (reduced): the Scores drawer over the real relay. The stub host's
+// scoreboard is in memory (the real score chain over a fake table): no Supabase.
+describe('Scores drawer: scores.get / score.set / scores.hide', () => {
+  const ROUNDS = [{ id: 'ra', number: 1 }, { id: 'rb', number: 2 }]
+  const TEAMS = () => [
+    { id: 't1', show_id: 'stub-show', name: 'Quizzly Bears', sort_order: 0, scores: { r_ra: 5, r_rb: { written: 4, phone: { w: 3 } } } },
+    { id: 't2', show_id: 'stub-show', name: 'Trivia Newton John', sort_order: 1, scores: { r_ra: 9 } },
+  ]
+  // The first result is "received" (or a refusal); a score command's outcome follows under the same id.
+  const outcome = (p, id) => until(() => { const ms = p.all[id] ?? []; return ms[0]?.refused ? ms[0] : ms[1] })
+  const setCell = (p, args) => p.tap('score.set', args)
+
+  it('scores.get attaches the fresh scoreboard to the snapshot, sorted by place', async () => {
+    stub(makeSlides(), { rounds: ROUNDS, teams: TEAMS() })
+    const p = await ipad()
+    expect(p.state.scores).toBe(null)
+    expect(await p.tap('scores.get')).toMatchObject({ received: true })
+    await until(() => p.state.scores)
+    expect(p.state.scores.cols.map(c => c.label)).toEqual(['R1', 'R2', '?'])
+    expect(p.state.scores.teams.map(t => [t.name, t.total, t.place])).toEqual([['Quizzly Bears', 12, 1], ['Trivia Newton John', 9, 2]])
+    expect(p.state.scores.teams[0].cells[1]).toEqual({ key: 'r_rb', label: 'R2', value: 7, phone: 3 })
+  })
+
+  it('score.set: received, then done with the value read back; snapshot refreshed; phone bucket kept; relay logs it', async () => {
+    const s = stub(makeSlides(), { rounds: ROUNDS, teams: TEAMS() })
+    const p = await ipad()
+    await p.tap('scores.get')
+    await until(() => p.state.scores)
+    const r = await setCell(p, { teamId: 't1', colKey: 'r_rb', value: 10, expectOld: 7 })
+    expect(r).toMatchObject({ received: true })
+    const done = await outcome(p, r.id)
+    expect(done).toEqual({ type: 'result', id: r.id, done: true, scoreSet: { team: 'Quizzly Bears', col: 'R2', from: 7, to: 10, teamId: 't1', colKey: 'r_rb' } })
+    await until(() => p.state.scores.teams[0].total === 15)
+    expect(s.db.rows[0].scores.r_rb).toEqual({ written: 7, phone: { w: 3 } })
+    expect(s.db.rows[1]).toEqual(TEAMS()[1])
+    expect(relayLines.some(l => l.includes('iPad set Quizzly Bears R2: 7 to 10'))).toBe(true)
+    expect(s.notices).toEqual(['iPad set Quizzly Bears R2: 7 to 10'])
+  })
+
+  it('a stale old value is refused changed-underneath and never written', async () => {
+    const s = stub(makeSlides(), { rounds: ROUNDS, teams: TEAMS() })
+    const p = await ipad()
+    await p.tap('scores.get')
+    const r = await setCell(p, { teamId: 't1', colKey: 'r_rb', value: 10, expectOld: 6 })
+    expect(await outcome(p, r.id)).toMatchObject({ refused: 'changed-underneath' })
+    expect(s.db.rows).toEqual(TEAMS())
+  })
+
+  it('a second score.set while one is on the chain is refused, not stacked', async () => {
+    const s = stub(makeSlides(), { rounds: ROUNDS, teams: TEAMS() })
+    const p = await ipad()
+    await p.tap('scores.get')
+    await until(() => p.state.scores)
+    let open
+    s.db.gate = new Promise(res => { open = res })
+    const a = await setCell(p, { teamId: 't1', colKey: 'r_ra', value: 6, expectOld: 5 })
+    expect(a).toMatchObject({ received: true })
+    const b = await setCell(p, { teamId: 't2', colKey: 'r_ra', value: 1, expectOld: 9 })
+    expect(b).toMatchObject({ refused: 'saving-scores' })
+    s.db.gate = null
+    open()
+    expect(await outcome(p, a.id)).toMatchObject({ done: true })
+    expect(s.db.rows[1].scores.r_ra).toBe(9)
+  })
+
+  it('bad values and unknown columns are refused by the laptop before any read', async () => {
+    const s = stub(makeSlides(), { rounds: ROUNDS, teams: TEAMS() })
+    const p = await ipad()
+    for (const value of [1.5, '7', null, 5000]) {
+      expect(await setCell(p, { teamId: 't1', colKey: 'r_ra', value, expectOld: 5 })).toMatchObject({ refused: 'bad-score' })
+    }
+    expect(await setCell(p, { teamId: 't1', colKey: 'r_zz', value: 1, expectOld: 5 })).toMatchObject({ refused: 'bad-column' })
+    expect(s.db.log).toEqual([])
+  })
+
+  it('an unknown team is refused after the fresh read', async () => {
+    stub(makeSlides(), { rounds: ROUNDS, teams: TEAMS() })
+    const p = await ipad()
+    const r = await setCell(p, { teamId: 'nope', colKey: 'r_ra', value: 1, expectOld: 0 })
+    expect(await outcome(p, r.id)).toMatchObject({ refused: 'no-team' })
+  })
+
+  it('paused or the laptop scoreboard open: refused, nothing read', async () => {
+    const s = stub(makeSlides(), { rounds: ROUNDS, teams: TEAMS() })
+    const p = await ipad()
+    s.setModalOpen(true)
+    expect(await p.tap('scores.get')).toMatchObject({ refused: 'modal-open' })
+    s.setModalOpen(false)
+    s.setPaused(true)
+    await until(() => p.state.paused)
+    expect(await setCell(p, { teamId: 't1', colKey: 'r_ra', value: 6, expectOld: 5 })).toMatchObject({ refused: 'paused' })
+    expect(s.db.log).toEqual([])
+  })
+
+  it('scores.hide stops attaching the scoreboard', async () => {
+    stub(makeSlides(), { rounds: ROUNDS, teams: TEAMS() })
+    const p = await ipad()
+    await p.tap('scores.get')
+    await until(() => p.state.scores)
+    await p.tap('scores.hide')
+    await until(() => p.state.scores === null)
   })
 })

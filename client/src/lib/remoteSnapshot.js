@@ -44,7 +44,9 @@ function jumpList(slides, rounds = []) {
   })
 }
 
-export function buildSnapshot({ slides, index, showState, cue, busy = false, paused = false, rounds = [], jumpBusy = false, fix = null }) {
+// scores: the Scores drawer's view (scoreCellWrite scoresView + `last`),
+// attached only while the iPad has the drawer open; null otherwise.
+export function buildSnapshot({ slides, index, showState, cue, busy = false, paused = false, rounds = [], jumpBusy = false, fix = null, scoreQueueDepth = 0, scores = null }) {
   const slide = slides[index] ?? null
   return {
     type: 'state',
@@ -57,12 +59,15 @@ export function buildSnapshot({ slides, index, showState, cue, busy = false, pau
       scoreboardVisible: !!showState.scoreboardVisible,
       scoresRevealed: !!showState.scoresRevealed,
     },
-    busy, paused, jumpBusy, fix,
+    busy, paused, jumpBusy, fix, scoreQueueDepth, scores,
     slides: jumpList(slides, rounds),
   }
 }
 
-export function hostReply(msg, { run, now, visibility }) {
+// A command whose work finishes later (score.set on the score chain) returns
+// { ok, later: Promise<{refuse} | {done}> }: the reply now is only "received",
+// and `post` sends the outcome under the same id once it settles.
+export function hostReply(msg, { run, now, visibility, post }) {
   if (msg?.type === 'relay-beat') return { type: 'beat', laptopNow: now, visibility }
   if (msg?.type !== 'cmd') return null
   let res
@@ -71,6 +76,12 @@ export function hostReply(msg, { run, now, visibility }) {
   } catch (e) {
     console.error('[remote] command threw', e)
     res = { refuse: 'error' }
+  }
+  if (res?.later) {
+    Promise.resolve(res.later)
+      .then(r => (r?.refuse ? { type: 'result', id: msg.id, refused: r.refuse } : { type: 'result', id: msg.id, done: true, scoreSet: r?.done ?? null }))
+      .catch(e => { console.error('[remote] command failed', e); return { type: 'result', id: msg.id, refused: 'error' } })
+      .then(out => post?.(out))
   }
   return res?.refuse ? { type: 'result', id: msg.id, refused: res.refuse } : { type: 'result', id: msg.id, received: true }
 }

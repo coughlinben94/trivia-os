@@ -65,6 +65,19 @@ export const REFUSAL_TEXT = {
   'sound-missing': 'That sound file is gone from the laptop',
   'local-failed': 'The laptop would not change that — use the Stream Deck',
   'local-unavailable': 'Volume and sounds are off on this relay — use the Stream Deck',
+  // Phase 3: the Scores drawer. No dashes at all in these.
+  'changed-underneath': 'That score just changed on the laptop. Check the new number, then try again',
+  'no-team': 'That team is not on the scoreboard any more. Open Scores again',
+  'bad-column': 'That round is not on the scoreboard any more. Open Scores again',
+  'bad-score': 'Scores must be a whole number from -999 to 999',
+  'scores-unreadable': 'The laptop could not read the scores. Check its internet, then try again',
+  'score-not-saved': 'That score did not save. Check the laptop internet, then try again',
+  'save-unconfirmed': 'The laptop could not confirm that save. Open Scores again and check the number',
+}
+// One line for a score fix, shown on the laptop and written to the relay log.
+const clip = (v, n) => String(v ?? '?').slice(0, n)
+export function scoreChangeText(c) {
+  return `iPad set ${clip(c?.team, 60)} ${clip(c?.col, 8)}: ${clip(c?.from, 8)} to ${clip(c?.to, 8)}`
 }
 export const refusalText = reason => REFUSAL_TEXT[reason] ?? 'The laptop said no — check the laptop'
 

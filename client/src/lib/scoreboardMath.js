@@ -169,6 +169,21 @@ export function computeTotal(scores, cols) {
   }, 0)
 }
 
+// ScoreboardModal's per-team total and tie-aware place ('—' for a team still
+// on zero). Moved here unchanged so the iPad's Scores drawer (scoreCellWrite)
+// ranks teams exactly as the laptop's modal does.
+export function addStats(teams, cols) {
+  const withTotals = teams.map(t => ({ ...t, _total: computeTotal(t.scores, cols) }))
+  const byTotal = [...withTotals].sort((a, b) => b._total - a._total)
+  const placeMap = {}
+  let place = 1
+  byTotal.forEach((t, i) => {
+    if (i > 0 && t._total < byTotal[i - 1]._total) place = i + 1
+    placeMap[t.id] = t._total === 0 ? '—' : place
+  })
+  return withTotals.map(t => ({ ...t, _place: placeMap[t.id] }))
+}
+
 // ─── Shared TV layout: how many columns a roster needs ──────────────────────
 // Past a team count where one column shrinks names below readable on a bar TV
 // (2026-08-19, Ben: "couldn't even read [the names]... probably needs to be

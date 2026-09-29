@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion, MotionConfig, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { EASE_OUT, EASE_PANEL, EASE_EXIT } from '../lib/easings.js'
 import { REMOTE_LOOK, lookCssVars, lookFontsHref, LOOK_DERIVED } from '../lib/remoteLook.js'
+import { SCORE_MIN, SCORE_MAX } from '../lib/scoreCellWrite.js'
 import { DEFAULT_REMOTE_URL, CLOSE_BAD_SECRET, BEAT_MS, STALE_BEAT_MS, GREY_GATES, refusalText, remoteStatus, jukeboxView } from '../lib/remoteProtocol.js'
 
 // /remote — the iPad host remote (spec docs/superpowers/specs/2026-09-28-
@@ -102,7 +103,10 @@ export default function Remote() {
   const [beat, setBeat] = useState(null) // { at, visibility } of the last laptop beat
   const [notice, setNotice] = useState(null)
   const [now, setNow] = useState(() => Date.now())
-  const [drawer, setDrawer] = useState(null) // 'jump' | 'fix' | 'sounds' | null
+  const [drawer, setDrawer] = useState(null) // 'jump' | 'fix' | 'sounds' | 'scores' | null
+  // The one score.set in flight from the Scores drawer: { id, state: 'saving'|'saved'|'refused', scoreSet?, reason? }
+  const [scoreSend, setScoreSend] = useState(null)
+  const scoreSendIdRef = useRef(null)
   // Phase 2b, both straight from the relay (not the laptop's Live Mode):
   const [local, setLocal] = useState(null)     // {type:'local-state', available, volume, ducked, sounds}
   const [jukebox, setJukebox] = useState(null) // {type:'jukebox', linked, waiting, open, playing, handoffPending}
@@ -152,7 +156,13 @@ export default function Remote() {
         else if (m.type === 'state') setSnap(m)
         else if (m.type === 'local-state') setLocal(m)
         else if (m.type === 'jukebox') setJukebox(m)
-        else if (m.type === 'result' && m.refused) setNotice(refusalText(m.refused))
+        else if (m.type === 'result') {
+          if (m.refused) setNotice(refusalText(m.refused))
+          if (m.id === scoreSendIdRef.current) {
+            if (m.done) setScoreSend({ id: m.id, state: 'saved', scoreSet: m.scoreSet })
+            else if (m.refused) setScoreSend({ id: m.id, state: 'refused', reason: m.refused })
+          }
+        }
       }
       ws.onclose = e => {
         clearTimeout(watchdog)
@@ -211,13 +221,32 @@ export default function Remote() {
 
   function send(cmd, args = {}, ok = live) {
     const ws = wsRef.current
-    if (!ws || ws.readyState !== WebSocket.OPEN || !ok) return
+    if (!ws || ws.readyState !== WebSocket.OPEN || !ok) return null
     setNotice(null)
+    const id = String(++idRef.current)
     ws.send(JSON.stringify({
-      type: 'cmd', id: String(++idRef.current), cmd, args,
+      type: 'cmd', id, cmd, args,
       expectSlideId: snap?.slide?.id ?? null,
       sentAt: Date.now() + offsetRef.current, // laptop time, for its 1500ms cut
     }))
+    return id
+  }
+
+  // Scores drawer: the laptop only reads and sends the scoreboard while it is open.
+  function openScores() {
+    setScoreSend(null)
+    scoreSendIdRef.current = null
+    setDrawer('scores')
+    send('scores.get')
+  }
+  function closeScores() {
+    setDrawer(null)
+    send('scores.hide', {}, true)
+  }
+  function sendScore(args) {
+    const id = send('score.set', args)
+    scoreSendIdRef.current = id
+    setScoreSend(id ? { id, state: 'saving' } : null)
   }
 
   function saveSettings(e) {
@@ -382,8 +411,8 @@ export default function Remote() {
           )}
         </div>
 
-        {/* One row of six from 1280pt wide (a 12.9in iPad); narrower, "Scoreboard" at 130pt tall no longer fits a sixth of the row, so two rows of three */}
-        <div className="portrait:col-span-2 landscape:col-span-4 grid grid-cols-3 min-[1280px]:grid-cols-6 gap-3">
+        {/* Two rows: the four quick presses, then the three drawers */}
+        <div className="portrait:col-span-2 landscape:col-span-4 grid grid-cols-12 gap-3 [&>*:nth-child(-n+4)]:col-span-3 [&>*:nth-child(n+5)]:col-span-4">
         <BigButton onClick={() => send('prev')} disabled={!live || snap?.paused || snap?.busy} icon={IconBack}>Prev</BigButton>
         <BigButton
           onClick={() => send('answer', { value: revealOwed ? true : !toggles.answerReveal })}
@@ -409,6 +438,10 @@ export default function Remote() {
           hint={fixBlock ?? 'Unlock or rescore'}>
           Fix
         </DrawerButton>
+        <DrawerButton onClick={openScores} disabled={!!jumpBlock} icon={IconTable}
+          hint={jumpBlock ?? 'Fix one team\u2019s score'}>
+          Scores
+        </DrawerButton>
         </div>
       </main>
 
@@ -426,6 +459,17 @@ export default function Remote() {
           blocked={jumpBlock}
           onUnlock={() => { send('unlock'); setDrawer(null) }}
           onRescore={() => { send('rescore'); setDrawer(null) }}
+        />
+      </Sheet>
+
+      <Sheet open={drawer === 'scores'} onClose={closeScores} title="Scores" subtitle="Fix one team's score" tall wide>
+        <ScoresPanel
+          scores={snap?.scores ?? null}
+          blocked={jumpBlock}
+          notice={notice}
+          send={scoreSend}
+          onSet={sendScore}
+          onClearSend={() => { setScoreSend(null); scoreSendIdRef.current = null; setNotice(null) }}
         />
       </Sheet>
 
@@ -575,7 +619,7 @@ function DrawerButton({ onClick, disabled, icon: Icon, hint, children }) {
 
 // Bottom sheet. Enter 280ms on the iOS drawer curve, exit faster (200ms);
 // transform and opacity only. Reduced motion: fade only, no slide.
-function Sheet({ open, onClose, title, subtitle, tall = false, children }) {
+function Sheet({ open, onClose, title, subtitle, tall = false, wide = false, children }) {
   const reduce = useReducedMotion()
   const hidden = reduce ? { opacity: 0 } : { opacity: 1, transform: 'translateY(100%)' }
   const shown = reduce ? { opacity: 1 } : { opacity: 1, transform: 'translateY(0%)' }
@@ -598,7 +642,7 @@ function Sheet({ open, onClose, title, subtitle, tall = false, children }) {
             animate={{ ...shown, transition: { duration: 0.28, ease: EASE_PANEL } }}
             exit={{ ...hidden, transition: { duration: 0.2, ease: EASE_EXIT } }}
             onClick={e => e.stopPropagation()}
-            className={`w-full max-w-3xl ${tall ? 'h-[85dvh]' : 'max-h-[85dvh]'} bg-[color:var(--rl-surface)] rounded-t-[calc(var(--rl-r)*1.4)] flex flex-col`}
+            className={`w-full ${wide ? 'max-w-5xl' : 'max-w-3xl'} ${tall ? 'h-[85dvh]' : 'max-h-[85dvh]'} bg-[color:var(--rl-surface)] rounded-t-[calc(var(--rl-r)*1.4)] flex flex-col`}
             style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
           >
             <div className="flex items-center gap-4 px-6 pt-5 pb-3 shrink-0">
@@ -739,6 +783,207 @@ function FixPanel({ fix, blocked, onUnlock, onRescore }) {
       {row('Unlock', 'Let teams answer again on their phones', fix?.canUnlock, fix?.unlockRefusal ?? 'nothing-to-fix', onUnlock, IconUnlock)}
       {row(fix?.rescoreLabel ?? 'Rescore', 'Score the locked answers again', fix?.canRescore, fix?.rescoreRefusal ?? 'nothing-to-fix', onRescore, IconRedo)}
     </div>
+  )
+}
+
+// ─── Scores drawer (phase 3, reduced: fix one team's score) ────────────────
+// Three levels plus a confirm: teams, a team's rounds, one round's editor,
+// then "Change X Round 2 from 7 to 9?". The laptop does a fresh read, writes
+// only that cell, and sends back what the database now says.
+const MINUS = '\u2212'
+const signed = n => (n < 0 ? `${MINUS}${-n}` : String(n))
+function roundName(label) {
+  if (label === '?') return 'Bonus'
+  if (label === 'SW') return 'Swing round'
+  if (label === 'PYL') return 'Press Your Luck'
+  const m = /^R(\d+)$/.exec(label ?? '')
+  return m ? `Round ${m[1]}` : label ?? 'Round'
+}
+const ordinal = n => {
+  const t = n % 100
+  if (t >= 11 && t <= 13) return `${n}th`
+  return `${n}${({ 1: 'st', 2: 'nd', 3: 'rd' })[n % 10] ?? 'th'}`
+}
+const row = `min-h-[80px] rounded-[var(--rl-r)] px-5 flex items-center gap-4 text-left
+  focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--rl-text)]
+  bg-[color:var(--rl-raised)] text-[color:var(--rl-text)] active:bg-[color:var(--rl-raised-press)]`
+const barBtn = 'h-16 px-6 rounded-[var(--rl-r)] text-xl font-semibold'
+const goBtn = `h-16 px-7 rounded-[var(--rl-r)] text-xl font-bold bg-[color:var(--rl-next)] text-[color:var(--rl-nextink)] active:bg-[color:var(--rl-next-press)]
+  disabled:bg-[color:var(--rl-surface)] disabled:text-[color:var(--rl-text-50)] disabled:border-2 disabled:border-dashed disabled:border-[color:var(--rl-text-20)]`
+
+function ScoresPanel({ scores, blocked, notice, send, onSet, onClearSend }) {
+  const [teamId, setTeamId] = useState(null)
+  const [edit, setEdit] = useState(null) // { colKey, old, draft, fresh, confirm }
+  const team = scores?.teams.find(t => t.id === teamId) ?? null
+  const cell = edit && team ? team.cells.find(c => c.key === edit.colKey) : null
+  const [noticeHead, noticeHint] = splitMsg(notice)
+
+  const back = () => {
+    const refused = send?.state === 'refused'
+    onClearSend()
+    // After a refusal (the number moved on the laptop), start again from what it says now.
+    if (edit?.confirm && refused && cell) setEdit({ colKey: cell.key, old: cell.value, draft: cell.value, fresh: true, confirm: false })
+    else if (edit?.confirm) setEdit({ ...edit, confirm: false })
+    else if (edit) setEdit(null)
+    else setTeamId(null)
+  }
+  const bar = (left, right) => (
+    <div className="shrink-0 border-t-2 border-[color:var(--rl-text-15)] px-5 py-4 flex flex-wrap items-center gap-3">
+      <div className="flex-1 min-w-[12rem]">{left}</div>
+      {right}
+    </div>
+  )
+  const backBtn = <button onClick={back} className={`${barBtn} bg-[color:var(--rl-raised)]`}>Back</button>
+  const noticeBox = notice && (
+    <div role="status" className="mx-5 mb-3 flex items-center gap-3 px-5 py-3 rounded-[var(--rl-r)] bg-[color:var(--rl-amber)] text-[color:var(--rl-amber-ink)]">
+      <IconAlert className="w-8 h-8 shrink-0" />
+      <span className="flex flex-col">
+        <span className="text-2xl font-bold">{noticeHead}</span>
+        {noticeHint && <span className="text-xl font-semibold">{noticeHint}</span>}
+      </span>
+    </div>
+  )
+
+  if (!scores) {
+    return (
+      <>
+        {noticeBox}
+        <p className="px-6 py-4 text-2xl font-semibold text-[color:var(--rl-text-75)]">
+          {notice ? 'Close this and try again in a moment.' : 'Getting scores from the laptop…'}
+        </p>
+      </>
+    )
+  }
+
+  // Level 1: teams by place.
+  if (!team) {
+    return (
+      <>
+        {noticeBox}
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pb-4 flex flex-col gap-2">
+          {scores.teams.length === 0 && <p className="px-2 text-2xl text-[color:var(--rl-text-75)]">No teams on the scoreboard yet.</p>}
+          {scores.teams.map(t => (
+            <button key={t.id} data-team={t.id} onClick={() => { onClearSend(); setTeamId(t.id) }} className={row}>
+              <span className="w-20 shrink-0 text-xl font-semibold text-[color:var(--rl-text-75)] tabular-nums">{t.place ? ordinal(t.place) : 'No points'}</span>
+              <span className="flex-1 min-w-0 text-2xl font-bold truncate">{t.name || 'Unnamed team'}</span>
+              <span className="shrink-0 text-3xl font-bold tabular-nums">{signed(t.total)}</span>
+            </button>
+          ))}
+        </div>
+      </>
+    )
+  }
+
+  // Level 2: one team's rounds.
+  if (!edit || !cell) {
+    return (
+      <>
+        <p className="px-6 pb-2 text-2xl font-bold truncate">{team.name} · {signed(team.total)} total</p>
+        {noticeBox}
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pb-4 grid grid-cols-2 landscape:grid-cols-3 gap-2 content-start">
+          {team.cells.map(c => (
+            <button key={c.key} data-col={c.key} onClick={() => { onClearSend(); setEdit({ colKey: c.key, old: c.value, draft: c.value, fresh: true, confirm: false }) }} className={row}>
+              <span className="flex-1 min-w-0 text-2xl font-bold truncate">{roundName(c.label)}</span>
+              <span className="shrink-0 text-3xl font-bold tabular-nums">{signed(c.value)}</span>
+            </button>
+          ))}
+        </div>
+        {bar(<span className="text-lg font-semibold text-[color:var(--rl-text-75)]">Tap a round to change it</span>, backBtn)}
+      </>
+    )
+  }
+
+  // Level 3: the editor, then its confirm.
+  const name = `${team.name} ${roundName(cell.label)}`
+  const draft = edit.draft
+  const valid = Number.isInteger(draft) && draft >= SCORE_MIN && draft <= SCORE_MAX
+  const changed = valid && draft !== edit.old
+  const clamp = n => Math.max(SCORE_MIN, Math.min(SCORE_MAX, n))
+  const step = n => setEdit(e => ({ ...e, draft: clamp(e.draft + n), fresh: true }))
+  const digit = d => setEdit(e => {
+    const base = e.fresh ? 0 : e.draft
+    const sign = !e.fresh && e.draft < 0 ? -1 : 1
+    const next = sign * (Math.abs(base) * 10 + d)
+    return Math.abs(next) > SCORE_MAX ? e : { ...e, draft: next, fresh: false }
+  })
+  const del = () => setEdit(e => ({ ...e, draft: Math.trunc(e.draft / 10), fresh: false }))
+  const flip = () => setEdit(e => ({ ...e, draft: -e.draft || 0, fresh: false }))
+  const sending = send?.state === 'saving'
+  const saved = send?.state === 'saved' ? send.scoreSet : null
+  const key = `h-16 rounded-[var(--rl-r)] text-2xl font-bold bg-[color:var(--rl-raised)] text-[color:var(--rl-text)] active:bg-[color:var(--rl-raised-press)]
+    focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--rl-text)]`
+  const stepBtn = `${key} w-24 text-3xl`
+
+  if (edit.confirm) {
+    return (
+      <>
+        {noticeBox}
+        <div className="flex-1 min-h-0 px-6 py-4 flex flex-col justify-center gap-4">
+          {saved ? (
+            <p className="text-4xl font-bold leading-tight" role="status">
+              Saved. {saved.team} {roundName(saved.col)} is now {signed(saved.to)}
+            </p>
+          ) : (
+            <p className="text-4xl font-bold leading-tight [text-wrap:balance]">
+              Change {name} from {signed(edit.old)} to {signed(draft)}?
+            </p>
+          )}
+          {sending && <p className="text-2xl font-semibold text-[color:var(--rl-text-75)]">Saving on the laptop…</p>}
+          {blocked && !saved && <p className="text-xl font-semibold text-[color:var(--rl-amber)]">{blocked}</p>}
+        </div>
+        {bar(
+          <span className="text-lg font-semibold text-[color:var(--rl-text-75)]">
+            {saved ? 'The number above is what the laptop saved' : 'Phone scoreboards update right away'}
+          </span>,
+          saved ? (
+            <button onClick={() => { onClearSend(); setEdit(null) }} className={goBtn}>Done</button>
+          ) : (
+            <>
+              {backBtn}
+              <button
+                onClick={() => onSet({ teamId: team.id, colKey: cell.key, value: draft, expectOld: edit.old })}
+                disabled={!!blocked || sending || send?.state === 'refused'}
+                className={goBtn}
+              >
+                Yes, change it
+              </button>
+            </>
+          ),
+        )}
+      </>
+    )
+  }
+
+  return (
+    <>
+      <p className="px-6 pb-1 text-3xl font-bold truncate">{team.name}, {roundName(cell.label)}: {signed(edit.old)}</p>
+      {cell.phone !== 0 && (
+        <p className="px-6 pb-1 text-lg font-semibold text-[color:var(--rl-text-75)]">{signed(cell.phone)} of these came from phones. Phone points stay; the rest moves.</p>
+      )}
+      {noticeBox}
+      <div className="flex-1 min-h-0 overflow-y-auto px-5 py-2 flex landscape:flex-row portrait:flex-col items-center justify-center gap-6">
+        <div className="flex items-center gap-3">
+          <button onClick={() => step(-5)} className={stepBtn}>{MINUS}5</button>
+          <button onClick={() => step(-1)} className={stepBtn}>{MINUS}1</button>
+          <span data-draft className="w-40 text-center tabular-nums leading-none" style={{ fontFamily: 'var(--rl-display)', fontSize: 'clamp(4rem, 10vmin, 6rem)' }}>{signed(draft)}</span>
+          <button onClick={() => step(1)} className={stepBtn}>+1</button>
+          <button onClick={() => step(5)} className={stepBtn}>+5</button>
+        </div>
+        <div className="grid grid-cols-3 gap-2 w-[17rem] shrink-0">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => <button key={d} onClick={() => digit(d)} className={key}>{d}</button>)}
+          <button onClick={flip} aria-label="Minus sign" className={key}>±</button>
+          <button onClick={() => digit(0)} className={key}>0</button>
+          <button onClick={del} aria-label="Delete" className={key}>⌫</button>
+        </div>
+      </div>
+      {bar(
+        <span className="text-lg font-semibold text-[color:var(--rl-text-75)]">{changed ? `Now ${signed(edit.old)}, new ${signed(draft)}` : 'Change the number to save'}</span>,
+        <>
+          {backBtn}
+          <button onClick={() => { onClearSend(); setEdit({ ...edit, confirm: true }) }} disabled={!changed} className={goBtn}>Save</button>
+        </>,
+      )}
+    </>
   )
 }
 
@@ -936,6 +1181,7 @@ function IconGear(p) {
 }
 function IconList(p) { return svg(<><path d="M9 6h11M9 12h11M9 18h11" /><path d="M4 6h.01M4 12h.01M4 18h.01" /></>)(p) }
 // Wrench outline after Lucide's (ISC).
+function IconTable(p) { return svg(<><rect x="3.5" y="4.5" width="17" height="15" rx="2" /><path d="M3.5 9.5h17M9.5 9.5v10" /></>)(p) }
 function IconWrench(p) { return svg(<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />)(p) }
 function IconUnlock(p) { return svg(<><rect x="4.5" y="11" width="15" height="10" rx="2" /><path d="M8 11V7.5a4 4 0 0 1 7.6-1.7" /></>)(p) }
 function IconRedo(p) { return svg(<><path d="M20 5v5h-5" /><path d="M20 10a8 8 0 1 0 1.5 5" /></>)(p) }

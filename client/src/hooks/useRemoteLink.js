@@ -50,8 +50,10 @@ export function useRemoteLink({ enabled, snapshot, runCommandRef, url = HOST_REL
         try { msg = JSON.parse(e.data) } catch { return }
         if (msg.type === 'remotes') { setRemotes(msg.count); return }
         // Beats are answered here, not from a setInterval — hidden tabs throttle timers.
-        const reply = hostReply(msg, { run: c => runCommandRef.current(c), now: Date.now(), visibility: document.visibilityState })
-        if (reply && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(reply))
+        // post: a score.set's outcome, sent once the score chain settles.
+        const post = out => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(out)) }
+        const reply = hostReply(msg, { run: c => runCommandRef.current(c), now: Date.now(), visibility: document.visibilityState, post })
+        if (reply) post(reply)
       }
       ws.onclose = e => {
         if (wsRef.current === ws) wsRef.current = null

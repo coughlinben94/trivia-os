@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
-import { deriveRoundCols, computeTotal, normalizeRoundScore, mergeScoreEdit, pickableTeams } from '../../lib/scoreboardMath.js'
+import { deriveRoundCols, computeTotal, normalizeRoundScore, mergeScoreEdit, pickableTeams, addStats } from '../../lib/scoreboardMath.js'
 import BoxingRing from '../display/slides/BoxingRing.jsx'
 import ChestDuel from '../display/slides/ChestDuel.jsx'
 import CardPick from '../display/slides/CardPick.jsx'
@@ -164,18 +164,6 @@ function duplicateNameIds(teams) {
     counts[key] = (counts[key] ?? 0) + 1
   })
   return new Set(teams.filter(t => counts[normalizeLoose(t.name)] > 1).map(t => t.id))
-}
-
-function addStats(teams, cols) {
-  const withTotals = teams.map(t => ({ ...t, _total: computeTotal(t.scores, cols) }))
-  const byTotal = [...withTotals].sort((a, b) => b._total - a._total)
-  const placeMap = {}
-  let place = 1
-  byTotal.forEach((t, i) => {
-    if (i > 0 && t._total < byTotal[i - 1]._total) place = i + 1
-    placeMap[t.id] = t._total === 0 ? '—' : place
-  })
-  return withTotals.map(t => ({ ...t, _place: placeMap[t.id] }))
 }
 
 const EMPTY_STR = ""

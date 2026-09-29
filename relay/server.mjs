@@ -17,7 +17,7 @@ import { pathToFileURL } from 'node:url'
 import { WebSocketServer } from 'ws'
 import {
   HOST_PORT, REMOTE_PORT, CLOSE_REPLACED, CLOSE_BAD_SECRET, CLOSE_TOO_FAST, MAX_INBOUND_BYTES, BEAT_MS, parseRemoteMessage,
-  DISPLAY_PATH, DISPLAY_COMMANDS, LOCAL_COMMANDS, LOCAL_RATE_PER_SEC,
+  DISPLAY_PATH, DISPLAY_COMMANDS, LOCAL_COMMANDS, LOCAL_RATE_PER_SEC, scoreChangeText,
 } from '../client/src/lib/remoteProtocol.js'
 import { createLocal, initSounds, DEFAULT_CONFIG_DIR } from './local.mjs'
 
@@ -102,7 +102,11 @@ export function createRelay({
       let m
       try { m = JSON.parse(text) } catch { return }
       if (m?.type === 'state') { lastState = text; hostPaused = !!m.paused; toRemotes(text) }
-      else if (m?.type === 'result' || m?.type === 'beat') toRemotes(text)
+      else if (m?.type === 'result' || m?.type === 'beat') {
+        // An iPad score fix, in the relay's own log (launchd keeps it).
+        if (m.type === 'result' && m.scoreSet) log.log(`[relay] ${new Date().toISOString()} ${scoreChangeText(m.scoreSet)}`)
+        toRemotes(text)
+      }
     })
     ws.on('close', () => {
       if (host !== ws) return

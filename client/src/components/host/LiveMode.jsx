@@ -1,4 +1,5 @@
-import { useEffect, useCallback, useState, useRef } from 'react'
+import { useEffect, useCallback, useState, useRef, useReducer } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { getTheme, THEMES } from '../../themes/index.js'
 import { resolveShinyPart, isAudioShiny, isBendleShiny } from '../../lib/shinySeries.js'
@@ -19,6 +20,9 @@ import { nextPressGate } from '../../lib/nextPressCue.js'
 import { planHostCommand } from '../../lib/hostCommands.js'
 import { useRemoteLink } from '../../hooks/useRemoteLink.js'
 import { buildSnapshot, hostChipText } from '../../lib/remoteSnapshot.js'
+import { createScoreChain, createScoreRemote } from '../../lib/scoreCellWrite.js'
+import { scoreChangeText } from '../../lib/remoteProtocol.js'
+import { EASE_OUT, EASE_EXIT } from '../../lib/easings.js'
 import { fixFor } from '../../lib/remoteFix.js'
 import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, unlockPatch, PHONE_MECHANICS, REVEAL_FIELD, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
 
@@ -292,6 +296,38 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     try { return localStorage.getItem(REMOTE_LINK_KEY) === '1' } catch { return false }
   })
   const [remotePaused, setRemotePaused] = useState(false)
+
+  // The score chain (lib/scoreCellWrite.js): lockAndScore's scoreboard_teams
+  // read-then-upsert and every iPad score.set run on it, one at a time. The
+  // queries are the same ones lockAndScore already used.
+  const scoreChainRef = useRef(null)
+  if (!scoreChainRef.current) {
+    scoreChainRef.current = createScoreChain({
+      readTeams: showId => supabase.from('scoreboard_teams').select('id, show_id, name, scores, sort_order').eq('show_id', showId),
+      upsertRow: row => supabase.from('scoreboard_teams').upsert(row),
+    })
+  }
+  // The iPad Scores drawer's view, plus a small fading notice here for every
+  // score the iPad changed, so Ben (or a helper) sees what moved.
+  const [, rerenderScores] = useReducer(n => n + 1, 0)
+  const [scoreNotice, setScoreNotice] = useState(null)
+  const scoreRemoteRef = useRef(null)
+  if (!scoreRemoteRef.current) {
+    scoreRemoteRef.current = createScoreRemote({
+      chain: scoreChainRef.current,
+      onChange: rerenderScores,
+      onSaved: change => {
+        const line = scoreChangeText(change)
+        console.info("[remote] %s %s", new Date().toISOString(), line)
+        setScoreNotice({ line, at: Date.now() })
+      },
+    })
+  }
+  useEffect(() => {
+    if (!scoreNotice) return undefined
+    const t = setTimeout(() => setScoreNotice(null), 6000)
+    return () => clearTimeout(t)
+  }, [scoreNotice])
   function toggleRemoteLink() {
     const on = !remoteLinkOn
     try { localStorage.setItem(REMOTE_LINK_KEY, on ? '1' : '0') } catch { /* private mode: session-only */ }
@@ -498,45 +534,55 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         .eq('show_id', show.id)
       if (teamsError) { console.error('teams fetch failed:', teamsError); setError('Scoring failed — check connection and retry'); return }
 
-      const { data: scoreboardTeams, error: sbError } = await supabase
-        .from('scoreboard_teams')
-        .select('id, show_id, name, scores, sort_order')
-        .eq('show_id', show.id)
-      if (sbError) { console.error('scoreboard_teams fetch failed:', sbError); setError('Scoring failed — check connection and retry'); return }
+      // The scoreboard_teams read through the upsert runs on the score chain
+      // (lib/scoreCellWrite.js), so an iPad score.set can never land between
+      // this read and this upsert and be overwritten by it. Same calls, same
+      // order as before; each early return below still ends lockAndScore.
+      const STOP = Symbol('stop')
+      const scored = await scoreChainRef.current.run(async () => {
+        const { data: scoreboardTeams, error: sbError } = await supabase
+          .from('scoreboard_teams')
+          .select('id, show_id, name, scores, sort_order')
+          .eq('show_id', show.id)
+        if (sbError) { console.error('scoreboard_teams fetch failed:', sbError); setError('Scoring failed — check connection and retry'); return STOP }
 
-      // `force` (2026-08-17, Ben) skips this ONE check — the UI only offers
-      // it after this exact error has already fired once, as a deliberate
-      // "yes, actually score everyone at 0" override, never a way past any
-      // of the other refusals.
-      if (zeroAnswersErrorMsg && !force && answers.length === 0 && (teams?.length ?? 0) > 0) {
-        setError(zeroAnswersErrorMsg)
-        return
-      }
+        // `force` (2026-08-17, Ben) skips this ONE check — the UI only offers
+        // it after this exact error has already fired once, as a deliberate
+        // "yes, actually score everyone at 0" override, never a way past any
+        // of the other refusals.
+        if (zeroAnswersErrorMsg && !force && answers.length === 0 && (teams?.length ?? 0) > 0) {
+          setError(zeroAnswersErrorMsg)
+          return STOP
+        }
 
-      let extra
-      if (loadExtra) {
-        extra = await loadExtra(slide)
-        if (extra === undefined) return // loadExtra already set its own error
-      }
+        let extra
+        if (loadExtra) {
+          extra = await loadExtra(slide)
+          if (extra === undefined) return STOP // loadExtra already set its own error
+        }
 
-      const { results, updates, unmatchedError } = buildResults({
-        answers, teams, scoreboardTeams,
-        roundKey: roundKeyFor(show, slide),
-        slideId: slide.id,
-        extra,
+        const { results, updates, unmatchedError } = buildResults({
+          answers, teams, scoreboardTeams,
+          roundKey: roundKeyFor(show, slide),
+          slideId: slide.id,
+          extra,
+        })
+
+        // Something was there to score but none of it could be attributed to a
+        // scoreboard row — a real problem (team-name mismatch, or nobody's been
+        // added to the scoreboard yet), not a legitimate "nothing to score"
+        // case. Treat it like any other scoring failure: don't reveal, stay on
+        // Retry Scoring.
+        if (unmatchedError) { setError(unmatchedError); return STOP }
+
+        if (updates.length > 0) {
+          const { error: updateError } = await supabase.from('scoreboard_teams').upsert(updates)
+          if (updateError) { console.error('scoreboard_teams score fold-in failed:', updateError); setError('Scoring failed — check connection and retry'); return STOP }
+        }
+        return { results }
       })
-
-      // Something was there to score but none of it could be attributed to a
-      // scoreboard row — a real problem (team-name mismatch, or nobody's been
-      // added to the scoreboard yet), not a legitimate "nothing to score"
-      // case. Treat it like any other scoring failure: don't reveal, stay on
-      // Retry Scoring.
-      if (unmatchedError) { setError(unmatchedError); return }
-
-      if (updates.length > 0) {
-        const { error: updateError } = await supabase.from('scoreboard_teams').upsert(updates)
-        if (updateError) { console.error('scoreboard_teams score fold-in failed:', updateError); setError('Scoring failed — check connection and retry'); return }
-      }
+      if (scored === STOP) return
+      const { results } = scored
 
       // The lock fields are restated explicitly, not just left to the
       // ...slide.data spread — `slide` is this call's original param and
@@ -1221,6 +1267,11 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       index: currentIndex,
       slideIds: slides.map(s => s.id),
       fix: remoteFix,
+      // Scores drawer (phase 3): any scoring at all, uncapped, refuses.
+      anyScoring: scoringBusy || raceBusy,
+      jumpBusy: remoteRun === 'jump',
+      scoreQueueDepth: scoreChainRef.current.depth(),
+      scoreCols: deriveRoundCols(show),
     })
     if (plan.refuse) return plan
     switch (plan.run) {
@@ -1256,6 +1307,15 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         else unlockCurrentSlide()
         break
       case 'rescore': runRemote('rescore', scoreActionFor(phoneMechanic, currentSlide)); break
+      // iPad Scores drawer: returns { ok, later }, the outcome follows (hostReply).
+      case 'scores-get':
+      case 'scores-hide':
+      case 'score-set': {
+        const res = scoreRemoteRef.current.perform(plan, { showId: show.id, cols: deriveRoundCols(show) })
+        rerenderScores() // scoreQueueDepth in the snapshot
+        res.later?.finally(rerenderScores)
+        return res
+      }
     }
     return { ok: true }
   }
@@ -1274,6 +1334,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       || pylPickerBusy
       || !!currentSlide?.data?.lockCountdownStartedAt
       || (!!remoteRunSinceRef.current && Date.now() - remoteRunSinceRef.current < 12000)
+      || scoreChainRef.current.depth() > 0
   }
   function runRemote(kind, fn) {
     remoteRunSinceRef.current = Date.now()
@@ -1290,8 +1351,13 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       slides, index: currentIndex, showState: show.showState, cue: nextGate,
       busy: remoteBusyNow(), paused: remotePaused,
       rounds: show.rounds, jumpBusy: remoteRun === 'jump', fix: remoteFix,
+      scoreQueueDepth: scoreChainRef.current.depth(), scores: scoreRemoteRef.current.view(),
     }),
   })
+  // No iPad left: stop attaching the scoreboard to the snapshot.
+  useEffect(() => {
+    if (remoteLink.remotes === 0 && scoreRemoteRef.current.view()) scoreRemoteRef.current.perform({ run: 'scores-hide' }, {})
+  }, [remoteLink.remotes])
 
   const handleKeyDown = useCallback((e) => {
     // A reflexive Cmd/Ctrl/Alt shortcut (Cmd+A select-all, Cmd+R reload,
@@ -1344,6 +1410,21 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   return (
     <div className="flex flex-col h-screen bg-gray-50 select-none">
       <FocusWarning />
+      {/* What the iPad just changed on the scoreboard. Non-modal, fades out. */}
+      <AnimatePresence>
+        {scoreNotice && (
+          <motion.div
+            key={scoreNotice.at}
+            role="status"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, transition: { duration: 0.2, ease: EASE_OUT } }}
+            exit={{ opacity: 0, transition: { duration: 0.18, ease: EASE_EXIT } }}
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 pointer-events-none px-4 py-2 rounded-xl bg-gray-900 text-white text-sm font-semibold shadow-lg"
+          >
+            {scoreNotice.line}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Top nav bar — three absolute zones ─────────────────────── */}
       <div className="relative shrink-0 h-14 bg-white border-b border-gray-100 flex items-center">

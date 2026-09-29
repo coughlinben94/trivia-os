@@ -99,4 +99,14 @@ describe('useRemoteLink', () => {
     expect(FakeWS.all).toHaveLength(1)
     expect(link.status).toBe('off')
   })
+  it('a command that finishes later (score.set) gets its outcome posted on the socket under the same id', async () => {
+    run = vi.fn(() => ({ ok: true, later: Promise.resolve({ done: { team: 'A', col: 'R1', from: 1, to: 2 } }) }))
+    render({ enabled: true })
+    const ws = FakeWS.all[0]
+    act(() => ws.open())
+    act(() => ws.msg({ type: 'cmd', id: '5', cmd: 'score.set', args: {}, sentAt: 5 }))
+    expect(ws.sent.at(-1)).toEqual({ type: 'result', id: '5', received: true })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(ws.sent.at(-1)).toEqual({ type: 'result', id: '5', done: true, scoreSet: { team: 'A', col: 'R1', from: 1, to: 2 } })
+  })
 })
