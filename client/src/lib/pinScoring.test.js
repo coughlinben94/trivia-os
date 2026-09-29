@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { scorePinRound, scoringGroupSize, payableRoomSize, resolvePinRoomSize, payableEntries, buildPinRound, isValidPin, parsePinPaste, PIN_POINTS } from './pinScoring.js'
+import { pinMissingSpot, PIN_SPOT_ERROR, pinLockedStatus, scorePinRound, scoringGroupSize, payableRoomSize, resolvePinRoomSize, payableEntries, buildPinRound, isValidPin, parsePinPaste, PIN_POINTS } from './pinScoring.js'
 
 const CORRECT = { lat: 41.8781, lon: -87.6298 } // Chicago
 // ~1 degree of latitude = ~69 miles; build pins by offsetting latitude
@@ -19,6 +19,27 @@ describe('scoringGroupSize', () => {
     expect(scoringGroupSize(0)).toBe(0)
     expect(scoringGroupSize(undefined)).toBe(0)
     expect(scoringGroupSize(-3)).toBe(0)
+  })
+})
+
+describe('pinMissingSpot', () => {
+  const pin = (data, type = 'question') => ({ type, data: { shinyInputSchema: { type: 'pin' }, ...data } })
+  it('true only for a Pin It question slide without a valid true spot', () => {
+    expect(pinMissingSpot(pin({}))).toBe(true)
+    expect(pinMissingSpot(pin({ pinAnswer: { lat: 99, lon: 0 } }))).toBe(true)
+    expect(pinMissingSpot(pin({ pinAnswer: { lat: 41.88, lon: -87.63 } }))).toBe(false)
+    expect(pinMissingSpot({ type: 'question', data: { shinyInputSchema: { type: 'choice' } } })).toBe(false)
+    expect(pinMissingSpot({ type: 'title', data: {} })).toBe(false)
+    expect(pinMissingSpot(null)).toBe(false)
+  })
+  it('error copy names the fix', () => { expect(PIN_SPOT_ERROR).toContain('Set the true spot first') })
+})
+
+describe('pinLockedStatus', () => {
+  it('shows the room size, or says it was not recorded (never "?")', () => {
+    expect(pinLockedStatus({ pinRoomSize: 12 })).toContain('(room of 12)')
+    expect(pinLockedStatus({})).toContain('room size not recorded')
+    expect(pinLockedStatus({})).not.toContain('?')
   })
 })
 

@@ -42,9 +42,11 @@ export function planHostCommand({ cmd, via, args = {}, expectSlideId = null, sen
         return { refuse: 'gate-changed' }
       }
       if (ctx.lockPhase) {
-        return ctx.lockCountdownRunning
-          ? { refuse: 'locking' }
-          : { run: 'start-lock-countdown', phase: ctx.lockPhase }
+        if (ctx.lockCountdownRunning) return { refuse: 'locking' }
+        // The lock would be refused by its preCheck WITHOUT closing the phase, so a
+        // countdown would just replay on every Next. Say why instead.
+        if (ctx.lockBlocked) return { refuse: 'lock-blocked', message: ctx.lockBlocked }
+        return { run: 'start-lock-countdown', phase: ctx.lockPhase }
       }
       if (ctx.scoringBlocked) return { refuse: 'scoring' }
       if (ctx.audioPending) return { run: 'play-audio' }
