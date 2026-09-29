@@ -315,6 +315,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // reads scoreboard_teams while a score write is still in flight.
   if (scoreChainIdleRef) scoreChainIdleRef.current = () => scoreChainRef.current.whenIdle()
   if (scoreChainRunRef) scoreChainRunRef.current = fn => scoreChainRef.current.run(fn)
+  useEffect(() => () => { if (scoreChainRunRef) scoreChainRunRef.current = null }, [scoreChainRunRef])
   // The iPad Scores drawer's view, plus a small fading notice here for every
   // score the iPad changed, so Ben (or a helper) sees what moved.
   const [, rerenderScores] = useReducer(n => n + 1, 0)
