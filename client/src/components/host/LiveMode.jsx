@@ -18,6 +18,7 @@ import { computeHorseRaceScoreUpdates, DEFAULT_RACE_POINTS } from '../../lib/rac
 import { buildPinRound, isValidPin, pinMissingSpot, pinLockedStatus, PIN_SPOT_ERROR } from '../../lib/pinScoring.js'
 import PinRoomControl from './PinRoomControl.jsx'
 import { HUES_CUES_CODE_RE } from '../../lib/huesCuesGrid.js'
+import { lockRefusal, HUES_CUES_ANSWER_ERROR, WAGER_ANSWER_ERROR, WAGER_TIERS_ERROR } from '../../lib/lockRefusal.js'
 import { nextPressGate } from '../../lib/nextPressCue.js'
 import { planHostCommand } from '../../lib/hostCommands.js'
 import { useRemoteLink } from '../../hooks/useRemoteLink.js'
@@ -757,7 +758,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       slide,
       lockField: 'huesCuesLocked', lockedAtField: 'huesCuesLockedAt',
       resultsField: 'huesCuesResults',
-      preCheck: s => HUES_CUES_CODE_RE.test(s.data.answer ?? '') ? null : 'Set a correct square before locking — pick one on the grid',
+      preCheck: s => HUES_CUES_CODE_RE.test(s.data.answer ?? '') ? null : HUES_CUES_ANSWER_ERROR,
       lateLogLabel: 'hues-cues lock',
       buildResults: ({ answers, teams, scoreboardTeams, roundKey, slideId }) => {
         const teamIdToName = new Map((teams ?? []).map(t => [t.id, t.name]))
@@ -872,7 +873,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       zeroAnswersErrorMsg: WAGER_ZERO_ANSWERS_ERROR,
       preCheck: s => {
         if (parseWagerNumber(s.data.answer) == null) {
-          return 'This slide’s Answer isn’t a number — fix it in the slide editor, then score'
+          return WAGER_ANSWER_ERROR
         }
         // Defensive: this handler only makes sense once handleLockWagers has
         // actually written a tier snapshot. Reaching it without one (shouldn't
@@ -880,7 +881,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         // presence rather than the lock flag — see that fix's comment for
         // exactly the trap this closes) would score every team at the Safe
         // default silently. Refuse instead.
-        if (s.data.wagerTiers == null) return 'Wagers were never locked — tap Lock Wagers first'
+        if (s.data.wagerTiers == null) return WAGER_TIERS_ERROR
         return null
       },
       buildResults: ({ answers, teams, scoreboardTeams, roundKey, slideId }) => {
@@ -1307,8 +1308,8 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       lockPhase: pendingLockPhase(currentSlide),
       lockCountdownRunning: !!currentSlide?.data?.lockCountdownStartedAt,
       // Next must not start a countdown its own lock would refuse (endless 3-2-1). Only
-      // Pin It so far; hues-cues/wager have the same shape but are left as they were.
-      lockBlocked: pinMissingSpot(currentSlide) ? PIN_SPOT_ERROR : null,
+      // Pin It has its own check; hues-cues and wager-guesses go through lockRefusal.
+      lockBlocked: pinMissingSpot(currentSlide) ? PIN_SPOT_ERROR : lockRefusal(currentSlide),
       scoringBlocked: scoringBlocksNext(),
       audioPending: audioPlayPending(),
       answerReveal: show.showState.answerReveal,
@@ -1337,7 +1338,13 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       scoreCols: deriveRoundCols(show),
       modalJustClosed: Date.now() - modalClosedAtRef.current < 1000,
     })
-    if (plan.refuse === 'lock-blocked') setPinScoreError(plan.message)
+    if (plan.refuse === 'lock-blocked') {
+      // Surface in the panel that owns this phase's error line.
+      const ph = pendingLockPhase(currentSlide)
+      if (ph === 'huesCues') setHuesCuesScoreError(plan.message)
+      else if (ph === 'wager-guesses') setWagerError(plan.message)
+      else setPinScoreError(plan.message)
+    }
     if (plan.refuse) return plan
     switch (plan.run) {
       case 'start-lock-countdown': startLockCountdown(plan.phase); break
