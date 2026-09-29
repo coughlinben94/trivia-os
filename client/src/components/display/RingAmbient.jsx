@@ -40,7 +40,7 @@ import { cylinderOf, authorPeriodOf, buildArc, loudnessOf, fillOf, rng, lerp, as
 import { ringNavAction } from '../../lib/ringStationIndex.js'
 import { EASE_SURGE } from '../../lib/easings.js'
 import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, skyRegionHues, accentCompanionHue, applySkyTints, applyTints } from '../../lib/ringPrimitives.js'
-import { SLOTS } from '../../worlds/midnightGalaxy.slots.js'
+import { SLOTS as SPACE_SLOTS } from '../../worlds/midnightGalaxy.slots.js'
 import { seedFrom } from '../../lib/paletteGenerator.js'
 import { RING_RETURN } from '../../lib/ringStationOverride.js'
 
@@ -152,16 +152,35 @@ const dom = ringDom('ring-', ENGINE)
 // slides with the pan any more — the sky itself leans, on its own slower
 // clock, with the region's own headline object visibly lighting it.
 
+// Per-world primitive dispatch (Halloween spec §4.10): a kind the world
+// supplies in `world.prims` is built by the world; every other kind falls
+// back to the shared ringPrimitives.js makePrim. No `prims` (the space
+// world) = the shared makePrim itself, unchanged.
+function makePrimFor(world) {
+  const own = world.prims
+  if (!own) return dom.makePrim
+  return (kind, ...args) => Object.hasOwn(own, kind) ? own[kind](dom, ...args) : dom.makePrim(kind, ...args)
+}
+
+// Ambient layers a world can switch off (`world.layers`); unset = on, which
+// is the space world.
+const layerOn = (world, key) => world.layers?.[key] !== false
+
 // ═══ BUILD ═══ dispatches per-layer content building.
 function buildLayerContent(engine, world, arc, host, L, showId) {
+  // Per-world seams (Halloween spec §4): slot table and sky-region set come
+  // from the world, defaulting to the space world's own modules.
+  const SLOTS = world.slots ?? SPACE_SLOTS
+  const regions = world.skyRegions ?? SKY_REGIONS
+  const makePrim = makePrimFor(world)
   // 2026-09-02 palette-aware, synced with world-07-ring.html: region hues are
   // derived from the world's own station data, never read off SKY_REGIONS.
-  const regionHues = skyRegionHues(world.stations)
+  const regionHues = skyRegionHues(world.stations, regions)
   const period = authorPeriodOf(engine, L)
 
   if (L.id === 'far') {
     /* slow, dense star field */
-    dom.buildStars(host, period, 140, 1.0, 0xA11CE)
+    if (layerOn(world, 'stars')) dom.buildStars(host, period, 140, 1.0, 0xA11CE)
 
     // Wide soft wash blobs (6/period, ~620-900px, `blob` primitive) removed
     // entirely 2026-08-13 — see world-07-ring.html's identical removal note
@@ -211,7 +230,7 @@ function buildLayerContent(engine, world, arc, host, L, showId) {
     // reach (far-layer stars top out at size 8 with box-shadow blur
     // 17.6px/spread 2.4px — see ringPrimitives.js's .drift, blur
     // 32px/spread 10px) so it reads as an object, not one more star.
-    {
+    if (layerOn(world, 'drifter')) {
       const dr = rng(0, 0xD817)
       const drift = dom.el('drift')
       const ds = 14
@@ -286,7 +305,7 @@ function buildLayerContent(engine, world, arc, host, L, showId) {
        sizeMul 1.25 (not far's 1.0): far:mid:near size ramps 1.0:1.25:1.5
        against the 1:4:6 speed ramp, so depth reads from a static frame
        too, not just from differential motion. */
-    dom.buildStars(host, period, 40, 1.25, 0xCAFE1)
+    if (layerOn(world, 'stars')) dom.buildStars(host, period, 40, 1.25, 0xCAFE1)
 
     // Occlusion eligibility + occluderStations (spec §7.2's >=1-in-3
     // subtractive-disc floor) removed entirely 2026-08-13, Ben's explicit
@@ -355,7 +374,7 @@ function buildLayerContent(engine, world, arc, host, L, showId) {
         : isSpanningField ? hw * 0.42
           : hw * (0.62 + rHeadline() * 0.26)
       const alpha = lerp(0.34, 0.55, lou)
-      const head = dom.makePrim(st.prim, hw, hh, st.hue, alpha, rHeadline, true, fill, st.variant) // isHeadline: only per-station breathe (spec §8); variant: per-station prim treatment (st3's dust ring)
+      const head = makePrim(st.prim, hw, hh, st.hue, alpha, rHeadline, true, fill, st.variant) // isHeadline: only per-station breathe (spec §8); variant: per-station prim treatment (st3's dust ring)
       // 2026-08-12: synced from world-07-ring.html — this file was still on
       // the pre-corner-bias uniform draw ([0.08,0.98] of remaining travel
       // room, the very formula that measured mean centroid x=920 but still
@@ -510,7 +529,7 @@ function buildLayerContent(engine, world, arc, host, L, showId) {
       // donut-shaped d-glow already lights the sky around the rim in the
       // region hue, so it needs no separate source. Same skip in
       // world-07-ring.html.
-      if (st.regionSource && SKY_REGIONS[st.region] && st.prim !== 'eclipse') {
+      if (st.regionSource && regions[st.region] && st.prim !== 'eclipse') {
         // Visual centre, not box centre: `spikes` re-centres its core+rays
         // (and its own d-glow) on the corner point above, so the light has
         // to follow them or it reads as a second, offset source.
@@ -519,7 +538,7 @@ function buildLayerContent(engine, world, arc, host, L, showId) {
           gcx = headLeft + hw * (headlineCornerLeft ? 0.30 : 0.70)
           gcy = headTop + hh * (pairUpper ? 0.30 : 0.70)
         }
-        host.insertBefore(dom.makeSourceGlow(st.region, regionHues[st.region], x0, gcx, gcy, Math.max(hw, hh)), head)
+        host.insertBefore(dom.makeSourceGlow(st.region, regionHues[st.region], x0, gcx, gcy, Math.max(hw, hh), regions), head)
       }
 
       // The per-station wash block that used to sit here (radial ellipse
@@ -597,7 +616,7 @@ function buildLayerContent(engine, world, arc, host, L, showId) {
           : st.hue + lerp(-18, 18, rCompanion())
         const compAlphaRoll = lerp(0.30, 0.48, lou) * 0.8
         const compAlpha = boostComp ? Math.max(compAlphaRoll, 0.55) : compAlphaRoll
-        const comp = dom.makePrim(ck, cw, ch, compHue, compAlpha, rCompanion, false, fill)
+        const comp = makePrim(ck, cw, ch, compHue, compAlpha, rCompanion, false, fill)
         const compLeft = dom.cornerX(rCompanion, cw, x0, !headlineCornerLeft)
         // companionUpper (st2, 2026-08-14): synced from world-07-ring.html —
         // per-station band override (true = upper); unset keeps !pairUpper,
@@ -637,7 +656,7 @@ function buildLayerContent(engine, world, arc, host, L, showId) {
       const dn = Math.min(Math.round(lerp(1, 4, lou)), SLOTS[i].maxDetail)
       for (let k = 0; k < dn; k++) {
         const dw = k === 0 ? lerp(58, 70, rDetail()) : lerp(58, 154, rDetail())
-        const d = dom.makePrim('dots', dw, dw * 0.9, st.hue, lerp(0.34, 0.60, lou) * 0.7, rDetail, false, fill)
+        const d = makePrim('dots', dw, dw * 0.9, st.hue, lerp(0.34, 0.60, lou) * 0.7, rDetail, false, fill)
         // 2026-08-12 round 2 (Ben, st1: "too much going on") — synced from
         // world-07-ring.html: keeps ambient detail specks in the middle
         // 64% of frame width, clear of the corner zones headline/companion/
@@ -676,7 +695,7 @@ function buildLayerContent(engine, world, arc, host, L, showId) {
 
   else if (L.id === 'near') {
     /* fast and anonymous — the layer that sells the turn */
-    dom.buildStars(host, period, 26, 1.5, 0xBEEF)
+    if (layerOn(world, 'stars')) dom.buildStars(host, period, 26, 1.5, 0xBEEF)
   }
 }
 
@@ -768,10 +787,11 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     const skyInner = dom.el('surge')
     skyInner.style.transition = 'none'
     skyInner.appendChild(dom.el('void'))
-    const skyTints = dom.makeSkyTints(skyRegionHues(worldData.stations)) // 2026-09-02 palette-aware, synced with world-07-ring.html
+    const regions = worldData.skyRegions ?? SKY_REGIONS
+    const skyTints = dom.makeSkyTints(skyRegionHues(worldData.stations, regions), regions) // 2026-09-02 palette-aware, synced with world-07-ring.html
     for (const t of Object.values(skyTints)) skyInner.appendChild(t)
     skyTintsRef.current = skyTints
-    skyWeightsRef.current = skyRegionWeights(worldData.stations)
+    skyWeightsRef.current = skyRegionWeights(worldData.stations, regions)
     sky.appendChild(skyInner)
     design.appendChild(sky)
 
@@ -817,9 +837,12 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     // below, same relative order as the reference build's own
     // `design.insertBefore(shootLane, qScrim)` — the scrim still dims
     // shoots the same as every other ring layer.
-    const shootLane = dom.el('shootLane')
-    design.appendChild(shootLane)
-    shootLaneRef.current = shootLane
+    const shoots = layerOn(worldData, 'shootingStars')
+    if (shoots) {
+      const shootLane = dom.el('shootLane')
+      design.appendChild(shootLane)
+      shootLaneRef.current = shootLane
+    }
 
     // scrim (ART-DIRECTION-SPEC.md sec 2: "alpha must reach exactly zero
     // strictly inside its own element bounds, on every axis"). Appended
@@ -858,7 +881,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     // mount-at-rest path (stationRef.current === 0, true for every existing
     // live show) stays byte-identical to before this fix.
     if (stationRef.current !== 0) dom.clampSafeBoxStarPeaks(design)
-    shootLoop()
+    if (shoots) shootLoop()
 
     // React 18 StrictMode double-invokes this effect in dev; clear what we
     // built so the second invocation doesn't append a duplicate DOM tree.

@@ -3668,13 +3668,15 @@ export const SKY_REGIONS = {
 // source is the member carrying `regionSource: true`; a region with members
 // but no declared source falls back to its first member, so the answer is
 // always derived from station data and never silently from a hardcode.
-export function skyRegionHues(stations) {
+// `regions` (here and in the sky-region functions below): a world's own
+// region set (world.skyRegions); defaults to the space world's SKY_REGIONS.
+export function skyRegionHues(stations, regions = SKY_REGIONS) {
   const hues = {}
-  for (const key of Object.keys(SKY_REGIONS)) {
+  for (const key of Object.keys(regions)) {
     const src = stations.find(s => s.region === key && s.regionSource)
       ?? stations.find(s => s.region === key)
     if (!src) continue
-    hues[key] = (((src.hue + SKY_REGIONS[key].hueOffset) % 360) + 360) % 360
+    hues[key] = (((src.hue + regions[key].hueOffset) % 360) + 360) % 360
   }
   return hues
 }
@@ -3751,11 +3753,11 @@ function cyclicOffset(i, j, n) {
 // neighbouring region's shoulder happens to overlap it. Whether the ring
 // should trade core contrast for a flatter total is an aesthetic call, not
 // this function's to make.
-export function skyRegionWeights(stations) {
+export function skyRegionWeights(stations, regions = SKY_REGIONS) {
   const n = stations.length
   return stations.map((_, i) => {
     const w = {}
-    for (const k of Object.keys(SKY_REGIONS)) w[k] = 0
+    for (const k of Object.keys(regions)) w[k] = 0
     stations.forEach((st, j) => {
       if (!st.region || !(st.region in w)) return
       const d = cyclicOffset(i, j, n)
@@ -3809,12 +3811,12 @@ function skyTintBackground(cfg) {
 // `regionHues` comes from skyRegionHues(stations) — a region whose station
 // left the world has no hue and gets no layer at all, rather than a layer
 // painted in some leftover default.
-function makeSkyTints(el, regionHues) {
+function makeSkyTints(el, regionHues, regions = SKY_REGIONS) {
   const tints = {}
-  for (const key of Object.keys(SKY_REGIONS)) {
+  for (const key of Object.keys(regions)) {
     if (regionHues?.[key] === undefined) continue
     const t = el('sky-tint')
-    t.style.background = skyTintBackground({ ...SKY_REGIONS[key], hue: regionHues[key] })
+    t.style.background = skyTintBackground({ ...regions[key], hue: regionHues[key] })
     t.style.opacity = '0'
     tints[key] = t
   }
@@ -3882,8 +3884,8 @@ const SRC_FEATHER_PX = 220
 // drawn after it - occludes it. Deliberately NOT a new free-floating
 // primitive: an unanchored soft shape on this system is a documented,
 // already-removed failure mode.
-function makeSourceGlow(el, engine, regionKey, hue, x0, cx, cy, size) {
-  const cfg = SKY_REGIONS[regionKey]
+function makeSourceGlow(el, engine, regionKey, hue, x0, cx, cy, size, regions = SKY_REGIONS) {
+  const cfg = regions[regionKey]
   const g = el('sky-src')
   g.style.left = px(x0); g.style.top = '0'
   g.style.width = px(engine.W); g.style.height = px(engine.H)
@@ -3931,8 +3933,8 @@ export function ringDom(prefix, engine) {
     // duplication: an earlier version of the pair-bridge skip listed
     // 'streak'/'ribbon' only, missing 'lens', which this table already had).
     isElongatedKind: (kind) => kind in ROTATION_MAX_DEG,
-    makeSkyTints: (regionHues) => makeSkyTints(el, regionHues),
-    makeSourceGlow: (regionKey, hue, x0, cx, cy, size) => makeSourceGlow(el, engine, regionKey, hue, x0, cx, cy, size),
+    makeSkyTints: (regionHues, regions) => makeSkyTints(el, regionHues, regions),
+    makeSourceGlow: (regionKey, hue, x0, cx, cy, size, regions) => makeSourceGlow(el, engine, regionKey, hue, x0, cx, cy, size, regions),
   }
 }
 
