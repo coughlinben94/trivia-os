@@ -4,7 +4,11 @@ import { scorePinRound, scoringGroupSize, payableRoomSize, isValidPin, PIN_POINT
 const CORRECT = { lat: 41.8781, lon: -87.6298 } // Chicago
 // ~1 degree of latitude = ~69 miles; build pins by offsetting latitude
 const pinAt = (miles) => ({ lat: CORRECT.lat + miles / 69.0, lon: CORRECT.lon })
-const entry = (id, miles) => ({ teamId: id, teamName: id, pin: miles == null ? null : pinAt(miles) })
+const entry = (id, miles) => {
+  const pin = miles == null ? null : pinAt(miles)
+  if (pin && !isValidPin(pin)) throw new Error(`entry(${id}, ${miles}): pin at lat ${pin.lat} exceeds bounds`)
+  return { teamId: id, teamName: id, pin }
+}
 
 describe('scoringGroupSize', () => {
   it('follows the spec table', () => {
@@ -29,7 +33,7 @@ describe('isValidPin', () => {
 
 describe('scorePinRound', () => {
   it('scores the closest 40% of a 10-team room (4 teams), flat 10', () => {
-    const entries = Array.from({ length: 10 }, (_, i) => entry(`t${i}`, (i + 1) * 100))
+    const entries = Array.from({ length: 10 }, (_, i) => entry(`t${i}`, (i + 1) * 50))
     const r = scorePinRound({ entries, correct: CORRECT, roomSize: 10 })
     expect(r.filter(x => x.points === PIN_POINTS).map(x => x.teamId)).toEqual(['t0', 't1', 't2', 't3'])
     expect(r.filter(x => x.points === 0)).toHaveLength(6)
@@ -40,9 +44,13 @@ describe('scorePinRound', () => {
   })
   it('ties at the cutoff all score (compared on whole miles)', () => {
     // roomSize 5 -> 2 score. b and c are both ~200 mi, so both score.
-    const entries = [entry('a', 50), entry('b', 200), entry('c', 200.2), entry('d', 900), entry('e', 1200)]
+    // b=200 and c=200.2 both round to 200 whole miles (tie at the cutoff).
+    // d=400 and e=500 are beyond the cutoff and score 0.
+    const entries = [entry('a', 50), entry('b', 200), entry('c', 200.2), entry('d', 400), entry('e', 500)]
     const r = scorePinRound({ entries, correct: CORRECT, roomSize: 5 })
     expect(r.filter(x => x.points > 0).map(x => x.teamId).sort()).toEqual(['a', 'b', 'c'])
+    expect(r.find(x => x.teamId === 'b').miles).toBe(r.find(x => x.teamId === 'c').miles)
+    expect(r.filter(x => x.teamId === 'd' || x.teamId === 'e').every(x => x.points === 0)).toBe(true)
   })
   it('a team with no or invalid pin scores 0, sorts last, and still counts toward the room', () => {
     const entries = [entry('a', 10), entry('b', 20), { teamId: 'z', teamName: 'z', pin: { lat: NaN, lon: 1 } }, entry('n', null)]
@@ -58,6 +66,7 @@ describe('scorePinRound', () => {
     const r = scorePinRound({ entries: [entry('b', 300), entry('a', 100)], correct: CORRECT, roomSize: 10 })
     expect(r.map(x => x.teamId)).toEqual(['a', 'b'])
     expect(Number.isInteger(r[0].miles)).toBe(true)
+    expect(r[0]).not.toHaveProperty('exact')
   })
   it('scores nobody with a missing/invalid correct spot or empty room', () => {
     expect(scorePinRound({ entries: [entry('a', 1)], correct: null, roomSize: 5 }).every(x => x.points === 0)).toBe(true)
