@@ -689,9 +689,7 @@ async function stepShow(showRow, direction) {
 // client/src/worlds/midnightGalaxy.ring.js's eclipse entry). Ben: the jukebox
 // grading-break "needs to have its own ring slot" rather than consuming an
 // arbitrary station and hiding it under the overlay, which is what it did
-// before. Declared here rather than imported from the world module so a
-// non-ring theme still compiles — the value is simply never used unless a
-// ring world is mounted. 2026-09-28: the number now comes from the world
+// before. 2026-09-28: the constant is deleted; the number now comes from the world
 // (`world.musicStation`, default 10 for space and non-ring themes) via
 // ringStationOverride() in lib/ringStationOverride.js — one pure resolver,
 // unit-tested against the old `breakActive ? MUSIC_STATION : ...` expression.
@@ -1122,7 +1120,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
           Jukebox level, not here. */}
       {/* Hyperspace between the ring's own station and the jukebox's eclipse.
           'out' finishing is what makes the overlay below VISIBLE and flips
-          stationOverride to MUSIC_STATION — one commit, so the jump lands on
+          stationOverride to the world's musicStation — one commit, so the jump lands on
           the warp's last (fully black) frame. 'back' mounts in the same commit
           that asks for RING_RETURN, so that snap is covered too. z-[80]: above
           the stage and its overlays, below the nav-denied banner (z-200); the
@@ -1205,7 +1203,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
           AND warp goes null (canvas unmounts) in one batched commit, so the
           mount condition below never goes false across it — Jukebox does NOT
           remount at the handover. The ring's station jump (stationOverride ->
-          MUSIC_STATION, effect above) stays keyed to breakActive, i.e. still
+          world musicStation, effect above) stays keyed to breakActive, i.e. still
           lands on onDone's fully-black frame — deliberately NOT moved earlier.
           If the host advances mid-'out', breakEligible drops and this unmounts
           exactly like a host-side advance mid-break always has (player

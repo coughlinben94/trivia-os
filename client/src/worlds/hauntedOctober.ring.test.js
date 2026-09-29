@@ -4,6 +4,8 @@ import { RING_WORLDS, isPickableWorld, ringWorldFor } from '../lib/ringWorldFor.
 import { RING_VERSION } from '../lib/ringCertification.js'
 import { THEMES, getTheme } from '../themes/index.js'
 import { contrastRatio } from '../lib/contrast.js'
+import { worldFromParams } from '../lib/drawWorld.js'
+import { RING_POOL } from './ringPool.js'
 
 describe('haunted-october registration (Phase 1 stub)', () => {
   it('is registered and has the 13-station contract', () => {
@@ -50,6 +52,25 @@ describe('host pickers: isPickableWorld', () => {
     expect(isPickableWorld('pure-michigan')).toBe(false)
     // Same list both pickers render (LiveMode filters THEMES by this alone).
     expect(THEMES.filter(t => isPickableWorld(t.id)).map(t => t.id)).toEqual(['midnight-galaxy'])
+  })
+})
+
+describe('AmbientAudit ?stations= / ?colors= on haunted-october (Phase 1 review #7)', () => {
+  // Same call AmbientAudit makes: pool = base.pool ?? RING_POOL (the space pool).
+  const call = (p) => worldFromParams(p, { base: hauntedOctoberRing, pool: hauntedOctoberRing.pool ?? RING_POOL, baseTheme: getTheme('haunted-october') })
+  const HAUNTED_ONLY = ['slots', 'layers', 'skyRegions', 'prims', 'autoDraw', 'pinKey', 'pinAt', 'musicStation', 'layerArt']
+  const keepsHauntedFields = (w) => { for (const k of HAUNTED_ONLY) expect(w[k], k).toBe(hauntedOctoberRing[k]) }
+
+  it('?stations= resolves against the world\'s own stations, not the space pool, and keeps every per-world field', () => {
+    const keys = hauntedOctoberRing.stations.map(s => s.key).reverse()
+    const w = call({ stationsParam: keys.join(',') })
+    expect(w.stations.map(s => s.key)).toEqual(keys)
+    expect(w.stations[0]).toBe(hauntedOctoberRing.stations[12]) // region/regionSource/variant ride along
+    keepsHauntedFields(w)
+  })
+
+  it('?colors= keeps every per-world field', () => {
+    keepsHauntedFields(call({ colorsParam: '#ff7a1a,#6a2c91', weightsParam: '0.6,0.4' }))
   })
 })
 

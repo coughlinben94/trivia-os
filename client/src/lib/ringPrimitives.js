@@ -2041,7 +2041,7 @@ function makePrim(el, kind, w, h, hue, alpha, r, isHeadline, fill, variant) {
     // Jukebox player that sits over this station every grading break —
     // docs/superpowers/plans/2026-09-05-ring-unified-noun-color-draw-design.md
     // header + §5). Index-agnostic like every branch here; Display.jsx's
-    // MUSIC_STATION carries the routing index.
+    // `world.musicStation` (lib/ringStationOverride.js) carries the routing index.
     //
     // Built CORONA-FIRST (design doc §5.1): every element in this branch is
     // additive light shaped as a donut. 2026-09-06 update: the hole DOES get

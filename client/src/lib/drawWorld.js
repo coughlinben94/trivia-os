@@ -53,7 +53,11 @@ export function resolveStations(pool, keys) {
 export function worldFromParams({ colorsParam, weightsParam, driftParam, stationsParam }, { base, pool, baseTheme }) {
   let result = base
   if (stationsParam) {
-    result = { ...result, stations: resolveStations(pool, stationsParam.split(',')) }
+    // A fixed-order world (autoDraw: false, e.g. haunted-october) has no draw
+    // pool; its own stations are the only legal keys. The space pool would
+    // swap in space nouns (Phase 1 review #7).
+    const from = base.autoDraw === false ? base.stations : pool
+    result = { ...result, stations: resolveStations(from, stationsParam.split(',')) }
   }
   if (colorsParam) {
     result = recolorWorld(result, {
