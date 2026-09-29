@@ -6,6 +6,7 @@ import { THEMES, getTheme } from '../themes/index.js'
 import { contrastRatio } from '../lib/contrast.js'
 import { worldFromParams } from '../lib/drawWorld.js'
 import { RING_POOL } from './ringPool.js'
+import { BAND_H, horizonBand } from './hauntedOctober.art.js'
 
 describe('haunted-october registration (Phase 1 stub)', () => {
   it('is registered and has the 13-station contract', () => {
@@ -71,6 +72,33 @@ describe('AmbientAudit ?stations= / ?colors= on haunted-october (Phase 1 review 
 
   it('?colors= keeps every per-world field', () => {
     keepsHauntedFields(call({ colorsParam: '#ff7a1a,#6a2c91', weightsParam: '0.6,0.4' }))
+  })
+})
+
+describe('Phase 2 look contract (spec §2)', () => {
+  it('six sky regions, every station in one, orange dusk leads', () => {
+    expect(Object.keys(hauntedOctoberRing.skyRegions).sort()).toEqual(['blood', 'bruise', 'dusk', 'fog', 'moon', 'sick'])
+    const count = {}
+    for (const st of hauntedOctoberRing.stations) {
+      expect(hauntedOctoberRing.skyRegions[st.region], st.key).toBeDefined()
+      count[st.region] = (count[st.region] ?? 0) + 1
+    }
+    const lead = Object.entries(count).sort((a, b) => b[1] - a[1])[0][0]
+    expect(lead).toBe('dusk')
+    expect(hauntedOctoberRing.stations[10]).toMatchObject({ region: 'dusk', regionSource: true })
+  })
+
+  it('horizon band stays under 12% of frame height, on the far layer', () => {
+    expect(BAND_H).toBeLessThanOrEqual(0.12 * 1080)
+    expect(hauntedOctoberRing.layerArt).toEqual({ far: horizonBand })
+  })
+
+  it('planet dispatch: only the harvestMoon variant gets the world drawing', () => {
+    const calls = []
+    const dom = { makePrim: (...a) => { calls.push(a); return 'shared' } }
+    expect(hauntedOctoberRing.prims.planet(dom, 600, 500, 30, 0.4, () => 0.5, true, 1, undefined)).toBe('shared')
+    expect(calls[0]).toEqual(['planet', 600, 500, 30, 0.4, expect.any(Function), true, 1, undefined])
+    expect(hauntedOctoberRing.stations[10]).toMatchObject({ prim: 'planet', variant: 'harvestMoon' })
   })
 })
 

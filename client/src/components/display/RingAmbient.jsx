@@ -697,6 +697,10 @@ function buildLayerContent(engine, world, arc, host, L, showId) {
     /* fast and anonymous — the layer that sells the turn */
     if (layerOn(world, 'stars')) dom.buildStars(host, period, 26, 1.5, 0xBEEF)
   }
+
+  // Per-world layer art (Halloween spec §2 horizon band): world.layerArt[L.id]
+  // appends into this layer's authored period. The space world has none.
+  world.layerArt?.[L.id]?.(dom, host, period, engine)
 }
 
 const isReduced = () =>

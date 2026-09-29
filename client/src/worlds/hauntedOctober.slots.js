@@ -13,7 +13,7 @@ export const SLOTS = [
   { cornerLeft: true,  bandUpper: true,  companionUpper: false, companionBoost: false, maxDetail: 1, family: 'radial' },   // 7 lantern
   { cornerLeft: false, bandUpper: false, companionUpper: true,  companionBoost: false, maxDetail: 1, family: 'block' },    // 8 haunted house
   { cornerLeft: true,  bandUpper: false, companionUpper: true,  companionBoost: false, maxDetail: 1, family: 'cloud' },    // 9 fog bank
-  { cornerLeft: false, bandUpper: true,  companionUpper: false, companionBoost: false, maxDetail: 1, family: 'radial' },   // 10 harvest moon (music station)
+  { cornerLeft: false, bandUpper: true,  companionUpper: false, companionBoost: false, maxDetail: 0, family: 'radial' },   // 10 harvest moon (music station): no detail specks, the moon stands alone
   { cornerLeft: true,  bandUpper: true,  companionUpper: false, companionBoost: false, maxDetail: 1, family: 'streak' },   // 11 storm
   { cornerLeft: false, bandUpper: true,  companionUpper: false, companionBoost: false, maxDetail: 1, family: 'figure' },   // 12 crow
 ]
