@@ -34,15 +34,16 @@ afterEach(() => { act(() => root.unmount()); host.remove(); warn.mockRestore() }
 const render = async data => { await act(async () => { root.render(<ShinyPinQuestion slide={mk(data)} show={show} theme={theme} />) }) }
 
 describe('ShinyPinQuestion', () => {
-  it('waiting: prompt and dropped-a-pin count line', async () => {
+  it('waiting: prompt and locked-in count line', async () => {
     await render({})
     expect(host.textContent).toContain('Where is Chicago?')
-    expect(host.textContent).toContain('dropped a pin')
+    expect(host.textContent).toContain('2 teams locked in')
+    expect(host.textContent).not.toContain('dropped a pin')
   })
   it('locked: badge, no count line', async () => {
     await render({ pinLocked: true })
     expect(host.textContent).toContain('Answers locked')
-    expect(host.textContent).not.toContain('dropped a pin')
+    expect(host.textContent).not.toContain('teams locked in')
   })
   it('revealed: ranked list with miles, +10 for scorers, no pin', async () => {
     await render({ pinRevealed: true, pinAnswer: { lat: 41.88, lon: -87.63 }, answer: 'Chicago',
@@ -72,5 +73,22 @@ describe('ShinyPinQuestion', () => {
     await render({ pinRevealed: true })
     expect(raf).not.toHaveBeenCalled()
     raf.mockRestore()
+  })
+  it('revealed: pins fade in as one opacity group with a dashed line from each scoring pin to the true spot', async () => {
+    await render({ pinRevealed: true, pinAnswer: { lat: 41.88, lon: -87.63 },
+      pinResults: [res(1, { points: 10 }), res(2, { points: 10 }), res(3)] })
+    const g = host.querySelector('[data-pin-fade]')
+    expect(g).not.toBeNull()
+    expect(g.getAttribute('opacity')).toBe('0') // fades in later; nothing pops during the camera move
+    const lines = g.querySelectorAll('line')
+    expect(lines.length).toBe(2)
+    expect(lines[0].getAttribute('stroke-dasharray')).toBeTruthy()
+    expect(lines[0].getAttribute('vector-effect')).toBe('non-scaling-stroke')
+  })
+  it('tied whole-mile distances share a rank (1,2,2,4); rows without a pin show a dash', async () => {
+    await render({ pinRevealed: true, pinAnswer: { lat: 41.88, lon: -87.63 },
+      pinResults: [res(1, { miles: 10 }), res(2, { miles: 20 }), res(3, { miles: 20 }), res(4, { miles: 30 }), res(5, { pin: null, miles: null })] })
+    const ranks = [...host.querySelectorAll('ol li')].map(li => li.querySelector('span').textContent)
+    expect(ranks).toEqual(['1', '2', '2', '4', '–'])
   })
 })

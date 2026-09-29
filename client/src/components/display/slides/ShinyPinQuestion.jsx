@@ -22,6 +22,7 @@ const Q_BOX = { boxW: 1500, boxH: 150, floorPx: 40, ceilPx: 92, maxLines: 2, lin
 // Starting values for bar-distance legibility; tune at the Task 12 real-TV check.
 const TV_PIN_SIZE = 1.8, TV_LABEL = 22, TV_CITY_LABEL = 18 // effective map units (labelSize is final size)
 const HOME = { k: 1, tx: 0, ty: 0 }
+const CAMERA_MS = 1100
 
 function useTweenedView(target, ms, instant) {
   const [v, setV] = useState(target)
@@ -88,6 +89,8 @@ export default function ShinyPinQuestion({ slide, show, theme }) {
   const results = Array.isArray(data.pinResults) ? data.pinResults : []
   const target = isValidPin(data.pinAnswer) ? data.pinAnswer : null
   const scorers = results.filter(r => r.points > 0 && r.pin)
+  // Competition ranking on whole miles (1,2,2,4): tied rows read the same on the list and the map.
+  const rankOf = (r) => 1 + results.filter(o => o.pin && o.miles < r.miles).length
 
   const targetView = useMemo(() => {
     if (!revealed || !target) return HOME
@@ -95,7 +98,7 @@ export default function ShinyPinQuestion({ slide, show, theme }) {
     return fitView(pts)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [revealed, data.pinAnswer, data.pinResults])
-  const view = useTweenedView(targetView, 1100, reduce)
+  const view = useTweenedView(targetView, CAMERA_MS, reduce)
 
   const size = useMemo(
     () => fitToBox(data.text ?? '', { ...Q_BOX, family: theme.fonts.display }),
@@ -118,10 +121,23 @@ export default function ShinyPinQuestion({ slide, show, theme }) {
           <UsMap view={view} states={states} ink={ink} cityLabelSize={TV_CITY_LABEL}>
             {k => revealed && (
               <>
-                {results.filter(r => r.pin).map((r, i) => (
-                  // scorePinRound sorts points-desc then miles-asc with no-pin rows last, so i is the rank of a pinned row.
-                  <PinMarker key={r.teamId} lon={r.pin.lon} lat={r.pin.lat} k={k} size={TV_PIN_SIZE} labelSize={TV_LABEL} color={colors[r.teamId] ?? '#4a90d9'} label={i < 5 ? (r.teamName ?? '') : String(i + 1)} />
-                ))}
+                {/* opacity-only fade, after the camera move, so pins never "pop" while the map is still flying */}
+                <motion.g
+                  data-pin-fade
+                  initial={reduce ? false : { opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.4, ease: EASE_OUT, delay: reduce ? 0 : CAMERA_MS / 1000 }}
+                >
+                  {target && scorers.map(r => {
+                    const [x1, y1] = lonLatToMap(r.pin.lon, r.pin.lat)
+                    const [x2, y2] = lonLatToMap(target.lon, target.lat)
+                    return <line key={`l${r.teamId}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke={ink} strokeOpacity="0.5" strokeWidth="1.5" strokeDasharray="6 6" vectorEffect="non-scaling-stroke" />
+                  })}
+                  {results.filter(r => r.pin).map((r, i) => (
+                    // scorePinRound sorts points-desc then miles-asc with no-pin rows last, so i is the position of a pinned row.
+                    <PinMarker key={r.teamId} lon={r.pin.lon} lat={r.pin.lat} k={k} size={TV_PIN_SIZE} labelSize={TV_LABEL} color={colors[r.teamId] ?? '#4a90d9'} label={i < 5 ? (r.teamName ?? '') : String(rankOf(r))} />
+                  ))}
+                </motion.g>
                 {/* drawn last so guesses never paint over the true spot */}
                 {target && <PinMarker lon={target.lon} lat={target.lat} k={k} size={TV_PIN_SIZE} labelSize={TV_LABEL} color={SHINY_GOLD} label={data.answer || 'Answer'} />}
               </>
@@ -132,7 +148,7 @@ export default function ShinyPinQuestion({ slide, show, theme }) {
         <div style={{ minHeight: '3.4rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: `${ink}d9`, fontSize: 'clamp(1.6rem, 2vw, 2.3rem)', fontFamily: bodyFont }}>
           {revealed ? (data.answer ? `It's ${data.answer}` : null)
             : locked ? <AnswersLockedBadge theme={theme} />
-            : <span style={{ fontVariantNumeric: 'tabular-nums' }}>{teamCount > 0 ? `${submitted} of ${teamCount} teams dropped a pin` : `${submitted} team${submitted === 1 ? '' : 's'} dropped a pin`}</span>}
+            : <span style={{ fontVariantNumeric: 'tabular-nums' }}>{teamCount > 0 ? `${submitted} of ${teamCount} teams locked in` : `${submitted} team${submitted === 1 ? '' : 's'} locked in`}</span>}
         </div>
       </div>
 
@@ -145,7 +161,7 @@ export default function ShinyPinQuestion({ slide, show, theme }) {
         >
           {results.slice(0, 12).map((r, i) => (
             <li key={r.teamId} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: 'clamp(1.1rem, 1.5vw, 1.6rem)', opacity: r.points > 0 ? 1 : 0.6 }}>
-              <span style={{ width: '1.6em', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.pin ? i + 1 : '–'}</span>
+              <span style={{ width: '1.6em', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.pin ? rankOf(r) : '–'}</span>
               <span aria-hidden="true" style={{ width: 14, height: 14, borderRadius: 7, background: colors[r.teamId] ?? '#4a90d9', flexShrink: 0 }} />
               <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.teamName ?? 'Team'}</span>
               <span style={{ fontVariantNumeric: 'tabular-nums' }}>{r.miles == null ? 'no pin' : `${r.miles.toLocaleString()} mi`}</span>
