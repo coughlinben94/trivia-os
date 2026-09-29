@@ -79,10 +79,30 @@ describe('renumberRoundQuestions', () => {
     expect(numByI('q7')).toBe(5)
   })
 
-  it('leaves a shiny slide\'s own questionLabel alone (only questionNumber is recomputed)', () => {
-    const slides = [q('a', 0, { isShiny: true, questionLabel: 'Q1', bendleStepIndex: 0 })]
+  it('leaves a shiny SERIES slide\'s own questionLabel alone (siblings are grouped by it)', () => {
+    const slides = [
+      q('a', 0, { questionLabel: 'Q1', questionNumber: 1 }),
+      q('s', 1, { isShiny: true, isSeries: true, shinyFormatId: 'f', questionLabel: 'Q1' }),
+    ]
     const result = renumberRoundQuestions(slides)
-    expect(result[0].data.questionLabel).toBe('Q1')
-    expect(result[0].data.questionNumber).toBe(1)
+    expect(result[1].data.questionLabel).toBe('Q1')
+    expect(result[1].data.questionNumber).toBe(2)
+  })
+
+  it('renumbers a single (non-series) shiny label with its position, e.g. Mixology added first then two questions before it', () => {
+    const slides = [
+      q('a', 0, { questionLabel: 'Q1' }),
+      q('b', 1, { questionLabel: 'Q2' }),
+      q('m', 2, { isShiny: true, questionLabel: 'Q1', questionNumber: 3 }), // stamped Q1 when the round was empty
+      q('c', 3, { questionLabel: 'Q4' }),
+    ]
+    const result = renumberRoundQuestions(slides)
+    expect(result.map(s => s.data.questionLabel)).toEqual(['Q1', 'Q2', 'Q3', 'Q4'])
+    expect(result.map(s => s.data.questionNumber)).toEqual([1, 2, 3, 4])
+  })
+
+  it('a non-series shiny in the bonus track gets a B label', () => {
+    const slides = [q('m', 0, { isShiny: true, isBonus: true, questionLabel: 'Q1' })]
+    expect(renumberRoundQuestions(slides)[0].data.questionLabel).toBe('B1')
   })
 })

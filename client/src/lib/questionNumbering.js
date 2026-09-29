@@ -13,10 +13,10 @@ import { sortSlides } from './slideStepping.js'
 // Counting convention matches what AddSlideWizard always used: question +
 // pixelate-series slides share one sequence per round, split into a
 // non-bonus track (Q1, Q2, …) and a bonus track (B1, B2, …). Shiny questions
-// still occupy a slot in that count (so a regular question after a shiny one
-// gets the right number), but their own label is left alone — BuildMode's
-// series grouping matches sibling slides by exact questionLabel equality, so
-// silently rewriting it would break that.
+// occupy a slot in that count too. A shiny SERIES (isSeries) keeps its own
+// label — BuildMode's series grouping matches sibling slides by exact
+// questionLabel equality, so rewriting it would split the series. A single
+// shiny (Mixology, Order, Choice…) is renumbered like any other question.
 
 // Where a newly-added slide should land: right after the round's own last
 // slide (roundSlides), falling back to the show's own last slide if the
@@ -61,7 +61,10 @@ export function renumberRoundQuestions(slides) {
         if (!isBendleFollowupStep) num += 1
         patches.set(s.id, {
           questionNumber: num,
-          questionLabel: s.data?.isShiny ? s.data.questionLabel : `${isBonus ? 'B' : 'Q'}${num}`,
+          // Only a shiny SERIES keeps its label: BuildMode groups its sibling
+          // slides by exact label equality. Any other shiny is one question and
+          // follows the numbering, or it reads "Q1" once questions land before it.
+          questionLabel: s.data?.isShiny && s.data?.isSeries ? s.data.questionLabel : `${isBonus ? 'B' : 'Q'}${num}`,
         })
       })
   }
