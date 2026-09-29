@@ -14,7 +14,7 @@ import { computeChoiceScoreUpdates, DEFAULT_CHOICE_POINTS } from '../../lib/choi
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
 import { scoreHuesCuesRound, computeHuesCuesScoreUpdates } from '../../lib/huesCuesScoring.js'
 import { computeHorseRaceScoreUpdates, DEFAULT_RACE_POINTS } from '../../lib/raceScoring.js'
-import { scorePinRound, computePinScoreUpdates, payableRoomSize, resolvePinRoomSize, isValidPin } from '../../lib/pinScoring.js'
+import { scorePinRound, computePinScoreUpdates, payableRoomSize, resolvePinRoomSize, payableEntries, isValidPin } from '../../lib/pinScoring.js'
 import PinRoomControl from './PinRoomControl.jsx'
 import { HUES_CUES_CODE_RE } from '../../lib/huesCuesGrid.js'
 import { nextPressGate } from '../../lib/nextPressCue.js'
@@ -694,7 +694,10 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       lateLogLabel: 'pin lock',
       buildResults: ({ answers, teams, scoreboardTeams, roundKey, slideId }) => {
         const teamIdToName = new Map((teams ?? []).map(t => [t.id, t.name]))
-        const entries = (answers ?? []).map(a => ({ teamId: a.team_id, teamName: teamIdToName.get(a.team_id) ?? null, pin: a.answer }))
+        const entries = payableEntries(
+          (answers ?? []).map(a => ({ teamId: a.team_id, teamName: teamIdToName.get(a.team_id) ?? null, pin: a.answer })),
+          teams, scoreboardTeams,
+        )
         const roomSize = resolvePinRoomSize({
           saved: slide.data.pinRoomSize,
           override: slide.data.pinRoomSizeOverride,

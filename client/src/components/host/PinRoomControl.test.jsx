@@ -6,12 +6,13 @@ import { createRoot } from 'react-dom/client'
 // No @testing-library/react in this repo — createRoot + act house pattern.
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
+let failFetch = false
 const teams = [{ id: 1, name: 'A' }, { id: 2, name: 'B' }, { id: 3, name: 'C' }]
 const sb = [{ id: 1, name: 'A' }, { id: 2, name: 'B' }]
 vi.mock('../../lib/supabase.js', () => ({
   supabase: {
     from: (table) => ({
-      select: () => ({ eq: () => Promise.resolve({ data: table === 'teams' ? teams : sb }) }),
+      select: () => ({ eq: () => failFetch ? Promise.reject(new Error('x')) : Promise.resolve({ data: table === 'teams' ? teams : sb }) }),
     }),
   },
 }))
@@ -25,7 +26,7 @@ async function mount(props) {
   root = createRoot(host)
   await act(async () => { root.render(<PinRoomControl showId="s" onOverride={() => {}} {...props} />) })
 }
-afterEach(() => { act(() => root.unmount()); host.remove() })
+afterEach(() => { failFetch = false; act(() => root.unmount()); host.remove() })
 
 function type(input, value) {
   const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
@@ -55,5 +56,18 @@ describe('PinRoomControl', () => {
     await mount({ override: 10 })
     expect(host.textContent).toContain('Room counted: 2')
     expect(host.textContent).toContain('top 4 score')
+  })
+
+  it('shows ? when the fetch fails', async () => {
+    failFetch = true
+    await mount()
+    expect(host.textContent).toContain('Room counted: ?')
+  })
+
+  it('clamps typed override to 99', async () => {
+    const onOverride = vi.fn()
+    await mount({ onOverride })
+    type(host.querySelector('input'), '150')
+    expect(onOverride).toHaveBeenLastCalledWith(99)
   })
 })

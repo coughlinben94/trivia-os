@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { scorePinRound, scoringGroupSize, payableRoomSize, resolvePinRoomSize, isValidPin, PIN_POINTS } from './pinScoring.js'
+import { scorePinRound, scoringGroupSize, payableRoomSize, resolvePinRoomSize, payableEntries, isValidPin, PIN_POINTS } from './pinScoring.js'
 
 const CORRECT = { lat: 41.8781, lon: -87.6298 } // Chicago
 // ~1 degree of latitude = ~69 miles; build pins by offsetting latitude
@@ -98,5 +98,22 @@ describe('resolvePinRoomSize', () => {
     expect(resolvePinRoomSize({ saved: 5, override: 0, payable: 12 })).toBe(5)
     expect(resolvePinRoomSize({ saved: null, override: -2, payable: 12 })).toBe(12)
     expect(resolvePinRoomSize({ saved: '8', override: null, payable: 12 })).toBe(12)
+  })
+})
+
+describe('payableEntries', () => {
+  const teams = [{ id: 'a', name: 'Alpha' }, { id: 'b', name: ' beta ' }, { id: 'c', name: 'Gamma' }]
+  const sb = [{ name: 'alpha' }, { name: 'Beta' }]
+  it('drops teams with no team row or no scoreboard row', () => {
+    const entries = [entry('a', 5), entry('b', 6), entry('c', 7), entry('ghost', 1)]
+    expect(payableEntries(entries, teams, sb).map(e => e.teamId)).toEqual(['a', 'b'])
+  })
+  it('an unpaid team pinning closest cannot take a scoring slot', () => {
+    const t = ['a', 'b', 'c', 'd', 'e'].map(id => ({ id, name: id }))
+    const s2 = t.map(x => ({ name: x.name }))
+    const entries = [entry('ghost', 1), entry('a', 10), entry('b', 20), entry('c', 30), entry('d', 40), entry('e', 50)]
+    const results = scorePinRound({ entries: payableEntries(entries, t, s2), correct: CORRECT, roomSize: 5 })
+    expect(JSON.stringify(results)).not.toContain('ghost')
+    expect(results.filter(r => r.points === PIN_POINTS).map(r => r.teamId).sort()).toEqual(['a', 'b'])
   })
 })

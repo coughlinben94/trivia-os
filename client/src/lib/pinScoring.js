@@ -32,6 +32,14 @@ export function payableRoomSize(teams, scoreboardTeams) {
   return (teams ?? []).filter(t => sbNames.has(normalizeTeamName(t.name))).length
 }
 
+// Only payable teams (live team row + scoreboard row) take part in the round,
+// so an unpaid team can never take a scoring slot it can't be paid for.
+export function payableEntries(entries, teams, scoreboardTeams) {
+  const sbNames = new Set((scoreboardTeams ?? []).map(t => normalizeTeamName(t.name)))
+  const payableIds = new Set((teams ?? []).filter(t => sbNames.has(normalizeTeamName(t.name))).map(t => t.id))
+  return (entries ?? []).filter(e => payableIds.has(e.teamId))
+}
+
 // Room size precedence: the size saved at first lock wins (so Retry Scoring
 // can't change who scores), then the host's override, then the payable count.
 export function resolvePinRoomSize({ saved, override, payable }) {
