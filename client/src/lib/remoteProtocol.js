@@ -73,9 +73,12 @@ export const REFUSAL_TEXT = {
   'scores-unreadable': 'The laptop could not read the scores. Check its internet, then try again',
   'score-not-saved': 'That score did not save. Check the laptop internet, then try again',
   'save-unconfirmed': 'The laptop could not confirm that save. Open Scores again and check the number',
+  'modal-just-closed': 'The score table just closed. Try again in a second.',
 }
 // One line for a score fix, shown on the laptop and written to the relay log.
-const clip = (v, n) => String(v ?? '?').slice(0, n)
+// Team names come from phones: any newline or other whitespace run becomes one
+// space, so a name can't forge a log line.
+const clip = (v, n) => String(v ?? '?').replace(/\s+/g, ' ').slice(0, n)
 export function scoreChangeText(c) {
   return `iPad set ${clip(c?.team, 60)} ${clip(c?.col, 8)}: ${clip(c?.from, 8)} to ${clip(c?.to, 8)}`
 }

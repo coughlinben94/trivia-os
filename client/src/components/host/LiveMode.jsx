@@ -21,7 +21,7 @@ import { planHostCommand } from '../../lib/hostCommands.js'
 import { useRemoteLink } from '../../hooks/useRemoteLink.js'
 import { REMOTE_LINK_KEY } from '../../lib/remoteProtocol.js'
 import { buildSnapshot, hostChipText } from '../../lib/remoteSnapshot.js'
-import { createScoreChain, createScoreRemote } from '../../lib/scoreCellWrite.js'
+import { createScoreChain, createScoreRemote, withTimeout, SCORE_CALL_TIMEOUT_MS } from '../../lib/scoreCellWrite.js'
 import { scoreChangeText } from '../../lib/remoteProtocol.js'
 import { EASE_OUT, EASE_EXIT } from '../../lib/easings.js'
 import { fixFor } from '../../lib/remoteFix.js'
@@ -238,7 +238,7 @@ function UpNextCard({ slide, offset }) {
 
 // ─── LiveMode ──────────────────────────────────────────────────────────────
 
-export default function LiveMode({ show, actions, onExitLive, onThemeChange, onOpenScoreboard, scoreboardModalOpen }) {
+export default function LiveMode({ show, actions, onExitLive, onThemeChange, onOpenScoreboard, scoreboardModalOpen, scoreChainIdleRef }) {
   const [lateTeamPopoverOpen, setLateTeamPopoverOpen] = useState(false)
   const [scorePanelOpen, setScorePanelOpen] = useState(false)
   const [themePickerOpen, setThemePickerOpen] = useState(false)
@@ -299,15 +299,21 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   const [remotePaused, setRemotePaused] = useState(false)
 
   // The score chain (lib/scoreCellWrite.js): lockAndScore's scoreboard_teams
-  // read-then-upsert and every iPad score.set run on it, one at a time. The
-  // queries are the same ones lockAndScore already used.
+  // read-then-upsert and every iPad score.set run on it, one at a time. Every
+  // call on it aborts after SCORE_CALL_TIMEOUT_MS, so a hung request can't
+  // hold the chain. The iPad writes only the scores column of a row that
+  // still exists (update, not upsert: a row deleted since the read stays gone).
   const scoreChainRef = useRef(null)
   if (!scoreChainRef.current) {
     scoreChainRef.current = createScoreChain({
-      readTeams: showId => supabase.from('scoreboard_teams').select('id, show_id, name, scores, sort_order').eq('show_id', showId),
-      upsertRow: row => supabase.from('scoreboard_teams').upsert(row),
+      readTeams: (showId, signal) => supabase.from('scoreboard_teams').select('id, show_id, name, scores, sort_order').eq('show_id', showId).abortSignal(signal),
+      updateScores: (row, signal) => supabase.from('scoreboard_teams').update({ scores: row.scores }).eq('id', row.id).eq('show_id', row.show_id).select('id').abortSignal(signal),
+      timeoutMs: SCORE_CALL_TIMEOUT_MS,
     })
   }
+  // Host.jsx's winner-reveal auto-save waits on this, so saveResults never
+  // reads scoreboard_teams while a score write is still in flight.
+  if (scoreChainIdleRef) scoreChainIdleRef.current = () => scoreChainRef.current.whenIdle()
   // The iPad Scores drawer's view, plus a small fading notice here for every
   // score the iPad changed, so Ben (or a helper) sees what moved.
   const [, rerenderScores] = useReducer(n => n + 1, 0)
@@ -321,6 +327,15 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         const line = scoreChangeText(change)
         console.info("[remote] %s %s", new Date().toISOString(), line)
         setScoreNotice({ line, at: Date.now() })
+        // On or past the winner slide, final_scores (Shows/Dashboard) was
+        // already saved from the old number: save it again. The TV's winner
+        // screen read its teams on mount and can't be updated silently, so
+        // the iPad says how to redraw it.
+        if (pastWinnerRef.current()) {
+          actionsRef.current.saveResults?.()
+          return { winnerStale: true }
+        }
+        return null
       },
     })
   }
@@ -337,6 +352,18 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
 
   const slides = sortedSlides(show)
   const currentIndex = show.showState.currentSlideIndex ?? 0
+  // Read when a score.set lands (not when it was sent): is the show on or past its winner slide?
+  const pastWinnerRef = useRef(() => false)
+  pastWinnerRef.current = () => {
+    const w = slides.findIndex(s => s.type === 'winner-reveal')
+    return w !== -1 && currentIndex >= w
+  }
+  // The laptop score table's last typed save flushes as it closes: for 1s
+  // after, the iPad's scores.get/score.set wait (hostCommands modal-just-closed).
+  const modalWasOpenRef = useRef(!!scoreboardModalOpen)
+  const modalClosedAtRef = useRef(0)
+  if (modalWasOpenRef.current && !scoreboardModalOpen) modalClosedAtRef.current = Date.now()
+  modalWasOpenRef.current = !!scoreboardModalOpen
   const currentSlide = slides[currentIndex] ?? null
   const nextSlides = slides.slice(currentIndex + 1, currentIndex + 3)
   const atStart = currentIndex === 0
@@ -541,10 +568,11 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       // order as before; each early return below still ends lockAndScore.
       const STOP = Symbol('stop')
       const scored = await scoreChainRef.current.run(async () => {
-        const { data: scoreboardTeams, error: sbError } = await supabase
+        const { data: scoreboardTeams, error: sbError } = await withTimeout(signal => supabase
           .from('scoreboard_teams')
           .select('id, show_id, name, scores, sort_order')
           .eq('show_id', show.id)
+          .abortSignal(signal), SCORE_CALL_TIMEOUT_MS)
         if (sbError) { console.error('scoreboard_teams fetch failed:', sbError); setError('Scoring failed — check connection and retry'); return STOP }
 
         // `force` (2026-08-17, Ben) skips this ONE check — the UI only offers
@@ -577,11 +605,13 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         if (unmatchedError) { setError(unmatchedError); return STOP }
 
         if (updates.length > 0) {
-          const { error: updateError } = await supabase.from('scoreboard_teams').upsert(updates)
+          const { error: updateError } = await withTimeout(signal => supabase.from('scoreboard_teams').upsert(updates).abortSignal(signal), SCORE_CALL_TIMEOUT_MS)
           if (updateError) { console.error('scoreboard_teams score fold-in failed:', updateError); setError('Scoring failed — check connection and retry'); return STOP }
         }
         return { results }
       })
+      // The iPad's open Scores drawer shows what this segment just wrote.
+      refreshScoresView()
       if (scored === STOP) return
       const { results } = scored
 
@@ -1273,6 +1303,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       jumpBusy: remoteRun === 'jump',
       scoreQueueDepth: scoreChainRef.current.depth(),
       scoreCols: deriveRoundCols(show),
+      modalJustClosed: Date.now() - modalClosedAtRef.current < 1000,
     })
     if (plan.refuse) return plan
     switch (plan.run) {
@@ -1335,7 +1366,10 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       || pylPickerBusy
       || !!currentSlide?.data?.lockCountdownStartedAt
       || (!!remoteRunSinceRef.current && Date.now() - remoteRunSinceRef.current < 12000)
-      || scoreChainRef.current.depth() > 0
+      || (scoreChainRef.current.depth() > 0 && Date.now() - scoreChainRef.current.busySince() < 12000)
+  }
+  function refreshScoresView() {
+    scoreRemoteRef.current.refresh({ showId: show.id, cols: deriveRoundCols(show) })
   }
   function runRemote(kind, fn) {
     remoteRunSinceRef.current = Date.now()
@@ -1355,6 +1389,15 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       scoreQueueDepth: scoreChainRef.current.depth(), scores: scoreRemoteRef.current.view(),
     }),
   })
+  // The score table just closed: once its 1s guard is over, re-read an open drawer.
+  useEffect(() => {
+    if (scoreboardModalOpen) return undefined
+    if (Date.now() - modalClosedAtRef.current >= 1000) return undefined
+    const t = setTimeout(() => refreshScoresViewRef.current(), 1000)
+    return () => clearTimeout(t)
+  }, [scoreboardModalOpen])
+  const refreshScoresViewRef = useRef(refreshScoresView)
+  refreshScoresViewRef.current = refreshScoresView
   // No iPad left: stop attaching the scoreboard to the snapshot.
   useEffect(() => {
     if (remoteLink.remotes === 0 && scoreRemoteRef.current.view()) scoreRemoteRef.current.perform({ run: 'scores-hide' }, {})

@@ -311,6 +311,26 @@ describe('stub display + relay + iPad (Stream Deck parity)', () => {
 
 // Phase 3 (reduced): the Scores drawer over the real relay. The stub host's
 // scoreboard is in memory (the real score chain over a fake table): no Supabase.
+describe('iPad clock skew with Live Mode closed', () => {
+  it('an iPad 3s behind the laptop, no host: it times taps from relay-beat laptopNow and vol.up is accepted', async () => {
+    const SKEW = -3000
+    const ws = new WebSocket(`ws://127.0.0.1:${ports.remotePort}`, { origin: PROD_ORIGIN })
+    const inbox = []
+    ws.on('message', d => inbox.push(JSON.parse(String(d))))
+    await new Promise((res, rej) => { ws.once('open', res); ws.once('error', rej) })
+    ws.send(JSON.stringify({ type: 'hello', secret: SECRET }))
+    const beat = await until(() => inbox.find(m => m.type === 'relay-beat'))
+    const ipadNow = () => Date.now() + SKEW
+    // Without the offset the tap reads 3s old and is refused late.
+    ws.send(JSON.stringify({ type: 'cmd', id: 'raw', cmd: 'vol.up', args: {}, sentAt: ipadNow() }))
+    expect(await until(() => inbox.find(m => m.type === 'result' && m.id === 'raw'))).toMatchObject({ refused: 'late' })
+    const offset = beat.laptopNow - ipadNow()
+    ws.send(JSON.stringify({ type: 'cmd', id: 'fixed', cmd: 'vol.up', args: {}, sentAt: ipadNow() + offset }))
+    expect(await until(() => inbox.find(m => m.type === 'result' && m.id === 'fixed'))).toMatchObject({ received: true })
+    ws.close()
+  })
+})
+
 describe('Scores drawer: scores.get / score.set / scores.hide', () => {
   const ROUNDS = [{ id: 'ra', number: 1 }, { id: 'rb', number: 2 }]
   const TEAMS = () => [
@@ -357,7 +377,7 @@ describe('Scores drawer: scores.get / score.set / scores.hide', () => {
     expect(s.db.rows).toEqual(TEAMS())
   })
 
-  it('a second score.set while one is on the chain is refused, not stacked', async () => {
+  it('a second score.set while one is on the chain is refused busy (as LiveMode does), not stacked', async () => {
     const s = stub(makeSlides(), { rounds: ROUNDS, teams: TEAMS() })
     const p = await ipad()
     await p.tap('scores.get')
@@ -367,7 +387,8 @@ describe('Scores drawer: scores.get / score.set / scores.hide', () => {
     const a = await setCell(p, { teamId: 't1', colKey: 'r_ra', value: 6, expectOld: 5 })
     expect(a).toMatchObject({ received: true })
     const b = await setCell(p, { teamId: 't2', colKey: 'r_ra', value: 1, expectOld: 9 })
-    expect(b).toMatchObject({ refused: 'saving-scores' })
+    expect(b).toMatchObject({ refused: 'busy' })
+    await until(() => p.state.busy === true)
     s.db.gate = null
     open()
     expect(await outcome(p, a.id)).toMatchObject({ done: true })
@@ -401,6 +422,29 @@ describe('Scores drawer: scores.get / score.set / scores.hide', () => {
     await until(() => p.state.paused)
     expect(await setCell(p, { teamId: 't1', colKey: 'r_ra', value: 6, expectOld: 5 })).toMatchObject({ refused: 'paused' })
     expect(s.db.log).toEqual([])
+  })
+
+  it('a row deleted before the write is not brought back; the iPad hears it did not save', async () => {
+    const s = stub(makeSlides(), { rounds: ROUNDS, teams: TEAMS() })
+    const p = await ipad()
+    s.db.afterRead = () => { s.db.rows = s.db.rows.filter(r => r.id !== 't1'); s.db.afterRead = null }
+    const r = await setCell(p, { teamId: 't1', colKey: 'r_ra', value: 6, expectOld: 5 })
+    expect(await outcome(p, r.id)).toMatchObject({ refused: 'score-not-saved' })
+    expect(s.db.rows.map(x => x.id)).toEqual(['t2'])
+  })
+
+  it('the laptop reloads mid-drawer (a fresh host with the drawer closed): the iPad asks again and the teams come back', async () => {
+    const a = stub(makeSlides(), { rounds: ROUNDS, teams: TEAMS() })
+    const p = await ipad()
+    await p.tap('scores.get')
+    await until(() => p.state.scores)
+    a.stop()
+    await until(() => p.host === false)
+    stub(makeSlides(), { rounds: ROUNDS, teams: TEAMS() })
+    await until(() => p.host === true && p.state.scores === null)
+    // Remote.jsx's rule: drawer open, live, no scores, nothing in flight: ask again.
+    expect(await p.tap('scores.get')).toMatchObject({ received: true })
+    await until(() => p.state.scores?.teams.length === 2)
   })
 
   it('scores.hide stops attaching the scoreboard', async () => {

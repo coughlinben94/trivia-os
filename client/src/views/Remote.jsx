@@ -104,16 +104,26 @@ export default function Remote() {
   const [notice, setNotice] = useState(null)
   const [now, setNow] = useState(() => Date.now())
   const [drawer, setDrawer] = useState(null) // 'jump' | 'fix' | 'sounds' | 'scores' | null
-  // The one score.set in flight from the Scores drawer: { id, state: 'saving'|'saved'|'refused', scoreSet?, reason? }
+  // The one score.set in flight from the Scores drawer:
+  // { id, state: 'saving'|'saved'|'refused'|'unsure', scoreSet?, reason? }
+  // 'unsure': the link dropped mid-save, so the outcome never came.
   const [scoreSend, setScoreSend] = useState(null)
   const scoreSendIdRef = useRef(null)
+  // The drawer's scores.get: its id while in flight, 'refused', or null.
+  const scoresGetRef = useRef(null)
   // Phase 2b, both straight from the relay (not the laptop's Live Mode):
   const [local, setLocal] = useState(null)     // {type:'local-state', available, volume, ducked, sounds}
   const [jukebox, setJukebox] = useState(null) // {type:'jukebox', linked, waiting, open, playing, handoffPending}
   const [skipArmed, setSkipArmed] = useState(false)
   const wsRef = useRef(null)
   const offsetRef = useRef(0) // laptopNow − iPadNow, from the latest beat
+  const hostBeatAtRef = useRef(0) // when the last host beat came (it wins over relay-beat)
   const idRef = useRef(0)
+  // Every id this iPad sends starts with this, so it never takes another
+  // iPad's result (the relay sends every result to every iPad) as its own.
+  const idPrefixRef = useRef(null)
+  idPrefixRef.current ??= globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 14)
+  const mine = id => typeof id === 'string' && id.startsWith(`${idPrefixRef.current}-`)
   // Drops a repeat tap of the same button inside `ms`, so quick double taps
   // can't toggle Duck twice or trip the relay's 10-a-second close (4008).
   const lastTapRef = useRef({})
@@ -156,17 +166,30 @@ export default function Remote() {
       ws.onmessage = e => {
         let m
         try { m = JSON.parse(e.data) } catch { return }
-        if (m.type === 'relay-beat') kick()
+        if (m.type === 'relay-beat') {
+          kick()
+          // Live Mode closed (no fresh host beat): time taps by the relay's clock.
+          if (typeof m.laptopNow === 'number' && Date.now() - hostBeatAtRef.current > STALE_BEAT_MS) offsetRef.current = m.laptopNow - Date.now()
+        }
         else if (m.type === 'beat') {
           offsetRef.current = m.laptopNow - Date.now()
+          hostBeatAtRef.current = Date.now()
           setBeat({ at: Date.now(), visibility: m.visibility })
         }
-        else if (m.type === 'host') setHostConnected(!!m.connected)
+        else if (m.type === 'host') {
+          setHostConnected(!!m.connected)
+          if (!m.connected) linkLost()
+        }
         else if (m.type === 'state') setSnap(m)
         else if (m.type === 'local-state') setLocal(m)
         else if (m.type === 'jukebox') setJukebox(m)
         else if (m.type === 'result') {
+          if (!mine(m.id)) return
           if (m.refused) setNotice(refusalText(m.refused))
+          if (m.id === scoresGetRef.current) {
+            if (m.refused) scoresGetRef.current = 'refused'
+            else if (m.done) scoresGetRef.current = null
+          }
           if (m.id === scoreSendIdRef.current) {
             if (m.done) setScoreSend({ id: m.id, state: 'saved', scoreSet: m.scoreSet })
             else if (m.refused) setScoreSend({ id: m.id, state: 'refused', reason: m.refused })
@@ -181,10 +204,17 @@ export default function Remote() {
         setHostConnected(false)
         setLocal(null)
         setJukebox(null)
+        linkLost()
         if (stopped || e.code === CLOSE_BAD_SECRET) return
         retry = setTimeout(connect, delay)
         delay = Math.min(delay * 2, 10000)
       }
+    }
+    // The laptop side is gone: an in-flight scores.get will never answer
+    // (ask again once live), and an in-flight save's outcome may never come.
+    function linkLost() {
+      scoresGetRef.current = null
+      setScoreSend(s => (s?.state === 'saving' ? { ...s, state: 'unsure' } : s))
     }
     connect()
     return () => {
@@ -232,7 +262,7 @@ export default function Remote() {
     const ws = wsRef.current
     if (!ws || ws.readyState !== WebSocket.OPEN || !ok) return null
     setNotice(null)
-    const id = String(++idRef.current)
+    const id = `${idPrefixRef.current}-${++idRef.current}`
     ws.send(JSON.stringify({
       type: 'cmd', id, cmd, args,
       expectSlideId: snap?.slide?.id ?? null,
@@ -246,12 +276,20 @@ export default function Remote() {
     setScoreSend(null)
     scoreSendIdRef.current = null
     setDrawer('scores')
-    send('scores.get')
+    scoresGetRef.current = send('scores.get')
   }
   function closeScores() {
     setDrawer(null)
+    scoresGetRef.current = null
     send('scores.hide', {}, true)
   }
+  // After a wifi flap, relay restart or laptop reload the laptop has no open
+  // drawer: open, live, no scores, nothing asked yet: ask again (a refusal
+  // stays shown until Ben closes and reopens, so this never loops).
+  const noScores = snap?.scores == null
+  useEffect(() => {
+    if (drawer === 'scores' && live && noScores && scoresGetRef.current == null) scoresGetRef.current = send('scores.get')
+  })
   function sendScore(args) {
     const id = send('score.set', args)
     scoreSendIdRef.current = id
@@ -471,7 +509,7 @@ export default function Remote() {
         />
       </Sheet>
 
-      <Sheet open={drawer === 'scores'} onClose={closeScores} title="Scores" subtitle="Fix one team's score" tall wide>
+      <Sheet open={drawer === 'scores'} onClose={closeScores} title="Scores" subtitle="Fix one team’s score" tall wide>
         <ScoresPanel
           scores={snap?.scores ?? null}
           blocked={jumpBlock}
@@ -828,9 +866,10 @@ function ScoresPanel({ scores, blocked, notice, send, onSet, onClearSend }) {
   const [noticeHead, noticeHint] = splitMsg(notice)
 
   const back = () => {
-    const refused = send?.state === 'refused'
+    const refused = send?.state === 'refused' || send?.state === 'unsure'
     onClearSend()
-    // After a refusal (the number moved on the laptop), start again from what it says now.
+    // After a refusal (the number moved on the laptop), or a save whose outcome
+    // never came, start again from what it says now (expectOld then guards a double write).
     if (edit?.confirm && refused && cell) setEdit({ colKey: cell.key, old: cell.value, draft: cell.value, fresh: true, confirm: false })
     else if (edit?.confirm) setEdit({ ...edit, confirm: false })
     else if (edit) setEdit(null)
@@ -887,7 +926,11 @@ function ScoresPanel({ scores, blocked, notice, send, onSet, onClearSend }) {
   if (!edit || !cell) {
     return (
       <>
-        <p className="px-6 pb-2 text-2xl font-bold truncate">{team.name} · {signed(team.total)} total</p>
+        <p className="px-6 pb-2 text-2xl font-bold flex items-baseline gap-2 min-w-0">
+          <span className="min-w-0 truncate">{team.name}</span>
+          <span aria-hidden className="shrink-0">·</span>
+          <span data-team-total className="shrink-0 tabular-nums">{signed(team.total)} total</span>
+        </p>
         {noticeBox}
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pb-4 grid grid-cols-2 landscape:grid-cols-3 gap-2 content-start">
           {team.cells.map(c => (
@@ -918,6 +961,7 @@ function ScoresPanel({ scores, blocked, notice, send, onSet, onClearSend }) {
   const del = () => setEdit(e => ({ ...e, draft: Math.trunc(e.draft / 10), fresh: false }))
   const flip = () => setEdit(e => ({ ...e, draft: -e.draft || 0, fresh: false }))
   const sending = send?.state === 'saving'
+  const unsure = send?.state === 'unsure'
   const saved = send?.state === 'saved' ? send.scoreSet : null
   const key = `h-16 rounded-[var(--rl-r)] text-2xl font-bold bg-[color:var(--rl-raised)] text-[color:var(--rl-text)] active:bg-[color:var(--rl-raised-press)]
     focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--rl-text)]`
@@ -929,16 +973,23 @@ function ScoresPanel({ scores, blocked, notice, send, onSet, onClearSend }) {
         {noticeBox}
         <div className="flex-1 min-h-0 px-6 py-4 flex flex-col justify-center gap-4">
           {saved ? (
-            <p className="text-4xl font-bold leading-tight" role="status">
-              Saved. {saved.team} {roundName(saved.col)} is now {signed(saved.to)}
-            </p>
+            <>
+              <p className="text-4xl font-bold leading-tight" role="status">
+                Saved. {saved.team} {roundName(saved.col)} is now {signed(saved.to)}
+              </p>
+              {saved.winnerStale && (
+                <p className="text-2xl font-semibold text-[color:var(--rl-amber)]">Saved. The winner screen on the TV is out of date. Press Prev, then Next.</p>
+              )}
+            </>
           ) : (
             <p className="text-4xl font-bold leading-tight [text-wrap:balance]">
               Change {name} from {signed(edit.old)} to {signed(draft)}?
             </p>
           )}
           {sending && <p className="text-2xl font-semibold text-[color:var(--rl-text-75)]">Saving on the laptop…</p>}
-          {blocked && !saved && <p className="text-xl font-semibold text-[color:var(--rl-amber)]">{blocked}</p>}
+          {unsure && <p className="text-2xl font-semibold text-[color:var(--rl-amber)]">Not sure it saved. Go back and check the total.</p>}
+          {/* Our own save makes the laptop busy: say so only when it is someone else. */}
+          {blocked && !saved && !sending && !unsure && <p className="text-xl font-semibold text-[color:var(--rl-amber)]">{blocked}</p>}
         </div>
         {bar(
           <span className="text-lg font-semibold text-[color:var(--rl-text-75)]">
@@ -951,7 +1002,7 @@ function ScoresPanel({ scores, blocked, notice, send, onSet, onClearSend }) {
               {backBtn}
               <button
                 onClick={() => onSet({ teamId: team.id, colKey: cell.key, value: draft, expectOld: edit.old })}
-                disabled={!!blocked || sending || send?.state === 'refused'}
+                disabled={!!blocked || sending || unsure || send?.state === 'refused'}
                 className={goBtn}
               >
                 Yes, change it

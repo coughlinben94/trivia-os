@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createScoreChain, createScoreRemote, validScoreValue, buildCellWrite, scoresView, SCORE_MIN, SCORE_MAX } from './scoreCellWrite.js'
+import { createScoreChain, createScoreRemote, validScoreValue, buildCellWrite, scoresView, withTimeout, SCORE_MIN, SCORE_MAX, SCORE_CALL_TIMEOUT_MS } from './scoreCellWrite.js'
 
 // In-memory scoreboard_teams: no network, ever.
 function fakeDb(rows) {
@@ -10,11 +10,14 @@ function fakeDb(rows) {
     if (db.readError) return { data: null, error: db.readError }
     return { data: structuredClone(db.rows.filter(r => r.show_id === showId)), error: null }
   }
-  db.upsertRow = async row => {
-    db.log.push(['upsert', row.id])
-    if (db.upsertError) return { error: db.upsertError }
-    db.rows = db.rows.map(r => (r.id === row.id ? structuredClone(row) : r))
-    return { error: null }
+  // update({ scores }).eq(id).eq(show_id).select('id'): only the scores
+  // column, only a row that still exists; returns the rows it matched.
+  db.updateScores = async row => {
+    db.log.push(['update', row.id])
+    if (db.upsertError) return { data: null, error: db.upsertError }
+    const hit = db.rows.find(r => r.id === row.id && r.show_id === row.show_id)
+    if (hit) hit.scores = structuredClone(row.scores)
+    return { data: hit ? [{ id: hit.id }] : [], error: null }
   }
   return db
 }
@@ -41,7 +44,7 @@ describe('buildCellWrite (mirrors ScoreboardModal updateScore + mergeScoreEdit)'
   it('keeps every phoneBySlide bucket and sets written so the cell total is the new value', () => {
     const row = buildCellWrite(ROWS[0], 'r_b', 12)
     expect(row).toEqual({
-      id: 't1', show_id: 'show', name: 'Quizzly Bears', sort_order: 0,
+      id: 't1', show_id: 'show',
       scores: { r_a: 5, r_b: { written: 7, phone: { slideX: 3, slideY: 2 } } },
     })
   })
@@ -86,7 +89,7 @@ describe('createScoreChain.setCell', () => {
     db.rows[0].scores.r_b.phone.slideZ = 0
     const res = await set(chain)
     expect(res).toMatchObject({ ok: true, old: 9, value: 12, teamName: 'Quizzly Bears', colLabel: 'R2' })
-    expect(db.log).toEqual([['read', 'show'], ['upsert', 't1'], ['read', 'show']])
+    expect(db.log).toEqual([['read', 'show'], ['update', 't1'], ['read', 'show']])
     expect(db.rows[0].scores.r_b).toEqual({ written: 7, phone: { slideX: 3, slideY: 2, slideZ: 0 } })
     expect(db.rows[1]).toEqual(ROWS[1])
     expect(res.view.teams[0].total).toBe(17)
@@ -130,7 +133,7 @@ describe('createScoreChain.setCell', () => {
   })
   it('a re-read that does not show the new value is reported, not claimed as saved', async () => {
     const db = fakeDb(ROWS)
-    const chain = createScoreChain({ readTeams: db.readTeams, upsertRow: async () => ({ error: null }) })
+    const chain = createScoreChain({ readTeams: db.readTeams, updateScores: async () => ({ data: [{ id: 't1' }], error: null }) })
     expect(await set(chain)).toMatchObject({ refuse: 'save-unconfirmed' })
   })
   it('same value as now: no write', async () => {
@@ -138,10 +141,87 @@ describe('createScoreChain.setCell', () => {
     expect(await set(createScoreChain(db), { value: 9 })).toMatchObject({ ok: true, old: 9, value: 9 })
     expect(db.log).toEqual([['read', 'show']])
   })
+  it('a row deleted between the read and the write is not brought back: zero rows matched is not saved', async () => {
+    const db = fakeDb(ROWS)
+    const readTeams = async id => { const r = await db.readTeams(id); db.rows = db.rows.filter(x => x.id !== 't1'); return r }
+    const res = await set(createScoreChain({ readTeams, updateScores: db.updateScores }))
+    expect(res).toMatchObject({ refuse: 'score-not-saved' })
+    expect(db.rows.map(r => r.id)).toEqual(['t2'])
+  })
+  it('writes only id, show_id and scores (no name or sort_order resent)', async () => {
+    const db = fakeDb(ROWS)
+    const seen = []
+    await set(createScoreChain({ readTeams: db.readTeams, updateScores: row => { seen.push(row); return db.updateScores(row) } }))
+    expect(Object.keys(seen[0]).sort()).toEqual(['id', 'scores', 'show_id'])
+  })
   it('a thrown read is caught and surfaced', async () => {
-    const chain = createScoreChain({ readTeams: async () => { throw new Error('boom') }, upsertRow: async () => ({ error: null }) })
+    const chain = createScoreChain({ readTeams: async () => { throw new Error('boom') }, updateScores: async () => ({ data: [{ id: 't1' }], error: null }) })
     expect(await set(chain)).toMatchObject({ refuse: 'scores-unreadable' })
     expect(chain.depth()).toBe(0)
+  })
+})
+
+// A Supabase call that never answers until its AbortSignal fires.
+const hang = (log, what) => (_arg, signal) => new Promise(resolve => {
+  log.push([what, !!signal])
+  signal?.addEventListener('abort', () => resolve({ data: null, error: { message: 'AbortError: aborted' } }))
+})
+
+describe('the chain times out every Supabase call (abort, not race)', () => {
+  it('the default is 10s', () => expect(SCORE_CALL_TIMEOUT_MS).toBe(10000))
+  it('a read that never answers is aborted: scores-unreadable, and the chain moves on', async () => {
+    const log = []
+    const chain = createScoreChain({ readTeams: hang(log, 'read'), updateScores: async () => ({ data: [], error: null }), timeoutMs: 30 })
+    expect(await set(chain)).toMatchObject({ refuse: 'scores-unreadable' })
+    expect(log).toEqual([['read', true]])
+    expect(chain.depth()).toBe(0)
+    expect(await chain.run(async () => 'next')).toBe('next')
+  })
+  it('a write that never answers is aborted and reported save-unconfirmed (it may have landed)', async () => {
+    const db = fakeDb(ROWS)
+    const log = []
+    const chain = createScoreChain({ readTeams: db.readTeams, updateScores: hang(log, 'update'), timeoutMs: 30 })
+    expect(await set(chain)).toMatchObject({ refuse: 'save-unconfirmed' })
+    expect(log).toEqual([['update', true]])
+    expect(chain.depth()).toBe(0)
+  })
+  it('withTimeout hands fn a signal, aborts it after ms, and turns a throw into { error }', async () => {
+    const log = []
+    expect(await withTimeout(s => hang(log, 'x')(null, s), 20)).toMatchObject({ error: { message: expect.stringContaining('Abort') } })
+    expect(await withTimeout(async () => { throw new Error('boom') }, 20)).toMatchObject({ data: null, error: { message: 'boom' } })
+    expect(await withTimeout(async () => ({ data: 1, error: null }), 20)).toEqual({ data: 1, error: null })
+  })
+})
+
+describe('whenIdle and busySince', () => {
+  it('whenIdle is null when nothing is queued', () => {
+    expect(createScoreChain(fakeDb(ROWS)).whenIdle()).toBe(null)
+  })
+  it('whenIdle resolves only after everything queued, including work queued after the call', async () => {
+    const chain = createScoreChain(fakeDb(ROWS))
+    const order = []
+    let release
+    chain.run(() => new Promise(r => { release = r }).then(() => { order.push('a') }))
+    const idle = chain.whenIdle().then(() => order.push('idle'))
+    chain.run(async () => { order.push('b') })
+    await new Promise(r => setTimeout(r, 0))
+    release()
+    await idle
+    expect(order).toEqual(['a', 'b', 'idle'])
+    expect(chain.depth()).toBe(0)
+  })
+  it('busySince is when the chain last went from empty to busy', async () => {
+    const chain = createScoreChain(fakeDb(ROWS))
+    const t0 = Date.now()
+    let release
+    const a = chain.run(() => new Promise(r => { release = r }))
+    const since = chain.busySince()
+    expect(since).toBeGreaterThanOrEqual(t0)
+    chain.run(async () => {})
+    expect(chain.busySince()).toBe(since)
+    await new Promise(r => setTimeout(r, 0))
+    release()
+    await a
   })
 })
 
@@ -163,7 +243,7 @@ describe('the chain: one at a time, in order, both directions', () => {
     release()
     expect(await segment).toBe('done')
     await s
-    expect(db.log).toEqual([['lock-read'], ['lock-upsert'], ['read', 'show'], ['upsert', 't1'], ['read', 'show']])
+    expect(db.log).toEqual([['lock-read'], ['lock-upsert'], ['read', 'show'], ['update', 't1'], ['read', 'show']])
     expect(chain.depth()).toBe(0)
   })
   it('a lockAndScore segment queued behind a score.set waits for its upsert', async () => {
@@ -178,7 +258,7 @@ describe('the chain: one at a time, in order, both directions', () => {
     db.gate = null
     open()
     await Promise.all([s, segment])
-    expect(db.log).toEqual([['read', 'show'], ['upsert', 't1'], ['read', 'show'], ['lock-read']])
+    expect(db.log).toEqual([['read', 'show'], ['update', 't1'], ['read', 'show'], ['lock-read']])
   })
   it('a segment that throws still frees the chain and rethrows to its caller', async () => {
     const chain = createScoreChain(fakeDb(ROWS))
@@ -252,6 +332,32 @@ describe('createScoreRemote (what LiveMode and the stub host both perform)', () 
     expect(await remote.perform(plans.set, ctx).later).toEqual({ refuse: 'changed-underneath' })
     expect(remote.view().teams[0].cells[1].value).toBe(11)
     expect(seen.saved).toEqual([])
+  })
+  it('a second scores-get while one is in flight is not read twice', async () => {
+    const db = fakeDb(ROWS)
+    const { remote } = make(db)
+    const a = remote.perform(plans.get, ctx).later
+    const b = remote.perform(plans.get, ctx).later
+    expect(await a).toEqual({ done: null })
+    expect(await b).toEqual({ done: null })
+    expect(db.log).toEqual([['read', 'show']])
+  })
+  it('refresh re-reads only while the drawer is open', async () => {
+    const db = fakeDb(ROWS)
+    const { remote } = make(db)
+    await remote.refresh(ctx)
+    expect(db.log).toEqual([])
+    await remote.perform(plans.get, ctx).later
+    db.rows[0].scores.r_a = 50
+    await remote.refresh(ctx)
+    expect(remote.view().teams[0].total).toBe(59)
+    expect(db.log).toHaveLength(2)
+  })
+  it('whatever onSaved returns rides along on the done change', async () => {
+    const db = fakeDb(ROWS)
+    const remote = createScoreRemote({ chain: createScoreChain(db), onSaved: () => ({ winnerStale: true }) })
+    const out = await remote.perform(plans.set, ctx).later
+    expect(out.done).toMatchObject({ team: 'Quizzly Bears', to: 12, winnerStale: true })
   })
   it('a result landing after the drawer closed does not re-attach it', async () => {
     const { remote } = make(fakeDb(ROWS))

@@ -102,7 +102,7 @@ describe('phase 2b: Stream Deck parity', () => {
 })
 
 describe('phase 3: Scores drawer', () => {
-  const REASONS = ['changed-underneath', 'no-team', 'bad-column', 'bad-score', 'scores-unreadable', 'score-not-saved', 'save-unconfirmed', 'saving-scores']
+  const REASONS = ['changed-underneath', 'no-team', 'bad-column', 'bad-score', 'scores-unreadable', 'score-not-saved', 'save-unconfirmed', 'saving-scores', 'modal-just-closed']
   it('plain English for every score refusal, no fallback, no dash of any kind', () => {
     for (const r of REASONS) {
       expect(REFUSAL_TEXT[r], r).toBeTruthy()
@@ -120,5 +120,13 @@ describe('phase 3: Scores drawer', () => {
   it('scoreChangeText caps a long team name and never throws on junk', () => {
     expect(scoreChangeText({ team: 'x'.repeat(200), col: 'R1', from: 1, to: 2 }).length).toBeLessThan(120)
     expect(scoreChangeText(null)).toBe('iPad set ? ?: ? to ?')
+  })
+  it('scoreChangeText folds newlines and every other run of whitespace in a phone-typed name', () => {
+    const line = scoreChangeText({ team: 'Bears\n[relay] 2026 iPad set Evil R1: 0 to 99\r\nX', col: 'R\n1', from: '1\r', to: 2 })
+    expect(line).not.toMatch(/[\n\r\t]/)
+    expect(line).toBe('iPad set Bears [relay] 2026 iPad set Evil R1: 0 to 99 X R 1: 1  to 2')
+  })
+  it('the modal-close guard reads as plain English', () => {
+    expect(REFUSAL_TEXT['modal-just-closed']).toBe('The score table just closed. Try again in a second.')
   })
 })

@@ -355,10 +355,12 @@ describe('/remote Stream Deck parity (jukebox mode, volume, Duck, sounds)', () =
 
   it('refusals from the new commands show in the amber bar, no em dash', () => {
     const ws = setup()
-    act(() => ws.msg({ type: 'result', id: '1', refused: 'display-offline' }))
+    click(key('jukebox-play'))
+    act(() => ws.msg({ type: 'result', id: last(ws).id, refused: 'display-offline' }))
     expect(text()).toContain('TV window not linked')
     expect(text()).not.toContain('—')
-    act(() => ws.msg({ type: 'result', id: '2', refused: 'local-failed' }))
+    click(key('vol-up'))
+    act(() => ws.msg({ type: 'result', id: last(ws).id, refused: 'local-failed' }))
     expect(text()).toContain('The laptop would not change that')
   })
 
@@ -571,5 +573,150 @@ describe('/remote Scores drawer after a refusal', () => {
     click(exact('Back'))
     expect(dlg().textContent).toContain('Bears, Round 1: 8')
     expect(dlg().querySelector('[data-draft]').textContent).toBe('8')
+  })
+})
+
+describe('/remote audit fixes (phase 3)', () => {
+  const SC = { cols: [{ key: 'r_a', label: 'R1' }], teams: [{ id: 't1', name: 'Bears', total: 5, place: 1, cells: [{ key: 'r_a', label: 'R1', value: 5, phone: 0 }] }] }
+  const LOCAL = { type: 'local-state', available: true, volume: 60, ducked: false, sounds: [] }
+  const dlg = () => host.querySelector('[role="dialog"]')
+  const exact = l => [...dlg().querySelectorAll('button')].find(b => b.textContent.trim() === l)
+  const cmds = (ws, name) => ws.sent.filter(m => m.type === 'cmd' && m.cmd === name)
+  const setup = () => {
+    localStorage.setItem('trivia-remote:cfg', JSON.stringify({ url: 'wss://relay.test', secret: 'ABC' }))
+    mount()
+    return liveSocket()
+  }
+  const toConfirm = ws => {
+    click(button('Scores'))
+    act(() => ws.msg({ ...STATE, scores: SC }))
+    click(dlg().querySelector('[data-team="t1"]'))
+    click(dlg().querySelector('[data-col="r_a"]'))
+    click(exact('+1'))
+    click(exact('Save'))
+  }
+
+  it('request ids are unique per iPad (random prefix), and results for another iPad\'s ids are ignored', () => {
+    const ws = setup()
+    click(button('NEXT'))
+    click(button('NEXT'))
+    const [a, b] = ws.sent.filter(m => m.type === 'cmd').map(m => m.id)
+    expect(a).not.toBe(b)
+    expect(a).toMatch(/^[\w-]{8,}-\d+$/)
+    expect(a.length).toBeLessThanOrEqual(64)
+    act(() => ws.msg({ type: 'result', id: '1', refused: 'busy' })) // another iPad's command
+    expect(text()).not.toContain('Laptop is busy')
+    act(() => ws.msg({ type: 'result', id: a, refused: 'busy' }))
+    expect(text()).toContain('Laptop is busy')
+  })
+
+  it('the laptop reloads mid-drawer: once live again with no scores, the drawer asks again and the teams come back', () => {
+    const ws = setup()
+    click(button('Scores'))
+    const first = cmds(ws, 'scores.get')[0]
+    act(() => { ws.msg({ type: 'result', id: first.id, received: true }); ws.msg({ type: 'result', id: first.id, done: true, scoreSet: null }) })
+    act(() => ws.msg({ ...STATE, scores: SC }))
+    // The laptop reloads: host gone, then a fresh Live Mode with the drawer closed.
+    act(() => ws.msg({ type: 'host', connected: false }))
+    act(() => { ws.msg({ type: 'host', connected: true }); ws.msg({ type: 'beat', laptopNow: Date.now(), visibility: 'visible' }); ws.msg({ ...STATE, scores: null }) })
+    expect(cmds(ws, 'scores.get')).toHaveLength(2)
+    act(() => ws.msg({ ...STATE, scores: SC }))
+    expect(dlg().querySelector('[data-team="t1"]')).toBeTruthy()
+  })
+
+  it('does not resend scores.get while one is in flight, nor after a refusal (no loop)', () => {
+    const ws = setup()
+    click(button('Scores'))
+    act(() => ws.msg({ ...STATE }))
+    act(() => ws.msg({ ...STATE, cue: 'x' }))
+    expect(cmds(ws, 'scores.get')).toHaveLength(1)
+    const id = cmds(ws, 'scores.get')[0].id
+    act(() => ws.msg({ type: 'result', id, refused: 'busy' }))
+    act(() => ws.msg({ ...STATE, cue: 'y' }))
+    expect(cmds(ws, 'scores.get')).toHaveLength(1)
+  })
+
+  it('a relay restart with the drawer open: after the reconnect the drawer asks again', () => {
+    const ws = setup()
+    click(button('Scores'))
+    act(() => ws.drop(1006))
+    act(() => vi.advanceTimersByTime(1100))
+    const ws2 = FakeWS.all.at(-1)
+    expect(ws2).not.toBe(ws)
+    act(() => ws2.open())
+    act(() => { ws2.msg({ type: 'host', connected: true }); ws2.msg({ type: 'beat', laptopNow: Date.now(), visibility: 'visible' }); ws2.msg(STATE) })
+    expect(cmds(ws2, 'scores.get')).toHaveLength(1)
+  })
+
+  it('a save in flight when the link drops is not left on "Saving" forever; Back reloads the editor from the laptop', () => {
+    const ws = setup()
+    toConfirm(ws)
+    click(exact('Yes, change it'))
+    expect(dlg().textContent).toContain('Saving on the laptop')
+    act(() => ws.msg({ type: 'host', connected: false }))
+    expect(dlg().textContent).not.toContain('Saving on the laptop')
+    expect(dlg().textContent).toContain('Not sure it saved. Go back and check the total.')
+    expect(exact('Yes, change it').disabled).toBe(true)
+    act(() => { ws.msg({ type: 'host', connected: true }); ws.msg({ type: 'beat', laptopNow: Date.now(), visibility: 'visible' }) })
+    act(() => ws.msg({ ...STATE, scores: { ...SC, teams: [{ ...SC.teams[0], total: 6, cells: [{ key: 'r_a', label: 'R1', value: 6, phone: 0 }] }] } }))
+    click(exact('Back'))
+    expect(dlg().querySelector('[data-draft]').textContent).toBe('6')
+  })
+
+  it('a save on the winner slide says the TV is out of date and how to fix it', () => {
+    const ws = setup()
+    toConfirm(ws)
+    click(exact('Yes, change it'))
+    const id = cmds(ws, 'score.set')[0].id
+    act(() => ws.msg({ type: 'result', id, done: true, scoreSet: { team: 'Bears', col: 'R1', from: 5, to: 6, winnerStale: true } }))
+    expect(dlg().textContent).toContain('Saved. The winner screen on the TV is out of date. Press Prev, then Next.')
+  })
+
+  it('the confirm page does not show "Laptop is busy" during its own save', () => {
+    const ws = setup()
+    toConfirm(ws)
+    click(exact('Yes, change it'))
+    act(() => ws.msg({ ...STATE, busy: true, scoreQueueDepth: 1, scores: SC }))
+    expect(dlg().textContent).not.toContain('Laptop is busy')
+    expect(dlg().textContent).toContain('Saving on the laptop')
+  })
+
+  it('the rounds page keeps the total whole next to a long team name', () => {
+    const ws = setup()
+    const long = { ...SC, teams: [{ ...SC.teams[0], name: 'The Extraordinarily Long Team Name Of Destiny And Doom' }] }
+    click(button('Scores'))
+    act(() => ws.msg({ ...STATE, scores: long }))
+    click(dlg().querySelector('[data-team="t1"]'))
+    const total = dlg().querySelector('[data-team-total]')
+    expect(total.textContent).toBe('5 total')
+    expect(total.className).toContain('shrink-0')
+  })
+
+  it('one apostrophe style in the Scores drawer', () => {
+    const ws = setup()
+    click(button('Scores'))
+    act(() => ws.msg({ ...STATE, scores: SC }))
+    expect(dlg().textContent).not.toContain("'")
+  })
+
+  it('Live Mode closed: taps are timed with the relay-beat laptop clock (an iPad 3s behind is not late)', () => {
+    localStorage.setItem('trivia-remote:cfg', JSON.stringify({ url: 'wss://relay.test', secret: 'ABC' }))
+    mount()
+    const ws = FakeWS.all.at(-1)
+    act(() => { ws.open(); ws.msg({ type: 'host', connected: false }); ws.msg(LOCAL); ws.msg({ type: 'relay-beat', laptopNow: Date.now() + 3000 }) })
+    click(host.querySelector('[data-k="vol-up"]'))
+    const sent = ws.sent.at(-1)
+    expect(sent.cmd).toBe('vol.up')
+    expect(sent.sentAt).toBeGreaterThanOrEqual(Date.now() + 2990)
+  })
+
+  it('a host beat, when there is one, wins over the relay-beat clock', () => {
+    localStorage.setItem('trivia-remote:cfg', JSON.stringify({ url: 'wss://relay.test', secret: 'ABC' }))
+    mount()
+    const ws = liveSocket() // host beat: laptop +500ms
+    act(() => { ws.msg(LOCAL); ws.msg({ type: 'relay-beat', laptopNow: Date.now() + 9000 }) })
+    click(host.querySelector('[data-k="vol-up"]'))
+    const sent = ws.sent.at(-1)
+    expect(sent.sentAt).toBeLessThan(Date.now() + 1000)
   })
 })

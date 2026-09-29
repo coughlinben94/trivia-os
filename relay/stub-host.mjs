@@ -13,18 +13,23 @@ import { createScoreChain, createScoreRemote } from '../client/src/lib/scoreCell
 import { deriveRoundCols } from '../client/src/lib/scoreboardMath.js'
 
 // An in-memory scoreboard_teams for the score chain. `gate` (a promise) holds
-// reads, so a test can keep one score.set in flight.
+// reads, so a test can keep one score.set in flight; `afterRead` runs once a
+// read has its rows (a test can delete one before the write).
 function memoryTable(rows) {
-  const db = { rows: structuredClone(rows), log: [], gate: null }
+  const db = { rows: structuredClone(rows), log: [], gate: null, afterRead: null }
   db.readTeams = async showId => {
     db.log.push('read')
     if (db.gate) await db.gate
-    return { data: structuredClone(db.rows.filter(r => r.show_id === showId)), error: null }
+    const data = structuredClone(db.rows.filter(r => r.show_id === showId))
+    db.afterRead?.()
+    return { data, error: null }
   }
-  db.upsertRow = async row => {
-    db.log.push(`upsert ${row.id}`)
-    db.rows = db.rows.map(r => (r.id === row.id ? structuredClone(row) : r))
-    return { error: null }
+  // LiveMode's update({ scores }).eq('id').eq('show_id').select('id').
+  db.updateScores = async row => {
+    db.log.push(`update ${row.id}`)
+    const hit = db.rows.find(r => r.id === row.id && r.show_id === row.show_id)
+    if (hit) hit.scores = structuredClone(row.scores)
+    return { data: hit ? [{ id: hit.id }] : [], error: null }
   }
   return db
 }
@@ -46,7 +51,8 @@ export function createStubHost({ url, origin, slides, rounds = [], retryMs = 50,
   }, { gapMs: 0 })
   const slide = () => slides[show.index]
   const cue = () => nextPressGate({ slide: slide(), nextSlide: slides[show.index + 1] ?? null })
-  const busy = () => !!slide()?.data?.lockCountdownStartedAt
+  // Like LiveMode's remoteBusyNow: a countdown, or anything on the score chain.
+  const busy = () => !!slide()?.data?.lockCountdownStartedAt || chain.depth() > 0
   const push = () => sender.offer(JSON.stringify(buildSnapshot({
     slides, index: show.index, showState: show.showState, cue: cue(), busy: busy(), paused: stub.paused, fix: fixFor(slide()), rounds,
     scoreQueueDepth: chain.depth(), scores: scores.view(),
@@ -56,7 +62,7 @@ export function createStubHost({ url, origin, slides, rounds = [], retryMs = 50,
     const s = slide()
     const plan = planHostCommand(cmd, {
       modalOpen: stub.modalOpen, pendingAdvance: false,
-      lockPhase: pendingLockPhase(s), lockCountdownRunning: busy(),
+      lockPhase: pendingLockPhase(s), lockCountdownRunning: !!s?.data?.lockCountdownStartedAt,
       scoringBlocked: false, audioPending: false, scoringBusy: false,
       answerReveal: show.showState.answerReveal, revealPending: !!pendingReveal(s), phoneRevealed: false,
       scoreboardVisible: show.showState.scoreboardVisible, scoresRevealed: show.showState.scoresRevealed,

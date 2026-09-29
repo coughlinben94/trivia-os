@@ -99,7 +99,7 @@ Every command is `{type:'cmd', id, cmd, args, expectSlideId, sentAt}`. `sentAt` 
 - `jumpBusy` (phase 2), `scoringBusy` (the keyboard's capped `scoringBlocksNext()`), or `raceBusy` with **its own `raceSinceRef` 12s cap**. `raceBusy` stays a separate remote-only busy input; folding it into `scoringBusy` would change the keyboard and is not approved (§15 Q2).
 - `pylPickerBusy`
 - `lockCountdownStartedAt`
-- the score write queue is non-empty (phase 3)
+- the score write queue is non-empty (phase 3), capped at 12s like the other inputs (`busySince`); a queue refusal reaches the iPad as `busy` ("Laptop is busy"), and `saving-scores` only after that cap
 
 It never gates the keyboard.
 
@@ -112,14 +112,19 @@ It never gates the keyboard.
 | `jump {index}` | `jumpTo(index)` (below) | `expectSlideId` + busy gate. Also refused while `pendingAdvanceRef` is set, because the 280ms deferred `nextSlide` holds the old `show` and would overwrite the jump |
 | `unlock` | `unlockCurrentSlide()`; horse race has its own branch (`raceLocked:false`) | `expectSlideId` + busy gate. The gate matters here: `lockAndScore`'s final write (~:502-504) sets the lock field again |
 | `rescore` | `scoreActionFor(phoneMechanic, slide)`, **extracted** from the inline `panel.act` closures (LiveMode ~:1442-1499); it doesn't exist yet | Only if **`canRescore = !pendingLockPhase(slide) && lastLockFieldSet && !busy && !lockCountdownStartedAt && !(revealed && !error)`** (the laptop's `hideMainPanel` rule, ~:1506). On wager, "any lock field" would count tiers-only as locked, and `handleLockAndScoreWagers` would then lock the guesses early. After the reveal, a rescore would rewrite `wagerResults` under a reveal the TV is already showing. **Horse race is excluded** (laptop only) |
-| `score.teams` | Fresh read of `scoreboard_teams` + `deriveRoundCols` | |
-| `score.open` / `score.close` | `scores_locked_at` lock + 2-min refresh (the `ScoreboardModal.jsx:311-337` compare-and-clear, extracted) | Refused while the laptop's `ScoreboardModal` is open. The iPad **sends `score.open` again when the first live `state` arrives after a reconnect** (not on socket open, when the host may not be there yet) while the drawer is open, and each `score.set` refreshes the lock too. The laptop drops the lock if no `score.*` arrives for 3 min (`Join.jsx` already treats a lock older than 10 min as expired) |
-| `score.set {teamId, colKey, value}` | Queued on the **score chain** (below): fresh read of the row, then build the cell with `phoneBySlide` from that read, then `upsert` | Busy gate + modal refusal |
+| `scores.get` | Fresh read of `scoreboard_teams` + `deriveRoundCols`, attached to the snapshot while the drawer is open; a second get while one is in flight shares it. The iPad sends it again whenever the drawer is open, live, has no scores and has nothing in flight (wifi flap, relay restart, laptop reload) | Busy gate, modal refusal, 1s after the modal closes (`modal-just-closed`: "The score table just closed. Try again in a second.") |
+| `scores.hide` | Stops attaching scores. The relay passes it on only from the last iPad with the drawer open | Never refused |
+| `score.set {teamId, colKey, value, expectOld}` | Queued on the **score chain** (below): fresh read, build the cell with `phoneBySlide` from that read, then `update({ scores }).eq('id').eq('show_id')` (a deliberate change from the upsert first planned: only the scores column, and a row deleted since the read is not brought back; zero rows matched is `score-not-saved`), then re-read to confirm | Same as `scores.get` |
+
+No `score.open`/`score.close` and no phone lock from the iPad (Ben's reduction): the drawer is for dispute fixes only.
 
 **The score chain.** It is one promise chain on the laptop (`scoreCellWrite.js`), and it has to work in both directions:
 - `lockAndScore` (~:452-490) runs its `scoreboard_teams` read-then-upsert **inside the same chain**, so a `score.set` can't land between that read and that upsert.
 - That is less code than bringing the atomic jsonb-set RPC forward. An RPC fixes only the iPad's cell write, while `lockAndScore` would still upsert whole `scores` objects built from its own earlier read, so the chain would still be needed. The RPC stays a later fix.
 - The snapshot carries `scoreQueueDepth`. While it's above 0, Next reads "Saving scores…" and `next` and `jump` are refused. `WinnerRevealSlide` and `saveResults` read `scoreboard_teams` as the winner slide appears.
+- Every Supabase call on the chain (both reads, the iPad's update, and `lockAndScore`'s in-chain read and upsert) aborts after 10s via `.abortSignal()` (abort, not a race: a raced-out fetch could still land a write after a later segment). A timed-out iPad write is `save-unconfirmed`; `lockAndScore` shows its usual "Scoring failed" and Retry.
+- Winner reveal: Host's auto-`saveResults` waits for the chain to drain (`whenIdle`). A `score.set` that lands on or after the winner slide calls `saveResults` again, and the iPad says "Saved. The winner screen on the TV is out of date. Press Prev, then Next." (`WinnerRevealSlide` still reads once on mount.)
+- `ScoreboardModal` runs every pending debounced save the moment it closes, and the iPad's score commands wait 1s after it closes. After `lockAndScore`'s segment and after that 1s, an open drawer is re-read.
 
 **`jumpTo(index)` in `useShow.js` is new mid-show behaviour.** Live Mode has no jump today. It mirrors `goLiveFrom` (`useShow.js:760`) with these differences:
 - `protectInProgress = target <= furthestIndexRef.current`. `furthestIndexRef` is a new ref in `useShow`, raised on every nav (next, prev, jump) and reset in `goLive`/`goLiveFrom`. `target < current` is wrong: jump back to Q3, then forward to Q5 (already scored), and Q5's locks would be cleared.

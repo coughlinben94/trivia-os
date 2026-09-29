@@ -109,14 +109,17 @@ export function planHostCommand({ cmd, via, args = {}, expectSlideId = null, sen
     case 'rescore':
       return ctx.fix?.canRescore ? { run: 'rescore' } : { refuse: ctx.fix?.rescoreRefusal ?? 'nothing-to-fix' }
     // Phase 3 (reduced): read the scoreboard, or fix one cell. Conservative:
-    // any scoring at all (uncapped, unlike Next's 12s cap), a countdown, a
-    // jump, or (score.set) anything already on the score chain refuses.
+    // the laptop score table closed under 1s ago (its last typed save may
+    // still be landing), any scoring at all (uncapped, unlike Next's 12s cap),
+    // a jump, or (score.set) anything already on the score chain refuses. A
+    // countdown is in remoteBusy, so it is refused above as busy.
     case 'scores.get':
     case 'score.set': {
+      if (ctx.modalJustClosed) return { refuse: 'modal-just-closed' }
       if (ctx.anyScoring) return { refuse: 'scoring' }
-      if (ctx.lockCountdownRunning) return { refuse: 'locking' }
       if (ctx.jumpBusy) return { refuse: 'busy' }
       if (cmd === 'scores.get') return { run: 'scores-get' }
+      // Reachable once the chain has been busy past remoteBusy's 12s cap.
       if (ctx.scoreQueueDepth > 0) return { refuse: 'saving-scores' }
       const { teamId, colKey, value, expectOld } = args
       if (typeof teamId !== 'string' || !teamId || teamId.length > 64) return { refuse: 'no-team' }

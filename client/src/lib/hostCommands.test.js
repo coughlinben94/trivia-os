@@ -282,15 +282,15 @@ describe('scores.get / score.set / scores.hide (remote only)', () => {
     planHostCommand({ cmd, via: 'remote', args, expectSlideId: 's1', sentAt: NOW - 10, ...env }, { ...live, ...ctx })
 
   it('score.set: the exact refusal order', () => {
-    const all = { paused: true, remoteBusy: true, modalOpen: true, anyScoring: true, lockCountdownRunning: true, jumpBusy: true, scoreQueueDepth: 1 }
+    const all = { paused: true, remoteBusy: true, modalOpen: true, modalJustClosed: true, anyScoring: true, jumpBusy: true, scoreQueueDepth: 1 }
     const bad = { ...good, value: 1.5 }
     const steps = [
       [{ ...all }, { sentAt: 0 }, 'late'],
       [{ ...all }, {}, 'paused'],
       [{ ...all, paused: false }, {}, 'busy'],
       [{ ...all, paused: false, remoteBusy: false }, {}, 'modal-open'],
-      [{ anyScoring: true, lockCountdownRunning: true, jumpBusy: true, scoreQueueDepth: 1 }, {}, 'scoring'],
-      [{ lockCountdownRunning: true, jumpBusy: true, scoreQueueDepth: 1 }, {}, 'locking'],
+      [{ modalJustClosed: true, anyScoring: true, jumpBusy: true, scoreQueueDepth: 1 }, {}, 'modal-just-closed'],
+      [{ anyScoring: true, jumpBusy: true, scoreQueueDepth: 1 }, {}, 'scoring'],
       [{ jumpBusy: true, scoreQueueDepth: 1 }, {}, 'busy'],
       [{ scoreQueueDepth: 1 }, {}, 'saving-scores'],
     ]
@@ -323,7 +323,9 @@ describe('scores.get / score.set / scores.hide (remote only)', () => {
     expect(r('scores.get', {}, { remoteBusy: true })).toEqual({ refuse: 'busy' })
     expect(r('scores.get', {}, { modalOpen: true })).toEqual({ refuse: 'modal-open' })
     expect(r('scores.get', {}, { anyScoring: true })).toEqual({ refuse: 'scoring' })
-    expect(r('scores.get', {}, { lockCountdownRunning: true })).toEqual({ refuse: 'locking' })
+    // A countdown is in remoteBusy (busy), so the score path never says 'locking'.
+    expect(r('scores.get', {}, { lockCountdownRunning: true })).toEqual({ run: 'scores-get' })
+    expect(r('scores.get', {}, { modalJustClosed: true })).toEqual({ refuse: 'modal-just-closed' })
     expect(r('scores.get', {}, { jumpBusy: true })).toEqual({ refuse: 'busy' })
     expect(r('scores.get', {}, { scoreQueueDepth: 1 })).toEqual({ run: 'scores-get' })
   })

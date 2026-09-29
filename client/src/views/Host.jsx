@@ -154,6 +154,8 @@ function HostInner({ showApi }) {
   const [goLivePicker, setGoLivePicker] = useState(false)
   const [showScoreboard, setShowScoreboard] = useState(false)
   const savedResultsRef = useRef(false)
+  // LiveMode sets this to its score chain's whenIdle (null when empty).
+  const scoreChainIdleRef = useRef(null)
   const leftAppDebounceRef = useRef({})
   // Toasts below fire off the row's CURRENT last_action, not a delta — that
   // was safe as long as every writer to `teams` also changed last_action.
@@ -263,7 +265,10 @@ function HostInner({ showApi }) {
     if (currentSlide?.type === 'winner-reveal') {
       if (!savedResultsRef.current) {
         savedResultsRef.current = true
-        showApi.saveResults()
+        // Never read scoreboard_teams mid score write: wait for the chain.
+        const wait = scoreChainIdleRef.current?.()
+        if (wait) wait.then(() => showApi.saveResults())
+        else showApi.saveResults()
         // A scoreboard left showing from an earlier round otherwise sits on
         // top of the winner slide (z-[60], above slide content) until the
         // host remembers to hit Score/S — which is how the winner ended up
@@ -313,6 +318,7 @@ function HostInner({ showApi }) {
           onThemeChange={handleThemeChange}
           onOpenScoreboard={() => setShowScoreboard(true)}
           scoreboardModalOpen={showScoreboard}
+          scoreChainIdleRef={scoreChainIdleRef}
         />
       ) : (
         <BuildMode

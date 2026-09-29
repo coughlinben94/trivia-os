@@ -62,6 +62,9 @@ export function createRelay({
   const displayWss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 })
   const remoteWss = new WebSocketServer({ noServer: true, maxPayload: MAX_INBOUND_BYTES })
   const paired = new Set()
+  // iPads with the Scores drawer open: a scores.hide reaches the host only
+  // from the last one, so one iPad closing can't blank another's view.
+  const scoresOpen = new Set()
   let host = null
   let display = null
   let lastState = null // raw text of the host's last `state`, replayed on every hello
@@ -104,7 +107,8 @@ export function createRelay({
       if (m?.type === 'state') { lastState = text; hostPaused = !!m.paused; toRemotes(text) }
       else if (m?.type === 'result' || m?.type === 'beat') {
         // An iPad score fix, in the relay's own log (launchd keeps it).
-        if (m.type === 'result' && m.scoreSet) log.log(`[relay] ${new Date().toISOString()} ${scoreChangeText(m.scoreSet)}`)
+        // JSON-quoted: a team name comes from a phone.
+        if (m.type === 'result' && m.scoreSet) log.log(`[relay] ${new Date().toISOString()} ${JSON.stringify(scoreChangeText(m.scoreSet))}`)
         toRemotes(text)
       }
     })
@@ -201,6 +205,11 @@ export function createRelay({
           send(display, m)
           return
         }
+        if (m.cmd === 'scores.get') scoresOpen.add(ws)
+        if (m.cmd === 'scores.hide') {
+          scoresOpen.delete(ws)
+          if (scoresOpen.size > 0) { send(ws, { type: 'result', id: m.id, received: true }); return }
+        }
         if (!host) { send(ws, { type: 'result', id: m.id, refused: 'laptop-offline' }); return }
         send(host, m)
       } catch (e) {
@@ -210,6 +219,7 @@ export function createRelay({
     })
     ws.on('close', () => {
       clearTimeout(helloTimer)
+      scoresOpen.delete(ws)
       if (paired.delete(ws)) tellHostCount()
     })
   })
@@ -245,9 +255,11 @@ export function createRelay({
       })
       const ports = { hostPort: await listen(hostServer, hostPort), remotePort: await listen(remoteServer, remotePort) }
       timers.push(setInterval(() => {
-        send(host, { type: 'relay-beat' })
-        send(display, { type: 'relay-beat' })
-        toRemotes({ type: 'relay-beat' })
+        // laptopNow: the iPad's clock offset when Live Mode (the host beat) is closed.
+        const beat = { type: 'relay-beat', laptopNow: Date.now() }
+        send(host, beat)
+        send(display, beat)
+        toRemotes(beat)
       }, beatMs))
       timers.push(setInterval(() => {
         for (const ws of [...hostWss.clients, ...displayWss.clients, ...remoteWss.clients]) {

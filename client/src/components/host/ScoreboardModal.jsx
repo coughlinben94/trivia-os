@@ -264,6 +264,18 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
   // this is purely "which number is at risk" visibility for the host.
   const [atRiskCells,  setAtRiskCells]  = useState({})
   const saveTimers = useRef({})
+  // The save each pending timer would run, so closing the modal can run it
+  // now instead of up to 500ms later (by then the iPad may have saved that
+  // cell, and this stale read-then-upsert would put the old number back).
+  const saveRuns = useRef({})
+  useEffect(() => () => {
+    for (const key of Object.keys(saveTimers.current)) {
+      clearTimeout(saveTimers.current[key])
+      saveRuns.current[key]?.()
+    }
+    saveTimers.current = {}
+    saveRuns.current = {}
+  }, [])
 
   const cols           = deriveRoundCols(show)
   const teamsWithStats = addStats(teams, cols)
@@ -334,7 +346,7 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
     // border — the save was never scheduled to fail, it was cancelled.
     const cellKey = `${team.id}:${fieldKey}`
     clearTimeout(saveTimers.current[cellKey])
-    saveTimers.current[cellKey] = setTimeout(async () => {
+    const run = async () => {
       // One place that decides what "this save failed" looks like to the
       // host, reached from every failure path below — including the initial
       // read, which used to throw on a real network outage BEFORE reaching
@@ -378,6 +390,12 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
       } catch (err) {
         markSaveFailed(err)
       }
+    }
+    saveRuns.current[cellKey] = run
+    saveTimers.current[cellKey] = setTimeout(() => {
+      delete saveTimers.current[cellKey]
+      delete saveRuns.current[cellKey]
+      run()
     }, 500)
   }
 
