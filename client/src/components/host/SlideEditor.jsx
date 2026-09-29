@@ -15,6 +15,9 @@ import WagerBoard from '../join/WagerBoard.jsx'
 import OrderBoard from '../join/OrderBoard.jsx'
 import ChoiceBoard from '../join/ChoiceBoard.jsx'
 import HuesCuesBoard from '../join/HuesCuesBoard.jsx'
+import PinBoard from '../join/PinBoard.jsx'
+import PinMapInteractive from '../shared/PinMapInteractive.jsx'
+import { isValidPin, parsePinPaste } from '../../lib/pinScoring.js'
 import { DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { DEFAULT_CHOICE_POINTS } from '../../lib/choiceScoring.js'
 import { WAGER_TIERS, parseWagerNumber } from '../../lib/wagerScoring.js'
@@ -1181,13 +1184,13 @@ function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, up
               2026-09-06 walking through a real Mandela Effect slide. */}
           {schema.type !== 'choice' && schema.type !== 'hues-cues' && (
             <Field
-              label={schema.type === 'wager' ? 'Answer — the true number' : 'Answer'}
-              hint={schema.type === 'wager' ? 'Every guess is scored by how close it lands to this. Must be a number.' : undefined}
+              label={schema.type === 'wager' ? 'Answer — the true number' : schema.type === 'pin' ? 'Place name' : 'Answer'}
+              hint={schema.type === 'wager' ? 'Every guess is scored by how close it lands to this. Must be a number.' : schema.type === 'pin' ? 'Shown on the TV at the reveal, e.g. "Apple Valley, MN". The true spot is set on the map below.' : undefined}
             >
               <TextInput
                 value={data.answer ?? ''}
                 onChange={v => onChange('answer', v)}
-                placeholder={schema.type === 'wager' ? 'e.g. 412' : 'The answer…'}
+                placeholder={schema.type === 'wager' ? 'e.g. 412' : schema.type === 'pin' ? 'e.g. Apple Valley, MN' : 'The answer…'}
               />
             </Field>
           )}
@@ -1203,6 +1206,23 @@ function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, up
                     theme={theme}
                     team={{ id: '__preview__', showId: show?.id ?? '__preview__' }}
                     slide={{ id: slide.id, showId: show?.id, data: { ...data, huesCuesLocked: false } }}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {schema.type === 'pin' && (
+            <>
+              <PinAnswerPicker data={data} onChange={onChange} />
+              <div className="flex flex-col gap-2">
+                <label className="block text-xs font-medium text-gray-700">Phone preview — live, matches what teams will see</label>
+                <div style={{ width: 300, margin: '0 auto', padding: '1.25rem 1rem', borderRadius: 20, background: theme.colors.bg }}>
+                  <PinBoard
+                    preview
+                    theme={theme}
+                    team={{ id: '__preview__', showId: show?.id ?? '__preview__' }}
+                    slide={{ id: slide.id, showId: show?.id, data: { ...data, pinLocked: false } }}
                   />
                 </div>
               </div>
@@ -2051,6 +2071,43 @@ function WagerBuilder({ answer }) {
         <p className="text-xs text-gray-400">Guesses will be scored against <strong>{trueNumber}</strong>.</p>
       )}
     </div>
+  )
+}
+
+// True-spot picker for Pin It: click the map or paste "lat, lon". Writes
+// data.pinAnswer; data.answer stays the plain-text place name.
+function PinAnswerPicker({ data, onChange }) {
+  const [paste, setPaste] = useState('')
+  const [pasteError, setPasteError] = useState(false)
+  const spot = isValidPin(data.pinAnswer) ? data.pinAnswer : null
+
+  function submitPaste() {
+    const next = parsePinPaste(paste)
+    if (!next) { setPasteError(true); return }
+    setPasteError(false)
+    onChange('pinAnswer', next)
+  }
+
+  return (
+    <Field label="True spot" hint="Click the map (scroll or +/− to zoom) to set the exact spot, or paste “lat, lon” from a map app. Teams are scored by miles from here.">
+      <div className="flex items-center gap-2 mb-2">
+        <input
+          type="text" value={paste}
+          onChange={e => { setPaste(e.target.value); setPasteError(false) }}
+          onKeyDown={e => { if (e.key === 'Enter') submitPaste() }}
+          placeholder="44.7319, -93.2177"
+          className="w-48 rounded border border-gray-300 px-2 py-1 text-xs font-mono"
+        />
+        <button type="button" onClick={submitPaste} className="rounded bg-gray-100 px-2 py-1 text-xs hover:bg-gray-200">Set</button>
+        {pasteError && <span className="text-xs text-red-500">Use “lat, lon” inside the lower 48</span>}
+      </div>
+      <div style={{ maxWidth: 560 }}>
+        <PinMapInteractive pin={spot} onPin={p => onChange('pinAnswer', p)} dropMode="click" ink="#111111" highlight="#e02020" />
+      </div>
+      <p className="text-xs text-gray-500 mt-2">
+        {spot ? <>Set: <strong>{spot.lat.toFixed(4)}, {spot.lon.toFixed(4)}</strong></> : 'No spot set yet — Lock Pins & Score stays blocked until you set one.'}
+      </p>
+    </Field>
   )
 }
 

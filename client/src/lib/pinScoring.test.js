@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { scorePinRound, scoringGroupSize, payableRoomSize, resolvePinRoomSize, payableEntries, isValidPin, PIN_POINTS } from './pinScoring.js'
+import { scorePinRound, scoringGroupSize, payableRoomSize, resolvePinRoomSize, payableEntries, isValidPin, parsePinPaste, PIN_POINTS } from './pinScoring.js'
 
 const CORRECT = { lat: 41.8781, lon: -87.6298 } // Chicago
 // ~1 degree of latitude = ~69 miles; build pins by offsetting latitude
@@ -115,5 +115,15 @@ describe('payableEntries', () => {
     const results = scorePinRound({ entries: payableEntries(entries, t, s2), correct: CORRECT, roomSize: 5 })
     expect(JSON.stringify(results)).not.toContain('ghost')
     expect(results.filter(r => r.points === PIN_POINTS).map(r => r.teamId).sort()).toEqual(['a', 'b'])
+  })
+})
+
+describe('parsePinPaste', () => {
+  it('parses valid pairs', () => {
+    expect(parsePinPaste('44.7319, -93.2177')).toEqual({ lat: 44.7319, lon: -93.2177 })
+    expect(parsePinPaste('  44.7   ,   -93  ')).toEqual({ lat: 44.7, lon: -93 })
+  })
+  it('rejects bad input', () => {
+    for (const t of ['44.7 -93.2', 'abc, def', '44.7N, 93.2W', '60, -93', '-93, 44', '']) expect(parsePinPaste(t)).toBeNull()
   })
 })

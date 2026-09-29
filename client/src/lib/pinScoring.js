@@ -15,6 +15,13 @@ export function isValidPin(p) {
     && lon >= US_BOUNDS.minLon && lon <= US_BOUNDS.maxLon
 }
 
+// Host-typed "lat, lon" (strict: two signed decimals, comma between).
+export function parsePinPaste(text) {
+  const m = String(text ?? '').trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/)
+  const pin = m ? { lat: parseFloat(m[1]), lon: parseFloat(m[2]) } : null
+  return pin && isValidPin(pin) ? pin : null
+}
+
 // Top 40% of the room, rounded up, via integer math (no float drift):
 // ceil(2N/5) === floor((2N + 4) / 5). Rooms under 5 teams: closest team only.
 export function scoringGroupSize(roomSize) {
