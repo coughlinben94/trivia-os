@@ -29,4 +29,10 @@ describe('MapLoadRetry', () => {
     act(() => { vi.advanceTimersByTime(10000) })
     expect(host.querySelector('button')).toBeNull()
   })
+  it('retry={false} (TV): plain "Map unavailable" text, no button', () => {
+    act(() => root.render(<MapLoadRetry states={null} retry={false} />))
+    act(() => { vi.advanceTimersByTime(4100) })
+    expect(host.querySelector('button')).toBeNull()
+    expect(host.textContent).toContain('Map unavailable')
+  })
 })

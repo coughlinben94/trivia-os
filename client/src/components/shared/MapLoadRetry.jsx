@@ -3,8 +3,9 @@ import { useEffect, useState } from 'react'
 import { retryUsMapData } from '../../hooks/useUsMapData.js'
 
 // Overlay for a Pin It map box (parent must be position: relative). If the
-// outline data is still missing after `delayMs`, offer a 44px retry tap.
-export default function MapLoadRetry({ states, ink = '#ffffff', delayMs = 4000 }) {
+// outline data is still missing after `delayMs`, offer a 44px retry tap
+// (or, with retry={false} on a TV, plain "Map unavailable" text).
+export default function MapLoadRetry({ states, ink = '#ffffff', delayMs = 4000, retry = true }) {
   const [late, setLate] = useState(false)
   useEffect(() => {
     if (states) { setLate(false); return }
@@ -12,6 +13,14 @@ export default function MapLoadRetry({ states, ink = '#ffffff', delayMs = 4000 }
     return () => clearTimeout(id)
   }, [states, delayMs])
   if (states || !late) return null
+  // A TV cannot be tapped: show plain text there (retry={false}).
+  if (!retry) {
+    return (
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: `${ink}99`, fontSize: '1.6rem' }}>
+        Map unavailable
+      </div>
+    )
+  }
   return (
     <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <button
