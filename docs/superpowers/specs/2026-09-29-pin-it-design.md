@@ -78,11 +78,13 @@ Full review: scratchpad `pin-it-critique.md`. These OVERRIDE anything above that
 
 **Room size (blocker).** `roomSize` = teams that have BOTH a live `teams` row AND a matching scoreboard row (`applyPhoneScoreUpdates`, `scoreboardMath.js:116`, skips teams with no scoreboard row, so counting them would raise the cutoff for teams that can never be paid). The lock step shows the host that number before scoring, with a host override field.
 
-**Repeatable scoring (blocker).** On first lock, save `pinRoomSize` and `pinResults` on the slide. "Retry Scoring" reuses the saved `pinRoomSize`, never re-reads live teams. Unlock clears `pinResults` and `pinRoomSize`. A retry re-sends nothing new from phones; a phone whose save timed out re-sends its CURRENT pin on Lock In tap.
+**Repeatable scoring (blocker).** On lock, save `pinRoomSize` (the saved value wins on retry) and `pinResults` on the slide. "Retry Scoring" reuses the saved `pinRoomSize`, never re-reads live teams. Unlock clears `pinResults` and `pinRoomSize`. A retry re-sends nothing new from phones; a phone whose save timed out re-sends its CURRENT pin on Lock In tap.
 
 **Ties.** Compare on distance rounded to whole miles (what the TV shows), so two "312 mi" teams both score or both miss. `ceil(0.4 N)`: 1/1, 1/2, 2/3, 2/4, 2/5, 4/10, 6/15, 8/20, 10/25.
 
-**Input validation.** `phone_answers.answer` has no shape check, so `pinScoring` rejects anything that is not `{lat, lon}` finite numbers inside the lower-48 bounds (treated as no pin). Note: `pinAnswer` and `pinResults` reach every phone at lock time, before the host reveal. That is acceptable (locked answers cannot change) and matches Hues & Cues; state it, do not hide it.
+**Input validation.** `phone_answers.answer` has no shape check, so `pinScoring` rejects anything that is not `{lat, lon}` finite numbers inside the lower-48 bounds (treated as no pin). Note: `pinResults` reaches every phone at lock time, before the host reveal. `pinAnswer` is readable by any phone from the moment the host sets it (Join reads `shows.select('*')`), exactly like every question's `data.answer`, so it is not a new risk. Both are acceptable and match Hues & Cues; state it, do not hide it.
+
+**Show-night note.** A phone that missed the lock and taps "Update My Pin" afterwards overwrites its row with a server `submitted_at` later than `lockedAt`, so the whole row is discarded and its valid pre-lock pin is lost (scores 0). `lockedAt` uses the host laptop clock and `submitted_at` the server clock, so skew can blur the cutoff.
 
 **iOS hold-to-drop (blocker) — build spec, not behavior.** Map surface: `touch-action: none`, `-webkit-touch-callout: none`, `-webkit-user-select: none`, `user-select: none`. Pointer events with `setPointerCapture`; a ~350ms timer arms on pointerdown; cancel on movement past ~8px slop or a second pointer (pinch). No haptics on iOS Safari (do not promise any). Zoom about the pinch centre (the existing `HuesCuesBoard.jsx:264-330` pan/pinch does not; write it properly, tested on a real iPhone). Hand-rolled, no new dependency.
 
