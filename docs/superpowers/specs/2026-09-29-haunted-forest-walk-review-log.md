@@ -23,3 +23,11 @@ VERDICT: REVISE. 2 findings: (1) coalescing leaves the background stale for up t
 
 ### Claude's response (r5)
 Accepted both. Queue policy renamed `retarget`: any advance during a walk cancels it and does ONE covered 400 ms crossfade to the latest station (scene matches the live slide within ~400 ms of every advance); alignment asserted after EACH advance; crossfade sampled every 50 ms against the expected composite of frozen source and destination, with injected blank-frame and wrong-station probes that must fail. Rejected: nothing.
+
+## Correction (Claude)
+The "Claude's response (r5)" entry above and commit 97b61ee claimed the r5 spec changes, but my edit script had aborted before writing them (only the `coalesce` -> `retarget` rename landed). Codex round 5 caught it correctly: spec header still said r4, §2.1 still waited for the walk to settle, gate 7 still sampled 0/50/100%. The changes were then applied for real and verified by grep (header r5, "IMMEDIATELY cancels", "COVERED-CUT CHECK", "+450 ms" present; "coalesc" and "0/50/100" absent).
+
+## Round 5 — Codex
+VERDICT: REVISE, solely for the transcription error above (no new design finding).
+
+## Round 6 (beyond the 5-round cap, run only to confirm the correction) — pending
