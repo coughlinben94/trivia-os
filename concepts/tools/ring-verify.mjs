@@ -57,7 +57,11 @@
 // ─────────────────────────────────────────────────────────────────────────
 //
 // Usage:
-//   node concepts/tools/ring-verify.mjs <path-to-html>
+//   node concepts/tools/ring-verify.mjs <path-to-html> [--world <id>]
+// --world (default midnight-galaxy, the only behaviour before 2026-09-28):
+// which registered ring world the live pass opens (/ambient?ring=1&world=<id>)
+// and which world id + station keys BOTH passes must render. Per-world gate
+// config lives in ring-verify-world.mjs (Halloween spec §4.7).
 //
 // Requires the target file (and, for the live pass, RingAmbient.jsx) to expose
 // window.__world = { ENGINE, WORLD, ARC, cylinderOf, authorPeriodOf, station, jumpTo,
@@ -72,6 +76,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { PNG } from 'pngjs';
 import { REC709_WEIGHTS } from '../../client/src/lib/oklab.js';
+import { RING_WORLDS, DEFAULT_WORLD_ID, worldGate, liveUrl, worldIdentityProblems, starBandStatus, forceProbeBad, sharedPrimKinds, missingPrims } from './ring-verify-world.mjs';
 
 const [LUMA_W_R, LUMA_W_G, LUMA_W_B] = REC709_WEIGHTS;
 
@@ -287,29 +292,19 @@ export function runStaticChecks(htmlPath) {
   // that once rendered a station as an empty div because RingAmbient's OWN copy of
   // makePrim (before the client/src/lib/ringPrimitives.js extraction) had no branch
   // for a primitive the world data required.
+  // 2026-09-28 (Halloween spec §4.7/§4.10): reads each registered world's own
+  // dispatch — a prim passes if the world supplies it (world.prims, what
+  // RingAmbient's makePrimFor calls first) or ringPrimitives.js has a branch.
   {
-    const worldsDir = path.join(REPO_ROOT, 'client/src/worlds');
-    const worldFiles = readdirSync(worldsDir).filter(f => f.endsWith('.ring.js'));
-    const primUses = []; // { prim, file }
-    for (const f of worldFiles) {
-      const txt = readFileSync(path.join(worldsDir, f), 'utf8');
-      const re = /\bprim\s*:\s*'([^']+)'/g;
-      let m;
-      while ((m = re.exec(txt))) primUses.push({ prim: m[1], file: f });
-    }
-    const primitivesPath = path.join(REPO_ROOT, 'client/src/lib/ringPrimitives.js');
-    const primitivesSrc = readFileSync(primitivesPath, 'utf8');
-    const branchRe = /\bkind\s*===\s*'([^']+)'/g;
-    const branches = new Set();
-    let bm;
-    while ((bm = branchRe.exec(primitivesSrc))) branches.add(bm[1]);
-    const distinctPrims = [...new Set(primUses.map(u => u.prim))];
-    const missing = distinctPrims.filter(p => !branches.has(p));
+    const branches = sharedPrimKinds(readFileSync(path.join(REPO_ROOT, 'client/src/lib/ringPrimitives.js'), 'utf8'));
+    const worlds = Object.values(RING_WORLDS);
+    const missing = worlds.flatMap(w => missingPrims(w, branches));
+    const distinctPrims = [...new Set(worlds.flatMap(w => w.stations.map(s => s.prim)))];
     report('[static] primitive-name parity (world data vs makePrim)',
       missing.length === 0 ? 'PASS' : 'FAIL',
       missing.length === 0
-        ? `${distinctPrims.length} distinct prim value(s) across ${worldFiles.length} world file(s) [${distinctPrims.join(',')}] all have a matching kind==='...' branch (${branches.size} branches in ringPrimitives.js)`
-        : `${missing.length} prim value(s) with NO makePrim branch: ${missing.join(',')} — would render as an empty div`);
+        ? `${distinctPrims.length} distinct prim value(s) across ${worlds.length} registered world(s) [${distinctPrims.join(',')}] all dispatch (world.prims or one of ${branches.size} kind==='...' branches in ringPrimitives.js)`
+        : `${missing.length} station prim(s) with NO dispatch: ${missing.join(',')} — would render as an empty div`);
   }
 
   // drawn-subject (ART-DIRECTION-SPEC.md §6.0, added 2026-08-09): every
@@ -449,7 +444,11 @@ async function freezeFrame(page) {
 // queries) and there are two real targets (html/react-live) sharing this
 // same logic, so a bare `(page)` can't carry what's needed; every OTHER
 // caller still goes through this one function, which is the actual point.
-export async function runChecks({ page, label, prefix, gotoUrl }) {
+// gate (optional, ring-verify-world.mjs worldGate()): when given, the pass
+// asserts the rendered world id + station keys and applies that world's gate
+// config. Omitted (palette-sweep, sentinel-selftest) = space defaults, no
+// identity check — unchanged from before.
+export async function runChecks({ page, label, prefix, gotoUrl, gate = null }) {
   const startIdx = results.length;
   const P = (name) => `[${label}] ${name}`;
   const consoleErrors = [];
@@ -476,6 +475,12 @@ export async function runChecks({ page, label, prefix, gotoUrl }) {
       })),
     };
   });
+
+  if (gate) {
+    const problems = worldIdentityProblems(world.WORLD, gate);
+    report(P(`renders world "${gate.id}" with its station keys`), problems.length ? 'FAIL' : 'PASS',
+      problems.length ? problems.join('; ') : `${gate.keys.length} station keys match in order`);
+  }
 
   // 1. layer arithmetic
   for (const L of world.layers) {
@@ -986,8 +991,10 @@ export async function runChecks({ page, label, prefix, gotoUrl }) {
   {
     const counts = stationMetrics.map(m => m.starCount);
     const mean = counts.reduce((a, b) => a + b, 0) / counts.length;
-    const status = mean >= 150 && mean <= 260 ? 'PASS' : mean >= 120 && mean <= 300 ? 'WARN' : 'FAIL';
-    report(P('visible stars per frame (target 150-260)'), status, `mean ${mean.toFixed(0)} — per-station ${counts.join(',')}`);
+    const status = starBandStatus(mean, gate ?? { stars: true });
+    report(P('visible stars per frame (target 150-260)'), status ?? 'PASS',
+      status ? `mean ${mean.toFixed(0)} — per-station ${counts.join(',')}`
+        : `SKIPPED — world "${gate.id}" declares no star layer (mean ${mean.toFixed(0)})`);
   }
 
   // 11. ink per station (spec §1, amended 2026-08-08 — see SPEC.inkPerStation
@@ -1210,9 +1217,7 @@ export async function runChecks({ page, label, prefix, gotoUrl }) {
   //      with EPS back to the float-tie role it was always documented as.
   {
     const EPS = 0.01;
-    const probeBad = stationMetrics.filter(m =>
-      m.forceProbe.starTotal === 0 || m.forceProbe.starForced < m.forceProbe.starTotal ||
-      m.forceProbe.pfTotal === 0 || m.forceProbe.pfForced < m.forceProbe.pfTotal);
+    const probeBad = stationMetrics.filter(m => forceProbeBad(m.forceProbe, gate ?? { stars: true }));
     const darker = stationMetrics.filter(m => m.safeStats.mean < m.safeStatsNatural.mean - EPS);
     const detail = `${stationMetrics.map(m => `st${m.s}=natural(mean${m.safeStatsNatural.mean.toFixed(1)}/p99.5-${m.safeStatsNatural.p995})->peak(mean${m.safeStats.mean.toFixed(1)}/p99.5-${m.safeStats.p995})[forced ${m.forceProbe.starForced}/${m.forceProbe.starTotal} star,${m.forceProbe.pfForced}/${m.forceProbe.pfTotal} pf]`).join(' ')}`;
     const bad = [...new Set([...probeBad, ...darker])];
@@ -1402,28 +1407,28 @@ async function findFreePort() {
   });
 }
 
-async function spawnViteOn(port) {
+async function spawnViteOn(port, worldId) {
   const base = `http://localhost:${port}`;
   const proc = spawn('npx', ['vite', '--port', String(port), '--strictPort'], { cwd: REPO_ROOT, stdio: 'ignore' });
   const deadline = Date.now() + 20000;
   while (Date.now() < deadline) {
-    if (await isUp(base + '/')) return { proc, url: base + '/ambient?ring=1' };
+    if (await isUp(base + '/')) return { proc, url: liveUrl(base, worldId) };
     await new Promise(r => setTimeout(r, 400));
   }
   proc.kill();
   throw new Error(`vite dev server on port ${port} did not become ready within 20s`);
 }
 
-export async function ensureViteServer() {
+export async function ensureViteServer(worldId = DEFAULT_WORLD_ID) {
   const base = `http://localhost:${VITE_PORT}`;
   if (await isUp(base + '/') && await serverMatchesThisWorktree(base)) {
-    return { proc: null, url: base + '/ambient?ring=1' };
+    return { proc: null, url: liveUrl(base, worldId) };
   }
   // Either nothing's on 5173, or something is but it's serving a different
   // worktree — either way, don't touch it. Get our own port instead of
   // guessing whether 5173 is free enough to grab with --strictPort.
   const port = await findFreePort();
-  return spawnViteOn(port);
+  return spawnViteOn(port, worldId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1438,9 +1443,11 @@ export async function ensureViteServer() {
 if (isCLI) {
   const target = process.argv[2];
   if (!target) {
-    console.error('Usage: node ring-verify.mjs <path-to-html>');
+    console.error('Usage: node ring-verify.mjs <path-to-html> [--world <id>]');
     process.exit(2);
   }
+  const worldFlag = process.argv.indexOf('--world');
+  const gate = worldGate(worldFlag > 0 ? process.argv[worldFlag + 1] : DEFAULT_WORLD_ID);
   const absPath = path.resolve(target);
 
   runStaticChecks(absPath);
@@ -1455,7 +1462,7 @@ if (isCLI) {
     const targetUrl = `http://127.0.0.1:${port}/${relPath}`;
     const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
     try {
-      await runChecks({ label: 'html', prefix: '', page, gotoUrl: targetUrl });
+      await runChecks({ label: 'html', prefix: '', page, gotoUrl: targetUrl, gate });
     } catch (err) {
       report('[html] pass', 'FAIL', `threw: ${err.message}`);
     } finally {
@@ -1471,10 +1478,10 @@ if (isCLI) {
   } else {
     let vite = null;
     try {
-      vite = await ensureViteServer();
+      vite = await ensureViteServer(gate.id);
       const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
       try {
-        await runChecks({ label: 'react-live', prefix: 'ring-', page, gotoUrl: vite.url });
+        await runChecks({ label: 'react-live', prefix: 'ring-', page, gotoUrl: vite.url, gate });
       } finally {
         await page.close();
       }

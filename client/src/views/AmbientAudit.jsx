@@ -7,6 +7,7 @@ import EvolvingRingAmbient from '../components/display/EvolvingRingAmbient.jsx'
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
 import { RING_POOL } from '../worlds/ringPool.js'
 import { worldFromParams } from '../lib/drawWorld.js'
+import { RING_WORLDS } from '../lib/ringWorldFor.js'
 
 export default function AmbientAudit() {
   const [params] = useSearchParams()
@@ -28,19 +29,22 @@ export default function AmbientAudit() {
   // re-running on every unrelated render.
   const searchString = params.toString()
   const ringWorldData = useMemo(() => {
+    // ?world=<id> picks any registered ring world (ring-verify's --world);
+    // absent = midnight-galaxy, the page's only world before 2026-09-28.
+    const base = RING_WORLDS[params.get('world')] ?? midnightGalaxyRing
     const colorsParam = params.get('colors')
     const stationsParam = params.get('stations')
-    if (!colorsParam && !stationsParam) return midnightGalaxyRing
+    if (!colorsParam && !stationsParam) return base
     try {
       return worldFromParams({
         colorsParam,
         weightsParam: params.get('weights'),
         driftParam: params.get('drift'),
         stationsParam,
-      }, { base: midnightGalaxyRing, pool: RING_POOL, baseTheme: getTheme('midnight-galaxy') })
+      }, { base, pool: base.pool ?? RING_POOL, baseTheme: getTheme(base.id) })
     } catch (err) {
       console.error('[AmbientAudit] bad ?colors=/?stations= params, using base:', err.message)
-      return midnightGalaxyRing
+      return base
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchString])
