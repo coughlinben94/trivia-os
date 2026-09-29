@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { ringWorldFor, RING_WORLDS, resolveArrangement, isEvolving } from './ringWorldFor.js'
+import { ringWorldFor, RING_WORLDS, resolveArrangement, isEvolving, autoDrawWorld } from './ringWorldFor.js'
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
 import { RING_VERSION } from './ringCertification.js'
 import { RING_POOL } from '../worlds/ringPool.js'
@@ -137,12 +137,12 @@ describe('ringWorldFor', () => {
 // session: 0 of the last 6 midnight-galaxy shows had theme.ringWorld set).
 // This tier makes the per-show draw actually fire by default, seeded from
 // showId, without needing a host to click "Re-roll objects" first.
-describe('ringWorldFor — auto-draw (no explicit ringWorld, showId present)', () => {
+describe('ringWorldFor — no explicit ringWorld, showId present (auto-draw disabled 2026-09-29)', () => {
   const POOL_KEYS = new Set(RING_POOL.map(s => s.key))
 
-  it('draws a per-show arrangement instead of the fixed authored order when showId is given', () => {
+  it('a showId alone no longer draws — returns the base world by identity, same as no showId at all', () => {
     const world = ringWorldFor(BASE_THEME, 'show_autodraw_1')
-    expect(world).not.toBe(midnightGalaxyRing)
+    expect(world).toBe(midnightGalaxyRing)
     expect(world.stations).toHaveLength(AUTHORED_KEYS.length)
   })
 
@@ -151,8 +151,23 @@ describe('ringWorldFor — auto-draw (no explicit ringWorld, showId present)', (
     expect(ringWorldFor(BASE_THEME, undefined)).toBe(midnightGalaxyRing)
   })
 
-  it('the drawn arrangement is structurally valid: 13 unique real pool keys, eclipse pinned at station 10', () => {
-    const world = ringWorldFor(BASE_THEME, 'show_autodraw_2')
+  // 2026-09-29: auto-draw is disabled by default (AUTO_DRAW_ENABLED = false,
+  // ringWorldFor.js) — confirmed live, through the real gate, that a random
+  // draw can push a bright object's glow past the safe-box cap (no equivalent
+  // of the authored order's hand-placed safety). ringWorldFor/resolveArrangement
+  // now always land on 'fixed' regardless of showId — see the tests below.
+  // autoDrawWorld itself is untouched and still exported so its own
+  // correctness stays covered for whenever a real placement-safety fix lands
+  // and this gets re-enabled.
+  it('with auto-draw disabled, ringWorldFor and resolveArrangement return the fixed authored order for any showId', () => {
+    for (const showId of ['show_autodraw_2', 'show_variety_0', 'show_variety_1', undefined, '']) {
+      expect(ringWorldFor(BASE_THEME, showId).stations.map(s => s.key)).toEqual(AUTHORED_KEYS)
+      expect(resolveArrangement(BASE_THEME, showId).stations.map(s => s.key)).toEqual(AUTHORED_KEYS)
+    }
+  })
+
+  it('autoDrawWorld itself is still structurally valid: 13 unique real pool keys, eclipse pinned at station 10 (machinery kept for re-enabling later)', () => {
+    const world = autoDrawWorld(midnightGalaxyRing, 'show_autodraw_2')
     const keys = world.stations.map(s => s.key)
     expect(keys).toHaveLength(13)
     expect(new Set(keys).size).toBe(13)
@@ -161,18 +176,16 @@ describe('ringWorldFor — auto-draw (no explicit ringWorld, showId present)', (
     expect(() => assertRing(world.stations)).not.toThrow()
   })
 
-  it('is deterministic for the same showId (a /display reload must not re-roll mid-show)', () => {
-    const a = ringWorldFor({ ...BASE_THEME }, 'show_stable_seed')
-    // Fresh theme object (new identity) but same showId and same underlying
-    // draw inputs — exercises the seed math directly, not just the memo cache.
-    const b = ringWorldFor({ ...BASE_THEME }, 'show_stable_seed')
+  it('autoDrawWorld is deterministic for the same showId (a /display reload must not re-roll mid-show)', () => {
+    const a = autoDrawWorld(midnightGalaxyRing, 'show_stable_seed')
+    const b = autoDrawWorld(midnightGalaxyRing, 'show_stable_seed')
     expect(b.stations.map(s => s.key)).toEqual(a.stations.map(s => s.key))
   })
 
-  it('different showIds can draw different arrangements', () => {
+  it('autoDrawWorld produces different orders for different showIds', () => {
     const orders = new Set()
     for (let i = 0; i < 8; i++) {
-      const world = ringWorldFor(BASE_THEME, `show_variety_${i}`)
+      const world = autoDrawWorld(midnightGalaxyRing, `show_variety_${i}`)
       orders.add(world.stations.map(s => s.key).join(','))
     }
     expect(orders.size).toBeGreaterThan(1)
@@ -227,10 +240,11 @@ describe('resolveArrangement', () => {
     expect(arrangement.stations.map(s => s.hue)).toEqual(midnightGalaxyRing.stations.map(s => s.hue))
   })
 
-  it('draws a per-show arrangement when showId is set and no worldPalette', () => {
+  // 2026-09-29: auto-draw disabled (AUTO_DRAW_ENABLED = false) — see the
+  // dated comment above autoDrawWorld tests. showId alone no longer draws.
+  it('with a showId and no worldPalette, still resolves to the fixed authored order (auto-draw disabled)', () => {
     const arrangement = resolveArrangement(BASE_THEME, 'show_arrangement_test')
-    expect(arrangement.stations.map(s => s.key)).not.toEqual(AUTHORED_KEYS)
-    expect(new Set(arrangement.stations.map(s => s.key)).size).toBe(AUTHORED_KEYS.length)
+    expect(arrangement.stations.map(s => s.key)).toEqual(AUTHORED_KEYS)
   })
 
   it('stays on the fixed order when a worldPalette is set, even with a showId', () => {
@@ -304,7 +318,10 @@ describe('resolveArrangement', () => {
 
   it('parity fixtures actually hit each arrangement kind (guards the table above from going vacuous)', () => {
     expect(resolveArrangement({ ...BASE_THEME, ringWorld: SAVED }, 'x').stations.map(s => s.key)).toEqual(SWAPPED_KEYS)
-    expect(resolveArrangement(BASE_THEME, 'show_arrangement_parity').stations.map(s => s.key)).not.toEqual(AUTHORED_KEYS)
+    // 'auto-draw' in PARITY_CASES no longer produces a drawn order (disabled,
+    // 2026-09-29) — it still hits the 'fixed' path both resolvers agree on,
+    // which is what the case above actually tests now.
+    expect(resolveArrangement(BASE_THEME, 'show_arrangement_parity').stations.map(s => s.key)).toEqual(AUTHORED_KEYS)
     expect(resolveArrangement({ ...BASE_THEME, forceFixedArrangement: true, ringWorld: SAVED }, 'x')).toBe(midnightGalaxyRing)
   })
 })
