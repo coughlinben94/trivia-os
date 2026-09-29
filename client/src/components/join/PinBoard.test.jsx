@@ -61,6 +61,8 @@ describe('PinBoard', () => {
     await flush()
     expect(onAnswered).not.toHaveBeenCalledWith(true)
     expect(host.textContent).toContain('tap Lock In again')
+    const err = [...host.querySelectorAll('p')].find(p => p.textContent.includes("Couldn't save"))
+    expect(parseFloat(err.style.fontSize) * 16).toBeGreaterThanOrEqual(14)
   })
   it('preview mode never writes', async () => {
     act(() => root.render(<PinBoard preview slide={slide()} team={team} theme={theme} />))
@@ -104,6 +106,17 @@ describe('PinBoard', () => {
     await flush()
     expect(host.textContent).toContain('until the host locks pins')
     expect(host.textContent).not.toContain('Ben')
+  })
+  it('hint, outcome and error text are at least 14px', async () => {
+    const px = el => { const v = el.style.fontSize; return v.endsWith('rem') ? parseFloat(v) * 16 : parseFloat(v) }
+    const hint = () => [...host.querySelectorAll('p')].find(p => p.textContent.includes('Press and hold'))
+    act(() => root.render(<PinBoard slide={slide()} team={team} theme={theme} />))
+    await flush()
+    expect(px(hint())).toBeGreaterThanOrEqual(14)
+    act(() => root.render(<PinBoard slide={slide({ pinLocked: true, pinRevealed: true, pinResults: [{ teamId: 't1', pin: { lat: 41, lon: -87 }, miles: 5, points: 0 }] })} team={{ ...team, id: 't1' }} theme={theme} />))
+    await flush()
+    const outcome = [...host.querySelectorAll('p')].find(p => p.textContent.includes('Your pin'))
+    expect(px(outcome)).toBeGreaterThanOrEqual(14)
   })
   it('preview with no results shows no outcome line', async () => {
     act(() => root.render(<PinBoard preview slide={slide({ pinLocked: true, pinRevealed: true })} team={team} theme={theme} />))

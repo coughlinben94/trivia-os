@@ -98,6 +98,21 @@ export default function ShinyPinQuestion({ slide, show, theme }) {
   // Competition ranking on whole miles (1,2,2,4): tied rows read the same on the list and the map.
   const rankOf = (r) => 1 + results.filter(o => o.pin && o.miles < r.miles).length
 
+  // Identical spots (ties) get ONE label on the first (closest) pin, "+N" for the extra teams; every marker still draws.
+  // Results are closest-first, so the first pin at a spot is the one named. The top-5-named rule counts distinct spots.
+  const pinLabels = useMemo(() => {
+    const spots = new Map()
+    const out = new Map()
+    results.filter(r => r.pin).forEach(r => {
+      const key = `${r.pin.lat.toFixed(5)},${r.pin.lon.toFixed(5)}`
+      const spot = spots.get(key)
+      if (spot) { spot.extra += 1; return }
+      const s = { r, extra: 0, named: spots.size < 5 }
+      spots.set(key, s); out.set(r.teamId, s)
+    })
+    return { spotOf: r => out.get(r.teamId) }
+  }, [data.pinResults])
+
   const targetView = useMemo(() => {
     if (!revealed || !target) return HOME
     const pts = [target, ...scorers.map(r => r.pin)].map(p => lonLatToMap(p.lon, p.lat))
@@ -124,7 +139,7 @@ export default function ShinyPinQuestion({ slide, show, theme }) {
           </p>
         )}
         <div style={{ width: '100%', maxWidth: `calc(62vh * ${MAP_W} / ${MAP_H})`, aspectRatio: `${MAP_W} / ${MAP_H}`, maxHeight: '62vh', alignSelf: 'center', position: 'relative', overflow: 'hidden', borderRadius: 20, background: 'rgba(255,255,255,0.05)', border: `1px solid ${ink}22` }}>
-          <UsMap view={view} states={states} ink={ink} cityLabelSize={TV_CITY_LABEL}>
+          <UsMap view={view} states={states} showCities={!revealed} ink={ink} cityLabelSize={TV_CITY_LABEL}>
             {k => revealed && (
               <>
                 {/* opacity-only fade, after the camera move, so pins never "pop" while the map is still flying */}
@@ -140,10 +155,13 @@ export default function ShinyPinQuestion({ slide, show, theme }) {
                     // non-scaling-stroke also makes the dash array screen-space, so dashes stay 6px at every zoom
                     return <line key={`l${r.teamId}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke={ink} strokeOpacity="0.5" strokeWidth="1.5" strokeDasharray="6 6" vectorEffect="non-scaling-stroke" />
                   })}
-                  {results.filter(r => r.pin).map((r, i) => (
-                    // scorePinRound sorts points-desc then miles-asc with no-pin rows last, so i is the position of a pinned row.
-                    <PinMarker key={r.teamId} lon={r.pin.lon} lat={r.pin.lat} k={k} size={TV_PIN_SIZE} labelSize={TV_LABEL} color={colors[r.teamId] ?? '#4a90d9'} label={i < 5 ? (r.teamName ?? '') : String(rankOf(r))} />
-                  ))}
+                  {results.filter(r => r.pin).map(r => {
+                    const spot = pinLabels.spotOf(r)
+                    const label = !spot ? '' : spot.named ? `${r.teamName ?? ''}${spot.extra ? ` +${spot.extra}` : ''}` : String(rankOf(r))
+                    return (
+                    <PinMarker key={r.teamId} lon={r.pin.lon} lat={r.pin.lat} k={k} size={TV_PIN_SIZE} labelSize={TV_LABEL} color={colors[r.teamId] ?? '#4a90d9'} label={label} />
+                    )
+                  })}
                 </motion.g>
                 {/* drawn last so guesses never paint over the true spot */}
                 {target && <PinMarker lon={target.lon} lat={target.lat} k={k} size={TV_PIN_SIZE} labelSize={TV_LABEL} color={SHINY_GOLD} label={data.answer || 'Answer'} />}

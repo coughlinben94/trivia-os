@@ -103,7 +103,7 @@ export default function PinBoard({ slide, team, theme, preview = false, onAnswer
           {saving ? 'Saving…' : !pin || !committed ? '🔒 Lock In My Pin' : dirty ? 'Update My Pin' : 'Pin Locked'}
         </button>
       )}
-      <p style={{ color: `${text}b3`, fontSize: '0.85rem', textAlign: 'center', margin: 0 }}>
+      <p style={{ color: `${text}b3`, fontSize: '0.875rem', textAlign: 'center', margin: 0 }}>
         {locked
           ? (outcome ?? (committed ? 'Pins locked' : "You didn't lock in a pin"))
           : !pin
@@ -113,7 +113,7 @@ export default function PinBoard({ slide, team, theme, preview = false, onAnswer
               : 'Locked in — press and hold again to move it until the host locks pins'}
       </p>
       {saveFailed && !locked && (
-        <p style={{ color: '#ff6b6b', fontSize: '0.8rem', textAlign: 'center', margin: 0 }}>
+        <p style={{ color: '#ff6b6b', fontSize: '0.875rem', textAlign: 'center', margin: 0 }}>
           Couldn't save — check your connection and tap Lock In again
         </p>
       )}
