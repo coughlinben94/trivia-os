@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { isShinySeriesSibling, reorderWithinRound } from '../../lib/shinySeries.js'
 import { roundLabel } from '../../lib/scoreboardMath.js'
+import { pinMissingSpot } from '../../lib/pinScoring.js'
 
 // Clusters consecutive slides in a round that form one shiny series run
 // (separate top-level slides, e.g. an image format the host asked for N
@@ -726,6 +727,9 @@ function SlideRow({ slide, selected, dragging, dragBefore, dragAfter, onSelect, 
       <span className={`text-sm flex-1 truncate ${selected ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
         {label}
       </span>
+      {pinMissingSpot(slide) && (
+        <span className="text-[10px] font-semibold text-red-600 shrink-0" title="Set the true spot in the slide editor before going live">⚠ no true spot</span>
+      )}
       {groupCount != null && (
         <span className="text-[10px] text-gray-400 shrink-0 tabular-nums">
           {leadPartLabel ?? groupCount}

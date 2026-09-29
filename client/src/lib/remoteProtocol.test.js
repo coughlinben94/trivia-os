@@ -25,8 +25,9 @@ describe('parseRemoteMessage', () => {
 
 describe('refusalText', () => {
   it('plain English for every built reason, fallback for unknown', () => {
-    for (const r of ['slide-changed', 'gate-changed', 'pending-advance', 'scoring', 'late', 'modal-open', 'paused', 'locking', 'busy', 'laptop-offline', 'unknown-command']) {
+    for (const r of ['slide-changed', 'gate-changed', 'pending-advance', 'scoring', 'late', 'modal-open', 'paused', 'locking', 'busy', 'laptop-offline', 'unknown-command', 'lock-blocked']) {
       expect(refusalText(r)).toMatch(/\w/)
+      expect(refusalText(r)).not.toBe(refusalText('weird'))
     }
     expect(refusalText('pending-advance')).toBe(refusalText('gate-changed'))
     expect(refusalText('locking')).toBe('Countdown running')

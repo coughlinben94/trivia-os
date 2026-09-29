@@ -88,8 +88,22 @@ describe('PinBoard', () => {
     render('t2'); await flush()
     expect(host.textContent).toContain('Your pin: 900 mi')
     expect(host.textContent).not.toContain('+10')
+    render('t3'); await flush()
+    expect(host.textContent).toContain('No pin locked in') // row exists, null miles
     render('t9'); await flush()
-    expect(host.textContent).toContain('No pin locked in')
+    // no row at all (e.g. unpaid team dropped from the scoreboard): "no pin" would be a guess
+    expect(host.textContent).toContain('No result recorded for your team')
+    expect(host.textContent).not.toContain('No pin locked in')
+  })
+  it('the "move it" hint names the host, not a person', async () => {
+    act(() => root.render(<PinBoard slide={slide()} team={team} theme={theme} />))
+    await flush()
+    upsert.mockResolvedValue({ error: null })
+    act(() => btn('drop').dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    await act(async () => { btn('Lock In').dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await flush()
+    expect(host.textContent).toContain('until the host locks pins')
+    expect(host.textContent).not.toContain('Ben')
   })
   it('preview with no results shows no outcome line', async () => {
     act(() => root.render(<PinBoard preview slide={slide({ pinLocked: true, pinRevealed: true })} team={team} theme={theme} />))

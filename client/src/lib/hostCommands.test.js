@@ -33,6 +33,15 @@ describe('next (ArrowRight)', () => {
     expect(plan({ cmd: 'next' }, { lockPhase: 'order', audioPending: true, answerReveal: true }))
       .toEqual({ run: 'start-lock-countdown', phase: 'order' })
   })
+  it('does not start a countdown when the lock would be refused (Pin It with no true spot); says why', () => {
+    expect(plan({ cmd: 'next' }, { lockPhase: 'pin', lockBlocked: 'Set the true spot first' }))
+      .toEqual({ refuse: 'lock-blocked', message: 'Set the true spot first' })
+    expect(plan({ cmd: 'next', via: 'button' }, { lockPhase: 'pin', lockBlocked: 'Set the true spot first' }))
+      .toEqual({ refuse: 'lock-blocked', message: 'Set the true spot first' })
+  })
+  it('a lock phase with nothing blocking it still starts the countdown', () => {
+    expect(plan({ cmd: 'next' }, { lockPhase: 'pin', lockBlocked: null })).toEqual({ run: 'start-lock-countdown', phase: 'pin' })
+  })
   it('no-ops while the countdown already runs', () => {
     expect(plan({ cmd: 'next' }, { lockPhase: 'order', lockCountdownRunning: true }))
       .toEqual({ refuse: 'locking' })

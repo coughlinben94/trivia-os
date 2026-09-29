@@ -46,6 +46,7 @@ export const REFUSAL_TEXT = {
   'modal-open': 'Close the panel on the laptop',
   paused: 'Remote paused on the laptop',
   locking: 'Countdown running',
+  'lock-blocked': 'This slide can\'t lock yet — check the laptop',
   busy: 'Laptop is busy — wait a second',
   'laptop-offline': 'Open Live Mode on the laptop',
   'unknown-command': 'Update the remote app',

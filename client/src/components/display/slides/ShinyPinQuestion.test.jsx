@@ -15,10 +15,11 @@ vi.mock('../../../lib/supabase.js', () => ({
 }))
 vi.mock('../../../hooks/useUsMapData.js', () => ({ useUsMapData: () => null }))
 vi.mock('../ShinySignal.jsx', () => ({ default: () => null }))
+vi.mock('../../shared/MapLoadRetry.jsx', () => ({ default: p => <i data-retry-overlay={String(p.retry)} /> }))
 // jsdom has no canvas, which fitToBox measures with
 vi.mock('../../../lib/autoFitText.js', () => ({ fitToBox: () => 60 }))
 
-const { default: ShinyPinQuestion } = await import('./ShinyPinQuestion.jsx')
+const { default: ShinyPinQuestion, TV_LABEL, TV_CITY_LABEL, TV_PIN_SIZE, Q_BOX, REVEAL_COL_W } = await import('./ShinyPinQuestion.jsx')
 const theme = { colors: { text: '#ffffff' }, fonts: { body: 'DM Sans', display: 'Boogaloo' } }
 const mk = (data = {}) => ({ id: 's1', data: { text: 'Where is Chicago?', ...data } })
 const show = { id: 'show_1' }
@@ -90,5 +91,27 @@ describe('ShinyPinQuestion', () => {
       pinResults: [res(1, { miles: 10 }), res(2, { miles: 20 }), res(3, { miles: 20 }), res(4, { miles: 30 }), res(5, { pin: null, miles: null })] })
     const ranks = [...host.querySelectorAll('ol li')].map(li => li.querySelector('span').textContent)
     expect(ranks).toEqual(['1', '2', '2', '4', '–'])
+  })
+  it('map box width is capped to the aspect at the 62vh height cap so it never letterboxes', async () => {
+    await render({})
+    // jsdom folds calc(62vh * 1000 / 632) to calc(98.1013vh)
+    expect(host.innerHTML).toMatch(/max-width: calc\(98\.10\d*vh\)/)
+  })
+  it('TV text sizes: team names ~36px and city labels ~27px at 1080p (1 map unit ~ 1.059px)', () => {
+    expect(TV_LABEL * 1.059).toBeGreaterThanOrEqual(35)
+    expect(TV_CITY_LABEL * 1.059).toBeGreaterThanOrEqual(26)
+    expect(TV_PIN_SIZE).toBeGreaterThan(0)
+  })
+  it('side list uses a TV-sized font, matching the Hues & Cues list', async () => {
+    await render({ pinRevealed: true, pinAnswer: { lat: 41.88, lon: -87.63 }, pinResults: [res(1)] })
+    expect(host.querySelector('ol li').getAttribute('style')).toContain('clamp(1.6rem, 2vw, 2.3rem)')
+  })
+  it('prompt fit box is no wider than the prompt column at reveal, so a 3-line prompt cannot clip', () => {
+    expect(Q_BOX.boxW).toBeLessThanOrEqual(REVEAL_COL_W)
+    expect(Q_BOX.maxLines).toBe(2)
+  })
+  it('TV never offers a tap-to-retry overlay', async () => {
+    await render({})
+    expect(host.querySelector('[data-retry-overlay]').getAttribute('data-retry-overlay')).toBe('false')
   })
 })

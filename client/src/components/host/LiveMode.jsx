@@ -15,7 +15,7 @@ import { computeChoiceScoreUpdates, DEFAULT_CHOICE_POINTS } from '../../lib/choi
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
 import { scoreHuesCuesRound, computeHuesCuesScoreUpdates } from '../../lib/huesCuesScoring.js'
 import { computeHorseRaceScoreUpdates, DEFAULT_RACE_POINTS } from '../../lib/raceScoring.js'
-import { buildPinRound, isValidPin } from '../../lib/pinScoring.js'
+import { buildPinRound, isValidPin, pinMissingSpot, pinLockedStatus, PIN_SPOT_ERROR } from '../../lib/pinScoring.js'
 import PinRoomControl from './PinRoomControl.jsx'
 import { HUES_CUES_CODE_RE } from '../../lib/huesCuesGrid.js'
 import { nextPressGate } from '../../lib/nextPressCue.js'
@@ -791,7 +791,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       slide,
       lockField: 'pinLocked', lockedAtField: 'pinLockedAt',
       resultsField: 'pinResults',
-      preCheck: s => isValidPin(s.data.pinAnswer) ? null : 'Set the true spot first — click the map in the slide editor',
+      preCheck: s => isValidPin(s.data.pinAnswer) ? null : PIN_SPOT_ERROR,
       lateLogLabel: 'pin lock',
       buildResults: args => buildPinRound({ ...args, data: slide.data }),
       setBusy: setPinBusy,
@@ -1306,6 +1306,9 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       // since starting a countdown isn't an advance at all.
       lockPhase: pendingLockPhase(currentSlide),
       lockCountdownRunning: !!currentSlide?.data?.lockCountdownStartedAt,
+      // Next must not start a countdown its own lock would refuse (endless 3-2-1). Only
+      // Pin It so far; hues-cues/wager have the same shape but are left as they were.
+      lockBlocked: pinMissingSpot(currentSlide) ? PIN_SPOT_ERROR : null,
       scoringBlocked: scoringBlocksNext(),
       audioPending: audioPlayPending(),
       answerReveal: show.showState.answerReveal,
@@ -1334,6 +1337,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       scoreCols: deriveRoundCols(show),
       modalJustClosed: Date.now() - modalClosedAtRef.current < 1000,
     })
+    if (plan.refuse === 'lock-blocked') setPinScoreError(plan.message)
     if (plan.refuse) return plan
     switch (plan.run) {
       case 'start-lock-countdown': startLockCountdown(plan.phase); break
@@ -1778,7 +1782,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
               pin: {
                 busy: pinBusy, error: pinScoreError, zeroErr: null,
                 status: d.pinLocked
-                  ? `Pins locked and scored (room of ${d.pinRoomSize ?? '?'}) — press A to reveal the true spot on the TV.`
+                  ? pinLockedStatus(d)
                   : 'Pin It — teams are dropping pins on their phones',
                 label: pinBusy ? 'Scoring…' : d.pinLocked ? '🔁 Retry Scoring' : '🔒 Lock Pins & Score',
                 act: scoreActionFor('pin', currentSlide),

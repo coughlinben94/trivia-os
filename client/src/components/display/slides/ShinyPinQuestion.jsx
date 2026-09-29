@@ -18,9 +18,15 @@ import ShinySignal from '../ShinySignal.jsx'
 // "locked" beat, then a reveal where the camera frames the true spot plus the
 // scoring pins, every pin shows in its team's color, and a ranked list shows
 // miles. Camera moves are JS-tweened SVG transforms (transform-only).
-const Q_BOX = { boxW: 1500, boxH: 150, floorPx: 40, ceilPx: 92, maxLines: 2, lineHeight: 1.15 }
-// Starting values for bar-distance legibility; tune at the Task 12 real-TV check.
-const TV_PIN_SIZE = 1.8, TV_LABEL = 22, TV_CITY_LABEL = 18 // effective map units (labelSize is final size)
+// boxW must fit the prompt column at reveal (1080p: 1920 - 2*3rem padding - 2rem gap - the 26% list = ~1318px),
+// or a prompt measured to two lines can wrap to three there and clip.
+const LIST_PCT = 0.26
+export const REVEAL_COL_W = 1920 - 96 - 32 - LIST_PCT * (1920 - 96)
+export const Q_BOX = { boxW: 1300, boxH: 150, floorPx: 40, ceilPx: 92, maxLines: 2, lineHeight: 1.15 }
+// Bar-distance legibility, effective map units (labelSize is the final size). The map box is ~1059px
+// wide at 1080p, so 1 unit ~ 1.059px: 34 -> ~36px team names, 26 -> ~27px city labels. Not yet
+// verified on the real TV.
+export const TV_PIN_SIZE = 1.8, TV_LABEL = 34, TV_CITY_LABEL = 26
 const HOME = { k: 1, tx: 0, ty: 0 }
 const CAMERA_MS = 1100
 
@@ -117,7 +123,7 @@ export default function ShinyPinQuestion({ slide, show, theme }) {
             {data.text}
           </p>
         )}
-        <div style={{ width: '100%', aspectRatio: `${MAP_W} / ${MAP_H}`, maxHeight: '62vh', alignSelf: 'center', position: 'relative', overflow: 'hidden', borderRadius: 20, background: 'rgba(255,255,255,0.05)', border: `1px solid ${ink}22` }}>
+        <div style={{ width: '100%', maxWidth: `calc(62vh * ${MAP_W} / ${MAP_H})`, aspectRatio: `${MAP_W} / ${MAP_H}`, maxHeight: '62vh', alignSelf: 'center', position: 'relative', overflow: 'hidden', borderRadius: 20, background: 'rgba(255,255,255,0.05)', border: `1px solid ${ink}22` }}>
           <UsMap view={view} states={states} ink={ink} cityLabelSize={TV_CITY_LABEL}>
             {k => revealed && (
               <>
@@ -131,6 +137,7 @@ export default function ShinyPinQuestion({ slide, show, theme }) {
                   {target && scorers.map(r => {
                     const [x1, y1] = lonLatToMap(r.pin.lon, r.pin.lat)
                     const [x2, y2] = lonLatToMap(target.lon, target.lat)
+                    // non-scaling-stroke also makes the dash array screen-space, so dashes stay 6px at every zoom
                     return <line key={`l${r.teamId}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke={ink} strokeOpacity="0.5" strokeWidth="1.5" strokeDasharray="6 6" vectorEffect="non-scaling-stroke" />
                   })}
                   {results.filter(r => r.pin).map((r, i) => (
@@ -143,7 +150,7 @@ export default function ShinyPinQuestion({ slide, show, theme }) {
               </>
             )}
           </UsMap>
-          <MapLoadRetry states={states} ink={ink} />
+          <MapLoadRetry states={states} ink={ink} retry={false} />
         </div>
         <div style={{ minHeight: '3.4rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: `${ink}d9`, fontSize: 'clamp(1.6rem, 2vw, 2.3rem)', fontFamily: bodyFont }}>
           {revealed ? (data.answer ? `It's ${data.answer}` : null)
@@ -157,18 +164,18 @@ export default function ShinyPinQuestion({ slide, show, theme }) {
           initial={reduce ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.4, ease: EASE_OUT, delay: reduce ? 0 : 0.9 }}
-          style={{ width: '22%', minWidth: 300, margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.5rem', justifyContent: 'center', fontFamily: bodyFont, color: ink }}
+          style={{ width: `${LIST_PCT * 100}%`, minWidth: 300, margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.35rem', justifyContent: 'center', fontFamily: bodyFont, color: ink }}
         >
           {results.slice(0, 12).map((r, i) => (
-            <li key={r.teamId} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: 'clamp(1.1rem, 1.5vw, 1.6rem)', opacity: r.points > 0 ? 1 : 0.6 }}>
-              <span style={{ width: '1.6em', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.pin ? rankOf(r) : '–'}</span>
-              <span aria-hidden="true" style={{ width: 14, height: 14, borderRadius: 7, background: colors[r.teamId] ?? '#4a90d9', flexShrink: 0 }} />
+            <li key={r.teamId} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: 'clamp(1.6rem, 2vw, 2.3rem)', opacity: r.points > 0 ? 1 : 0.6 }}>
+              <span style={{ width: '1.4em', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.pin ? rankOf(r) : '–'}</span>
+              <span aria-hidden="true" style={{ width: 18, height: 18, borderRadius: 9, background: colors[r.teamId] ?? '#4a90d9', flexShrink: 0 }} />
               <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.teamName ?? 'Team'}</span>
               <span style={{ fontVariantNumeric: 'tabular-nums' }}>{r.miles == null ? 'no pin' : `${r.miles.toLocaleString()} mi`}</span>
               {r.points > 0 && <span style={{ color: SHINY_GOLD, fontWeight: 700 }}>+{r.points}</span>}
             </li>
           ))}
-          {results.length > 12 && <li style={{ opacity: 0.6, fontSize: '1.1rem', textAlign: 'center' }}>+{results.length - 12} more</li>}
+          {results.length > 12 && <li style={{ opacity: 0.6, fontSize: '1.4rem', textAlign: 'center' }}>+{results.length - 12} more</li>}
         </motion.ol>
       )}
     </div>

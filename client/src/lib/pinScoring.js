@@ -5,6 +5,20 @@ import { normalizeTeamName } from './teamColors.js'
 export const PIN_POINTS = 10
 export const US_BOUNDS = { minLat: 24, maxLat: 50, minLon: -125.5, maxLon: -66 }
 
+export const PIN_SPOT_ERROR = 'Set the true spot first — click the map in the slide editor'
+
+// A Pin It question slide the host cannot lock yet (no valid true spot). Drives the
+// build-list badge and LiveMode's Next guard, so both agree with the lock preCheck.
+export function pinMissingSpot(slide) {
+  return slide?.type === 'question' && slide.data?.shinyInputSchema?.type === 'pin' && !isValidPin(slide.data.pinAnswer)
+}
+
+// Host panel line once pins are locked and scored.
+export function pinLockedStatus(data) {
+  const room = Number.isFinite(data?.pinRoomSize) ? `room of ${data.pinRoomSize}` : 'room size not recorded'
+  return `Pins locked and scored (${room}) — press A to reveal the true spot on the TV.`
+}
+
 // phone_answers.answer has no shape check, so anything a phone sent is
 // treated as hostile until it passes this.
 export function isValidPin(p) {

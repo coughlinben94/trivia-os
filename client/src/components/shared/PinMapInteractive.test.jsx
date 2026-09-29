@@ -150,4 +150,36 @@ describe('PinMapInteractive click mode (host picker)', () => {
     fire(s, 'pointerdown', 250, 150, 1, 2); fire(s, 'pointerup', 250, 150, 1, 2)
     expect(onPin).not.toHaveBeenCalled()
   })
+
+  it('zoom buttons live OUTSIDE the gesture surface so a hold on the map is never eaten by one', () => {
+    mount({ pin: null })
+    const surface = host.querySelector('[data-pin-surface]')
+    const btns = host.querySelectorAll('button[aria-label^="Zoom"]')
+    expect(btns.length).toBe(2)
+    btns.forEach(b => expect(surface.contains(b)).toBe(false))
+  })
+  it('zoom buttons still zoom and stop pointerdown from reaching the surface', () => {
+    const s = mount({ pin: null })
+    const before = s.querySelector('svg > g').getAttribute('transform')
+    act(() => host.querySelector('button[aria-label="Zoom in"]').dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    expect(s.querySelector('svg > g').getAttribute('transform')).not.toBe(before)
+  })
+  it('a touch pointerdown on the surface does not reach an ancestor (carousel swipe) handler; a mouse one does', () => {
+    const s = mount({ pin: null })
+    const ancestor = vi.fn()
+    host.addEventListener('pointerdown', ancestor)
+    const down = type => { const e = new MouseEvent('pointerdown', { bubbles: true, clientX: 250, clientY: 150 }); Object.defineProperty(e, 'pointerId', { value: 7 }); Object.defineProperty(e, 'pointerType', { value: type }); act(() => { s.dispatchEvent(e) }) }
+    down('touch')
+    expect(ancestor).not.toHaveBeenCalled()
+    fire(s, 'pointerup', 250, 150, 7)
+    down('mouse')
+    expect(ancestor).toHaveBeenCalledTimes(1)
+  })
+  it('touch hold-to-drop still works with the ancestor shield (hold, lift, one commit)', () => {
+    const onPin = vi.fn()
+    const s = mount({ pin: null, onPin })
+    const t = (type, x, y) => { const e = new MouseEvent(type, { bubbles: true, clientX: x, clientY: y }); Object.defineProperty(e, 'pointerId', { value: 3 }); Object.defineProperty(e, 'pointerType', { value: 'touch' }); act(() => { s.dispatchEvent(e) }) }
+    t('pointerdown', 250, 150); act(() => { vi.advanceTimersByTime(400) }); t('pointerup', 250, 150)
+    expect(onPin).toHaveBeenCalledTimes(1)
+  })
 })

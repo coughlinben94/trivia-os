@@ -71,7 +71,8 @@ export default function PinBoard({ slide, team, theme, preview = false, onAnswer
   // After reveal, ranks past the TV's top 12 never show up there: each phone reads its own row.
   const revealRow = data.pinRevealed && Array.isArray(data.pinResults) ? data.pinResults.find(r => r.teamId === team.id) ?? null : null
   const outcome = data.pinRevealed && Array.isArray(data.pinResults)
-    ? (revealRow?.miles != null ? `Your pin: ${revealRow.miles.toLocaleString()} mi${revealRow.points > 0 ? ` · +${revealRow.points}` : ''}` : 'No pin locked in')
+    ? (!revealRow ? 'No result recorded for your team' // no row: e.g. an unpaid team that is not on the scoreboard, so "no pin" would be a guess
+      : revealRow.miles != null ? `Your pin: ${revealRow.miles.toLocaleString()} mi${revealRow.points > 0 ? ` · +${revealRow.points}` : ''}` : 'No pin locked in')
     : null
 
   const font = `'${theme?.fonts?.body ?? 'DM Sans'}', 'DM Sans', sans-serif`
@@ -109,7 +110,7 @@ export default function PinBoard({ slide, team, theme, preview = false, onAnswer
             ? 'Press and hold the map to drop your pin — pinch to zoom'
             : dirty
               ? 'Tap Lock In to submit'
-              : 'Locked in — press and hold again to move it until Ben locks pins'}
+              : 'Locked in — press and hold again to move it until the host locks pins'}
       </p>
       {saveFailed && !locked && (
         <p style={{ color: '#ff6b6b', fontSize: '0.8rem', textAlign: 'center', margin: 0 }}>

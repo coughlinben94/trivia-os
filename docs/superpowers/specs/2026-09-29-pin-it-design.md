@@ -80,7 +80,7 @@ Full review: scratchpad `pin-it-critique.md`. These OVERRIDE anything above that
 
 **Repeatable scoring (blocker).** On lock, save `pinRoomSize` (the saved value wins on retry) and `pinResults` on the slide. "Retry Scoring" reuses the saved `pinRoomSize`, never re-reads live teams. Unlock clears `pinResults` and `pinRoomSize`. A retry re-sends nothing new from phones; a phone whose save timed out re-sends its CURRENT pin on Lock In tap.
 
-**Ties.** Compare on distance rounded to whole miles (what the TV shows), so two "312 mi" teams both score or both miss. `ceil(0.4 N)`: 1/1, 1/2, 2/3, 2/4, 2/5, 4/10, 6/15, 8/20, 10/25.
+**Ties.** Compare on distance rounded to whole miles (what the TV shows), so two "312 mi" teams both score or both miss. Scoring group `k(N)` (matches `scoringGroupSize`: 1 for N < 5, then `ceil(0.4 N)`), as k/N: 1/1, 1/2, 1/3, 1/4, 2/5, 4/10, 6/15, 8/20, 10/25.
 
 **Input validation.** `phone_answers.answer` has no shape check, so `pinScoring` rejects anything that is not `{lat, lon}` finite numbers inside the lower-48 bounds (treated as no pin). Note: `pinResults` reaches every phone at lock time, before the host reveal. `pinAnswer` is readable by any phone from the moment the host sets it (Join reads `shows.select('*')`), exactly like every question's `data.answer`, so it is not a new risk. Both are acceptable and match Hues & Cues; state it, do not hide it.
 
