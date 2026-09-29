@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import PlaceSearch from './PlaceSearch.jsx'
 import { nanoid } from 'nanoid'
 import { analyzeAudioGain } from '../../lib/audioNormalize.js'
 import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
@@ -1215,7 +1216,7 @@ function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, up
 
           {schema.type === 'pin' && (
             <>
-              <PinAnswerPicker data={data} onChange={onChange} />
+              <PinAnswerPicker data={data} onChange={onChange} onBatchChange={onBatchChange} />
               <div className="flex flex-col gap-2">
                 <label className="block text-xs font-medium text-gray-700">Phone preview — live, matches what teams will see</label>
                 <div style={{ width: 300, margin: '0 auto', padding: '1.25rem 1rem', borderRadius: 20, background: theme.colors.bg }}>
@@ -2077,7 +2078,7 @@ function WagerBuilder({ answer }) {
 
 // True-spot picker for Pin It: click the map or paste "lat, lon". Writes
 // data.pinAnswer; data.answer stays the plain-text place name.
-function PinAnswerPicker({ data, onChange }) {
+function PinAnswerPicker({ data, onChange, onBatchChange }) {
   const [paste, setPaste] = useState('')
   const [pasteError, setPasteError] = useState(false)
   const spot = isValidPin(data.pinAnswer) ? data.pinAnswer : null
@@ -2090,8 +2091,19 @@ function PinAnswerPicker({ data, onChange }) {
     onChange('pinAnswer', next)
   }
 
+  // Search pick: set the spot, and the place name only if the host left it empty.
+  function pickPlace({ lat, lon, label }) {
+    const round = n => Math.round(n * 1e6) / 1e6
+    const updates = { pinAnswer: { lat: round(lat), lon: round(lon) } }
+    if (!String(data.answer ?? '').trim()) updates.answer = label
+    setPaste('')
+    setPasteError(false)
+    onBatchChange(updates)
+  }
+
   return (
     <Field label="True spot" hint="Click the map (scroll or +/− to zoom) to set the exact spot, or paste “lat, lon” from a map app. Teams are scored by miles from here.">
+      <PlaceSearch onPick={pickPlace} />
       <div className="flex items-center gap-2 mb-2">
         <input
           type="text" value={paste}
