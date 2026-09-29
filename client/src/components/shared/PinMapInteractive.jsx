@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import UsMap, { PinMarker } from './UsMap.jsx'
 import { useUsMapData } from '../../hooks/useUsMapData.js'
 import { mapToLonLat, MAP_W, MAP_H } from '../../lib/usMapGeo.js'
-import { zoomAbout, clampView, screenToMap } from '../../lib/pinView.js'
+import { zoomAbout, clampView, screenToMap, MAX_K } from '../../lib/pinView.js'
 import { isValidPin } from '../../lib/pinScoring.js'
 
 const HOLD_MS = 350
@@ -21,20 +21,32 @@ export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disab
   const dragRef = useRef(null); dragRef.current = drag
   const g = useRef({ pointers: new Map(), mode: 'idle', timer: null, start: null, pan: null, pinch: null, last: null })
 
-  function factor() { return MAP_W / ref.current.getBoundingClientRect().width }
+  // Zero/NaN width (unmounted or not laid out yet) -> null; callers bail out.
+  function factor() {
+    const w = ref.current?.getBoundingClientRect().width
+    return w > 0 ? MAP_W / w : null
+  }
   function toViewport(e, liftPx = 0) {
-    const r = ref.current.getBoundingClientRect(); const f = MAP_W / r.width
+    const f = factor()
+    if (f == null) return null
+    const r = ref.current.getBoundingClientRect()
     return [(e.clientX - r.left) * f, (e.clientY - r.top - liftPx) * f]
+  }
+  function resetGesture() {
+    const s = g.current
+    cancelTimer(); s.pointers.clear(); s.mode = 'idle'; s.pinch = null; dragRef.current = null; setDrag(null)
   }
   function cancelTimer() { clearTimeout(g.current.timer); g.current.timer = null }
 
   function placeDrag(e, liftPx) {
-    const [px, py] = toViewport(e, liftPx)
-    const [mx, my] = screenToMap(viewRef.current, px, py)
+    const p = toViewport(e, liftPx)
+    if (!p) return
+    const [mx, my] = screenToMap(viewRef.current, p[0], p[1])
+    dragRef.current = { mx, my } // before setDrag: a pointerup before the re-render must still commit
     setDrag({ mx, my })
-    return [mx, my]
   }
   function commit(mx, my) {
+    if (disabled) return
     const [lon, lat] = mapToLonLat(mx, my)
     const next = { lat: round6(lat), lon: round6(lon) }
     if (isValidPin(next)) onPin?.(next)
@@ -42,8 +54,13 @@ export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disab
 
   function onPointerDown(e) {
     if (disabled) return
-    e.currentTarget.setPointerCapture?.(e.pointerId)
+    if (e.pointerType === 'mouse' && e.button !== 0) return
     const s = g.current
+    if (!s.pointers.has(e.pointerId) && s.pointers.size >= 2) return // third finger: ignore
+    if (s.pointers.has(e.pointerId)) { // stale entry for this id: start over
+      cancelTimer(); s.pointers.clear(); s.mode = 'idle'; s.pinch = null; dragRef.current = null; setDrag(null)
+    }
+    e.currentTarget.setPointerCapture?.(e.pointerId)
     s.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
     s.last = { clientX: e.clientX, clientY: e.clientY }
     if (s.pointers.size === 1) {
@@ -62,6 +79,7 @@ export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disab
       s.mode = 'pinch'
       const [a, b] = [...s.pointers.values()]
       const midPx = toViewport({ clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 })
+      if (!midPx) { s.mode = 'idle'; return }
       s.pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y) || 1, k0: viewRef.current.k, m0: screenToMap(viewRef.current, midPx[0], midPx[1]) }
     }
   }
@@ -77,14 +95,16 @@ export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disab
     }
     if (s.mode === 'pan') {
       const f = factor()
+      if (f == null) return
       setView(clampView({ k: s.pan.view.k, tx: s.pan.view.tx + (e.clientX - s.pan.x) * f, ty: s.pan.view.ty + (e.clientY - s.pan.y) * f }))
     } else if (s.mode === 'drop') {
       placeDrag(e, PIN_LIFT_PX)
     } else if (s.mode === 'pinch' && s.pointers.size >= 2) {
       const [a, b] = [...s.pointers.values()]
       const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1
-      const k = Math.max(1, Math.min(8, s.pinch.k0 * (dist / s.pinch.dist)))
+      const k = Math.max(1, Math.min(MAX_K, s.pinch.k0 * (dist / s.pinch.dist)))
       const mid = toViewport({ clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 })
+      if (!mid) return
       // keep the map point that started under the fingers under the fingers now
       setView(clampView({ k, tx: mid[0] - k * s.pinch.m0[0], ty: mid[1] - k * s.pinch.m0[1] }))
     }
@@ -95,15 +115,15 @@ export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disab
     if (!s.pointers.has(e.pointerId)) return
     s.pointers.delete(e.pointerId)
     cancelTimer()
-    if (e.type === 'pointerup') {
+    if (e.type === 'pointerup' && !disabled) {
       if (s.mode === 'drop' && dragRef.current) commit(dragRef.current.mx, dragRef.current.my)
       else if (s.mode === 'maybe' && dropMode === 'click') {
-        const [px, py] = toViewport(e)
-        const [mx, my] = screenToMap(viewRef.current, px, py)
-        commit(mx, my)
+        const p = toViewport(e)
+        if (p) { const [mx, my] = screenToMap(viewRef.current, p[0], p[1]); commit(mx, my) }
       }
     }
-    if (s.pointers.size === 0) { s.mode = 'idle'; setDrag(null) }
+    if (disabled) resetGesture()
+    else if (s.pointers.size === 0) { s.mode = 'idle'; dragRef.current = null; setDrag(null) }
     else if (s.pointers.size === 1 && s.mode === 'pinch') {
       const [p] = [...s.pointers.values()]
       s.mode = 'pan'; s.pan = { x: p.x, y: p.y, view: viewRef.current }
@@ -117,7 +137,9 @@ export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disab
     if (!el) return
     function onWheel(e) {
       e.preventDefault()
-      const [px, py] = toViewport(e)
+      const p = toViewport(e)
+      if (!p) return
+      const [px, py] = p
       setView(v => zoomAbout(v, px, py, Math.exp(-e.deltaY * 0.0025)))
     }
     el.addEventListener('wheel', onWheel, { passive: false })
@@ -136,6 +158,8 @@ export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disab
   )
 
   const shown = drag ? (() => { const [lon, lat] = mapToLonLat(drag.mx, drag.my); return { lon, lat } })() : pin
+  // Held past the US edge: the release will not drop, so show the preview faded.
+  const outOfBounds = !!drag && !isValidPin(shown)
   return (
     <div
       ref={ref}
@@ -144,6 +168,7 @@ export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disab
       onPointerMove={onPointerMove}
       onPointerUp={onPointerEnd}
       onPointerCancel={onPointerEnd}
+      onLostPointerCapture={onPointerEnd}
       onContextMenu={e => e.preventDefault()}
       style={{
         position: 'relative', width: '100%', aspectRatio: `${MAP_W} / ${MAP_H}`, overflow: 'hidden', borderRadius: 16,
@@ -153,7 +178,7 @@ export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disab
       }}
     >
       <UsMap view={view} states={states} ink={ink}>
-        {k => (shown && Number.isFinite(shown.lat) ? <PinMarker lon={shown.lon} lat={shown.lat} k={k} color={highlight} /> : null)}
+        {k => (shown && Number.isFinite(shown.lat) ? <g data-pin-preview opacity={outOfBounds ? 0.3 : 1}><PinMarker lon={shown.lon} lat={shown.lat} k={k} color={highlight} /></g> : null)}
       </UsMap>
       {!disabled && (
         <div style={{ position: 'absolute', right: 8, bottom: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>

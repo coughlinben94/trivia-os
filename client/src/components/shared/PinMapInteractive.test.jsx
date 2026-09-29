@@ -20,9 +20,10 @@ function mount(props) {
   surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 500, height: 300, right: 500, bottom: 300 })
   return surface
 }
-function fire(el, type, x, y, id = 1) {
-  const e = new MouseEvent(type, { bubbles: true, clientX: x, clientY: y })
+function fire(el, type, x, y, id = 1, button = 0) {
+  const e = new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button })
   Object.defineProperty(e, 'pointerId', { value: id })
+  Object.defineProperty(e, 'pointerType', { value: 'mouse' })
   act(() => { el.dispatchEvent(e) })
 }
 
@@ -61,6 +62,73 @@ describe('PinMapInteractive hold-to-drop', () => {
     fire(s, 'pointerdown', 250, 150); act(() => { vi.advanceTimersByTime(600) }); fire(s, 'pointerup', 250, 150)
     expect(onPin).not.toHaveBeenCalled()
   })
+  it('pointercancel after a hold does not commit', () => {
+    const onPin = vi.fn()
+    const s = mount({ pin: null, onPin })
+    fire(s, 'pointerdown', 250, 150); act(() => { vi.advanceTimersByTime(400) }); fire(s, 'pointercancel', 250, 150)
+    fire(s, 'pointerup', 250, 150)
+    expect(onPin).not.toHaveBeenCalled()
+  })
+  it('hold, second finger lands, lift both: no commit', () => {
+    const onPin = vi.fn()
+    const s = mount({ pin: null, onPin })
+    fire(s, 'pointerdown', 250, 150, 1); act(() => { vi.advanceTimersByTime(400) })
+    fire(s, 'pointerdown', 300, 150, 2)
+    fire(s, 'pointerup', 300, 150, 2); fire(s, 'pointerup', 250, 150, 1)
+    expect(onPin).not.toHaveBeenCalled()
+  })
+  it('a lost pointer capture ends the gesture without committing', () => {
+    const onPin = vi.fn()
+    const s = mount({ pin: null, onPin })
+    fire(s, 'pointerdown', 250, 150); act(() => { vi.advanceTimersByTime(400) }); fire(s, 'lostpointercapture', 250, 150)
+    fire(s, 'pointerup', 250, 150)
+    expect(onPin).not.toHaveBeenCalled()
+  })
+  it('the pin lands ~48px above the finger', () => {
+    const held = vi.fn(), clicked = vi.fn()
+    let s = mount({ pin: null, onPin: held })
+    fire(s, 'pointerdown', 250, 150); act(() => { vi.advanceTimersByTime(400) }); fire(s, 'pointerup', 250, 150)
+    act(() => root.unmount()); root = createRoot(host)
+    s = mount({ pin: null, onPin: clicked, dropMode: 'click' })
+    fire(s, 'pointerdown', 250, 150); fire(s, 'pointerup', 250, 150)
+    expect(held.mock.calls[0][0].lat).toBeGreaterThan(clicked.mock.calls[0][0].lat)
+    // lift of 48px on a 500px-wide surface == a click 48px higher
+    const exp = vi.fn()
+    act(() => root.unmount()); root = createRoot(host)
+    s = mount({ pin: null, onPin: exp, dropMode: 'click' })
+    fire(s, 'pointerdown', 250, 102); fire(s, 'pointerup', 250, 102)
+    expect(held.mock.calls[0][0]).toEqual(exp.mock.calls[0][0])
+  })
+  it('disabled flipping true mid-hold: pointerup does not commit', () => {
+    const onPin = vi.fn()
+    const s = mount({ pin: null, onPin })
+    fire(s, 'pointerdown', 250, 150); act(() => { vi.advanceTimersByTime(400) })
+    act(() => root.render(<PinMapInteractive dropMode="hold" pin={null} onPin={onPin} disabled />))
+    fire(s, 'pointerup', 250, 150)
+    expect(onPin).not.toHaveBeenCalled()
+  })
+  it('an out-of-bounds hold-release calls onPin zero times and dims the preview', () => {
+    const onPin = vi.fn()
+    const s = mount({ pin: null, onPin })
+    fire(s, 'pointerdown', 2, 60); act(() => { vi.advanceTimersByTime(400) })
+    expect(s.querySelector('[data-pin-preview]').getAttribute('opacity')).toBe('0.3')
+    fire(s, 'pointerup', 2, 60)
+    expect(onPin).not.toHaveBeenCalled()
+  })
+  it('an in-bounds hold preview is not dimmed', () => {
+    const s = mount({ pin: null, onPin: vi.fn() })
+    fire(s, 'pointerdown', 250, 150); act(() => { vi.advanceTimersByTime(400) })
+    expect(s.querySelector('[data-pin-preview]').getAttribute('opacity')).toBe('1')
+  })
+  it('a pointerup right after a move commits even before any re-render (no lost commit)', () => {
+    const onPin = vi.fn()
+    const s = mount({ pin: null, onPin })
+    fire(s, 'pointerdown', 250, 150); act(() => { vi.advanceTimersByTime(400) })
+    const mv = new MouseEvent('pointermove', { bubbles: true, clientX: 260, clientY: 150 }); Object.defineProperty(mv, 'pointerId', { value: 1 })
+    const up = new MouseEvent('pointerup', { bubbles: true, clientX: 260, clientY: 150 }); Object.defineProperty(up, 'pointerId', { value: 1 })
+    act(() => { s.dispatchEvent(mv); s.dispatchEvent(up) })
+    expect(onPin).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('PinMapInteractive click mode (host picker)', () => {
@@ -69,5 +137,17 @@ describe('PinMapInteractive click mode (host picker)', () => {
     const s = mount({ pin: null, onPin, dropMode: 'click' })
     fire(s, 'pointerdown', 250, 150); fire(s, 'pointerup', 250, 150)
     expect(onPin).toHaveBeenCalledTimes(1)
+  })
+  it('a click-mode pan (move past slop) does not commit', () => {
+    const onPin = vi.fn()
+    const s = mount({ pin: null, onPin, dropMode: 'click' })
+    fire(s, 'pointerdown', 250, 150); fire(s, 'pointermove', 290, 150); fire(s, 'pointerup', 290, 150)
+    expect(onPin).not.toHaveBeenCalled()
+  })
+  it('a non-primary mouse button never commits', () => {
+    const onPin = vi.fn()
+    const s = mount({ pin: null, onPin, dropMode: 'click' })
+    fire(s, 'pointerdown', 250, 150, 1, 2); fire(s, 'pointerup', 250, 150, 1, 2)
+    expect(onPin).not.toHaveBeenCalled()
   })
 })
