@@ -180,10 +180,16 @@ export function driftPlan(anchorDeg, requestedArc) {
 // from drifting toward each other. Verified 2026-09-28: 7 of the 17 curated
 // duos drop below 15deg apart somewhere in their drift cycle with driftPlan's
 // independent per-colour plans. This scales every colour's plan down by the
-// SAME factor (never up, never a direction change) until no pair comes
-// within MIN_SEPARATION at any station — arcs only ever shrink, so each
-// individual colour's own dead-band safety (driftPlan's own `room` cap) is
-// untouched by construction.
+// SAME factor (never up, never a direction change) until no pair of drifted
+// ANCHOR hues (hueAnchorsAt) comes within MIN_SEPARATION at any station —
+// arcs only ever shrink, so each individual colour's own dead-band safety
+// (driftPlan's own `room` cap) is untouched by construction.
+// ANCHOR-LEVEL ONLY: the hues actually drawn per station add ladder offsets
+// on top of these anchors, so two stations of DIFFERENT colours can still
+// render closer than MIN_SEPARATION (2026-09-28 final review: purple_blue
+// ~9deg, spring_lilac ~15deg). Separate, also still open: same-colour
+// neighbours can render identical (drift-shading cancellation, 11 of 17
+// duos) — neither is fixed here.
 const MIN_SEPARATION = 20 // degrees — 5deg of margin above the loosest observed collapse
 
 export function safeDriftPlans(anchorsDeg, requestedArc, stationCount) {

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useMemo } from 'react'
-import { RING_WORLDS, ringWorldFor, resolveArrangement } from '../../lib/ringWorldFor.js'
+import { useEffect, useRef, useMemo, useState } from 'react'
+import { ringWorldFor, resolveArrangement, isEvolving } from '../../lib/ringWorldFor.js'
 import { outgoingAndIncomingDuo } from '../../lib/duoTransition.js'
 import { DUO_GRAPH } from '../../lib/duoGraph.js'
 import { worldForDuo } from './EvolvingRingAmbient.jsx'
@@ -225,10 +225,13 @@ export default function WarpTransition({ dir = 'out', onDone, durationMs = DURAT
   // EvolvingRingAmbient instead, whose worlds are the arrangement repainted
   // per duo — so this reads the CURRENT (incoming) duo's world through
   // EvolvingRingAmbient's own worldForDuo cache, the identical object it
-  // mounted. Same RING_WORLDS guard ParticleBackground uses: colorEvolution
-  // on a non-ring theme is ignored. Recomputed only if theme/palette/showId/
-  // slideIndex identity changes (it doesn't mid-warp; this component
-  // remounts per warp).
+  // mounted. Same isEvolving guard ParticleBackground uses: colorEvolution
+  // on a non-ring theme is ignored. slideIndex is FROZEN at mount: a host
+  // CAN advance during a warp (Display.jsx), but the canvas loop below reads
+  // BANDS/WARM once at mount, so following the live prop would repaint the
+  // CSS ground in the new duo while the trails stay in the old one — a
+  // visible split. This component remounts per warp, so the frozen index is
+  // always the one the warp started on.
   // Fallback to midnightGalaxyRing: the grading-break warp fires on EVERY
   // theme (Display.jsx's breakEligible has no theme check), but RING_WORLDS
   // only has a midnight-galaxy entry — ringWorldFor returns undefined for
@@ -236,17 +239,18 @@ export default function WarpTransition({ dir = 'out', onDone, durationMs = DURAT
   // to hardcode midnightGalaxyRing unconditionally; this preserves that,
   // rather than throwing (a throw here is swallowed by Display.jsx's
   // ErrorBoundary, but onDone never fires and the grading break gets stuck).
+  const [frozenSlideIndex] = useState(slideIndex)
   const world = useMemo(() => {
-    if (theme.colorEvolution && RING_WORLDS[theme.id] && Number.isInteger(slideIndex)) {
+    if (isEvolving(theme) && Number.isInteger(frozenSlideIndex)) {
       try {
-        const { incoming } = outgoingAndIncomingDuo(showId, DUO_GRAPH, slideIndex)
+        const { incoming } = outgoingAndIncomingDuo(showId, DUO_GRAPH, frozenSlideIndex)
         return worldForDuo(incoming, resolveArrangement(theme, showId))
       } catch {
         return midnightGalaxyRing
       }
     }
     return ringWorldFor(theme, showId) ?? midnightGalaxyRing
-  }, [theme, showId, slideIndex])
+  }, [theme, showId, frozenSlideIndex])
   // Same stop RingAmbient paints its stage ground with — the world's own
   // terminal sky, not a second near-black to keep in sync by hand.
   const BG = world.sky[world.sky.length - 1]
