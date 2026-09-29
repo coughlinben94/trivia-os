@@ -30,13 +30,15 @@ export default function UsMap({ view, states, cities = US_CITIES, showCities = t
 }
 
 // Tip of the pin sits exactly on the point (size scales about the tip).
+// labelSize is the FINAL label font size in map units: the label sits inside
+// the size-scaled group, so it is divided by size here.
 export function PinMarker({ lon, lat, k, color = '#f5c842', label, size = 1, labelSize = 12 }) {
   const [x, y] = lonLatToMap(lon, lat)
   return (
     <g transform={`translate(${x} ${y}) scale(${size / k})`}>
       <path d="M0 0 L-6 -14 A8 8 0 1 1 6 -14 Z" fill={color} stroke="#000" strokeOpacity="0.55" strokeWidth="1" />
       <circle cy="-20" r="3" fill="#000" fillOpacity="0.55" />
-      {label ? <text x="11" y="-16" fontSize={labelSize} fontWeight="700" fill="#fff" stroke="#000" strokeWidth="3" paintOrder="stroke" style={{ fontFamily: 'DM Sans, sans-serif' }}>{label}</text> : null}
+      {label ? <text x="11" y="-16" fontSize={labelSize / size} fontWeight="700" fill="#fff" stroke="#000" strokeWidth="3" paintOrder="stroke" style={{ fontFamily: 'DM Sans, sans-serif' }}>{label}</text> : null}
     </g>
   )
 }

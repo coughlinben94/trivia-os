@@ -2,7 +2,8 @@ import { MAP_W, MAP_H } from './usMapGeo.js'
 
 export const MAX_K = 8
 
-const clampNum = (n, lo, hi) => Math.max(lo, Math.min(hi, n))
+// NaN -> lo (never leaks NaN into a view); +/-Infinity clamps normally.
+const clampNum = (n, lo, hi) => (Number.isNaN(n) ? lo : Math.max(lo, Math.min(hi, n)))
 
 // Map covers the viewport at every zoom: t in [size*(1-k), 0].
 export function clampView({ k, tx, ty }) {
@@ -16,6 +17,7 @@ export function clampView({ k, tx, ty }) {
 
 // px,py: a point in the viewport, in MAP UNITS. The map point under it stays put.
 export function zoomAbout(v, px, py, factor) {
+  if (Number.isNaN(factor) || !Number.isFinite(px) || !Number.isFinite(py)) return v
   const k = clampNum(v.k * factor, 1, MAX_K)
   const mx = (px - v.tx) / v.k
   const my = (py - v.ty) / v.k

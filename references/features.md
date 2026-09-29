@@ -277,7 +277,7 @@ Managed via `HostPhotoLibrary.jsx`. Host can upload photos to a reusable library
 - **Room size:** saved at first lock as `pinRoomSize`, alongside `pinResults`. Unlock / fresh entry clears both (`PHONE_MECHANICS.pin.clearFields` in `slideStepping.js`).
 - **Payable teams only** (`lib/pinScoring.js`): `payableEntries` / `payableRoomSize` count only teams that are both live and on the scoreboard. `resolvePinRoomSize` picks saved room size, then host override, then counted.
 - **Host paste:** `parsePinPaste` (`lib/pinScoring.js`) parses a host-typed "lat, lon" string (strict: two signed decimals, comma between, inside US bounds) into a pin, else null.
-- **TV sizing:** `TV_PIN_SIZE`, `TV_LABEL`, `TV_CITY_LABEL` at the top of `ShinyPinQuestion.jsx` are tunable starting values, not verified on the real TV.
+- **TV sizing:** `TV_PIN_SIZE`, `TV_LABEL`, `TV_CITY_LABEL` at the top of `ShinyPinQuestion.jsx` are tunable starting values (effective map units: `PinMarker`'s `labelSize` is the FINAL label size, divided by `size` internally), not verified on the real TV.
 - **Not offered in /questions/add:** `ShinyFormatPicker` in `DatabaseAddPanels.jsx` filters out `pin` formats (the question bank has no coordinates).
 
 ---

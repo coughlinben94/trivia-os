@@ -18,9 +18,9 @@ describe('PinMarker', () => {
     expect(host.querySelector('g').getAttribute('transform')).toMatch(/scale\(0\.5\)/)
     done()
   })
-  it('size and labelSize scale about the tip', async () => {
+  it('size scales the pin about the tip; labelSize is the FINAL label size regardless of size', async () => {
     const { host, done } = await mount(<PinMarker lon={-87} lat={41} k={2} label="A" size={1.8} labelSize={22} />)
-    expect(host.querySelector('text').getAttribute('font-size')).toBe('22')
+    expect(parseFloat(host.querySelector('text').getAttribute('font-size')) * 1.8).toBeCloseTo(22, 6)
     expect(host.querySelector('g').getAttribute('transform')).toMatch(/scale\(0\.9\)/)
     done()
   })

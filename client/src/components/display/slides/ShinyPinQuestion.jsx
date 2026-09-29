@@ -19,7 +19,7 @@ import ShinySignal from '../ShinySignal.jsx'
 // miles. Camera moves are JS-tweened SVG transforms (transform-only).
 const Q_BOX = { boxW: 1500, boxH: 150, floorPx: 40, ceilPx: 92, maxLines: 2, lineHeight: 1.15 }
 // Starting values for bar-distance legibility; tune at the Task 12 real-TV check.
-const TV_PIN_SIZE = 1.8, TV_LABEL = 22, TV_CITY_LABEL = 18
+const TV_PIN_SIZE = 1.8, TV_LABEL = 22, TV_CITY_LABEL = 18 // effective map units (labelSize is final size)
 const HOME = { k: 1, tx: 0, ty: 0 }
 
 function useTweenedView(target, ms, instant) {
