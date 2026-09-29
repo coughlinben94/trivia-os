@@ -12,7 +12,8 @@ import ScoreboardOverlay from '../components/display/ScoreboardOverlay.jsx'
 import LockCountdownOverlay from '../components/display/LockCountdownOverlay.jsx'
 import JukeboxBreakOverlay from '../components/display/JukeboxBreakOverlay.jsx'
 import WarpTransition from '../components/display/WarpTransition.jsx'
-import { RING_RETURN } from '../components/display/RingAmbient.jsx'
+import { ringStationOverride } from '../lib/ringStationOverride.js'
+import { RING_WORLDS } from '../lib/ringWorldFor.js'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import StageFrame from '../display/StageFrame.jsx'
 import { PRESHOW_BEN_PHOTO } from '../components/shared/BenPhoto.jsx'
@@ -690,9 +691,10 @@ async function stepShow(showRow, direction) {
 // arbitrary station and hiding it under the overlay, which is what it did
 // before. Declared here rather than imported from the world module so a
 // non-ring theme still compiles — the value is simply never used unless a
-// ring world is mounted. This constant must always point at the station whose
-// prim is 'eclipse' — the routing contract follows the eclipse, not the index.
-const MUSIC_STATION = 10
+// ring world is mounted. 2026-09-28: the number now comes from the world
+// (`world.musicStation`, default 10 for space and non-ring themes) via
+// ringStationOverride() in lib/ringStationOverride.js — one pure resolver,
+// unit-tested against the old `breakActive ? MUSIC_STATION : ...` expression.
 
 // How long the grading-break slide holds before the warp takes the TV.
 // 2026-08-17, Ben: was 5s, now 10s ("after the slide is there for 10 seconds,
@@ -859,7 +861,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
   // long after any Go Live transition.
   useEffect(() => {
     onRingStateChange?.({
-      stationOverride: breakActive ? MUSIC_STATION : (warp === 'back' ? RING_RETURN : null),
+      stationOverride: ringStationOverride({ breakActive, warp, world: RING_WORLDS[theme.id] }),
       showStationDebug: isPreview,
       // Same fix as team-picker's forceSnap (below): the shiny warp vortex is
       // the only motion Ben wants visible on a shiny entry/exit — the ring's
@@ -868,7 +870,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
       // it under cover of the vortex instead, same as team-picker's reveal.
       forceSnap: shinyWarp != null,
     })
-  }, [onRingStateChange, breakActive, warp, isPreview, shinyWarp])
+  }, [onRingStateChange, breakActive, warp, isPreview, shinyWarp, theme.id])
 
   // Auto-open after BREAK_DELAY_MS (Ben's timing — the break screen reads, then
   // music takes the TV). Space/ArrowRight skip the wait, unchanged from the old
@@ -976,7 +978,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
           theme={theme}
           showId={showId}
           slideIndex={ringVisibleStationIndex(sortedSlides, ringPeekIndex(sortedSlides, show.current_slide_index ?? 0), isRingVisible)}
-          stationOverride={breakActive ? MUSIC_STATION : (warp === 'back' ? RING_RETURN : null)}
+          stationOverride={ringStationOverride({ breakActive, warp, world: RING_WORLDS[theme.id] })}
           showStationDebug={isPreview}
           forceSnap={sortedSlides[show.current_slide_index ?? 0]?.type === 'team-picker' || shinyWarp != null}
         />

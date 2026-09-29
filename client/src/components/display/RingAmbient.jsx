@@ -42,6 +42,7 @@ import { EASE_SURGE } from '../../lib/easings.js'
 import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, skyRegionHues, accentCompanionHue, applySkyTints, applyTints } from '../../lib/ringPrimitives.js'
 import { SLOTS } from '../../worlds/midnightGalaxy.slots.js'
 import { seedFrom } from '../../lib/paletteGenerator.js'
+import { RING_RETURN } from '../../lib/ringStationOverride.js'
 
 // ENGINE — engine-fixed, identical for every world; never a prop (a world
 // never sets any of this, same as the reference build's own ENGINE const).
@@ -688,7 +689,8 @@ const isReduced = () =>
 // than a second prop or a ref threaded through ParticleBackground — the
 // station being returned to is this component's own private state (stationRef),
 // so the caller never has to learn a number it couldn't act on anyway.
-export const RING_RETURN = 'return'
+// Defined in lib/ringStationOverride.js (the pure resolver that emits it).
+export { RING_RETURN }
 
 // worldData shape: { id, type, name, phase, sky: [4 hex], qColours: [2 hex],
 // stations: [PANES x {key,prim,hue,accent}] } — see concepts/world-07-ring.html's
