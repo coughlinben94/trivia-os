@@ -2085,6 +2085,7 @@ function PinAnswerPicker({ data, onChange }) {
     const next = parsePinPaste(paste)
     if (!next) { setPasteError(true); return }
     setPasteError(false)
+    setPaste('')
     onChange('pinAnswer', next)
   }
 
@@ -2102,7 +2103,7 @@ function PinAnswerPicker({ data, onChange }) {
         {pasteError && <span className="text-xs text-red-500">Use “lat, lon” inside the lower 48</span>}
       </div>
       <div style={{ maxWidth: 560 }}>
-        <PinMapInteractive pin={spot} onPin={p => onChange('pinAnswer', p)} dropMode="click" ink="#111111" highlight="#e02020" />
+        <PinMapInteractive pin={spot} onPin={p => { setPaste(''); onChange('pinAnswer', p) }} dropMode="click" ink="#111111" highlight="#e02020" />
       </div>
       <p className="text-xs text-gray-500 mt-2">
         {spot ? <>Set: <strong>{spot.lat.toFixed(4)}, {spot.lon.toFixed(4)}</strong></> : 'No spot set yet — Lock Pins & Score stays blocked until you set one.'}

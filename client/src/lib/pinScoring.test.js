@@ -123,7 +123,11 @@ describe('parsePinPaste', () => {
     expect(parsePinPaste('44.7319, -93.2177')).toEqual({ lat: 44.7319, lon: -93.2177 })
     expect(parsePinPaste('  44.7   ,   -93  ')).toEqual({ lat: 44.7, lon: -93 })
   })
+  it('accepts a leading + and a trailing dot', () => {
+    expect(parsePinPaste('+44.7, -93.2')).toEqual({ lat: 44.7, lon: -93.2 })
+    expect(parsePinPaste('44., -93.')).toEqual({ lat: 44, lon: -93 })
+  })
   it('rejects bad input', () => {
-    for (const t of ['44.7 -93.2', 'abc, def', '44.7N, 93.2W', '60, -93', '-93, 44', '']) expect(parsePinPaste(t)).toBeNull()
+    for (const t of ['N44.7 W93.2', '1e1, -90', '.5, -90', '44, -93, 1', '44.7 -93.2', '-93, 44', 'abc, def', '44.7N, 93.2W', '60, -93', '-93, 44', '']) expect(parsePinPaste(t)).toBeNull()
   })
 })
