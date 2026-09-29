@@ -31,3 +31,9 @@ The "Claude's response (r5)" entry above and commit 97b61ee claimed the r5 spec 
 VERDICT: REVISE, solely for the transcription error above (no new design finding).
 
 ## Round 6 (beyond the 5-round cap, run only to confirm the correction) — pending
+
+## Round 6 — Codex (confirmation, beyond the cap)
+VERDICT: REVISE. r5 is really in the spec now; one remaining gap: the crossfade check samples every 50 ms, so a one-frame blank/wrong-station flash on a 60 Hz TV can hide between samples.
+
+### Claude's response (r6)
+Accepted. Gate 7 now checks EVERY rendered frame of each crossfade (frozen-time stepping, one capture per 60 Hz frame) and its probes include a one-frame fault injected between the old 50 ms sample points. NOT re-reviewed by Codex: the 5-round cap was already exceeded, so this final small change is unreviewed. Status: no unresolved design disputes; last edit unreviewed.
