@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
+import liveModeSrc from './LiveMode.jsx?raw'
 
 const calls = []
 let responses = {}
@@ -362,5 +363,61 @@ describe('iPad score.set through Live Mode (fake socket, fake Supabase)', () => 
     cmd('5', 'scores.hide', {})
     await tick(200)
     expect(last().scores).toBe(null)
+  })
+})
+
+// Merge guard (feat/pin-it onto main's score-chain lockAndScore): Pin It's
+// buildResults returns extraData ({ pinRoomSize }) from INSIDE the score-chain
+// step; it must survive that step's return and land in the final slide write.
+// If it is dropped, pinRoomSize is never saved and Retry Scoring can change
+// who scores.
+describe('Pin It: extraData threads through the score chain into the final write', () => {
+  const pinSlide = extra => ({ id: 'p1s', roundId: 'r1', order: 0, type: 'question', data: {
+    isShiny: true, shinyInputSchema: { type: 'pin' }, pinAnswer: { lat: 44.98, lon: -93.27 }, ...extra,
+  } })
+  beforeEach(() => {
+    responses['phone_answers.select'] = { data: [{ team_id: 'p1', answer: { lat: 44.9, lon: -93.2 }, submitted_at: null }], error: null }
+  })
+
+  it('first lock saves the payable room size, results and the lock on the slide', async () => {
+    const a = actions()
+    act(() => root.render(<LiveMode show={SHOW(pinSlide())} actions={a} scoreboardModalOpen={false} />))
+    act(() => button('Lock Pins & Score').click())
+    await tick(900)
+    expect(calls.some(c => c.table === 'scoreboard_teams' && c.op === 'upsert')).toBe(true)
+    expect(a.updateSlide.mock.calls.at(-1)[1].data).toMatchObject({
+      pinLocked: true, pinRoomSize: 1, pinResults: expect.any(Array),
+    })
+  })
+
+  it('the host override wins over the payable count at first lock', async () => {
+    const a = actions()
+    act(() => root.render(<LiveMode show={SHOW(pinSlide({ pinRoomSizeOverride: 5 }))} actions={a} scoreboardModalOpen={false} />))
+    act(() => button('Lock Pins & Score').click())
+    await tick(900)
+    expect(a.updateSlide.mock.calls.at(-1)[1].data).toMatchObject({ pinLocked: true, pinRoomSize: 5 })
+  })
+
+  it('Retry Scoring keeps the room size saved at first lock', async () => {
+    const a = actions()
+    const slide = pinSlide({ pinLocked: true, pinLockedAt: new Date().toISOString(), pinRoomSize: 7 })
+    act(() => root.render(<LiveMode show={SHOW(slide)} actions={a} scoreboardModalOpen={false} />))
+    act(() => button('Retry Scoring').click())
+    await tick(200)
+    expect(a.updateSlide).toHaveBeenCalledTimes(1) // no re-lock write, just the final one
+    expect(a.updateSlide.mock.calls[0][1].data).toMatchObject({ pinLocked: true, pinRoomSize: 7 })
+  })
+})
+
+// Source-text guard: the iPad Fix drawer's busy/error map and scoreActionFor
+// (the iPad rescore path) are keyed by mechanic and git never flags a missing
+// key on merge. Nothing here can reach them cheaply (the iPad remote channel
+// has no harness in this file), so this reads LiveMode.jsx and checks each map
+// has its pin entry. The lock/score behaviour itself is tested above.
+describe('LiveMode per-mechanic maps include pin (source guard)', () => {
+  it('fixBusy/fixError, scoreActionFor and lockHandlersRef each have a pin entry', () => {
+    expect(liveModeSrc).toMatch(/pin: \[pinBusy, pinScoreError\]/)
+    expect(liveModeSrc).toMatch(/pin: \(\) => handleLockAndScorePin\(slide\)/)
+    expect(liveModeSrc).toMatch(/lockHandlersRef\.current = \{[^}]*pin: handleLockAndScorePin/)
   })
 })

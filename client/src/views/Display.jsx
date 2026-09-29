@@ -16,7 +16,8 @@ import { RING_RETURN } from '../components/display/RingAmbient.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import StageFrame from '../display/StageFrame.jsx'
 import { PRESHOW_BEN_PHOTO } from '../components/shared/BenPhoto.jsx'
-import { resolveShinyPart, isWagerShiny, isHuesCuesShiny } from '../lib/shinySeries.js'
+import { resolveShinyPart, isWagerShiny, isHuesCuesShiny, isPinShiny } from '../lib/shinySeries.js'
+import { preloadUsMapData } from '../hooks/useUsMapData.js'
 import { EASE_OUT } from '../lib/easings.js'
 import { resolvePreviewShow } from '../lib/previewSlide.js'
 import {
@@ -556,7 +557,7 @@ function AnswerRevealOverlay({ show, currentSlide }) {
   // accidental Stream Deck "A" during the blind-wager beat would spoil the
   // whole round. The mechanic has its own reveal, so this generic overlay is
   // suppressed on wager slides outright rather than merely phase-gated.
-  const suppressed = currentSlide ? (isWagerShiny(currentSlide.data) || isHuesCuesShiny(currentSlide.data)) : false
+  const suppressed = currentSlide ? (isWagerShiny(currentSlide.data) || isHuesCuesShiny(currentSlide.data) || isPinShiny(currentSlide.data)) : false
 
   return (
     <AnimatePresence>
@@ -749,6 +750,9 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
   const reduce = useReducedMotion()
   const sortedSlides = sortSlides(show.slides)
   const currentSlide = sortedSlides[show.current_slide_index ?? 0] ?? null
+  // Warm the Pin It map chunk as soon as the show holds a pin slide, so the TV never shows an empty map.
+  const hasPinSlide = sortedSlides.some(sl => sl.data && isPinShiny(sl.data))
+  useEffect(() => { if (hasPinSlide) preloadUsMapData() }, [hasPinSlide])
 
   // ── Grading-break music overlay ──
   // The break lifecycle lives here now, not in GradingBreakSlide (which used to

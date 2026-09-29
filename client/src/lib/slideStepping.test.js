@@ -296,6 +296,27 @@ describe('computePrevStep', () => {
 })
 
 describe('withEntryState', () => {
+  it('pin: fresh entry also clears saved room size and results; protected re-entry keeps everything', () => {
+    const s = slide('a', 0, 'question', { isShiny: true, shinyInputSchema: { type: 'pin' }, pinLocked: true, pinRevealed: true, pinRoomSize: 12, pinResults: [{}] })
+    const fresh = withEntryState([s], s, { currentPart: 0 })[0].data
+    expect(fresh).toMatchObject({ pinLocked: false, pinRevealed: false, pinRoomSize: null, pinResults: null })
+    const reentry = withEntryState([s], s, { currentPart: 0, protectInProgress: true })[0].data
+    expect(reentry).toMatchObject({ pinLocked: true, pinRevealed: true, pinRoomSize: 12, pinResults: [{}] })
+  })
+  it('pin: fresh entry nulls the host room-size override (rehearsal must not carry to show night); protected re-entry keeps it', () => {
+    const s = slide('a', 0, 'question', { isShiny: true, shinyInputSchema: { type: 'pin' }, pinLocked: true, pinRoomSizeOverride: 12 })
+    expect(withEntryState([s], s, { currentPart: 0 })[0].data.pinRoomSizeOverride).toBeNull()
+    expect(withEntryState([s], s, { currentPart: 0, protectInProgress: true })[0].data.pinRoomSizeOverride).toBe(12)
+    const unlocked = slide('b', 0, 'question', { isShiny: true, shinyInputSchema: { type: 'pin' }, pinRoomSizeOverride: 12 })
+    expect(withEntryState([unlocked], unlocked, { currentPart: 0 })[0].data.pinRoomSizeOverride).toBeNull()
+  })
+  it('an existing mechanic gets no clearFields keys on fresh entry', () => {
+    const s = slide('a', 0, 'question', { isShiny: true, shinyInputSchema: { type: 'hues-cues' }, huesCuesLocked: true })
+    const d = withEntryState([s], s, { currentPart: 0 })[0].data
+    expect(d.huesCuesLocked).toBe(false)
+    expect('pinRoomSize' in d).toBe(false)
+    expect('pinResults' in d).toBe(false)
+  })
   it('re-arms invoke-gated audio on a fresh entry', () => {
     const s = slide('a', 0, 'pre-show', { walkoutSong: { trigger: 'invoke', videoId: 'x', invoked: true } })
     const out = withEntryState([s], s, { currentPart: 0 })
@@ -688,6 +709,17 @@ describe('pendingReveal', () => {
 })
 
 describe('unlockPatch', () => {
+  it('pin also clears its saved room size and results so a re-lock recomputes them', () => {
+    expect(unlockPatch('pin', { pinLocked: true, pinRevealed: true, pinRoomSize: 12, pinResults: [{}] })).toEqual({
+      pinLocked: false, pinRevealed: false, pinRoomSize: null, pinResults: null,
+    })
+  })
+  it('pin unlock leaves the host override alone', () => {
+    expect(unlockPatch('pin', { pinLocked: true, pinRoomSizeOverride: 12 })).not.toHaveProperty('pinRoomSizeOverride')
+  })
+  it('existing mechanics gain no extra cleared fields', () => {
+    expect(unlockPatch('choice', { choiceLocked: true })).toEqual({ choiceLocked: false, choiceRevealed: false })
+  })
   it('clears the lock field and reveal field for a single-lock-field mechanic', () => {
     expect(unlockPatch('matching', { matchingLocked: true, matchingRevealed: true })).toEqual({
       matchingLocked: false, matchingRevealed: false,

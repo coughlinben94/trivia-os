@@ -32,3 +32,15 @@ describe('questionRows — horse-race', () => {
     expect(row).toBeNull()
   })
 })
+
+describe('questionRows — pin it', () => {
+  const show = { id: 'show1', title: 'Test Show', date: '2026-09-14', rounds: [] }
+  it('is not archived: the true-spot coordinates would be lost', () => {
+    const slide = { id: 'p1', type: 'question', data: { isShiny: true, shinyInputSchema: { type: 'pin' }, text: 'Where is Chicago?', answer: 'Chicago', pinAnswer: { lat: 41.88, lon: -87.63 } } }
+    expect(slideToArchiveRow(slide, show)).toBeNull()
+  })
+  it('an ordinary shiny question still archives', () => {
+    const slide = { id: 'q1', type: 'question', data: { isShiny: true, text: 'Q?', answer: 'A' } }
+    expect(slideToArchiveRow(slide, show)).not.toBeNull()
+  })
+})

@@ -37,6 +37,11 @@ describe('canRescore truth table', () => {
     expect(t(q('matching', { matchingLocked: true, matchingRevealed: true }), { error: 'Scoring failed' }))
       .toMatchObject({ canRescore: true, rescoreLabel: 'Retry scoring' })
   })
+  it('pin: locked and idle can rescore; revealed is refused; while scoring, refused', () => {
+    expect(t(q('pin', { pinLocked: true }))).toMatchObject({ mechanic: 'pin', canRescore: true, canUnlock: true, rescoreLabel: 'Rescore' })
+    expect(t(q('pin', { pinLocked: true, pinRevealed: true }))).toMatchObject({ canRescore: false, rescoreRefusal: 'already-revealed' })
+    expect(t(q('pin', { pinLocked: true }), { busy: true })).toMatchObject({ canRescore: false, rescoreRefusal: 'scoring' })
+  })
   describe('wager, two phases', () => {
     it('tiers only: refused, the guesses are still open (would lock them early)', () => {
       expect(t(q('wager', { wagerTiersLocked: true, wagerTiers: {} }))).toMatchObject({ canRescore: false, rescoreRefusal: 'not-locked' })

@@ -21,7 +21,7 @@
 // Callers own the write + their own local-state update; nothing here
 // touches the network or React.
 
-import { isMatchingShiny, isWagerShiny, isOrderShiny, isChoiceShiny, isHuesCuesShiny, isConcurrentShiny, isConcurrentMediaShiny } from './shinySeries.js'
+import { isMatchingShiny, isWagerShiny, isOrderShiny, isChoiceShiny, isHuesCuesShiny, isPinShiny, isConcurrentShiny, isConcurrentMediaShiny } from './shinySeries.js'
 
 // Chunks `parts` into fixed-size reveal groups of `groupSize`, in authored
 // order — the single implementation both revealStepCount's Next/Prev step
@@ -153,6 +153,9 @@ export function withEntryState(slides, slide, { currentPart, protectInProgress =
         if (slide.data?.[f]) patch[f] = false
       }
       if (slide.data?.[m.revealField]) patch[m.revealField] = false
+      for (const f of [...(m.clearFields ?? []), ...(m.freshClearFields ?? [])]) {
+        if (slide.data?.[f] != null) patch[f] = null
+      }
     }
   }
   // Fresh entry always re-arms invoke-gated audio too — a stale `invoked:
@@ -377,6 +380,9 @@ export const PHONE_MECHANICS = {
   order:    { guard: isOrderShiny,    lockFields: ['orderLocked'], revealField: 'orderRevealed' },
   choice:   { guard: isChoiceShiny,   lockFields: ['choiceLocked'], revealField: 'choiceRevealed' },
   huesCues: { guard: isHuesCuesShiny, lockFields: ['huesCuesLocked'], revealField: 'huesCuesRevealed' },
+  pin:      { guard: isPinShiny,      lockFields: ['pinLocked'], revealField: 'pinRevealed', clearFields: ['pinRoomSize', 'pinResults'],
+            // fresh entry only (withEntryState); Unlock keeps the host's override
+            freshClearFields: ['pinRoomSizeOverride'] },
 }
 
 // True when a slide already finished a phone-scored round (every lock field
@@ -473,7 +479,11 @@ export function unlockPatch(mechanicKey, data) {
   const m = PHONE_MECHANICS[mechanicKey]
   if (!m || !data) return null
   const lastField = m.lockFields[m.lockFields.length - 1]
-  return { [lastField]: false, [m.revealField]: false }
+  return {
+    [lastField]: false,
+    [m.revealField]: false,
+    ...Object.fromEntries((m.clearFields ?? []).map(f => [f, null])),
+  }
 }
 
 /**

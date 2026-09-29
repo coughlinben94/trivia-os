@@ -269,6 +269,24 @@ Managed via `HostPhotoLibrary.jsx`. Host can upload photos to a reusable library
 
 ---
 
+## Pin It (shiny format, 2026-09-29)
+
+`shinyInputSchema.type === 'pin'`: teams drop one pin on a lower-48 US map (phone `PinBoard`, TV `ShinyPinQuestion`). True spot is `data.pinAnswer {lat, lon}`; `data.answer` is just the place-name label. Closest 40% of the room score a flat 10 (rooms under 5: closest team only). Spec: `docs/superpowers/specs/2026-09-29-pin-it-design.md`; map outlines built by `scripts/build-us-map.mjs`.
+
+- **Gesture** (`shared/PinMapInteractive.jsx`): hold 350ms (`HOLD_MS`) to drop, 8px slop (`SLOP_PX`), pin tip lifted 48px above the finger while dragging (`PIN_LIFT_PX`), `touch-action: none` on the map. No haptics (nothing calls vibrate).
+- **Room size:** saved at lock as `pinRoomSize`, alongside `pinResults`; the saved value wins on retry. Unlock / fresh entry clears both (`PHONE_MECHANICS.pin.clearFields` in `slideStepping.js`). Fresh entry (not Unlock) also clears the host's `pinRoomSizeOverride` (`freshClearFields`), so a rehearsal override never carries to show night.
+- **True spot visibility:** `pinAnswer` is readable by any phone from the moment the host sets it (Join reads `shows.select('*')`), exactly like every question's `data.answer`. Not a new risk.
+- **Show-night gotcha:** a phone that missed the lock and taps "Update My Pin" afterwards overwrites its row with a server `submitted_at` later than `lockedAt`, so the whole row is discarded and its valid pre-lock pin is lost (scores 0). `lockedAt` comes from the host laptop clock, `submitted_at` from the server, so clock skew can also blur the cutoff.
+- **Phone after lock:** the map shows the last CONFIRMED pin (never a moved-but-unsaved one); with none, "You didn't lock in a pin". After reveal each phone reads its own row from `data.pinResults` ("Your pin: 312 mi · +10", "Your pin: 312 mi", or "No pin locked in"), so teams ranked past the TV's top 12 still learn their result.
+- **Map load:** Join and Display call `preloadUsMapData()` (`hooks/useUsMapData.js`) once the show holds a pin slide. If outlines are still missing after 4s, `shared/MapLoadRetry.jsx` shows a "Map didn't load. Tap to retry" button.
+- **TV reveal:** camera moves first; team pins fade in (opacity only, after the camera tween) with a dashed line from each scoring pin to the true spot. Tied whole-mile distances share a rank (1,2,2,4). Count line reads "N of M teams locked in".
+- **Payable teams only** (`lib/pinScoring.js`): `payableEntries` / `payableRoomSize` count only teams that are both live and on the scoreboard. `resolvePinRoomSize` picks saved room size, then host override, then counted.
+- **Host paste:** `parsePinPaste` (`lib/pinScoring.js`) parses a host-typed "lat, lon" string (strict: two signed decimals, comma between, inside US bounds) into a pin, else null.
+- **TV sizing:** `TV_PIN_SIZE`, `TV_LABEL`, `TV_CITY_LABEL` at the top of `ShinyPinQuestion.jsx` are tunable starting values (effective map units: `PinMarker`'s `labelSize` is the FINAL label size, divided by `size` internally), not verified on the real TV.
+- **Not offered in /questions/add:** `ShinyFormatPicker` in `DatabaseAddPanels.jsx` filters out `pin` formats (the question bank has no coordinates).
+
+---
+
 ## Persistence & Backup
 
 **Show persistence:**
