@@ -52,3 +52,11 @@ describe('host pickers: isPickableWorld', () => {
     expect(THEMES.filter(t => isPickableWorld(t.id)).map(t => t.id)).toEqual(['midnight-galaxy'])
   })
 })
+
+describe('fields other consumers read off any ring world', () => {
+  it('carries the tints WarpTransition reads on a grading-break warp', () => {
+    expect(hauntedOctoberRing.tints.starTint3).toMatch(/^#/)
+    expect(hauntedOctoberRing.tints.drift).toMatch(/^#/)
+    expect(hauntedOctoberRing.sky).toHaveLength(4)
+  })
+})

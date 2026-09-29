@@ -7,6 +7,7 @@
 import { THEMES } from '../themes/index.js'
 import { floorContrast } from '../lib/contrast.js'
 import { skyFromTheme } from '../lib/ringEngine.js'
+import { BASE_TINTS } from '../lib/ringPrimitives.js'
 import { SLOTS } from './hauntedOctober.slots.js'
 
 const theme = THEMES.find(t => t.id === 'haunted-october')
@@ -14,7 +15,7 @@ if (!theme) throw new Error('hauntedOctober.ring.js: no THEMES entry with id "ha
 
 export const hauntedOctoberRing = {
   id: 'haunted-october',
-  type: 'halloween',
+  type: 'terrestrial', // one of ring-verify's WORLD.type values
   name: 'Haunted October',
   phase: 5,
   approved: false,
@@ -24,6 +25,9 @@ export const hauntedOctoberRing = {
     floorContrast(theme.colors.text, [theme.colors.bgDeep], 7),
   ],
   hueAnchors: [{ deg: 28, window: 25 }],
+  // WarpTransition.jsx reads tints.starTint3/drift on every grading-break
+  // warp, so a world must carry the table. STUB: shared defaults until Phase 2.
+  tints: BASE_TINTS,
 
   // ── Per-world config (read by ringWorldFor / RingAmbient / Display). The
   // space world leaves these unset and gets its shipped values as defaults. ──
