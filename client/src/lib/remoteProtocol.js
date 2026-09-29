@@ -8,7 +8,8 @@ export const HOST_RELAY_URL = `ws://localhost:${HOST_PORT}`
 export const DEFAULT_REMOTE_URL = 'wss://macbook-pro.tail13050c.ts.net:8795'
 
 export const CLOSE_REPLACED = 4001   // a newer /host tab took over
-export const CLOSE_BAD_SECRET = 4003 // wrong, missing or late pairing hello
+export const CLOSE_BAD_SECRET = 4003 // wrong pairing code (the iPad stops retrying)
+export const CLOSE_RETRY = 4004      // no hello in time, or a message the relay choked on (the iPad retries)
 export const CLOSE_TOO_FAST = 4008   // more than 10 laptop-local commands in a second
 
 // Phase 2b (spec §17). /display joins the relay's local listener on this

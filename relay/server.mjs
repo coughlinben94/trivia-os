@@ -16,7 +16,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { WebSocketServer } from 'ws'
 import {
-  HOST_PORT, REMOTE_PORT, CLOSE_REPLACED, CLOSE_BAD_SECRET, CLOSE_TOO_FAST, MAX_INBOUND_BYTES, BEAT_MS, parseRemoteMessage,
+  HOST_PORT, REMOTE_PORT, CLOSE_REPLACED, CLOSE_BAD_SECRET, CLOSE_RETRY, CLOSE_TOO_FAST, MAX_INBOUND_BYTES, BEAT_MS, parseRemoteMessage,
   DISPLAY_PATH, DISPLAY_COMMANDS, LOCAL_COMMANDS, LOCAL_RATE_PER_SEC, COMMAND_TTL_MS, scoreChangeText,
 } from '../client/src/lib/remoteProtocol.js'
 import { createLocal, initSounds, DEFAULT_CONFIG_DIR } from './local.mjs'
@@ -170,7 +170,7 @@ export function createRelay({
       localTimes.push(now)
       return localTimes.length > LOCAL_RATE_PER_SEC
     }
-    const helloTimer = setTimeout(() => { if (!paired.has(ws)) ws.close(CLOSE_BAD_SECRET, 'no hello') }, helloMs)
+    const helloTimer = setTimeout(() => { if (!paired.has(ws)) ws.close(CLOSE_RETRY, 'no hello') }, helloMs)
     ws.on('message', data => {
       try {
         const m = parseRemoteMessage(data)
@@ -214,12 +214,15 @@ export function createRelay({
         send(host, m)
       } catch (e) {
         log.error('[relay] bad message', e)
-        ws.close(CLOSE_BAD_SECRET, 'bad message')
+        ws.close(CLOSE_RETRY, 'bad message')
       }
     })
     ws.on('close', () => {
       clearTimeout(helloTimer)
-      scoresOpen.delete(ws)
+      // The last iPad with the Scores drawer open dropped (slept, lost wifi):
+      // tell the laptop to stop refreshing scores for a drawer nobody sees.
+      const lastOpener = scoresOpen.delete(ws) && scoresOpen.size === 0
+      if (lastOpener && host) send(host, { type: 'cmd', id: 'relay-hide', cmd: 'scores.hide', args: {}, sentAt: Date.now() })
       if (paired.delete(ws)) tellHostCount()
     })
   })

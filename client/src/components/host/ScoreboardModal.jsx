@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase.js'
+import { withTimeout } from '../../lib/scoreCellWrite.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import { deriveRoundCols, computeTotal, normalizeRoundScore, mergeScoreEdit, pickableTeams, addStats } from '../../lib/scoreboardMath.js'
 import BoxingRing from '../display/slides/BoxingRing.jsx'
@@ -249,7 +250,7 @@ function TeamTable({ teams, cols, onUpdateName, onUpdateScore, onDelete, highlig
 
 // ─── ScoreboardModal ──────────────────────────────────────────────────────────
 
-export default function ScoreboardModal({ show, onClose, onWriteError }) {
+export default function ScoreboardModal({ show, onClose, onWriteError, runOnScoreChain }) {
   const { theme } = useTheme()
   const [teams,        setTeams]        = useState([])
   const [loading,      setLoading]      = useState(true)
@@ -346,7 +347,7 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
     // border — the save was never scheduled to fail, it was cancelled.
     const cellKey = `${team.id}:${fieldKey}`
     clearTimeout(saveTimers.current[cellKey])
-    const run = async () => {
+    const runBody = async () => {
       // One place that decides what "this save failed" looks like to the
       // host, reached from every failure path below — including the initial
       // read, which used to throw on a real network outage BEFORE reaching
@@ -369,14 +370,16 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
           // Score edit — merge onto a fresh read instead of the local copy,
           // which can be stale on OTHER round keys written elsewhere (see
           // mergeScoreEdit).
-          const { data: fresh } = await supabase.from('scoreboard_teams').select('scores').eq('id', team.id).single()
+          const { data: fresh, error: readError } = await withTimeout(signal => supabase.from('scoreboard_teams').select('scores').eq('id', team.id).abortSignal(signal).single())
+          // A failed read must not fall back to the local copy: that could put a stale number over the iPad's.
+          if (readError) { markSaveFailed(readError); return }
           payload.scores = mergeScoreEdit(fresh?.scores, team.scores, fieldKey)
         }
         // Supabase's query builder is a lazy thenable — without awaiting (or
         // otherwise consuming) it, the request is built but never actually
         // sent. Every other write in this file awaits; this one silently
         // didn't, so name/score edits typed into the table never persisted.
-        const { error } = await supabase.from('scoreboard_teams').upsert(payload)
+        const { error } = await withTimeout(signal => supabase.from('scoreboard_teams').upsert(payload).abortSignal(signal))
         if (error) {
           markSaveFailed(error)
         } else {
@@ -391,6 +394,10 @@ export default function ScoreboardModal({ show, onClose, onWriteError }) {
         markSaveFailed(err)
       }
     }
+    // On the same queue as the iPad's score edits and lockAndScore, so a save
+    // still in flight when the table closes can't land after (and undo) an
+    // iPad edit; the iPad is refused while the queue is busy.
+    const run = () => (runOnScoreChain ? runOnScoreChain(runBody) : runBody())
     saveRuns.current[cellKey] = run
     saveTimers.current[cellKey] = setTimeout(() => {
       delete saveTimers.current[cellKey]

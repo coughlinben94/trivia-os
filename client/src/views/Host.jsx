@@ -156,6 +156,8 @@ function HostInner({ showApi }) {
   const savedResultsRef = useRef(false)
   // LiveMode sets this to its score chain's whenIdle (null when empty).
   const scoreChainIdleRef = useRef(null)
+  // LiveMode's score chain, so the score table's saves queue with the iPad's edits.
+  const scoreChainRunRef = useRef(null)
   const leftAppDebounceRef = useRef({})
   // Toasts below fire off the row's CURRENT last_action, not a delta — that
   // was safe as long as every writer to `teams` also changed last_action.
@@ -319,6 +321,7 @@ function HostInner({ showApi }) {
           onOpenScoreboard={() => setShowScoreboard(true)}
           scoreboardModalOpen={showScoreboard}
           scoreChainIdleRef={scoreChainIdleRef}
+          scoreChainRunRef={scoreChainRunRef}
         />
       ) : (
         <BuildMode
@@ -344,6 +347,7 @@ function HostInner({ showApi }) {
         <ScoreboardModal
           show={show}
           onClose={() => setShowScoreboard(false)}
+          runOnScoreChain={fn => (scoreChainRunRef.current ? scoreChainRunRef.current(fn) : fn())}
           onWriteError={message => addToast({ id: `sb_we_${Date.now()}`, type: 'error', message, autoDismiss: 8000 })}
         />
       )}

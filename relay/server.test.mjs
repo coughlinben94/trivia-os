@@ -6,7 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import WebSocket from 'ws'
 import { createRelay, initSecret, devRefused, PROD_ORIGIN, DEV_ORIGIN } from './server.mjs'
-import { CLOSE_BAD_SECRET, CLOSE_REPLACED, CLOSE_TOO_FAST } from '../client/src/lib/remoteProtocol.js'
+import { CLOSE_BAD_SECRET, CLOSE_RETRY, CLOSE_REPLACED, CLOSE_TOO_FAST } from '../client/src/lib/remoteProtocol.js'
 import { createLocal } from './local.mjs'
 import { fakeRunner } from './fake-runner.mjs'
 
@@ -87,9 +87,10 @@ describe('pairing', () => {
     }
     await pairedIpad()
   })
-  it('no hello in time closes 4003', async () => {
+  it('no hello in time closes 4004, a code the iPad retries on (4003 stops it)', async () => {
     const ipad = await open(ports.remotePort)
-    expect(await ipad.closed).toBe(CLOSE_BAD_SECRET)
+    expect(await ipad.closed).toBe(CLOSE_RETRY)
+    expect(CLOSE_RETRY).not.toBe(CLOSE_BAD_SECRET)
   })
   it('reads the secret file on every hello (rotation without restart)', async () => {
     await pairedIpad()
@@ -227,6 +228,29 @@ describe('state', () => {
     await until(() => host.inbox.filter(m => m.type === 'remotes').at(-1)?.count === 1)
     b.send(cmd('b2', { cmd: 'scores.hide' }))
     await until(() => host.inbox.some(m => m.type === 'cmd' && m.cmd === 'scores.hide'))
+  })
+  it('the last iPad with Scores open dropping tells the host to hide the scores view', async () => {
+    const host = await openHost()
+    const a = await pairedIpad()
+    a.send(cmd('a1', { cmd: 'scores.get' }))
+    await until(() => host.inbox.some(m => m.type === 'cmd' && m.cmd === 'scores.get'))
+    a.close()
+    const hide = await find(host, m => m.type === 'cmd' && m.cmd === 'scores.hide')
+    expect(hide.id).toBe('relay-hide')
+    expect(typeof hide.sentAt).toBe('number')
+  })
+  it('no hide when another iPad still has Scores open, or the dropped iPad never opened it', async () => {
+    const host = await openHost()
+    const a = await pairedIpad()
+    const b = await pairedIpad()
+    const c = await pairedIpad()
+    a.send(cmd('a1', { cmd: 'scores.get' }))
+    b.send(cmd('b1', { cmd: 'scores.get' }))
+    await until(() => host.inbox.filter(m => m.cmd === 'scores.get').length === 2)
+    c.close() // never opened Scores
+    a.close() // b still has it open
+    await until(() => host.inbox.filter(m => m.type === 'remotes').at(-1)?.count === 1)
+    expect(host.inbox.some(m => m.cmd === 'scores.hide')).toBe(false)
   })
   it('tells the host how many iPads are paired', async () => {
     const host = await openHost()

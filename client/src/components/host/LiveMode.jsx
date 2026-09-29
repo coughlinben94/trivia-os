@@ -238,7 +238,7 @@ function UpNextCard({ slide, offset }) {
 
 // ─── LiveMode ──────────────────────────────────────────────────────────────
 
-export default function LiveMode({ show, actions, onExitLive, onThemeChange, onOpenScoreboard, scoreboardModalOpen, scoreChainIdleRef }) {
+export default function LiveMode({ show, actions, onExitLive, onThemeChange, onOpenScoreboard, scoreboardModalOpen, scoreChainIdleRef, scoreChainRunRef }) {
   const [lateTeamPopoverOpen, setLateTeamPopoverOpen] = useState(false)
   const [scorePanelOpen, setScorePanelOpen] = useState(false)
   const [themePickerOpen, setThemePickerOpen] = useState(false)
@@ -314,6 +314,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // Host.jsx's winner-reveal auto-save waits on this, so saveResults never
   // reads scoreboard_teams while a score write is still in flight.
   if (scoreChainIdleRef) scoreChainIdleRef.current = () => scoreChainRef.current.whenIdle()
+  if (scoreChainRunRef) scoreChainRunRef.current = fn => scoreChainRef.current.run(fn)
   // The iPad Scores drawer's view, plus a small fading notice here for every
   // score the iPad changed, so Ben (or a helper) sees what moved.
   const [, rerenderScores] = useReducer(n => n + 1, 0)

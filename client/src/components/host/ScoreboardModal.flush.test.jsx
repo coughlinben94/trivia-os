@@ -14,7 +14,7 @@ function builder(table) {
     upsert(p) { e.op = 'upsert'; e.args = p; return q },
     update(p) { e.op = 'update'; e.args = p; return q },
     insert(p) { e.op = 'insert'; e.args = p; return q },
-    eq() { return q }, order() { return q }, single() { return q },
+    eq() { return q }, order() { return q }, single() { return q }, abortSignal() { return q },
     then(res, rej) {
       calls.push(e)
       const data = table === 'scoreboard_teams' && e.op === 'select'
@@ -63,5 +63,17 @@ describe('ScoreboardModal unmount', () => {
     expect(calls.find(c => c.op === 'upsert').args.scores.r_r1.written).toBe(9)
     await tick(600)
     expect(calls.filter(c => c.table === 'scoreboard_teams' && c.op === 'upsert')).toHaveLength(1) // not twice
+  })
+  it('score saves run on the host score chain when one is given (queued with the iPad edits)', async () => {
+    const queued = []
+    const runOnScoreChain = fn => { queued.push(fn); return fn() }
+    act(() => root.render(<ScoreboardModal show={SHOW} onClose={() => {}} runOnScoreChain={runOnScoreChain} />))
+    await tick(20)
+    type(host.querySelector('input[type="number"]'), '7')
+    calls.length = 0
+    act(() => root.unmount())
+    await tick(50)
+    expect(queued).toHaveLength(1)
+    expect(calls.find(c => c.op === 'upsert').args.scores.r_r1.written).toBe(7)
   })
 })
