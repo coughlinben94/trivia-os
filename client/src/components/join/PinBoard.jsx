@@ -87,6 +87,7 @@ export default function PinBoard({ slide, team, theme, preview = false, onAnswer
         disabled={locked}
         highlight={highlight}
         ink={text}
+        showCities={false}
       />
       {!locked && (
         <button

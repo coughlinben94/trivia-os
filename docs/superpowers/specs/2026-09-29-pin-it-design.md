@@ -88,7 +88,7 @@ Full review: scratchpad `pin-it-critique.md`. These OVERRIDE anything above that
 
 **iOS hold-to-drop (blocker) — build spec, not behavior.** Map surface: `touch-action: none`, `-webkit-touch-callout: none`, `-webkit-user-select: none`, `user-select: none`. Pointer events with `setPointerCapture`; a ~350ms timer arms on pointerdown; cancel on movement past ~8px slop or a second pointer (pinch). No haptics on iOS Safari (do not promise any). Zoom about the pinch centre (the existing `HuesCuesBoard.jsx:264-330` pan/pinch does not; write it properly, tested on a real iPhone). Hand-rolled, no new dependency.
 
-**Map.** Blank outlines have no landmarks, so cap zoom at ~8x and add ~40-60 city dots with labels that appear as you zoom. One shared `UsMap` component used by phone, TV and the host picker (consistency by construction). Lazy-load the map data (~25-40 KB raw). Host picker also gets a "paste lat, lon" field.
+**Map.** Blank outlines have no landmarks, so cap zoom at ~8x and team maps (phones and TV) show state outlines only, no city names (they would reveal answers); the host picker alone gets ~40-60 city dots with labels that appear as you zoom, for orientation. One shared `UsMap` component used by phone, TV and the host picker (consistency by construction). Lazy-load the map data (~25-40 KB raw). Host picker also gets a "paste lat, lon" field.
 
 **TV reveal.** Camera fits the true spot plus the scoring pins only; far outliers get edge markers. Label the top 5 by name; list the rest at the side; rank numbers as well as color. Animate only `transform`/`opacity` (no dashed-line draw via stroke-dashoffset; use an opacity/scale reveal). Honor `prefers-reduced-motion`. Keep the center safe-area rule for the prompt text.
 
