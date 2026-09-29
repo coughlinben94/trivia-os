@@ -26,6 +26,16 @@ describe('PinMarker', () => {
   })
 })
 
+describe('PinMarker crisp', () => {
+  it('default stroke unchanged; crisp uses a 2px non-scaling stroke', async () => {
+    let m = await mount(<PinMarker lon={-87} lat={41} k={1} />)
+    expect(m.host.querySelector('path').getAttribute('stroke-width')).toBe('1'); expect(m.host.querySelector('[data-pin-halo]')).toBeNull(); m.done()
+    m = await mount(<PinMarker lon={-87} lat={41} k={1} crisp />)
+    const p = m.host.querySelectorAll('path')[1]
+    expect(p.getAttribute('stroke-width')).toBe('2'); expect(m.host.querySelector('[data-pin-halo]').getAttribute('stroke')).toBe('#ffffff'); expect(p.getAttribute('vector-effect')).toBe('non-scaling-stroke'); m.done()
+  })
+})
+
 describe('UsMap', () => {
   it('cityLabelSize sets city label font, default 10', async () => {
     const cities = [{ name: 'X', lon: -87, lat: 41, minK: 1 }]

@@ -4,7 +4,7 @@ import UsMap, { PinMarker } from './UsMap.jsx'
 import MapLoadRetry from './MapLoadRetry.jsx'
 import { useUsMapData } from '../../hooks/useUsMapData.js'
 import { mapToLonLat, MAP_W, MAP_H } from '../../lib/usMapGeo.js'
-import { zoomAbout, clampView, screenToMap, MAX_K } from '../../lib/pinView.js'
+import { zoomAbout, clampView, screenToMap, pinMarkerSize, MAX_K } from '../../lib/pinView.js'
 import { isValidPin } from '../../lib/pinScoring.js'
 
 const HOLD_MS = 350
@@ -18,6 +18,7 @@ export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disab
   const [view, setView] = useState({ k: 1, tx: 0, ty: 0 })
   const [drag, setDrag] = useState(null) // live pin (map coords) while the finger is still down
   const ref = useRef(null)
+  const [surfaceW, setSurfaceW] = useState(0) // measured px; 0 -> pinMarkerSize falls back to 335
   const viewRef = useRef(view); viewRef.current = view
   const dragRef = useRef(null); dragRef.current = drag
   const g = useRef({ pointers: new Map(), mode: 'idle', timer: null, start: null, pan: null, pinch: null, last: null })
@@ -146,6 +147,16 @@ export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disab
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const measure = () => setSurfaceW(el.getBoundingClientRect().width)
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
   useEffect(() => () => cancelTimer(), [])
 
   // Touch pans must not also swipe the Join carousel (framer `drag` on an
@@ -200,7 +211,7 @@ export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disab
       }}
     >
       <UsMap view={view} states={states} ink={ink} showCities={showCities}>
-        {k => (shown && Number.isFinite(shown.lat) ? <g data-pin-preview opacity={outOfBounds ? 0.3 : 1}><PinMarker lon={shown.lon} lat={shown.lat} k={k} color={highlight} /></g> : null)}
+        {k => (shown && Number.isFinite(shown.lat) ? <g data-pin-preview opacity={outOfBounds ? 0.3 : 1}><PinMarker lon={shown.lon} lat={shown.lat} k={k} size={pinMarkerSize(surfaceW)} crisp color={highlight} /></g> : null)}
       </UsMap>
       <MapLoadRetry states={states} ink={ink} />
     </div>

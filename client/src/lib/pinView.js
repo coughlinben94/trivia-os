@@ -43,3 +43,10 @@ export function fitView(points, { padFrac = 0.35, minSpan = 90, maxK = MAX_K } =
   const cy = (minY + maxY) / 2
   return clampView({ k, tx: MAP_W / 2 - k * cx, ty: MAP_H / 2 - k * cy })
 }
+
+// Pin size (multiplier on a ~28-unit-tall pin) that renders ~targetPx tall on screen
+// for a map surface containerPx wide. Zero/NaN width -> 335 (phone-ish) fallback.
+export function pinMarkerSize(containerPx, { targetPx = 52, unitsTall = 28, mapW = MAP_W } = {}) {
+  const w = containerPx > 0 ? containerPx : 335
+  return clampNum(targetPx * (mapW / w) / unitsTall, 1, 8)
+}

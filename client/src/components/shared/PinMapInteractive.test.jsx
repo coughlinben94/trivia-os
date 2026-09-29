@@ -183,3 +183,24 @@ describe('PinMapInteractive click mode (host picker)', () => {
     expect(onPin).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('PinMapInteractive pin size', () => {
+  it('pin is ~52px on screen: scale = size/k, size ~5.54 at 335px wide, tip on the point', () => {
+    const orig = Element.prototype.getBoundingClientRect
+    Element.prototype.getBoundingClientRect = () => ({ left: 0, top: 0, width: 335, height: 200, right: 335, bottom: 200 })
+    try {
+      act(() => root.render(<PinMapInteractive pin={{ lat: 41, lon: -87 }} />))
+      const t = host.querySelector('[data-pin-preview] g').getAttribute('transform')
+      const m = t.match(/^translate\(([-\d.]+) ([-\d.]+)\) scale\(([-\d.]+)\)$/)
+      expect(m).not.toBeNull()
+      expect(parseFloat(m[3])).toBeCloseTo(5.54, 1) // k = 1
+      // on-screen height = scale * 28 units * (335 / MAP_W) ~ 40px
+      expect(parseFloat(m[3]) * 28 * 0.335).toBeCloseTo(52, 0)
+      expect(host.querySelector('[data-pin-preview] [data-pin-halo]')).not.toBeNull()
+      // zoom in: k grows, scale shrinks by k, so on-screen size (scale * k) is unchanged
+      act(() => { host.querySelector('button[aria-label="Zoom in"]').click() })
+      const m2 = host.querySelector('[data-pin-preview] g').getAttribute('transform').match(/scale\(([-\d.]+)\)/)
+      expect(parseFloat(m2[1])).toBeCloseTo(5.54 / 1.6, 1)
+    } finally { Element.prototype.getBoundingClientRect = orig }
+  })
+})

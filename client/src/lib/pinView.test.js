@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { clampView, zoomAbout, screenToMap, fitView, MAX_K } from './pinView.js'
+import { clampView, zoomAbout, screenToMap, fitView, MAX_K, pinMarkerSize } from './pinView.js'
 import { MAP_W, MAP_H } from './usMapGeo.js'
 
 const HOME = { k: 1, tx: 0, ty: 0 }
@@ -78,5 +78,22 @@ describe('fitView', () => {
     expect(Number.isFinite(v.k)).toBe(true)
     const [mx, my] = screenToMap(v, MAP_W / 2, MAP_H / 2)
     expect(mx).toBeCloseTo(c[0], 6); expect(my).toBeCloseTo(c[1], 6)
+  })
+})
+
+describe('pinMarkerSize', () => {
+  it('targets ~52px on screen', () => {
+    expect(pinMarkerSize(335)).toBeCloseTo(5.54, 1)
+    expect(pinMarkerSize(350)).toBeCloseTo(5.3, 1)
+    expect(pinMarkerSize(560)).toBeCloseTo(3.32, 1)
+  })
+  it('clamps to [1, 8]', () => {
+    expect(pinMarkerSize(5000)).toBe(1)
+    expect(pinMarkerSize(50)).toBe(8)
+  })
+  it('zero/NaN width uses the 335 fallback', () => {
+    expect(pinMarkerSize(0)).toBe(pinMarkerSize(335))
+    expect(pinMarkerSize(NaN)).toBe(pinMarkerSize(335))
+    expect(pinMarkerSize(undefined)).toBe(pinMarkerSize(335))
   })
 })
