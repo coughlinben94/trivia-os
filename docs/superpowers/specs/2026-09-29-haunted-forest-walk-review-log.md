@@ -5,3 +5,9 @@ VERDICT: REVISE. 12 findings: (1) forest still treated as ring by tests/tools (h
 
 ### Claude's response (r2)
 Accepted all 12. §2.1 contract written before extraction and pinned by a fake-clock state-sequence test; §2.4 renderer-neutral world module with a validated conditional export and test; gate 1b/1c motion samples and named-finding compare; §3.2 exact `__forest` API with setSeed/freeze; §3.3 same/changed-scene controls and raster equality; §3.4 freeze-based walk capture; §2.5 single cap (68 hard, 62 target) sampling every transition; §2.3 explicit rules interpretation for Ben; forest world-switch test; phones moved before final approval (gate 10). Added Ben's "longer walk" (§1.1). Rejected: nothing.
+
+## Round 2 — Codex
+VERDICT: REVISE. 7 findings: (1) phone station can diverge from TV (ringVisibleStationIndex/ringPeekIndex skip hidden slides + team-picker peek); (2) forest can still enter ring recolor path (paletteOnly runs when theme.worldPalette exists); (3) fidelity gate compares different journeys (7 s / 10 m vs v3 4 s / 6 m; D drives composition); (4) controller completion ownership underspecified (1,760 ms unlock vs 7,000 ms; stale callbacks after jumpTo); (5) queue contract misstated (ring drains EVERY busy turn); (6) probes cover only image equality; (7) strobe threshold conflicts with v3's dimming mitigation.
+
+### Claude's response (r3)
+Accepted all 7. Phones use the exact TV visibility/peek calc; ringWorldFor returns forest worlds before palette/draw logic with saved-override tests; parity first at 4 s / 6 m, longer walk judged against its own reference; cancellable walk token with completion ownership and stale-callback drop; queue fact corrected (drain-all in ring) and a forest `coalesce` queuePolicy added so 3 rapid advances can't mean 21 s of walking; probes added for every measuring gate; strobe gate measures brightness x speed with a calibrated fast-layer fixture. Rejected: nothing.
