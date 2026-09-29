@@ -12,8 +12,12 @@ export default function PinRoomControl({ showId, override, onOverride }) {
     Promise.all([
       supabase.from('teams').select('id, name').eq('show_id', showId),
       supabase.from('scoreboard_teams').select('id, name').eq('show_id', showId),
-    ]).then(([t, s]) => { if (!cancelled) setCounted(payableRoomSize(t.data ?? [], s.data ?? [])) })
-      .catch(() => { if (!cancelled) { setCounted(null); setFailed(true) } })
+    ]).then(([t, s]) => {
+      if (cancelled) return
+      // supabase-js resolves with { error } instead of rejecting
+      if (t.error || s.error) { setCounted(null); setFailed(true); return }
+      setCounted(payableRoomSize(t.data ?? [], s.data ?? []))
+    }).catch(() => { if (!cancelled) { setCounted(null); setFailed(true) } })
     return () => { cancelled = true }
   }, [showId])
 

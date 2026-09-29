@@ -14,7 +14,7 @@ import { computeChoiceScoreUpdates, DEFAULT_CHOICE_POINTS } from '../../lib/choi
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
 import { scoreHuesCuesRound, computeHuesCuesScoreUpdates } from '../../lib/huesCuesScoring.js'
 import { computeHorseRaceScoreUpdates, DEFAULT_RACE_POINTS } from '../../lib/raceScoring.js'
-import { scorePinRound, computePinScoreUpdates, payableRoomSize, resolvePinRoomSize, payableEntries, isValidPin } from '../../lib/pinScoring.js'
+import { buildPinRound, isValidPin } from '../../lib/pinScoring.js'
 import PinRoomControl from './PinRoomControl.jsx'
 import { HUES_CUES_CODE_RE } from '../../lib/huesCuesGrid.js'
 import { nextPressGate } from '../../lib/nextPressCue.js'
@@ -692,28 +692,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       resultsField: 'pinResults',
       preCheck: s => isValidPin(s.data.pinAnswer) ? null : 'Set the true spot first — click the map in the slide editor',
       lateLogLabel: 'pin lock',
-      buildResults: ({ answers, teams, scoreboardTeams, roundKey, slideId }) => {
-        const teamIdToName = new Map((teams ?? []).map(t => [t.id, t.name]))
-        const entries = payableEntries(
-          (answers ?? []).map(a => ({ teamId: a.team_id, teamName: teamIdToName.get(a.team_id) ?? null, pin: a.answer })),
-          teams, scoreboardTeams,
-        )
-        const roomSize = resolvePinRoomSize({
-          saved: slide.data.pinRoomSize,
-          override: slide.data.pinRoomSizeOverride,
-          payable: payableRoomSize(teams, scoreboardTeams),
-        })
-        const results = scorePinRound({ entries, correct: slide.data.pinAnswer, roomSize })
-        const updates = computePinScoreUpdates({ results, teams, scoreboardTeams, roundKey, slideId })
-        return {
-          results,
-          updates,
-          extraData: { pinRoomSize: roomSize },
-          unmatchedError: answers.length > 0 && updates.length === 0
-            ? 'No pins could be matched to the scoreboard — check team names match, then retry'
-            : null,
-        }
-      },
+      buildResults: args => buildPinRound({ ...args, data: slide.data }),
       setBusy: setPinBusy,
       setError: setPinScoreError,
     })

@@ -7,12 +7,13 @@ import { createRoot } from 'react-dom/client'
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 let failFetch = false
+let errorFetch = false
 const teams = [{ id: 1, name: 'A' }, { id: 2, name: 'B' }, { id: 3, name: 'C' }]
 const sb = [{ id: 1, name: 'A' }, { id: 2, name: 'B' }]
 vi.mock('../../lib/supabase.js', () => ({
   supabase: {
     from: (table) => ({
-      select: () => ({ eq: () => failFetch ? Promise.reject(new Error('x')) : Promise.resolve({ data: table === 'teams' ? teams : sb }) }),
+      select: () => ({ eq: () => failFetch ? Promise.reject(new Error('x')) : errorFetch ? Promise.resolve({ data: null, error: { message: 'x' } }) : Promise.resolve({ data: table === 'teams' ? teams : sb }) }),
     }),
   },
 }))
@@ -26,7 +27,7 @@ async function mount(props) {
   root = createRoot(host)
   await act(async () => { root.render(<PinRoomControl showId="s" onOverride={() => {}} {...props} />) })
 }
-afterEach(() => { failFetch = false; act(() => root.unmount()); host.remove() })
+afterEach(() => { failFetch = false; errorFetch = false; act(() => root.unmount()); host.remove() })
 
 function type(input, value) {
   const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
@@ -60,6 +61,12 @@ describe('PinRoomControl', () => {
 
   it('shows ? when the fetch fails', async () => {
     failFetch = true
+    await mount()
+    expect(host.textContent).toContain('Room counted: ?')
+  })
+
+  it('shows ? when supabase resolves with an error (it does not reject)', async () => {
+    errorFetch = true
     await mount()
     expect(host.textContent).toContain('Room counted: ?')
   })

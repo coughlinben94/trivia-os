@@ -89,3 +89,30 @@ export function scorePinRound({ entries, correct, roomSize }) {
 export function computePinScoreUpdates({ results, teams, scoreboardTeams, roundKey, slideId }) {
   return applyPhoneScoreUpdates({ results, teams, scoreboardTeams, roundKey, slideId })
 }
+
+// The whole lock-and-score computation for one Pin It slide, pure so it can be
+// tested without LiveMode. `data` is slide.data (pinAnswer, saved room size,
+// host override). Room size: saved wins (Retry Scoring can't change who scores),
+// then the override, then the payable count.
+export function buildPinRound({ answers, teams, scoreboardTeams, data, roundKey, slideId }) {
+  const teamIdToName = new Map((teams ?? []).map(t => [t.id, t.name]))
+  const entries = payableEntries(
+    (answers ?? []).map(a => ({ teamId: a.team_id, teamName: teamIdToName.get(a.team_id) ?? null, pin: a.answer })),
+    teams, scoreboardTeams,
+  )
+  const roomSize = resolvePinRoomSize({
+    saved: data.pinRoomSize,
+    override: data.pinRoomSizeOverride,
+    payable: payableRoomSize(teams, scoreboardTeams),
+  })
+  const results = scorePinRound({ entries, correct: data.pinAnswer, roomSize })
+  const updates = computePinScoreUpdates({ results, teams, scoreboardTeams, roundKey, slideId })
+  return {
+    results,
+    updates,
+    extraData: { pinRoomSize: roomSize },
+    unmatchedError: answers.length > 0 && updates.length === 0
+      ? 'No pins could be matched to the scoreboard — check team names match, then retry'
+      : null,
+  }
+}

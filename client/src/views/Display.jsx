@@ -748,7 +748,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
   const sortedSlides = sortSlides(show.slides)
   const currentSlide = sortedSlides[show.current_slide_index ?? 0] ?? null
   // Warm the Pin It map chunk as soon as the show holds a pin slide, so the TV never shows an empty map.
-  const hasPinSlide = sortedSlides.some(sl => isPinShiny(sl.data))
+  const hasPinSlide = sortedSlides.some(sl => sl.data && isPinShiny(sl.data))
   useEffect(() => { if (hasPinSlide) preloadUsMapData() }, [hasPinSlide])
 
   // ── Grading-break music overlay ──

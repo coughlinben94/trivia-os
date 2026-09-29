@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { scorePinRound, scoringGroupSize, payableRoomSize, resolvePinRoomSize, payableEntries, isValidPin, parsePinPaste, PIN_POINTS } from './pinScoring.js'
+import { scorePinRound, scoringGroupSize, payableRoomSize, resolvePinRoomSize, payableEntries, buildPinRound, isValidPin, parsePinPaste, PIN_POINTS } from './pinScoring.js'
 
 const CORRECT = { lat: 41.8781, lon: -87.6298 } // Chicago
 // ~1 degree of latitude = ~69 miles; build pins by offsetting latitude
@@ -129,5 +129,48 @@ describe('parsePinPaste', () => {
   })
   it('rejects bad input', () => {
     for (const t of ['N44.7 W93.2', '1e1, -90', '.5, -90', '44, -93, 1', '44.7 -93.2', '-93, 44', 'abc, def', '44.7N, 93.2W', '60, -93', '-93, 44', '']) expect(parsePinPaste(t)).toBeNull()
+  })
+})
+
+describe('buildPinRound', () => {
+  const ids = ['a', 'b', 'c', 'd', 'e']
+  const teams = [...ids.map(id => ({ id, name: id })), { id: 'g', name: 'ghost' }]
+  const scoreboardTeams = ids.map((id, i) => ({ id: `sb${id}`, show_id: 'sh', name: id, scores: {}, sort_order: i }))
+  const ans = (id, miles) => ({ team_id: id, answer: pinAt(miles) })
+  const run = (over = {}) => buildPinRound({
+    answers: [ans('a', 10), ans('b', 20), ans('c', 30), ans('d', 40), ans('e', 50)],
+    teams, scoreboardTeams, data: { pinAnswer: CORRECT }, roundKey: 'r1', slideId: 's1', ...over,
+  })
+
+  it('drops an unpaid team even when it pins closest', () => {
+    const r = run({ answers: [ans('g', 1), ans('a', 10), ans('b', 20)] })
+    expect(JSON.stringify(r.results)).not.toContain('ghost')
+    expect(r.results.map(x => x.teamId).sort()).toEqual(['a', 'b'])
+  })
+  it('names results from the teams table and writes this slide into the round bucket', () => {
+    const r = run()
+    expect(r.results[0]).toMatchObject({ teamId: 'a', teamName: 'a', points: PIN_POINTS })
+    expect(r.updates.find(u => u.id === 'sba').scores.r1.phone.s1).toBe(PIN_POINTS)
+  })
+  it('saved room size wins over override and payable', () => {
+    const r = run({ data: { pinAnswer: CORRECT, pinRoomSize: 10, pinRoomSizeOverride: 20 } })
+    expect(r.extraData).toEqual({ pinRoomSize: 10 })
+    expect(r.results.filter(x => x.points > 0).length).toBe(4) // top 4 of a room of 10
+  })
+  it('override wins over the payable count', () => {
+    const r = run({ data: { pinAnswer: CORRECT, pinRoomSizeOverride: 10 } })
+    expect(r.extraData).toEqual({ pinRoomSize: 10 })
+  })
+  it('falls back to the payable count and records it', () => {
+    expect(run().extraData).toEqual({ pinRoomSize: 5 })
+  })
+  it('unmatchedError when every answer is unpaid', () => {
+    const r = run({ answers: [ans('g', 5)] })
+    expect(r.updates).toEqual([])
+    expect(r.unmatchedError).toBe('No pins could be matched to the scoreboard — check team names match, then retry')
+  })
+  it('no answers at all is not an error', () => {
+    expect(run({ answers: [] }).unmatchedError).toBeNull()
+    expect(run().unmatchedError).toBeNull()
   })
 })

@@ -1381,7 +1381,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
   )
   // 25 phones fetching the map chunk the instant a Pin It slide goes live is
   // the slow path: warm it as soon as the show is known to contain one.
-  const hasPinSlide = slides.some(sl => isPinShiny(sl.data))
+  const hasPinSlide = slides.some(sl => sl.data && isPinShiny(sl.data))
   useEffect(() => { if (hasPinSlide) preloadUsMapData() }, [hasPinSlide])
   const hostIndex = show?.current_slide_index ?? 0
   const liveSlide  = slides[hostIndex] ?? null
