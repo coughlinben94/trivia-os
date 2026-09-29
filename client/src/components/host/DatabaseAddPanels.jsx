@@ -19,8 +19,10 @@ function cleanItems(items) {
 // Question panel and Paste & Organize (was a nice grid in one and a 34-row
 // native <select> in the other). Owns its own search state; onSelect gets the
 // full format object, or null when the selected tile is clicked again.
-function ShinyFormatPicker({ formats, loading, selectedId, onSelect, showHeading = true }) {
+export function ShinyFormatPicker({ formats: allFormats, loading, selectedId, onSelect, showHeading = true }) {
   const [search, setSearch] = useState('')
+  // Pin It needs a true-spot lat/lon the coordinate-less question bank can't hold.
+  const formats = allFormats.filter(f => f.input_schema?.type !== 'pin')
   const q = search.trim().toLowerCase()
   const visible = q
     ? formats.filter(f => f.name?.toLowerCase().includes(q) || f.description?.toLowerCase().includes(q))
