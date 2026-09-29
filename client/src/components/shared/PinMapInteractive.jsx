@@ -1,6 +1,7 @@
 // client/src/components/shared/PinMapInteractive.jsx
 import { useEffect, useRef, useState } from 'react'
 import UsMap, { PinMarker } from './UsMap.jsx'
+import MapLoadRetry from './MapLoadRetry.jsx'
 import { useUsMapData } from '../../hooks/useUsMapData.js'
 import { mapToLonLat, MAP_W, MAP_H } from '../../lib/usMapGeo.js'
 import { zoomAbout, clampView, screenToMap, MAX_K } from '../../lib/pinView.js'
@@ -180,6 +181,7 @@ export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disab
       <UsMap view={view} states={states} ink={ink}>
         {k => (shown && Number.isFinite(shown.lat) ? <g data-pin-preview opacity={outOfBounds ? 0.3 : 1}><PinMarker lon={shown.lon} lat={shown.lat} k={k} color={highlight} /></g> : null)}
       </UsMap>
+      <MapLoadRetry states={states} ink={ink} />
       {!disabled && (
         <div style={{ position: 'absolute', right: 8, bottom: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
           {zoomBtn('+', 1.6)}{zoomBtn('−', 1 / 1.6)}

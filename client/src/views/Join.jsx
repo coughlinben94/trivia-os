@@ -14,6 +14,7 @@ import OrderBoard from '../components/join/OrderBoard.jsx'
 import ChoiceBoard from '../components/join/ChoiceBoard.jsx'
 import HuesCuesBoard from '../components/join/HuesCuesBoard.jsx'
 import PinBoard from '../components/join/PinBoard.jsx'
+import { preloadUsMapData } from '../hooks/useUsMapData.js'
 import HorseRaceBoard from '../components/join/HorseRaceBoard.jsx'
 import ShrinkToFit from '../components/join/ShrinkToFit.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
@@ -1378,6 +1379,10 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
     () => sortSlides(show?.slides),
     [show?.slides]
   )
+  // 25 phones fetching the map chunk the instant a Pin It slide goes live is
+  // the slow path: warm it as soon as the show is known to contain one.
+  const hasPinSlide = slides.some(sl => isPinShiny(sl.data))
+  useEffect(() => { if (hasPinSlide) preloadUsMapData() }, [hasPinSlide])
   const hostIndex = show?.current_slide_index ?? 0
   const liveSlide  = slides[hostIndex] ?? null
   const currentSlide = slides[viewedIndex] ?? null

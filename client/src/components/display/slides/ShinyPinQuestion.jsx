@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../../lib/supabase.js'
 import UsMap, { PinMarker } from '../../shared/UsMap.jsx'
+import MapLoadRetry from '../../shared/MapLoadRetry.jsx'
 import { useUsMapData } from '../../../hooks/useUsMapData.js'
 import { fitView } from '../../../lib/pinView.js'
 import { lonLatToMap, MAP_W, MAP_H } from '../../../lib/usMapGeo.js'
@@ -126,6 +127,7 @@ export default function ShinyPinQuestion({ slide, show, theme }) {
               </>
             )}
           </UsMap>
+          <MapLoadRetry states={states} ink={ink} />
         </div>
         <div style={{ minHeight: '3.4rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: `${ink}d9`, fontSize: 'clamp(1.6rem, 2vw, 2.3rem)', fontFamily: bodyFont }}>
           {revealed ? (data.answer ? `It's ${data.answer}` : null)
