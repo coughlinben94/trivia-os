@@ -48,6 +48,17 @@
     87.5%{transform:translate(-3px,5px) rotate(-.18deg)}
     100%{transform:translate(0,0) rotate(0deg)}}
   #cam.bob{animation:bob var(--walk) ease-in-out}
+  /* the flashlight is held, not bolted to the eye: it lags the footfalls a little */
+  @keyframes beamSway{0%{transform:translateX(0);opacity:1}12.5%{transform:translateX(-6px);opacity:.985}37.5%{transform:translateX(12px);opacity:.97}62.5%{transform:translateX(-12px);opacity:.99}87.5%{transform:translateX(6px);opacity:.975}100%{transform:translateX(0);opacity:1}}
+  #light{position:absolute;inset:0}
+  #light.sway{animation:beamSway var(--walk) ease-in-out}
+  /* lantern flame: small (<=12%), slow (under 3 Hz) and eased, never a strobe */
+  @keyframes flick{0%{opacity:1}22%{opacity:.88}46%{opacity:.97}72%{opacity:.9}100%{opacity:1}}
+  .flick{animation:flick 2.7s ease-in-out infinite}
+  /* idle: after the 40 s creep the camera breathes, so a long question never sits on a still image */
+  #rig{transform-origin:960px 1400px}
+  @keyframes idle{from{transform:translateY(-3px) rotate(-.12deg)}to{transform:translateY(3px) rotate(.12deg)}}
+  #rig.idle{animation:idle 7.3s ease-in-out -3.65s infinite alternate}
   @keyframes fIn{from{opacity:0}to{opacity:1}}
   @keyframes fOut{from{opacity:1}to{opacity:0}}
   .fIn{animation:fIn var(--walk) cubic-bezier(.45,.05,.25,1) forwards}
@@ -72,7 +83,7 @@
     <div id="rig"><div id="cam">
       <div id="sky" class="fill"></div>
       <div class="creep" id="creepG"><div id="groundStatic" class="fill"></div><div id="ground" class="fill"></div></div>
-      <div id="gmask"></div>
+      <div id="light"><div id="gmask"></div></div>
       <div class="creep" id="creepW"><div id="world" class="fill"></div></div>
       <div id="lightsTop" class="fill"></div>
       <div id="topdark" class="bleed"></div>
@@ -282,7 +293,7 @@ function lanternItem(Z,X){
   const glass=[[lx-0.15,2.12],[lx+0.15,2.12],[lx+0.16,2.55],[lx-0.16,2.55]];const base=[[lx-0.2,2.05],[lx+0.2,2.05],[lx+0.17,2.13],[lx-0.17,2.13]];
   const bars=[ribbon([[lx-0.15,2.12,0.05],[lx-0.16,2.55,0.05]]),ribbon([[lx+0.15,2.12,0.05],[lx+0.16,2.55,0.05]])];
   const dark=[post,arm,brace,cap,hook,base,...bars];
-  return {grp:'w',Z,X,kind:'lm',op:z=>clamp((ZFAR-z)/FADE),lops:[null,z=>fogAmt(z)*0.95,z=>clamp(1.15-fogAmt(z)*1.4)],
+  return {grp:'w',Z,X,kind:'lm',op:z=>clamp((ZFAR-z)/FADE),lops:[null,z=>fogAmt(z)*0.95,z=>clamp(1.15-fogAmt(z)*1.4)],flick:[0,0,'flick'],
     geom(z,id){const pr=p=>P(X+p[0],p[1],z);const s=F/z;const gc=pr([lx,2.33]);const ps=dark.map(p=>p.map(pr));const gp=glass.map(pr);
       const halo=1.05*s;
       return{bb:bbox([...ps,[[gc[0]-halo,gc[1]-halo],[gc[0]+halo,gc[1]+halo]]]),layers:[
@@ -437,12 +448,18 @@ function collect(c,walking){
   for(const it of ITEMS){const z=zrel(it,c);if(z>0.3&&z<=ZFAR+ext)list.push([z,it])}
   list.sort((a,b)=>b[0]-a[0]);return list;
 }
-let station=0,walking=false,walkId=0,autoT=null;
+let station=0,walking=false,walkId=0,autoT=null,idleT=null;
+const rig=$('rig'),light=$('light');
 const styleEl=document.createElement('style');document.head.appendChild(styleEl);
 const rmOn=()=>$('cRm').checked||matchMedia('(prefers-reduced-motion: reduce)').matches;
 function setCreep(on){for(const el of document.querySelectorAll('.creep')){
   if(on&&!rmOn()){el.style.transition='transform 40s cubic-bezier(.2,.5,.3,1)';el.style.transform='scale(1.045)'}
-  else{el.style.transition=`transform ${DUR}ms cubic-bezier(.45,.05,.25,1)`;el.style.transform='scale(1)'}}}
+  else{el.style.transition=`transform ${DUR}ms cubic-bezier(.45,.05,.25,1)`;el.style.transform='scale(1)'}}
+  clearTimeout(idleT);
+  if(on&&!rmOn())idleT=setTimeout(()=>rig.classList.add('idle'),40000);
+  else if(rig.classList.contains('idle')){ // settle out of the idle sway from wherever it is, no snap
+    const cur=getComputedStyle(rig).transform;rig.classList.remove('idle');rig.style.transition='none';rig.style.transform=cur;void rig.offsetWidth;
+    rig.style.transition='transform 700ms cubic-bezier(.45,.05,.25,1)';rig.style.transform='none'}}
 function build(c,animate){
   const fw=document.createDocumentFragment(),css=[];
   const list=collect(c,animate);let n=0;
@@ -463,10 +480,10 @@ function advance(){
   walking=true;walkId++;
   build(c,true);
   for(const el of cam.querySelectorAll('.sl')){const s=+el.dataset.st;el.classList.remove('fIn','fOut');el.style.opacity='';if(s===n)el.classList.add('fIn');else if(s===c)el.classList.add('fOut');else el.style.opacity=0}
-  cam.classList.remove('bob');void cam.offsetWidth;cam.classList.add('bob');
+  cam.classList.remove('bob');light.classList.remove('sway');void cam.offsetWidth;cam.classList.add('bob');light.classList.add('sway');
   setCreep(false);
   station=n;ui();
-  setTimeout(()=>{render();cam.classList.remove('bob');walking=false;setCreep(true)},DUR+40);
+  setTimeout(()=>{render();cam.classList.remove('bob');light.classList.remove('sway');walking=false;setCreep(true)},DUR+40);
 }
 function jump(s){if(walking)return;station=((s%NS)+NS)%NS;setCreep(false);render();setTimeout(()=>setCreep(true),30)}
 function ui(){
