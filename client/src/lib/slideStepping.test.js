@@ -688,6 +688,14 @@ describe('pendingReveal', () => {
 })
 
 describe('unlockPatch', () => {
+  it('pin also clears its saved room size and results so a re-lock recomputes them', () => {
+    expect(unlockPatch('pin', { pinLocked: true, pinRevealed: true, pinRoomSize: 12, pinResults: [{}] })).toEqual({
+      pinLocked: false, pinRevealed: false, pinRoomSize: null, pinResults: null,
+    })
+  })
+  it('existing mechanics gain no extra cleared fields', () => {
+    expect(unlockPatch('choice', { choiceLocked: true })).toEqual({ choiceLocked: false, choiceRevealed: false })
+  })
   it('clears the lock field and reveal field for a single-lock-field mechanic', () => {
     expect(unlockPatch('matching', { matchingLocked: true, matchingRevealed: true })).toEqual({
       matchingLocked: false, matchingRevealed: false,

@@ -21,7 +21,7 @@
 // Callers own the write + their own local-state update; nothing here
 // touches the network or React.
 
-import { isMatchingShiny, isWagerShiny, isOrderShiny, isChoiceShiny, isHuesCuesShiny, isConcurrentShiny, isConcurrentMediaShiny } from './shinySeries.js'
+import { isMatchingShiny, isWagerShiny, isOrderShiny, isChoiceShiny, isHuesCuesShiny, isPinShiny, isConcurrentShiny, isConcurrentMediaShiny } from './shinySeries.js'
 
 // Chunks `parts` into fixed-size reveal groups of `groupSize`, in authored
 // order — the single implementation both revealStepCount's Next/Prev step
@@ -377,6 +377,7 @@ export const PHONE_MECHANICS = {
   order:    { guard: isOrderShiny,    lockFields: ['orderLocked'], revealField: 'orderRevealed' },
   choice:   { guard: isChoiceShiny,   lockFields: ['choiceLocked'], revealField: 'choiceRevealed' },
   huesCues: { guard: isHuesCuesShiny, lockFields: ['huesCuesLocked'], revealField: 'huesCuesRevealed' },
+  pin:      { guard: isPinShiny,      lockFields: ['pinLocked'], revealField: 'pinRevealed', clearFields: ['pinRoomSize', 'pinResults'] },
 }
 
 // Wager is the only mechanic with TWO lock phases on one slide (blind tiers
@@ -464,7 +465,11 @@ export function unlockPatch(mechanicKey, data) {
   const m = PHONE_MECHANICS[mechanicKey]
   if (!m || !data) return null
   const lastField = m.lockFields[m.lockFields.length - 1]
-  return { [lastField]: false, [m.revealField]: false }
+  return {
+    [lastField]: false,
+    [m.revealField]: false,
+    ...Object.fromEntries((m.clearFields ?? []).map(f => [f, null])),
+  }
 }
 
 /**
