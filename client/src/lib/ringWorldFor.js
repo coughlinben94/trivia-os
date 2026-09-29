@@ -4,6 +4,7 @@
 // ringWorldFor test existed before this file. See design doc §7.1:
 // docs/superpowers/plans/2026-09-05-ring-unified-noun-color-draw-design.md
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
+import { hauntedOctoberRing } from '../worlds/hauntedOctober.ring.js'
 import { RING_POOL } from '../worlds/ringPool.js'
 import { resolveStations } from './drawWorld.js'
 import { drawStations } from './ringDraw.js'
@@ -20,6 +21,15 @@ import { hash32 } from './ringEngine.js'
 // geometry is a RingAmbient.jsx change, not just a registry entry.
 export const RING_WORLDS = {
   'midnight-galaxy': midnightGalaxyRing,
+  'haunted-october': hauntedOctoberRing,
+}
+
+// What the host theme pickers offer: registered ring worlds not flagged
+// `approved: false` (a world still being built stays routable, just not
+// pickable).
+export function isPickableWorld(themeId) {
+  const w = RING_WORLDS[themeId]
+  return !!w && w.approved !== false
 }
 
 // Memoized at module scope (not per-component state) so WarpTransition.jsx

@@ -188,6 +188,18 @@ export const THEMES = [
     scene: { background: null, foreground: null, cssClass: 'theme-eighties-night' },
     cutawayFrame: 'none',
   },
+  // Second ring world (docs/superpowers/specs/2026-09-28-halloween-ring-world-design.md
+  // §4.11 Tier 1). Separate from the bespoke `halloween` theme above, which is untouched.
+  // Not offered in the host pickers until its world is approved (hauntedOctober.ring.js).
+  {
+    id: 'haunted-october',
+    name: 'Haunted October',
+    colors: { bg: '#0c0604', bgDeep: '#060302', accent: '#8a3a08', highlight: '#ffdcb0', text: '#fff1dc', textMuted: '#a07a5a', shinyBg: '#160a04', shinyAccent: '#ff7a1a' },
+    fonts: { display: 'Boogaloo', body: 'DM Sans', ui: 'DM Sans' },
+    vignette: { r: 4, g: 1, b: 0, strength: 0.60 },
+    scene: { background: null, foreground: null, cssClass: 'theme-haunted-october' },
+    cutawayFrame: 'none',
+  },
 ]
 
 export const DEFAULT_THEME_ID = 'pure-michigan'

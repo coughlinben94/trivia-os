@@ -5,6 +5,7 @@ import ParticleBackground from '../display/ParticleBackground.jsx'
 import ThemeCustomizeControls from './ThemeCustomizeControls.jsx'
 import WorldPaletteEditor from './WorldPaletteEditor.jsx'
 import { applyOverrides } from '../shared/ThemeProvider.jsx'
+import { isPickableWorld } from '../../lib/ringWorldFor.js'
 
 // Matches the real /display TV output (see Display.jsx's ticker comment:
 // "always fills the full 1920px width") — fixed-px ambient details (stars,
@@ -175,13 +176,13 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
         <div className="flex flex-1 min-h-0 overflow-hidden">
           {/* Theme list */}
           <div className="w-56 shrink-0 border-r border-gray-100 overflow-y-auto py-2">
-            {/* Only Midnight Galaxy is a real, finished "world" right now —
-                the other 20 legacy themes stay defined in THEMES (nothing
-                deleted, still fully customizable via ThemeCustomizeControls
-                below if a show is already on one of them) but aren't
-                surfaced as pickable options until they get the same
-                ring-world treatment. */}
-            {THEMES.filter(t => t.id === 'midnight-galaxy' || t.id === show.theme).map(t => {
+            {/* Only approved ring worlds (isPickableWorld) are offered —
+                the legacy themes stay defined in THEMES (nothing deleted,
+                still fully customizable via ThemeCustomizeControls below if
+                a show is already on one of them) but aren't surfaced as
+                pickable options until they get the same ring-world
+                treatment. */}
+            {THEMES.filter(t => isPickableWorld(t.id) || t.id === show.theme).map(t => {
               const isActive = t.id === show.theme
               const isPreviewing = t.id === previewId
               return (

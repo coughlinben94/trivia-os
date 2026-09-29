@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useState, useRef } from 'react'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { getTheme, THEMES } from '../../themes/index.js'
+import { isPickableWorld } from '../../lib/ringWorldFor.js'
 import { resolveShinyPart, isAudioShiny, isBendleShiny } from '../../lib/shinySeries.js'
 import ScorePanel from './ScorePanel.jsx'
 import FocusWarning from './FocusWarning.jsx'
@@ -1354,11 +1355,11 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setThemePickerOpen(false)} />
                   <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-52 max-h-72 overflow-y-auto">
-                    {/* Only Midnight Galaxy is a real, finished "world" right
-                        now — the other 20 legacy themes stay defined in
-                        THEMES (nothing deleted) but aren't surfaced as live
-                        options until they get the same ring-world treatment. */}
-                    {THEMES.filter(t => t.id === 'midnight-galaxy').map(t => (
+                    {/* Only approved ring worlds (isPickableWorld) — the
+                        legacy themes stay defined in THEMES (nothing deleted)
+                        but aren't surfaced as live options until they get
+                        the same ring-world treatment. */}
+                    {THEMES.filter(t => isPickableWorld(t.id)).map(t => (
                       <button
                         key={t.id}
                         onClick={() => { onThemeChange(t.id); setThemePickerOpen(false) }}
