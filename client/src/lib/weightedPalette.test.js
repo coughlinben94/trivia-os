@@ -415,3 +415,35 @@ describe('drift', () => {
     expect(found).toBe(true)
   })
 })
+
+describe('derivePalette — cross-color drift separation', () => {
+  const COLLAPSING_DUOS = [
+    { name: 'purple_blue', colors: ['#a855f7', '#3b82f6'], weights: [0.65, 0.35], arc: 60 },
+    { name: 'amazon_dusk', colors: ['#166534', '#7c3aed'], weights: [0.55, 0.45], arc: 60 },
+    { name: 'mint_drift', colors: ['#63e4a3', '#5134f9'], weights: [0.688, 0.312], arc: 79 },
+    { name: 'turquoise_bloom', colors: ['#2bdeb6', '#8254ef'], weights: [0.664, 0.336], arc: 52 },
+    { name: 'cyan_mirage', colors: ['#53f7e2', '#d24aed'], weights: [0.646, 0.354], arc: 75 },
+    { name: 'spring_lilac', colors: ['#56f594', '#8659e9'], weights: [0.599, 0.401], arc: 85 },
+    { name: 'ice_violet', colors: ['#39c1f5', '#8856f0'], weights: [0.599, 0.401], arc: 31 },
+  ]
+
+  it.each(COLLAPSING_DUOS)('$name never drops below 20deg separation across all 13 stations', ({ colors, weights, arc }) => {
+    const result = derivePalette({ colors, weights, stationCount: 13, currentHues: [], drift: { arc } })
+    // hueAnchorsAt carries BOTH colors' rotated anchor at every station,
+    // regardless of which color the station is assigned.
+    for (const anchorsAtStation of result.hueAnchorsAt) {
+      const [a, b] = anchorsAtStation
+      expect(hueDelta(a.deg, b.deg)).toBeGreaterThanOrEqual(20)
+    }
+  })
+
+  it('does not change output at all for a palette that never collapses (no scaling applied)', () => {
+    const colors = ['#dc2626', '#eab308'] // crimson_gold — verified non-collapsing (minDelta 45deg @ arc 60)
+    const weights = [0.6, 0.4]
+    const result = derivePalette({ colors, weights, stationCount: 13, currentHues: [], drift: { arc: 60 } })
+    for (const anchorsAtStation of result.hueAnchorsAt) {
+      const [a, b] = anchorsAtStation
+      expect(hueDelta(a.deg, b.deg)).toBeGreaterThan(20)
+    }
+  })
+})

@@ -39,7 +39,7 @@ export function GridContent({ slide, theme }) {
   const vBand = 720, hBand = 1520
   const maxByH = (vBand - intraGap * (rows - 1)) / rows
   const maxByW = (hBand - interGap * (nCols - 1)) / nCols
-  const size = Math.min(360, Math.floor(Math.min(maxByH, maxByW)))
+  const size = Math.min(data.tileMax ?? 360, Math.floor(Math.min(maxByH, maxByW)))
 
   const tIn = (i) => reduce
     ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0.2 } }
@@ -59,8 +59,9 @@ export function GridContent({ slide, theme }) {
           flash: the shiny wrapper transition in SlideRenderer owns the entrance. */}
       <ShinySignal />
 
-      {/* Centered column group */}
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingBottom: 130 }}>
+      {/* Centered column group. screenCentered (concurrent-media view) anchors the tiles on
+          the screen's middle; real grid slides keep the 130px caption reserve. */}
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingBottom: data.screenCentered ? 0 : 130 }}>
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: interGap }}>
           {columns.map((col, ci) => (
             <div key={ci} style={{ display: 'flex', flexDirection: 'column', gap: intraGap, alignItems: 'center' }}>
