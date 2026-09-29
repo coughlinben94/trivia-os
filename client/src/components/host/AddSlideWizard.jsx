@@ -574,8 +574,14 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   const shinyFmtType    = selectedShinyFmt?.input_schema?.type ?? null
   const fixedShapeKind  = shinyFmtType ? FIXED_SHAPE_KINDS[shinyFmtType] : null
   const isFixedShapeFmt = !!fixedShapeKind
+  // Blank-shell kinds (choice/matching/wager/order/hues-cues/elimination/race)
+  // have no shape controls of their own, so the wizard asks the one thing
+  // left: how many separate blank questions to make. Their `slots` preset is
+  // NOT a question count (Mixology 101's 12 is ingredients), so it never
+  // pre-fills it.
+  const isBlankShellFmt = isFixedShapeFmt && !fixedShapeKind.hasOwnControls
   const fmtAssetPreset  = selectedShinyFmt?.input_schema?.slots
-  const hasAssetPreset  = typeof fmtAssetPreset === 'number' && fmtAssetPreset > 0
+  const hasAssetPreset  = !isBlankShellFmt && typeof fmtAssetPreset === 'number' && fmtAssetPreset > 0
   // The typed count wins, always. A preset only pre-fills it (see the
   // creation-shape comment at the top of this file for the incident that made
   // this non-negotiable).
@@ -610,7 +616,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   // shiny" — widened from "only matching/wager/order/choice/hues-cues/
   // elimination/race" to also cover grid, which has its own Columns/Rows
   // shape controls but no own "how many separate questions" concept either.
-  const fixedShapeCount = (isFixedShapeFmt && shinyFmtType !== 'venn' && shinyFmtType !== 'bendle' && initialData.assetCount != null)
+  const fixedShapeCount = (isFixedShapeFmt && shinyFmtType !== 'venn' && shinyFmtType !== 'bendle' && (isBlankShellFmt || initialData.assetCount != null))
     ? Math.min(20, Math.max(1, parseInt(assetCount, 10) || 1))
     : 1
   // Separate questions can't share one typed answer — those slides start
@@ -759,9 +765,9 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                 A format's `slots` preset only pre-fills it. It used to HIDE
                 this input and hard-override the value, which on 2026-08-25
                 left a host staring at a number he could not change mid-build. */}
-            {!isFixedShapeFmt && (
+            {(!isFixedShapeFmt || isBlankShellFmt) && (
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">How many assets?</label>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">{isBlankShellFmt ? 'How many questions?' : 'How many assets?'}</label>
                 <input
                   autoFocus
                   type="number"
@@ -773,7 +779,9 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                   className="w-full border border-gray-200 rounded-lg px-3 py-3 text-base text-gray-900 text-center focus:outline-none focus:ring-1 focus:ring-[#1a6b4a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
                 <p className="text-[11px] text-gray-400 mt-1">
-                  The title card is automatic — this is how many assets come after it.
+                  {isBlankShellFmt
+                    ? 'Each one is its own blank question you fill in from the slide editor.'
+                    : 'The title card is automatic — this is how many assets come after it.'}
                   {hasAssetPreset && assetNum !== fmtAssetPreset ? ` Format default: ${fmtAssetPreset}.` : ''}
                 </p>
               </div>
@@ -848,7 +856,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                   // Fixed-shape formats render no count input, so the answer
                   // takes the focus the count would otherwise have had —
                   // except venn, which has its own count input to focus.
-                  autoFocus={isFixedShapeFmt && !isVenn}
+                  autoFocus={isFixedShapeFmt && !isVenn && !isBlankShellFmt}
                   placeholder="Leave blank to set it after creating"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1a6b4a]"
                 />
@@ -1077,7 +1085,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
                     // shiny hand-off does this so its own count doesn't get
                     // overwritten by whatever slots preset the chosen format
                     // happens to carry).
-                    if (initialData.assetCount == null) setAssetCount(String(defaultAssetCount(selectedShinyFmt)))
+                    if (initialData.assetCount == null) setAssetCount(isBlankShellFmt ? '1' : String(defaultAssetCount(selectedShinyFmt)))
                     if (initialData.relationship == null) setRelationship(defaultRelationship(selectedShinyFmt))
                     setShinyStep('details')
                   }}

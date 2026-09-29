@@ -94,6 +94,15 @@ describe('AddSlideWizard shiny details — registry wiring', () => {
     openDetails('Matching Fmt')
     for (const s of [...GRID_STRINGS, ...VENN_STRINGS]) expect(host.textContent).not.toContain(s)
   })
+
+  // Blank-shell kinds ask how many separate questions; their `slots` preset
+  // (Mixology 101's 12 = ingredients) must never pre-fill it.
+  it('asks how many questions for a blank-shell kind (choice), defaulting to 1', () => {
+    FORMATS.push({ ...fmt('fmt_choice', 'Choice Fmt', 'choice'), input_schema: { type: 'choice', slots: 12, multiSelect: true } })
+    openDetails('Choice Fmt')
+    expect(host.textContent).toContain('How many questions?')
+    expect(host.querySelector('input[type="number"]').value).toBe('1')
+  })
 })
 
 // 2026-09-05 whole-branch review, Fix 1: a Bendle slide used to create with
