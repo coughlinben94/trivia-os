@@ -1072,13 +1072,13 @@ function ShinyListQuestion({ slide, theme }) {
     floorPx: LIST_ITEM_FLOOR * 16,
     ceilPx: LIST_ITEM_CEIL * 16,
     gapPx: 18,
-    rowInset: hasPoints ? 160 : 96,
+    rowInset: hasPoints ? 260 : 170, // number badge scales with the text (up to ~63px) + gaps + points pill
     maxLinesPerRow: 2,
     lineHeight: 1.35,
   })
 
   return (
-    <div className="w-full h-full relative overflow-hidden flex flex-col items-center justify-center px-24 py-16" style={{ background: theme.colors.shinyBg }}>
+    <div className="w-full h-full relative overflow-hidden flex flex-col items-center justify-start px-24 py-16" style={{ background: theme.colors.shinyBg }}>
       <div
         aria-hidden
         className="absolute inset-0 pointer-events-none"
@@ -1103,8 +1103,10 @@ function ShinyListQuestion({ slide, theme }) {
         </motion.p>
       )}
 
-      <div ref={listBoxRef} className="relative z-10 w-full max-w-4xl">
-        <ol className="space-y-4">
+      {/* Fixed-height band centered on the screen's middle (18% top/bottom). The old box had no
+          height of its own, so the fit measured its own content and never grew past ~32px. */}
+      <div ref={listBoxRef} className="absolute z-10 left-1/2 -translate-x-1/2 w-full" style={{ top: '18%', bottom: '18%', maxWidth: 1500 }}>
+        <ol className="h-full flex flex-col justify-center" style={{ gap: 18 }}>
           {items.map((item, i) => (
             <motion.li
               key={i}
@@ -1116,11 +1118,11 @@ function ShinyListQuestion({ slide, theme }) {
               <span
                 className="shrink-0 flex items-center justify-center rounded-full"
                 style={{
-                  width: 40, height: 40,
+                  width: Math.round(rowSize * 0.9), height: Math.round(rowSize * 0.9),
                   background: theme.colors.accent,
                   fontFamily: `'${theme.fonts.display}', sans-serif`,
                   color: theme.colors.highlight,
-                  fontSize: '1rem', fontWeight: 700,
+                  fontSize: `${Math.round(rowSize * 0.5)}px`, fontWeight: 700,
                 }}
               >
                 {i + 1}
