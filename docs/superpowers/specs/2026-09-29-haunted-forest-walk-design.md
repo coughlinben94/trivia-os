@@ -1,64 +1,52 @@
-# Haunted October: forward-walking forest renderer (DRAFT r0, pivot spec)
+# Haunted October: forest walk as a real Trivia OS world (r1)
 
-Date: 2026-09-29. Supersedes the RENDERER and ART parts of `2026-09-28-halloween-ring-world-design.md` (Phase 2 look rejected by Ben: "too close to the ambient background bs we did in the past... i want to feel like im wandering through a haunted forest... walking forward"). Keeps that spec's decisions on: theme id `haunted-october`, 13 stations, harvest moon = jukebox picture at index 10 (`musicStation`), 80" TVs gate at 30 ft (min stroke 7px on 1920x1080), phone plan (§4.11 there), branch/worktree, gates on the space world. Not built. Ben has not approved this spec.
+Date: 2026-09-29. Replaces r0 of this file (canvas renderer, rejected by the Fable critique: ART-DIRECTION-SPEC §8 and themes.md rule 4 ban an always-on rAF/canvas background). Supersedes the RENDERER and ART parts of `2026-09-28-halloween-ring-world-design.md`; keeps its decisions: theme id `haunted-october`, 13 stations (one per slide, loop), harvest moon at index 10 = `musicStation`, TVs (two 80in gate at 30 ft, min stroke 7px on 1920x1080; 40in advisory), phone plan (§4.11 there: Tier 1 palette + Tier 2 backdrop), branch `feat/haunted-october-world` in worktree `~/Projects/baynes-trivia/trivia-os-haunted`, the frozen space-world gates. Ben's verdict on the prototype: v3 "looks awesome" (2026-09-29). Not built. Not approved for merge.
 
-## 1. Idea (Ben's words: "the same concept as the ring station, just moving forward instead of sideways")
+## 1. Source of truth
 
-13 stations, one per slide, world closes into a loop. Instead of a cylinder that turns sideways, the viewer walks forward along a path through a haunted forest. Each slide advance = walk to the next clearing (a station with one landmark). At rest the trees sway a little and fog drifts. After station 12 the path leads back to station 0.
+`concepts/haunted-forest-walk-v3.html` (commit 8672a7c and ancestors, 724 lines) is the visual and motion reference. Ben liked it; the job is to PORT it into the app, not redesign it. The port must reproduce v3's rest frames and walk closely (gate 3). v3 facts: pure CSS transform/opacity keyframes plus chained `setTimeout`, zero `requestAnimationFrame`/`Math.random`/canvas, content is a pure function of the integer station 0..12, seeded generator, DUR 4000 ms, 24 keyframe stops, 68-80 items and 143-178 animations per walk, `advance()` median 8 ms.
 
-## 2. Renderer
+## 2. Design
 
-- New component `ForestAmbient.jsx`, a 2D canvas (1920x1080 logical, DPR 1) that fakes depth: every tree has a world position (x lateral, z along the path); screen position = projection of x/z, scale = 1/z, alpha/tint by depth (fog).
-- Same imperative contract as `RingAmbient` where the rest of the app touches it (ref `turn()`, `station`, slide-index alignment to `slideIndex % 13` before first paint, `stationOverride` for the jukebox break). Phase 1 seams (`ringStationOverride`, world-switch remount key, station alignment) are reused unchanged.
-- Selection: a world declares `renderer: 'forward'`; `ParticleBackground` picks `ForestAmbient` for such worlds and `RingAmbient` otherwise (space world has no field, default 'ring', unchanged).
-- Deterministic forest: trees placed by hashing a z-bucket with the world seed (`rng`/`hash32` from `ringEngine.js`), never `Math.random`. Loop length L = 13 x D (D = distance between stations); position hashing is modulo L so the world closes exactly and station 0 after 13 turns is the same frame as the start.
-- Tree art: ~6 seeded procedural silhouette variants (trunk + recursive branches, bare, some leaning), pre-rendered once to offscreen canvases and drawn scaled. Near trees near-black, far trees fog-lit. No generated or vectorized art; code only.
-- Path: a pale worn strip narrowing to the horizon. Center corridor kept free of trees (|x| < corridor half-width scaled by depth) so the middle 60% x 45% stays open and dark for question text.
-- Fog: 3-4 soft depth bands drifting slowly; light sources (lantern, moon shaft, cabin window) are radial glows drawn at their landmark's depth.
-- Walk: on `turn()`, camera z advances D over ~2.2 s (ease in/out), trees stream past; landmark of the next station ends centered-ahead-left/right, never in the safe box. Rest: tiny sway (sin, <= 6px near layer), fog drift; canvas redraws at ~15 fps at rest, 60 fps during a walk.
-- Reduced motion: no sway, no fog drift, walk becomes a 400 ms crossfade to the new station.
-- Rules check for Codex: Critical Rule 2 (GPU-only animation, transform/opacity) governs CSS keyframes; this is a canvas draw loop. Rule 1 (ParticleBackground never remounts on slide advance) holds: the canvas persists; only a world change remounts (Phase 1 key).
+### 2.1 Extract the station state machine first (Fable finding 2)
+The station logic is private to `RingAmbient.jsx`: alignment on mount (`lastSlideIndexRef` seeded null + `ringNavAction`), the stationOverride round trip with `returnStationRef`, busy/queued turns, `forceSnap`. Extract it into one hook `useStationCamera({ slideIndex, stationOverride, forceSnap, stationCount, onTurn(dir), onJump(i) })` used by BOTH renderers. Gate: the space world must stay byte-identical (frozen 13 frames + motion.json, `ringWorldFor` snapshot, `ParticleBackground.worldSwitch.test.jsx`, `RingAmbient.worldSeams.test.jsx`, existing suite). Nothing else in Phase 3a.
 
-## 3. Stations (13, kept from the ring spec, adapted to forest; index = slide mod 13)
+### 2.2 ForestAmbient (DOM/CSS, rule-compliant)
+`client/src/components/display/ForestAmbient.jsx` builds the DOM imperatively in a ref like RingAmbient and runs v3's world generator, walk (generated CSS keyframes) and rest life (creep, idle sway, lantern flicker, fog drift) on it. No rAF, no canvas, no WebGL: CSS transform/opacity + chained setTimeout only. Every animated element has a prefers-reduced-motion path (v3: jump with a 400 ms opacity crossfade). It consumes `useStationCamera`.
 
-Each station = one landmark in a clearing beside the path, with a light source. Noun test applies as before: write `PASS = a fresh viewer names this as ___` in a code comment before drawing.
+### 2.3 Wiring (Fable finding 3; every caller that assumes a ring)
+- `world.renderer: 'forest'` (space has none = 'ring'). `ParticleBackground.jsx:~1257` branches on it (today it hardcodes RingAmbient); its key remains `ringWorldId ?? 'none'`.
+- `AmbientAudit.jsx` mounts RingAmbient directly at ~117: give it the same branch or `?world=haunted-october` throws in `makePrim(undefined)`.
+- World data fields that MUST exist for forest worlds: `id`, `type:'terrestrial'`, `stations[].key` (13), `layers.stars:false`, `sky[4]`, `tints` (WarmTints: `WarpTransition` reads `sky[2]`, `sky[last]`, `tints.starTint3`, `tints.drift`; today `BASE_TINTS` gives blue-white motes over an orange forest), `musicStation`, `approved:false`. `pinKey/pinAt/slots/prims/layerArt/skyRegions` are dead for a forest world and are removed from `hauntedOctober.ring.js`; Phase 2's ring art (`hauntedOctober.art.js`, harvest-moon prim, sky regions, horizon band) is dropped from the runtime (stays in git history).
+- `hauntedOctober.ring.js` module-load throw if its THEMES entry is missing (Phase 1 review #5): downgrade to `console.error` + skip registration so the space show cannot be taken down.
+- `ring-baseline.mjs` (frames, `animations:'disabled'`, DOM counts) does not apply to forest frames; forest gets its own capture in §3.
+- Theme pickers gate on `approved`; stub must stay hidden until Ben signs off.
 
-| Idx | Landmark | Light | Class |
-|-----|----------|-------|-------|
-| 0 | fence gate at the forest edge | dusk glow behind | iconic |
-| 1 | jack-o'-lantern on a stump | its own glow | iconic |
-| 2 | dead tree with hanging branches | bruise-purple sky gap | iconic (uses the tree generator) |
-| 3 | gravestone row | low moon shaft | iconic |
-| 4 | will-o'-wisps over a bog | green glow | iconic |
-| 5 | falling leaves in a shaft of light | amber shaft | iconic |
-| 6 | spiderweb strung between trunks | pale moonlight | iconic |
-| 7 | lantern on a post | its own glow | iconic |
-| 8 | haunted cabin with lit windows | window glow | FIGURATIVE (two-strike protocol) |
-| 9 | fog bank across the path | grey glow | iconic |
-| 10 | harvest moon through a gap (jukebox picture) | moon | iconic |
-| 11 | bats crossing a clearing | moon | iconic |
-| 12 | crow on a branch | dim moon | FIGURATIVE (two-strike protocol) |
+### 2.4 Safe box (Fable finding 4)
+v3 numbers are the acceptance floor: text-box (left 20%, top 28%, width 60%, height 44%) mean <= 34 and p99.5 <= 68 at every rest frame AND every sampled walk frame; v3's worst was 59.2. Trunk branches sweep the box as z falls, so the spec keeps v3's rule that nothing closer than 1 m is drawn at rest and near items fade over the last 400 ms; the port must not regress these (gate 4).
 
-Figurative failure path (per `OBJECT-RENDERING-PROTOCOL.md`): a landmark failing a fresh visual read twice escalates to tighter reference-tracing, still hand-built; if that fails, stop and ask Ben.
+### 2.5 Jukebox picture (Fable finding 12)
+Station 10 (harvest moon) stays `musicStation` for continuity, but the jukebox overlay paints an opaque layer over it: do not spend art effort on the "behind the jukebox" framing. Confirm against `JukeboxBreakOverlay.jsx` / LiveScreen during Phase 3b.
 
-## 4. Reuse from the ring work
+## 3. Gates
 
-Kept: per-world config (`musicStation`, `pinKey/pinAt`, `autoDraw: false`), the pure `ringStationOverride` resolver, world-switch remount key + station alignment, `ring-baseline.mjs` frozen space frames, `ringWorldFor` snapshot, theme entry and palette, picker `approved` flag. Dropped: Phase 2's sky regions, horizon band, and harvest-moon prim (still in git history on the branch). `hauntedOctober.ring.js` becomes forest world data (stations, landmarks, palette, `renderer: 'forward'`, `approved: false`).
+1. SPACE UNCHANGED (every phase): 13 frames + motion.json identical to `~/Projects/baynes-trivia/ring-baselines/space-08f249c-v2` via `scripts/ring-baseline.mjs`; `ringWorldFor` snapshot unchanged; unit suite green (the two relay files fail only for the missing `ws` package, pre-existing); `verify:ring` FAIL/WARN names unchanged from main (13 FAIL, 2 WARN).
+2. Hook for tests: `window.__forest = { seed, station, turn(), jumpTo(i), freeze(t) }`. Known-answer probes: same station twice = 0 diff; different station must differ; seed+1 must fail equality; station 0 after 13 turns equals a fresh station 0 EXACTLY with time frozen (no tunable tolerance; v3's 0.196 mean difference came from time-based motion).
+3. FIDELITY: ported rest frames for stations 0, 1, 3, 10, 5 and walk frames at 0/25/50/75/100% compared numerically to golden frames captured from `haunted-forest-walk-v3.html` (metric and numeric tolerance fixed BEFORE the first comparison and probed with one deliberately wrong render).
+4. SAFE BOX + CONTRAST: every rest frame (13) and mid-walk frames (walks 0->1, 2->3, 9->10, 12->0) at mean <= 34, p99.5 <= 62 (headroom), text contrast >= 7:1 measured against the render.
+5. WALK/PERF: no rAF/canvas (grep); walk main-thread cost under ~10 ms median; layer/animation counts no worse than v3; measured in the REAL /display route with a slide transition running (ART §8), not only /ambient; on the real rig before merge, with `window.innerWidth === 1920` asserted or backing sized to the stage.
+6. STATE: alignment on mount at slideIndex % 13; live world switch space<->haunted<->space mid-show with visible station index asserted after each switch and advance; grading-break round trip (warp out -> override 10 -> RING_RETURN); rapid double advance; reload mid-show.
+7. MOTION QUALITY: Emil/Impeccable review of the ported renderer (same reviewers as v3); strobe check on the sample-and-hold TV (peak bright-layer speed <= ~8 px/frame at 60 Hz).
+8. PROOF: Ben watches the ported world in the real /display route (not the prototype) before any polish beyond parity.
 
-## 5. Gates
+## 4. Phases
 
-1. Space unchanged: all 13 frames + motion.json identical to `~/Projects/baynes-trivia/ring-baselines/space-08f249c-v2`; `ringWorldFor` snapshot unchanged; unit suite green (2 relay files fail only for the missing `ws` package, pre-existing); `verify:ring` FAIL/WARN names unchanged from main.
-2. Determinism: same seed produces identical forest; loop closure: frame at station 0 after 13 turns equals the start frame within a tolerance.
-3. Depth read: a frame-sequence of one walk (sampled at 0, 25, 50, 75, 100%) reviewed by looking; tree scale/order monotonic; no popping when a tree recycles (test: no tree appears or vanishes inside the visible frustum).
-4. Safe box: centre 60% x 45% mean luminance <= 34 and p99.5 <= 68 at every station (same cap as the ring spec), text contrast >= 7:1 measured against the render.
-5. 30 ft check: Gaussian blur sigma ~2.9 px; each landmark and the tree line still read. Min stroke 7px.
-6. Performance: p95 frame time during a walk <= 16.7 ms and idle CPU low, measured in bundled Chromium on this Mac; canvas paused when tab hidden.
-7. PROOF SCENE GATE: before any landmark beyond one clearing, Ben watches the proof scene (path + streaming trees + fog + one clearing, walk between two stops) in his browser and approves. Nothing further is built before that.
+3a extract `useStationCamera` (space frozen). 3b port ForestAmbient + wiring behind `approved:false` + `window.__forest` + verifier + gates 1-6. STOP for Ben. 3c polish (crow visibility, denser canopy at rest, dread option, walk 3.2 vs 4.0 s; Ben decides). 3d phones: shared station resolver (host live position) + Tier 1 palette + Tier 2 static backdrop, phone audit at 375/390/430. 3e real-TV run: full 13-station auto-play for judder and dropped frames; `approved:true` only after Ben signs off.
 
-## 6. Phases
+## 5. Open questions for Ben
 
-P0 (done): baseline. P1 (done): seams. P2' proof scene (this spec): `ForestAmbient` + procedural trees + path + fog + one clearing, wired via `renderer: 'forward'`, behind `approved: false`. Stop for Ben. P3': easy landmarks (0,1,3,4,5,6,7,9,10,11). P4': figurative (2 is tree-generator based, 8 cabin, 12 crow). P5': phone Tier 1 + Tier 2 (from the ring spec §4.11). P6': real-TV check.
+Walk duration 3.2 s vs the 4.0 s v3 shipped (its origin is unclear: the builder found DUR=4000 set before its first write); how much dread vs Jackbox-cute; whether the 13 landmarks stay as built.
 
-## 7. Open questions for Ben
+## 6. Deferred
 
-Walk length per slide (default ~2.2 s); whether the stop should hold a slow forward creep instead of a full stop; whether daylight-orange dusk or full night is the lead sky (default: deep night, warm light sources, faint orange horizon glow).
+True 3D / three.js (needs an rAF waiver; the reviewer estimates CSS already closes ~70% of the gap); Halloween jukebox tint; picker UI; recolor script.
