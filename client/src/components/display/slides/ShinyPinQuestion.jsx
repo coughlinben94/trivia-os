@@ -139,7 +139,7 @@ export default function ShinyPinQuestion({ slide, show, theme }) {
           </p>
         )}
         <div style={{ width: '100%', maxWidth: `calc(62vh * ${MAP_W} / ${MAP_H})`, aspectRatio: `${MAP_W} / ${MAP_H}`, maxHeight: '62vh', alignSelf: 'center', position: 'relative', overflow: 'hidden', borderRadius: 20, background: 'rgba(255,255,255,0.05)', border: `1px solid ${ink}22` }}>
-          <UsMap view={view} states={states} showCities={!revealed} ink={ink} cityLabelSize={TV_CITY_LABEL}>
+          <UsMap view={view} states={states} showCities={false} ink={ink} cityLabelSize={TV_CITY_LABEL}>
             {k => revealed && (
               <>
                 {/* opacity-only fade, after the camera move, so pins never "pop" while the map is still flying */}

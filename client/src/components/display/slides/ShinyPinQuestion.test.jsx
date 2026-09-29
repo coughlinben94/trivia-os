@@ -115,13 +115,13 @@ describe('ShinyPinQuestion', () => {
     expect(Q_BOX.boxW).toBeLessThanOrEqual(REVEAL_COL_W)
     expect(Q_BOX.maxLines).toBe(2)
   })
-  it('city labels are drawn before reveal but not on the reveal (they collide with the gold place label)', async () => {
-    mapProps.length = 0
-    await render({})
-    expect(mapProps.at(-1).showCities).not.toBe(false)
-    mapProps.length = 0
-    await render({ pinRevealed: true, pinAnswer: { lat: 41.88, lon: -87.63 }, pinResults: [res(1)] })
-    expect(mapProps.every(p => p.showCities === false)).toBe(true)
+  it('city labels are never drawn on the TV: waiting, locked, revealed (names give away the answer)', async () => {
+    for (const d of [{}, { pinLocked: true }, { pinRevealed: true, pinAnswer: { lat: 41.88, lon: -87.63 }, pinResults: [res(1)] }]) {
+      mapProps.length = 0
+      await render(d)
+      expect(mapProps.length).toBeGreaterThan(0)
+      expect(mapProps.every(p => p.showCities !== true)).toBe(true)
+    }
   })
   const pinLabels = () => [...host.querySelectorAll('[data-pin-fade] text')].map(t => t.textContent)
   it('identical pins: one merged label with +N, every marker still drawn', async () => {

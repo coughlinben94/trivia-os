@@ -13,7 +13,7 @@ const PIN_LIFT_PX = 48 // pin tip sits this far ABOVE the finger while dragging
 
 const round6 = n => Math.round(n * 1e6) / 1e6
 
-export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disabled = false, highlight = '#f5c842', ink = '#ffffff' }) {
+export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disabled = false, highlight = '#f5c842', ink = '#ffffff', showCities = false }) {
   const states = useUsMapData()
   const [view, setView] = useState({ k: 1, tx: 0, ty: 0 })
   const [drag, setDrag] = useState(null) // live pin (map coords) while the finger is still down
@@ -199,7 +199,7 @@ export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disab
         cursor: disabled ? 'default' : 'crosshair',
       }}
     >
-      <UsMap view={view} states={states} ink={ink}>
+      <UsMap view={view} states={states} ink={ink} showCities={showCities}>
         {k => (shown && Number.isFinite(shown.lat) ? <g data-pin-preview opacity={outOfBounds ? 0.3 : 1}><PinMarker lon={shown.lon} lat={shown.lat} k={k} color={highlight} /></g> : null)}
       </UsMap>
       <MapLoadRetry states={states} ink={ink} />

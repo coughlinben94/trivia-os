@@ -29,9 +29,16 @@ describe('PinMarker', () => {
 describe('UsMap', () => {
   it('cityLabelSize sets city label font, default 10', async () => {
     const cities = [{ name: 'X', lon: -87, lat: 41, minK: 1 }]
-    let m = await mount(<UsMap view={{ k: 1, tx: 0, ty: 0 }} states={[]} cities={cities} />)
+    let m = await mount(<UsMap view={{ k: 1, tx: 0, ty: 0 }} states={[]} cities={cities} showCities />)
     expect(m.host.querySelector('text').getAttribute('font-size')).toBe('10'); m.done()
-    m = await mount(<UsMap view={{ k: 1, tx: 0, ty: 0 }} states={[]} cities={cities} cityLabelSize={18} />)
+    m = await mount(<UsMap view={{ k: 1, tx: 0, ty: 0 }} states={[]} cities={cities} showCities cityLabelSize={18} />)
     expect(m.host.querySelector('text').getAttribute('font-size')).toBe('18'); m.done()
+  })
+  it('draws no city labels by default, even at high zoom (labels give away Pin It answers)', async () => {
+    const cities = [{ name: 'X', lon: -87, lat: 41, minK: 1 }]
+    let m = await mount(<UsMap view={{ k: 4, tx: 0, ty: 0 }} states={[]} cities={cities} />)
+    expect(m.host.querySelector('text')).toBeNull(); m.done()
+    m = await mount(<UsMap view={{ k: 4, tx: 0, ty: 0 }} states={[]} cities={cities} showCities />)
+    expect(m.host.querySelector('text').textContent).toBe('X'); m.done()
   })
 })

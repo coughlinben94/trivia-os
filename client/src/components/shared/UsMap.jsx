@@ -6,7 +6,7 @@ import { US_CITIES } from '../../lib/usCities.js'
 // inside the transformed group. Strokes stay hairline at every zoom
 // (non-scaling-stroke); pins/labels counter-scale by 1/k so they keep a
 // constant on-screen size.
-export default function UsMap({ view, states, cities = US_CITIES, showCities = true, ink = '#ffffff', cityLabelSize = 10, children }) {
+export default function UsMap({ view, states, cities = US_CITIES, showCities = false, ink = '#ffffff', cityLabelSize = 10, children }) {
   const { k, tx, ty } = view
   return (
     <svg viewBox={`0 0 ${MAP_W} ${MAP_H}`} width="100%" height="100%" style={{ display: 'block' }} aria-hidden="true">
