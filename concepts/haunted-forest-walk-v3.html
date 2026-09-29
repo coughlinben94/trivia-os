@@ -86,6 +86,7 @@
       <div id="light"><div id="gmask"></div></div>
       <div class="creep" id="creepW"><div id="world" class="fill"></div></div>
       <div id="lightsTop" class="fill"></div>
+      <div id="hush" class="fill"></div>
       <div id="topdark" class="bleed"></div>
       <div id="vig" class="bleed"></div>
     </div></div>
@@ -117,7 +118,7 @@ const D=6, NS=13, L=NS*D, REST=9;           // metres per station, 13 stations, 
 const ZFAR=42, FADE=7, ZMIN=0.45, M=48, KCAP=6, ZG0=6.1, ZG1=34;
 const DUR=4000, STOPS=40, AUTO_MS=7000, CAPFADE=400;   // DUR: one station-to-station walk; AUTO_MS keeps a 3s pause between walks
 const EASE=bez(.45,.05,.25,1);
-const NAMES=['forest edge, broken fence gate','lantern on a post','','leaning gravestone row','','','','','','','harvest moon through the canopy','',''];
+const NAMES=['forest edge, broken fence gate','lantern on a post','scarecrow with a pumpkin head','leaning gravestone row','row of jack-o\'-lanterns','crow on a stump','stone well, glowing green','abandoned cart','fallen log, glowing mushrooms','will-o\'-wisps over a bog','harvest moon through the canopy','cabin with a lit window','signpost with a skull'];
 
 const clamp=(v,a=0,b=1)=>v<a?a:v>b?b:v;
 const fm=n=>Math.round(n*10)/10;
@@ -180,7 +181,7 @@ function treeItem(Z,X,w,r){
       return {bb:bbox([tr,...br]),pb:[tr,...br].map(l=>bbox([l])),layers:[
         `<path d="${all}" fill="#070706"/>`,
         // fog tint: the base is fog-coloured, so far trunks sink into the ground fog instead of ending on a hard dark foot
-        `<defs>${lgrad(id+'f',0,fy0,0,fy2,[[0,'#2c2d30'],[.07,'#2a2b2d'],[.16,'#2a2b2d'],[.55,'#18191c'],[1,'#0b0c0e']])}</defs><path d="${all}" fill="url(#${id}f)"/>`,
+        `<defs>${lgrad(id+'f',0,fy0,0,fy2,[[0,'#2a2b2e'],[.07,'#27282a'],[.16,'#262729'],[.55,'#18191c'],[1,'#0b0c0e']])}</defs><path d="${all}" fill="url(#${id}f)"/>`,
         `<defs>${lgrad(id+'l',ex0,0,ex1,0,[[0,'#4A4035',1],[.3,'#3d342b',.85],[.7,'#2A2620',.35],[1,'#2A2620',0]])}${lgrad(id+'v',0,ly1,0,ly2,[[0,'#fff',1],[.4,'#fff',.8],[1,'#fff',0]])}<mask id="${id}k" maskUnits="userSpaceOnUse" x="${fm(lb[0]-4)}" y="${fm(lb[1]-4)}" width="${fm(lb[2]-lb[0]+8)}" height="${fm(lb[3]-lb[1]+8)}"><rect x="${fm(lb[0]-4)}" y="${fm(lb[1]-4)}" width="${fm(lb[2]-lb[0]+8)}" height="${fm(lb[3]-lb[1]+8)}" fill="url(#${id}v)"/></mask></defs><path mask="url(#${id}k)" d="${dPoly(litA.map(pr))}" fill="url(#${id}l)"/>`
       ]};
     }};
@@ -200,7 +201,7 @@ function limbItem(Z,sd,r){
 
 // ---------- fog shaped by trunks ----------
 function fogShaft(Z,X,wd,r){
-  const dx=fm(rr(r,10,22)),d=fm(rr(r,17,29)),dl=-fm(rr(r,0,20)),pk=rr(r,.15,.24);
+  const dx=fm(rr(r,10,22)),d=fm(rr(r,17,29)),dl=-fm(rr(r,0,20)),pk=rr(r,.10,.17);
   return {grp:'w',Z,X,kind:'fog',op:z=>clamp((ZFAR-z)/FADE)*clamp((z-3)/5),lops:[null],drift:[{dx,d,dl}],
     geom(z,id){const a=P(X-wd/2,15,z),b=P(X+wd/2,0,z);
       return {bb:[a[0]-40,a[1],b[0]+40,b[1]],layers:[
@@ -326,22 +327,206 @@ function moonPool(Z){
       return{bb:[c[0]-rx,cy-ry,c[0]+rx,cy+ry],layers:[`<defs>${rgrad(id+'p',c[0],cy,rx,[[0,'#9fb4d0',.2],[.5,'#8aa0c0',.08],[1,'#8aa0c0',0]],ry/rx)}</defs><ellipse cx="${fm(c[0])}" cy="${fm(cy)}" rx="${fm(rx)}" ry="${fm(ry)}" fill="url(#${id}p)"/>`]};}};
 }
 
+// ---------- side landmarks: one per station, off the path (world |X| >= 3.8 at rest, outside the text box) ----------
+// generic prop: world shapes relative to (X,Z). p = polygon [[x,h]], s = spine [[x,h,w]] (7px floor), e = ellipse [cx,h,rx,ry],
+// hole = even-odd inner polygon. Layers: 0 back light (rim glow behind a silhouette), 1 colours, 2 fog veil, 3 light (emissive shapes + glows)
+const ell=(cx,h,rx,ry,n=18)=>[...Array(n)].map((_,i)=>{const a=i/n*TAU;return[cx+Math.cos(a)*rx,h+Math.sin(a)*ry]});
+const rotS=(sh,a,ox,oy)=>Object.assign({},sh,sh.s?{s:sh.s.map(([x,h,w])=>{const[q]=rot([[x,h]],a,ox,oy);return[q[0],q[1],w]})}:{p:rot(sh.p,a,ox,oy),hole:sh.hole&&rot(sh.hole,a,ox,oy)});
+function prop(Z,X,body,lit,opts={}){
+  const zr=opts.zr||REST;
+  const norm=sh=>sh.e?Object.assign({},sh,{p:ell(...sh.e)}):sh;
+  body=body.map(norm);lit=lit.map(norm);const glows=opts.glows||[];
+  return {grp:'w',Z,X,kind:'lm',op:z=>clamp((ZFAR-z)/FADE),
+    // the light switches on as you come out of the fog, so a landmark two stations ahead never lights up the text box
+    lops:[z=>clamp((zr+5.5-z)/4.5),null,z=>fogAmt(z)*0.95,z=>clamp((zr+5.5-z)/4.5)],flick:opts.flick?[0,0,0,'flick']:null,drift:opts.drift?[null,null,null,opts.drift]:null,
+    geom(z,id){
+      const pts=sh=>sh.s?wRib(sh.s,X,z):sh.p.map(([x,h])=>P(X+x,h,z));
+      const path=sh=>`<path d="${dPoly(pts(sh))}${sh.hole?dPoly(sh.hole.map(([x,h])=>P(X+x,h,z))):''}"${sh.hole?' fill-rule="evenodd"':''} fill="${sh.c}"${sh.o?` opacity="${sh.o}"`:''}/>`;
+      let gi=0;const glow=g=>{const c=P(X+g.x,g.h,z),r=g.r*F/z,gid=id+'g'+(gi++);
+        return `<defs>${rgrad(gid,c[0],c[1],r,[[0,g.c,g.a],[.35,g.c,g.a*.45],[1,g.c,0]],g.sy||1)}</defs><ellipse cx="${fm(c[0])}" cy="${fm(c[1])}" rx="${fm(r)}" ry="${fm(r*(g.sy||1))}" fill="url(#${gid})"/>`};
+      const all=[...body,...lit].map(pts);const gb=glows.map(g=>{const c=P(X+g.x,g.h,z),r=g.r*F/z;return[[c[0]-r,c[1]-r*(g.sy||1)],[c[0]+r,c[1]+r*(g.sy||1)]]});
+      const veil=body.filter(sh=>!sh.back).map(sh=>`<path d="${dPoly(pts(sh))}" fill="#242527"/>`).join('');
+      return {bb:bbox([...all,...gb]),pb:all.map(l=>bbox([l])),layers:[
+        glows.filter(g=>g.back).map(glow).join(''),
+        body.map(path).join(''),
+        veil,
+        lit.map(path).join('')+glows.filter(g=>!g.back).map(glow).join('')]};
+    }};
+}
+const keep=(X,Z,hw=2.6,dz=3)=>[X-hw,X+hw,Z-dz,Z+dz];
+// station 2 — PASS = a fresh viewer names this as "a scarecrow with a glowing pumpkin head"
+function scarecrow(Z,X){
+  const cloth='#3a2a1c',straw='#8a6a2c';
+  return prop(Z,X,[
+    {p:[[-.05,-.05],[.05,-.05],[.045,2.25],[-.045,2.25]],c:'#241a10'},
+    {s:[[-.8,1.72,.09],[.8,1.76,.09]],c:'#2a1f14'},
+    {p:[[-.46,1.8],[.46,1.8],[.4,1.3],[.42,.95],[.3,.88],[.22,.98],[.1,.86],[-.02,.97],[-.14,.85],[-.26,.96],[-.36,.87],[-.42,.95],[-.4,1.3]],c:cloth},
+    {p:[[.08,1.2],[.26,1.22],[.25,1.4],[.07,1.38]],c:'#5a3f22'},
+    {s:[[-.42,1.74,.2],[-.75,1.72,.17]],c:cloth},{s:[[.42,1.76,.2],[.75,1.78,.17]],c:cloth},
+    {p:[[-.75,1.8],[-.95,1.88],[-.88,1.76],[-1,1.7],[-.86,1.68],[-.93,1.58],[-.75,1.64]],c:straw},
+    {p:[[.75,1.82],[.95,1.9],[.88,1.78],[1,1.72],[.86,1.7],[.93,1.6],[.75,1.66]],c:straw},
+    {p:[[-.22,.9],[-.18,.7],[-.13,.9]],c:straw},{p:[[.04,.9],[.1,.68],[.15,.9]],c:straw},{p:[[.27,.9],[.33,.72],[.37,.9]],c:straw},
+    {e:[0,2.02,.25,.2],c:'#8a4516'},
+    {s:[[-.1,1.86,.04],[-.13,2.02,.045],[-.1,2.18,.04]],c:'#5e2e0e'},{s:[[.1,1.86,.04],[.13,2.02,.045],[.1,2.18,.04]],c:'#5e2e0e'},
+    {s:[[-.34,2.2,.05],[.34,2.22,.05]],c:'#141010'},
+    {p:[[-.17,2.21],[.15,2.23],[.07,2.5],[.22,2.62],[-.01,2.53]],c:'#141010'},
+  ],[
+    {p:[[-.14,2.02],[-.04,2.02],[-.09,2.11]],c:'#ffc15a'},{p:[[.04,2.02],[.14,2.02],[.09,2.11]],c:'#ffc15a'},
+    {p:[[-.14,1.94],[.14,1.94],[.11,1.88],[.06,1.92],[.02,1.87],[-.02,1.92],[-.06,1.87],[-.11,1.9]],c:'#ffb347'},
+  ],{flick:1,glows:[{x:0,h:1.98,r:.6,c:'#ffa040',a:.38},{x:0,h:1.6,r:1.5,c:'#6c7a92',a:.16,back:1}]});
+}
+// station 4 — PASS = "a row of glowing carved jack-o'-lanterns"
+function jackRow(Z,X){
+  const body=[],lit=[],glows=[];
+  for(const [cx,r] of [[-.95,.26],[-.35,.33],[.25,.24],[.78,.3]]){
+    body.push({e:[cx,.88*r,1.2*r,.9*r],c:'#86400f'});
+    for(const sd of[-1,1])body.push({s:[[cx+sd*.42*r,.16*r,.05],[cx+sd*.55*r,.88*r,.06],[cx+sd*.42*r,1.6*r,.05]],c:'#5a2a0a'});
+    body.push({s:[[cx,1.7*r,.07],[cx+.05,1.98*r,.06]],c:'#2f3316'});
+    lit.push({p:[[cx-.6*r,.95*r],[cx-.15*r,.95*r],[cx-.38*r,1.32*r]],c:'#ffc45e'},{p:[[cx+.15*r,.95*r],[cx+.6*r,.95*r],[cx+.38*r,1.32*r]],c:'#ffc45e'},
+      {p:[[cx-.62*r,.62*r],[cx+.62*r,.62*r],[cx+.46*r,.38*r],[cx+.2*r,.54*r],[cx,.34*r],[cx-.2*r,.54*r],[cx-.46*r,.38*r]],c:'#ffb040'});
+    glows.push({x:cx,h:.9*r,r:r*2.6,c:'#ff9a30',a:.36});
+  }
+  glows.push({x:-.1,h:.02,r:1.7,c:'#ff9a40',a:.22,sy:.22});
+  return prop(Z,X,body,lit,{flick:1,glows});
+}
+// station 5 — PASS = "a big crow perched on a broken tree stump"
+function crowStump(Z,X){
+  const bird='#07080a';
+  return prop(Z,X,[
+    {p:[[-.62,-.04],[-.3,.16],[-.3,.12],[-.27,.92],[-.18,1.04],[-.08,.96],[.02,1.08],[.12,.94],[.2,1.02],[.27,.9],[.3,.12],[.62,-.03],[.4,-.05],[-.4,-.05]],c:'#2a2016'},
+    {s:[[-.1,.1,.05],[-.12,.85,.05]],c:'#15100b'},{s:[[.13,.1,.05],[.1,.8,.05]],c:'#15100b'},
+    {p:[[-.2,1.1],[.1,1.06],[.28,1.1],[.52,1.0],[.55,1.07],[.34,1.2],[.22,1.34],[0,1.4],[-.14,1.38],[-.22,1.28]],c:bird},
+    {e:[-.22,1.43,.12,.11],c:bird},
+    {p:[[-.31,1.47],[-.5,1.41],[-.31,1.38]],c:'#101114'},
+    {s:[[-.04,1.08,.035],[-.06,1.0,.03]],c:bird},{s:[[.08,1.08,.035],[.09,1.0,.03]],c:bird},
+    {s:[[-.08,1.32,.05],[.16,1.26,.05],[.36,1.17,.04]],c:'#262a34'},
+  ],[{e:[-.25,1.45,.035,.035,10],c:'#ffd24a'}],{glows:[{x:-.05,h:1.25,r:1.35,c:'#8090a8',a:.3,back:1},{x:-.25,h:1.45,r:.2,c:'#ffcc40',a:.5}]});
+}
+// station 6 — PASS = "an old stone well with a roof, glowing green inside"
+function well(Z,X){
+  const mort='#1c1b18',wood='#2a2016',sp=[];
+  for(const h of[.3,.58])sp.push({s:[[-.64,h,.05],[.64,h,.05]],c:mort});
+  for(const [x,a,b] of[[-.3,0,.3],[.25,0,.3],[-.05,.3,.58],[.45,.3,.58],[-.45,.58,.85],[.15,.58,.85]])sp.push({s:[[x,a,.05],[x,b,.05]],c:mort});
+  return prop(Z,X,[
+    {p:[[-.65,-.05],[.65,-.05],[.66,.85],[-.66,.85]],c:'#3a3832'},...sp,
+    {e:[0,.86,.72,.11],c:'#4a473f'},
+    {s:[[-.56,.85,.09],[-.56,1.95,.08]],c:wood},{s:[[.56,.85,.09],[.56,1.95,.08]],c:wood},
+    {s:[[-.62,1.62,.07],[.62,1.62,.07]],c:wood},{s:[[.05,1.62,.03],[.05,1.28,.03]],c:'#6a5a3a'},
+    {p:[[-.08,1.28],[.18,1.28],[.15,1.05],[-.05,1.05]],c:'#3a2c1c'},
+    {p:[[-.92,1.86],[0,2.42],[.92,1.86],[.8,1.79],[0,2.28],[-.8,1.79]],c:'#1e1812'},
+  ],[{e:[0,.88,.56,.07],c:'#b8ffcc'}],{glows:[{x:0,h:1.0,r:.95,c:'#70f0a0',a:.36,sy:.8},{x:0,h:1.55,r:.75,c:'#70f0a0',a:.14}]});
+}
+// station 7 — PASS = "an abandoned wooden cart with a broken wheel"
+function cart(Z,X){
+  const wood='#3a2a1a',dk='#1e160e',tilt=-0.1;
+  const sh=[
+    {p:[[-1,.55],[.9,.55],[.95,1],[-1.05,1]],c:wood},
+    {s:[[-1,.7,.04],[.92,.7,.04]],c:dk},{s:[[-1,.85,.04],[.93,.85,.04]],c:dk},
+    {s:[[-.95,1,.07],[-.97,1.35,.06]],c:'#2e2216'},{s:[[-.2,1,.07],[-.2,1.3,.06]],c:'#2e2216'},{s:[[.6,1,.07],[.62,1.28,.06]],c:'#2e2216'},
+    {s:[[-.97,1.3,.06],[.63,1.26,.06]],c:'#2e2216'},
+    {e:[-.55,1.1,.2,.15],c:'#8a4516'},{e:[-.12,1.08,.17,.13],c:'#7a3c12'},
+    {p:ell(-.5,.45,.45,.45,24),hole:ell(-.5,.45,.37,.37,24),c:'#2e2216'},
+    ...[0,1,2,3,4,5].map(i=>{const a=i/6*Math.PI;return{s:[[-.5-Math.cos(a)*.4,.45-Math.sin(a)*.4,.05],[-.5+Math.cos(a)*.4,.45+Math.sin(a)*.4,.05]],c:'#2e2216'}}),
+    {e:[-.5,.45,.08,.08],c:'#1a140c'},
+    {s:[[.9,.75,.07],[1.6,.35,.06],[1.85,.05,.05]],c:'#2e2216'},
+  ].map(s=>rotS(s.e?Object.assign({},s,{p:ell(...s.e),e:null}):s,tilt,0,0));
+  // mirror: shafts point toward the path, so the cart body stays inside the frame
+  sh.push({p:ell(.6,.07,.44,.09,24),hole:ell(.6,.07,.34,.05,24),c:'#2e2216'});
+  const lamp=rotS({p:[[.55,1.02],[.69,1.02],[.69,1.19],[.55,1.19]],c:'#ffcf7a'},tilt,0,0);
+  const lh=rot([[.62,1.1]],tilt,0,0)[0];
+  sh.push(rotS({s:[[.62,1.19,.03],[.62,1.28,.03]],c:'#141008'},tilt,0,0));
+  const mir=o=>Object.assign({},o,o.s?{s:o.s.map(([x,h,w])=>[-x,h,w])}:{p:o.p.map(([x,h])=>[-x,h]),hole:o.hole&&o.hole.map(([x,h])=>[-x,h])});
+  return prop(Z,X,sh.map(mir),[mir(lamp)],{flick:1,glows:[{x:-lh[0],h:lh[1],r:.75,c:'#ffb060',a:.4},{x:-.3,h:.02,r:1.2,c:'#ffb060',a:.18,sy:.25}]});
+}
+// station 8 — PASS = "a fallen mossy log with glowing mushrooms"
+function logShrooms(Z,X){
+  const lit=[],glows=[{x:0,h:.6,r:1.7,c:'#40c0b0',a:.12}];
+  for(const [x,h,r] of[[-1.1,.58,.09],[-.95,.6,.13],[-.2,.63,.1],[.35,.58,.12],[.52,.57,.08],[1.0,.55,.1]]){
+    lit.push({s:[[x,h-.1,.04],[x,h,.035]],c:'#cfeee0'},{p:[[x-r,h],[x-r*.8,h+r*.45],[x,h+r*.62],[x+r*.8,h+r*.45],[x+r,h]],c:'#7ff0d8'});
+    glows.push({x,h:h+.04,r:r*4,c:'#50e0c0',a:.34});
+  }
+  return prop(Z,X,[
+    {s:[[-1.5,.3,.56],[-.5,.33,.58],[.6,.3,.55],[1.35,.28,.5]],c:'#2c2218'},
+    {s:[[-1.3,.53,.1],[0,.57,.12],[1.1,.51,.1]],c:'#2e3a1c'},
+    {s:[[-.4,.5,.1],[-.55,.85,.07],[-.5,1.0,.05]],c:'#2c2218'},
+    {e:[1.38,.28,.12,.26],c:'#6a5236'},{e:[1.38,.28,.06,.14],c:'#4a3824'},
+  ],lit,{glows});
+}
+// station 9 — PASS = "glowing will-o'-wisps floating over a swamp"
+function bogWisps(Z,X){
+  const water=[...Array(18)].map((_,i)=>{const a=i/18*TAU;return[Math.cos(a)*1.75*(1+.07*Math.sin(i*2.3)),Math.sin(a)*1.5]});
+  const it=prop(Z,X,[
+    {s:[[-.9,.01,.05],[.4,.01,.05]],c:'#2c4448'},{s:[[-.3,.01,.05],[.9,.01,.05]],c:'#243a3e'},
+    ...[[-1.35,.1],[-1.18,-.06],[-1.02,.12],[.95,-.1],[1.12,.08],[1.32,-.04]].flatMap(([x,l])=>[{s:[[x,0,.05],[x+l,.95,.04]],c:'#1a1a10'},{s:[[x+l*.88,.8,.08],[x+l,1.0,.08]],c:'#3a2a18'}]),
+    {s:[[.3,0,.14],[.35,1.2,.1],[.2,1.7,.06]],c:'#1a1612'},{s:[[.34,1.0,.06],[.62,1.32,.05]],c:'#1a1612'},
+  ],[{e:[-.6,.9,.06,.06,10],c:'#e8fcff'},{e:[.1,1.42,.05,.05,10],c:'#e8fcff'},{e:[.85,.75,.055,.055,10],c:'#e8fcff'}],
+  {drift:{dx:14,d:9,dl:-3},glows:[{x:-.6,h:.9,r:.55,c:'#80e0ff',a:.45},{x:.1,h:1.42,r:.5,c:'#80e0ff',a:.42},{x:.85,h:.75,r:.5,c:'#80e0ff',a:.45},{x:0,h:.02,r:1.5,c:'#80e0ff',a:.14,sy:.22}]});
+  const g=it.geom;
+  it.geom=(z,id)=>{const r=g(z,id);const wp=water.map(([x,dz])=>P(X+x,0,z+dz));r.layers[1]=`<path d="${dPoly(wp)}" fill="#0b1113"/>`+r.layers[1];r.bb=bbox([[[r.bb[0],r.bb[1]],[r.bb[2],r.bb[3]]],wp]);return r};
+  return it;
+}
+// station 11 — PASS = "a small cabin in the woods with a lit window (and someone in it)"
+function cabin(Z,X,zr){
+  const logs=[.3,.6,.9,1.2,1.5].map(h=>({s:[[-1.3,h,.05],[1.3,h,.05]],c:'#15100b'}));
+  return prop(Z,X,[
+    {p:[[-1.3,-.05],[1.3,-.05],[1.3,1.8],[-1.3,1.8]],c:'#2a2118'},...logs,
+    {p:[[-1.3,1.8],[0,2.72],[1.3,1.8]],c:'#231a12'},
+    {p:[[.6,2.1],[.95,2.1],[.95,3.05],[.6,3.05]],c:'#2c2a26'},
+    {s:[[-1.62,1.68,.14],[0,2.86,.14],[1.62,1.68,.14]],c:'#120e0a'},
+    {p:[[-.95,-.05],[-.4,-.05],[-.4,1.3],[-.95,1.3]],c:'#0c0a08'},
+    {s:[[-1.05,.05,.1],[-.3,.05,.1]],c:'#1e1812'},
+  ],[
+    {p:[[.15,.65],[.85,.65],[.85,1.3],[.15,1.3]],c:'#ffc766'},
+    {e:[.62,1.07,.09,.11],c:'#3a2410'},{p:[[.44,.65],[.8,.65],[.76,.9],[.62,.96],[.48,.9]],c:'#3a2410'},
+    {s:[[.5,.65,.06],[.5,1.3,.06]],c:'#2a1a0c'},{s:[[.15,.97,.06],[.85,.97,.06]],c:'#2a1a0c'},
+  ],{zr,flick:1,glows:[{x:.5,h:1.0,r:1.25,c:'#ffb050',a:.3},{x:.5,h:.02,r:1.4,c:'#ffb050',a:.2,sy:.25}]});
+}
+// station 12 — PASS = "a crooked wooden signpost with a skull on it"
+function signpost(Z,X){
+  const b='#5a4530',dk='#241a10';
+  return prop(Z,X,[
+    {s:[[0,-.05,.14],[.02,2.3,.12]],c:'#2e2317'},
+    rotS({p:[[-.8,1.98],[-.62,2.12],[.3,2.1],[.3,1.86],[-.62,1.84]],c:b},.06,0,2),
+    rotS({s:[[-.5,1.98,.04],[.1,1.98,.04]],c:dk},.06,0,2),
+    rotS({p:[[-.2,1.5],[.62,1.52],[.8,1.4],[.62,1.28],[-.2,1.3]],c:b},-.14,0,1.4),
+    rotS({s:[[-.05,1.41,.04],[.5,1.41,.04]],c:dk},-.14,0,1.4),
+    rotS({p:[[-.34,1.0],[.34,1.0],[.34,.82],[-.34,.82]],c:'#4a3826'},.45,.3,.95),
+    {e:[.0,2.42,.13,.14],c:'#cfc6b0'},{p:[[-.08,2.3],[.08,2.3],[.07,2.22],[-.07,2.22]],c:'#bdb39c'},
+    {e:[-.05,2.43,.035,.045,10],c:'#141008'},{e:[.05,2.43,.035,.045,10],c:'#141008'},
+  ],[],{glows:[{x:0,h:1.7,r:1.5,c:'#8a98b0',a:.26,back:1}]});
+}
+
 // ---------- the world: pure function of seeds, built once ----------
 const ITEMS=[];
+const OCC=[];
 const EXCL=[]; // keep-clear boxes around landmarks, absolute world coords [xmin,xmax,Zmin,Zmax]
 (function buildWorld(){
   const lm=(it,box)=>{ITEMS.push(it);if(box)EXCL.push(box)};
-  lm(fenceItem(0*D+REST));
+  lm(fenceItem(0*D+6.6));   // the gate is walked through: close enough (6.6 m) that it is gone by station 1
   lm(lanternPool(1*D+REST+0.05,-3.3));lm(lanternItem(1*D+REST,-4.9),[-6.8,-1.8,1*D+REST-2.5,1*D+REST+2.5]);
   const rgv=rngFor(3,55);[[-2.3,9],[-3.1,9.8],[-4.0,10.5],[-5.0,11.3],[-6.1,12],[-7.2,12.7]].forEach(([X,o],i)=>ITEMS.push(graveItem(3*D+o,X,rgv,i%4)));
   EXCL.push([-8.5,-1.6,3*D+7,3*D+14]);lm(moonPool(3*D+11));
-  const clear=(X,Z)=>!EXCL.some(e=>X>e[0]&&X<e[1]&&Z>e[2]&&Z<e[3]);
+  const R=s=>s*D+REST;
+  // no trunk may stand between the viewer and a landmark at its own station: screen window [xa,xb] at rest
+  const occ=(s,X,hw,zr=REST)=>OCC.push({Z0:s*D,zr,xa:VX+(X-hw)*F/zr-30,xb:VX+(X+hw)*F/zr+30});
+  occ(1,-4.6,.9);occ(2,4.9,1.1);occ(3,-4.7,2.6,11);occ(4,-4.6,1.3);occ(5,4.4,.8);occ(6,-4.8,1.0);occ(7,5.0,1.2);occ(8,-4.6,1.6);occ(9,4.6,1.8);occ(11,-7.1,1.7,13);occ(12,4.8,.9);
+  lm(scarecrow(R(2),4.9),keep(4.9,R(2)));
+  lm(jackRow(R(4),-4.6),keep(-4.6,R(4)));
+  lm(crowStump(R(5),4.4),keep(4.4,R(5)));
+  lm(well(R(6),-4.8),keep(-4.8,R(6)));
+  lm(cart(R(7),5.0),keep(5.2,R(7),3));
+  lm(logShrooms(R(8),-4.6),keep(-4.6,R(8)));
+  lm(bogWisps(R(9),4.6),keep(4.6,R(9)));
+  lm(cabin(R(11)+4,-7.1,REST+4),keep(-7.1,R(11)+4,3));   // a building sits further back: z=13 so it fits beside the text box
+  lm(signpost(R(12),4.8),keep(4.8,R(12)));
+  const clear=(X,Z,w=1)=>!EXCL.some(e=>X>e[0]&&X<e[1]&&Z>e[2]&&Z<e[3])&&
+    !OCC.some(o=>{const z=((Z-o.Z0)%L+L)%L;if(z<=0.3||z>=o.zr)return false;const x=VX+X*F/z,hw=w*0.8*F/z;return x+hw>o.xa&&x-hw<o.xb});
   // keep the harvest moon visible from station 10 (screen rect of the moon)
   const moonHole=bb=>bb&&bb[2]>1480&&bb[0]<1840&&bb[1]<290;
   const inMoon=(X,Zabs)=>{const z=((Zabs-10*D)%L+L)%L;if(z<0.5||z>ZFAR)return false;const x=VX+X*F/z;return x>1500&&x<1800};
   for(let seg=0;seg<NS;seg++){
     const r=rngFor(seg,11), Z0=seg*D;
-    const add=(X,off,w)=>{X=Math.sign(X)*Math.max(Math.abs(X),2.3+w*0.6);const Z=Z0+off;if(clear(X,Z)&&!inMoon(X,Z))ITEMS.push(treeItem(Z,X,w,rngFor(seg,Math.round(off*97),Math.round(X*131))))};
+    const add=(X,off,w)=>{X=Math.sign(X)*Math.max(Math.abs(X),2.3+w*0.6);const Z=Z0+off;if(clear(X,Z,w)&&!inMoon(X,Z))ITEMS.push(treeItem(Z,X,w,rngFor(seg,Math.round(off*97),Math.round(X*131))))};
     for(const sd of[-1,1]){
       const off=rr(r,3.0,5.4); let k=rr(r,0.5,0.72); if(seg===10&&sd>0)k=0.8;
       add(sd*Math.max(2.1,off*k),off,rr(r,0.7,1.1));                         // near frame trunk
@@ -384,10 +569,12 @@ stage.style.setProperty('--walk',DUR+'ms');
    <div class="bleed" style="background:radial-gradient(ellipse 620px 300px at 1008px 48px,rgba(62,68,80,.42),rgba(40,44,52,.16) 55%,transparent 100%)"></div>
    <div class="fill sl" data-st="10"><svg width="1920" height="1080" viewBox="0 0 1920 1080" style="position:absolute;inset:0">${moonSvg()}</svg></div>`;
   // station 3 — cool moonlight falling through the canopy onto the gravestones (screen-space light in the air)
-  { const tm=[175,-20],bm=[480,990],ux=bm[0]-tm[0],uy=bm[1]-tm[1],ul=Math.hypot(ux,uy),nx=-uy/ul,ny=ux/ul,hw=165,c=[(tm[0]+bm[0])/2,(tm[1]+bm[1])/2];
-    $('lightsTop').innerHTML=`<div class="fill sl" data-st="3" style="opacity:0"><svg width="1920" height="1080" viewBox="0 0 1920 1080" style="position:absolute;inset:0"><defs>${lgrad('msa',c[0]-nx*hw,c[1]-ny*hw,c[0]+nx*hw,c[1]+ny*hw,[[0,'#a8bcd8',0],[.5,'#b4c6de',.24],[1,'#a8bcd8',0]])}${lgrad('msv',0,-20,0,990,[[0,'#fff',.45],[.7,'#fff',1],[1,'#fff',.2]])}<mask id="msk"><rect x="0" y="-20" width="900" height="1030" fill="url(#msv)"/></mask></defs><path mask="url(#msk)" d="M${tm[0]-hw} -20L${tm[0]+hw} -20L${bm[0]+hw} 990L${bm[0]-hw} 990Z" fill="url(#msa)"/></svg></div>`; }
+  { const tm=[95,-20],bm=[390,990],ux=bm[0]-tm[0],uy=bm[1]-tm[1],ul=Math.hypot(ux,uy),nx=-uy/ul,ny=ux/ul,hw=165,c=[(tm[0]+bm[0])/2,(tm[1]+bm[1])/2];
+    $('lightsTop').innerHTML=`<div class="fill sl" data-st="3" style="opacity:0"><svg width="1920" height="1080" viewBox="0 0 1920 1080" style="position:absolute;inset:0"><defs>${lgrad('msa',c[0]-nx*hw,c[1]-ny*hw,c[0]+nx*hw,c[1]+ny*hw,[[0,'#a8bcd8',0],[.5,'#b4c6de',.21],[1,'#a8bcd8',0]])}${lgrad('msv',0,-20,0,990,[[0,'#fff',.45],[.7,'#fff',1],[1,'#fff',.2]])}<mask id="msk"><rect x="0" y="-20" width="900" height="1030" fill="url(#msv)"/></mask></defs><path mask="url(#msk)" d="M${tm[0]-hw} -20L${tm[0]+hw} -20L${bm[0]+hw} 990L${bm[0]-hw} 990Z" fill="url(#msa)"/></svg></div>`; }
   // canopy shade: the tops of the trunks disappear into a dark roof of leaves (screen space, it is overhead at every station)
   $('topdark').style.background='linear-gradient(to bottom,rgba(4,4,5,.9) 48px,rgba(4,4,5,.55) 120px,rgba(4,4,5,0) 250px)';
+  // text safety net: the dark ahead thickens a little behind the question (static)
+  $('hush').style.background='radial-gradient(ellipse 760px 330px at 960px 540px,rgba(3,3,4,.3),rgba(3,3,4,.18) 55%,rgba(3,3,4,0) 100%)';
   $('vig').style.background='radial-gradient(ellipse 78% 74% at 50% 52%,transparent 58%,rgba(0,0,0,.5) 100%)';
 })();
 // station 10 — PASS = "a big orange harvest moon behind the trees"
