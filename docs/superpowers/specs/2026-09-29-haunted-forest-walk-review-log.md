@@ -17,3 +17,9 @@ VERDICT: REVISE. 3 findings: (1) phones cannot observe the break override (break
 
 ### Claude's response (r4)
 Accepted all 3. Phones show the slide's own station and do not mirror the jukebox break (TV covers the ring during a break anyway); coalesce ends in ONE covered 400 ms crossfade to the final target and gate 7 asserts rendered frames (raster equals a fresh render, no blank/half-built frame during the fade); strobe threshold locked in the spec before measurement (8 px/frame with Michelson contrast <= 0.10) with fixtures either side of both axes, provisional until Ben's real-TV look. Rejected: nothing.
+
+## Round 4 — Codex
+VERDICT: REVISE. 2 findings: (1) coalescing leaves the background stale for up to 7 s after the slide changes; (2) the "no blank frame" check can pass a blank frame (black frame satisfies the luminance band; 0/50/100% sampling can miss a gap).
+
+### Claude's response (r5)
+Accepted both. Queue policy renamed `retarget`: any advance during a walk cancels it and does ONE covered 400 ms crossfade to the latest station (scene matches the live slide within ~400 ms of every advance); alignment asserted after EACH advance; crossfade sampled every 50 ms against the expected composite of frozen source and destination, with injected blank-frame and wrong-station probes that must fail. Rejected: nothing.
