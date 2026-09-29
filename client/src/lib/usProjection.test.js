@@ -34,12 +34,12 @@ describe('haversineMiles', () => {
     expect(haversineMiles({ lat: 41, lon: -87 }, { lat: 41, lon: -87 })).toBe(0)
   })
   it('matches known great-circle distances within 1%', () => {
-    // Chicago -> Miami ~ 1,190 mi; Seattle -> San Diego ~ 1,050 mi
+    // Chicago -> Miami ~ 1,190 mi; Seattle -> San Diego ~ 1,064 mi
     const chiMia = haversineMiles({ lat: 41.8781, lon: -87.6298 }, { lat: 25.7617, lon: -80.1918 })
     const seaSd = haversineMiles({ lat: 47.6062, lon: -122.3321 }, { lat: 32.7157, lon: -117.1611 })
     expect(chiMia).toBeGreaterThan(1190 * 0.99)
     expect(chiMia).toBeLessThan(1190 * 1.01)
-    expect(seaSd).toBeGreaterThan(1050 * 0.99)
-    expect(seaSd).toBeLessThan(1050 * 1.01)
+    expect(seaSd).toBeGreaterThan(1064 * 0.99)
+    expect(seaSd).toBeLessThan(1064 * 1.01)
   })
 })
