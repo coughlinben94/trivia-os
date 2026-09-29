@@ -52,8 +52,8 @@ const AUTO_DRAW_MAX_ATTEMPTS = 20
 // the arrangement a room full of people already saw (same reproducible-
 // recompute pattern as duoWalk.js and TeamPickerSlide's seededShuffle).
 //
-// Only ever called when theme.worldPalette is NOT set (ringWorldFor's own
-// gate below) — a host-picked palette was only ever certified against the
+// Only ever called for arrangementKind 'drawn' (below: no worldPalette, no
+// colorEvolution, no forceFixedArrangement) — a host-picked palette was only ever certified against the
 // FIXED authored order (palette-sweep.mjs's --seed-batch shelf rows carry
 // stations=null), never against a drawn arrangement. Recoloring a fresh
 // draw with that palette and only checking assertWorld's cheap hue rules
@@ -81,20 +81,43 @@ function autoDrawWorld(base, showId) {
   return base
 }
 
-// Resolves ONLY the station arrangement (fixed authored order, a saved
-// ringWorld, or a per-show draw) — no coloring applied. Both the ordinary
-// worldPalette path (ringWorldFor, below) and the color-evolution path
-// (EvolvingRingAmbient.jsx) call this so there is exactly one place that
-// decides "which stations, in what order" — sharing it instead of a second
-// copy is what gap-C's own root cause (two places deciding the same thing)
-// argues for.
+// The ONE place that decides "which stations, in what order": 'fixed'
+// (authored order), 'saved' (a current theme.ringWorld), or 'drawn' (per-show
+// auto-draw). resolveArrangement and ringWorldFor both branch on this, so the
+// decision can't drift between them (gap C's own root cause was two places
+// deciding the same thing; Task 7 then had to add forceFixedArrangement in
+// both).
+function arrangementKind(theme, showId) {
+  // Host's "Fixed layout" pick (ThemePickerModal): no draw, no saved order.
+  // colorEvolution gets the same rule worldPalette gets: duos were only ever
+  // certified against the fixed authored order (certify-duos.mjs,
+  // stations: null). Duo colors on a fresh draw is gap C again — Task 9's
+  // live check measured that combination at 80.9 vs the 68 brightness cap.
+  if (theme.forceFixedArrangement || theme.colorEvolution) return 'fixed'
+  if (theme.ringWorld && theme.ringWorld.ringVersion === RING_VERSION) return 'saved'
+  // A host-picked palette was only ever certified against the fixed order
+  // (palette-sweep.mjs's shelf rows carry stations=null) — never auto-draw
+  // under one (2026-09-28, "gap C").
+  if (showId && !theme.worldPalette) return 'drawn'
+  return 'fixed'
+}
+
+// True when the color-evolution renderer (EvolvingRingAmbient) applies.
+// colorEvolution on a theme with no ring world is ignored.
+export function isEvolving(theme) {
+  return Boolean(theme.colorEvolution && RING_WORLDS[theme.id])
+}
+
+// Resolves ONLY the station arrangement (see arrangementKind) — no coloring
+// applied. Both the ordinary path (ringWorldFor, below) and the
+// color-evolution path (EvolvingRingAmbient.jsx) call this.
 export function resolveArrangement(theme, showId) {
   const base = RING_WORLDS[theme.id]
   if (!base) return base
-  // Host's "Fixed layout" pick (ThemePickerModal): no draw, no saved order.
-  if (theme.forceFixedArrangement) return base
+  const kind = arrangementKind(theme, showId)
+  if (kind === 'drawn') return autoDrawWorld(base, showId)
 
-  if (theme.ringWorld && theme.ringWorld.ringVersion === RING_VERSION) {
+  if (kind === 'saved') {
     try {
       // Resolve against RING_POOL, which carries the full station objects
       // (variant, region, regionSource, noCompanion, companionKind), not a
@@ -126,40 +149,31 @@ export function resolveArrangement(theme, showId) {
     }
   }
 
-  if (showId && !theme.worldPalette) {
-    return autoDrawWorld(base, showId)
-  }
-
   return base
 }
 
-// theme.ringWorld (a drawn world: stations + palette) wins when present and
-// its ringVersion is current; a per-show auto-draw (above) is the next
-// fallback, but ONLY when showId is known AND no worldPalette is set — a
-// host-picked palette was only ever certified against the fixed authored
-// order (palette-sweep.mjs's shelf rows for a palette-only preset/generated
-// entry always carry stations=null), so a palette must always land on
-// paletteOnly's fixed order, never on a fresh, uncertified draw (2026-09-28,
-// "gap C"). theme.worldPalette (palette-only, fixed authored order) is the
-// fallback after auto-draw; the unmodified base world is the fallback of
-// the fallback. A malformed saved value must never blank the TV — every
-// failure mode below falls through to the next tier instead of throwing.
+// Adds coloring on top of resolveArrangement's arrangement — it never decides
+// the arrangement itself (arrangementKind does):
+//   'saved' -> the saved ringWorld.palette painted on the saved order;
+//   'drawn' -> the drawn stations with their own authored hues (no recolor);
+//   'fixed' -> worldPalette on the fixed order (paletteOnly), else base.
+// forceFixedArrangement makes a saved ringWorld 'fixed' (its drawn order is
+// exactly what the host opted out of), landing on paletteOnly —
+// worldPalette is always written alongside ringWorld, so colors survive.
+// A malformed saved value must never blank the TV — every failure mode
+// below falls through to the next tier instead of throwing.
 export function ringWorldFor(theme, showId) {
   const base = RING_WORLDS[theme.id]
   if (!base) return base
+  const kind = arrangementKind(theme, showId)
 
-  // forceFixedArrangement skips a saved ringWorld entirely (its drawn order
-  // is exactly what the host opted out of) and falls through to paletteOnly
-  // — worldPalette is always written alongside ringWorld, so colors survive.
-  if (theme.ringWorld && theme.ringWorld.ringVersion === RING_VERSION && !theme.forceFixedArrangement) {
+  if (kind === 'saved') {
     const key = theme.id + '|world|' + JSON.stringify(theme.ringWorld)
     if (!worldCache.has(key)) {
       const arrangement = resolveArrangement(theme, showId)
       try {
-        // In this branch resolveArrangement returns `base` itself (by
-        // identity) ONLY when the saved arrangement failed (its
-        // forceFixedArrangement early return can't fire here — the branch
-        // condition above excludes that flag) — a valid one is
+        // For 'saved', resolveArrangement returns `base` itself (by
+        // identity) ONLY when the saved arrangement failed — a valid one is
         // always a fresh {...base, stations}. A failed arrangement must fall
         // back to paletteOnly/base, never get the saved palette painted onto
         // the authored order (an uncertified pair).
@@ -173,12 +187,10 @@ export function ringWorldFor(theme, showId) {
     return worldCache.get(key)
   }
 
-  // Same forceFixedArrangement gate resolveArrangement has — without it the
-  // host's "Fixed layout" pick would only reach the color-evolution path.
-  if (showId && !theme.worldPalette && !theme.forceFixedArrangement) {
+  if (kind === 'drawn') {
     const key = theme.id + '|autodraw|' + showId
     if (!worldCache.has(key)) {
-      worldCache.set(key, autoDrawWorld(base, showId))
+      worldCache.set(key, resolveArrangement(theme, showId))
     }
     return worldCache.get(key)
   }

@@ -332,8 +332,15 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
           <div className="flex items-center gap-5 px-5 py-2 border-t border-gray-100 shrink-0 flex-wrap">
             <div className="flex items-center gap-2 text-xs font-medium text-gray-600">
               Layout
-              <button onClick={() => setFixedArrangement(true)} className={optionClass(overrides.forceFixedArrangement)}>Fixed layout</button>
-              <button onClick={() => setFixedArrangement(false)} className={optionClass(!overrides.forceFixedArrangement)}>Random draw</button>
+              {/* Color evolution always renders the fixed layout
+                  (ringWorldFor.js's arrangementKind) — show that, and don't
+                  offer a draw it would ignore. */}
+              <button onClick={() => setFixedArrangement(true)} className={optionClass(overrides.forceFixedArrangement || colorMode === 'evolution')}>Fixed layout</button>
+              <button
+                onClick={() => setFixedArrangement(false)}
+                disabled={colorMode === 'evolution'}
+                className={`${optionClass(!overrides.forceFixedArrangement && colorMode !== 'evolution')} disabled:opacity-40 disabled:pointer-events-none`}
+              >Random draw</button>
             </div>
             <div className="flex items-center gap-2 text-xs font-medium text-gray-600">
               Colors
@@ -344,6 +351,9 @@ export default function ThemePickerModal({ show, onClose, onSelectTheme, onUpdat
             {/* ringWorldFor never auto-draws under a plain worldPalette (gap C) */}
             {colorMode === 'custom' && !overrides.ringWorld && !overrides.forceFixedArrangement && (
               <span className="text-[11px] text-gray-400">Custom palettes always use the fixed layout.</span>
+            )}
+            {colorMode === 'evolution' && (
+              <span className="text-[11px] text-gray-400">Color evolution always uses the fixed layout.</span>
             )}
           </div>
         )}

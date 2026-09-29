@@ -4,7 +4,7 @@ import { getTheme } from '../../themes/index.js'
 import BreathingGradient from './BreathingGradient'
 import RingAmbient from './RingAmbient.jsx'
 import EvolvingRingAmbient from './EvolvingRingAmbient.jsx'
-import { RING_WORLDS, ringWorldFor, resolveArrangement } from '../../lib/ringWorldFor.js'
+import { RING_WORLDS, ringWorldFor, resolveArrangement, isEvolving } from '../../lib/ringWorldFor.js'
 import { deriveTint, hexToRgba } from '../../lib/colorTint.js'
 
 // ─── Keyframes ────────────────────────────────────────────────────────────
@@ -1208,7 +1208,7 @@ export default function ParticleBackground({ theme, showId, slideIndex, stationO
     // colorEvolution only means something for a theme that HAS a ring world;
     // on any other theme it is ignored (the bespoke/gradient ambient stays),
     // rather than swapping in EvolvingRingAmbient's default midnight ring.
-    ringWorldRef.current = theme.colorEvolution && RING_WORLDS[theme.id]
+    ringWorldRef.current = isEvolving(theme)
       ? { evolving: true, arrangement: resolveArrangement(theme, showId) }
       : (ringWorldFor(theme, showId) ?? false)
   }
