@@ -105,6 +105,40 @@ describe('AddSlideWizard shiny details — registry wiring', () => {
   })
 })
 
+// Blank-shell kinds that also have a buildSlideData (elimination/race): a typed
+// N > 1 must make N separate slides (previously only choice-style kinds were covered).
+describe('AddSlideWizard shiny details — blank-shell with buildSlideData, count > 1', () => {
+  it.each(['elimination', 'race'])('%s with count 3 creates 3 series siblings', async kind => {
+    const onAddSlide = vi.fn(() => Promise.resolve({}))
+    const name = `${kind} Fmt`
+    const formats = [...FORMATS, { ...fmt(`fmt_${kind}`, name, kind), input_schema: { type: kind, slots: 1 } }]
+    act(() => root.render(
+      <AddSlideWizard
+        show={{ id: 'show_1', rounds: [{ id: 'round_1', number: 1, title: 'Round 1' }] }}
+        shinyFormats={formats}
+        shinyLoading={false}
+        initialData={{ type: 'shiny-question', roundId: 'round_1' }}
+        onAddSlide={onAddSlide}
+        onClose={() => {}}
+        onTypeChange={() => {}}
+      />,
+    ))
+    click(name)
+    click(`Add ${name}`)
+    await act(async () => { await Promise.resolve() })
+    const input = host.querySelector('input[type="number"]')
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+    act(() => { setter.call(input, '3'); input.dispatchEvent(new Event('input', { bubbles: true })) })
+    expect(host.textContent).toContain('Creates 3 blank slides')
+    await act(async () => { createButtonFor(name).dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    expect(onAddSlide).toHaveBeenCalledTimes(1)
+    const payload = onAddSlide.mock.calls[0][0]
+    const content = payload.slides.filter(sl => sl.data?.isSeries)
+    expect(content.length).toBe(3)
+    expect(new Set(content.map(sl => sl.data.shinyGroupId)).size).toBe(1)
+  })
+})
+
 // 2026-09-05 whole-branch review, Fix 1: a Bendle slide used to create with
 // bendleSongId: null (canAddShiny only checked roundId+answer, and Bendle has
 // no typed answer to check) — dead end downstream, no recovery path. Asserts
