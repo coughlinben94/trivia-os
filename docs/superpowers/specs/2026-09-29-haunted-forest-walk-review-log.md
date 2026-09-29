@@ -11,3 +11,9 @@ VERDICT: REVISE. 7 findings: (1) phone station can diverge from TV (ringVisibleS
 
 ### Claude's response (r3)
 Accepted all 7. Phones use the exact TV visibility/peek calc; ringWorldFor returns forest worlds before palette/draw logic with saved-override tests; parity first at 4 s / 6 m, longer walk judged against its own reference; cancellable walk token with completion ownership and stale-callback drop; queue fact corrected (drain-all in ring) and a forest `coalesce` queuePolicy added so 3 rapid advances can't mean 21 s of walking; probes added for every measuring gate; strobe gate measures brightness x speed with a calibrated fast-layer fixture. Rejected: nothing.
+
+## Round 3 — Codex
+VERDICT: REVISE. 3 findings: (1) phones cannot observe the break override (breakActive/warp are local to Display.jsx); (2) coalescing after rapid advances creates an uncovered jump, gate 7 checks metadata not rendered frames; (3) strobe threshold is self-calibrated to the fixture.
+
+### Claude's response (r4)
+Accepted all 3. Phones show the slide's own station and do not mirror the jukebox break (TV covers the ring during a break anyway); coalesce ends in ONE covered 400 ms crossfade to the final target and gate 7 asserts rendered frames (raster equals a fresh render, no blank/half-built frame during the fade); strobe threshold locked in the spec before measurement (8 px/frame with Michelson contrast <= 0.10) with fixtures either side of both axes, provisional until Ben's real-TV look. Rejected: nothing.
