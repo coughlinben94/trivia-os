@@ -99,6 +99,19 @@ export function useShow() {
     return trackWrite(Promise.resolve(result), setWriteError)
   }
 
+  // Going live ends every other show still marked live. Nothing else clears
+  // is_live, so old shows stayed LIVE forever and a bare /display could pick
+  // one over tonight's. Best-effort and not awaited by the caller: a failure
+  // is logged, never blocks or toasts over the live transition.
+  async function endOtherLiveShows(keepId) {
+    try {
+      const { error } = await supabase.from('shows').update({ is_live: false }).eq('is_live', true).neq('id', keepId)
+      if (error) console.error('[useShow] ending other live shows failed:', error)
+    } catch (err) {
+      console.error('[useShow] ending other live shows failed:', err)
+    }
+  }
+
   // Refs for debounced saves — always hold latest values without stale closure issues
   const slidesRef = useRef([])
   const showIdRef = useRef(null)
@@ -783,6 +796,7 @@ export function useShow() {
       showState: { ...s.showState, isLive: true, currentSlideIndex: 0, currentSlideId: null },
     }))
     const wroteShow = await updateShowRow(show.id, goLivePatch)
+    if (wroteShow) endOtherLiveShows(show.id)
     // Best-effort, non-blocking — don't hold up the live transition on it, and
     // don't let a successful archive clear a real shows-write failure toast.
     if (wroteShow) {
@@ -819,6 +833,7 @@ export function useShow() {
       showState: { ...s.showState, isLive: true, currentSlideIndex: target, currentSlideId: slide?.id ?? null },
     }))
     const wroteShow = await updateShowRow(show.id, goLiveFromPatch)
+    if (wroteShow) endOtherLiveShows(show.id)
     // Best-effort, non-blocking — don't hold up the live transition on it, and
     // don't let a successful archive clear a real shows-write failure toast.
     if (wroteShow) {
