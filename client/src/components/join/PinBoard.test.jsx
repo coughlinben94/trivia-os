@@ -5,11 +5,12 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 
 const upsert = vi.fn()
+let restoreRow = null
 vi.mock('../../lib/supabase.js', () => ({
   supabase: {
     from: () => ({
       upsert: (...a) => upsert(...a),
-      select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: null }) }) }) }),
+      select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: restoreRow }) }) }) }),
     }),
   },
 }))
@@ -29,7 +30,7 @@ const slide = (data = {}) => ({ id: 's1', showId: 'show_1', data: { text: 'Where
 
 let host, root
 let errSpy
-beforeEach(() => { errSpy = vi.spyOn(console, 'error').mockImplementation(() => {}); upsert.mockReset(); host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host) })
+beforeEach(() => { errSpy = vi.spyOn(console, 'error').mockImplementation(() => {}); upsert.mockReset(); restoreRow = null; host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host) })
 afterEach(() => { act(() => root.unmount()); host.remove(); errSpy.mockRestore() })
 const flush = () => act(async () => { await Promise.resolve() })
 const btn = t => [...host.querySelectorAll('button')].find(b => b.textContent.includes(t))
@@ -69,9 +70,48 @@ describe('PinBoard', () => {
     expect(upsert).not.toHaveBeenCalled()
   })
   it('once the host locks pins, no Lock In button remains', async () => {
+    restoreRow = { answer: { lat: 40, lon: -80 } }
     act(() => root.render(<PinBoard slide={slide({ pinLocked: true })} team={team} theme={theme} />))
     await flush()
     expect(btn('Lock In')).toBeUndefined()
     expect(host.textContent).toContain('locked')
+  })
+  it('after reveal a team sees its own result under the map (scorer, no points, no pin)', async () => {
+    const results = [
+      { teamId: 't1', pin: { lat: 41, lon: -87 }, miles: 312, points: 10 },
+      { teamId: 't2', pin: { lat: 41, lon: -87 }, miles: 900, points: 0 },
+      { teamId: 't3', pin: null, miles: null, points: 0 },
+    ]
+    const render = id => act(() => root.render(<PinBoard slide={slide({ pinLocked: true, pinRevealed: true, pinResults: results })} team={{ ...team, id }} theme={theme} />))
+    render('t1'); await flush()
+    expect(host.textContent).toContain('Your pin: 312 mi · +10')
+    render('t2'); await flush()
+    expect(host.textContent).toContain('Your pin: 900 mi')
+    expect(host.textContent).not.toContain('+10')
+    render('t9'); await flush()
+    expect(host.textContent).toContain('No pin locked in')
+  })
+  it('preview with no results shows no outcome line', async () => {
+    act(() => root.render(<PinBoard preview slide={slide({ pinLocked: true, pinRevealed: true })} team={team} theme={theme} />))
+    await flush()
+    expect(host.textContent).not.toContain('Your pin')
+    expect(host.textContent).not.toContain('No pin locked in')
+  })
+  it('once locked the map shows the last CONFIRMED pin, not a moved-but-unsaved one', async () => {
+    restoreRow = { answer: { lat: 40, lon: -80 } }
+    act(() => root.render(<PinBoard slide={slide()} team={team} theme={theme} />))
+    await flush()
+    act(() => btn('drop').dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    expect(host.querySelector('[data-pin]').textContent).toBe('41.9,-87.6')
+    act(() => root.render(<PinBoard slide={slide({ pinLocked: true })} team={team} theme={theme} />))
+    expect(host.querySelector('[data-pin]').textContent).toBe('40,-80')
+  })
+  it('locked with nothing confirmed: no pin on the map and a plain message', async () => {
+    act(() => root.render(<PinBoard slide={slide()} team={team} theme={theme} />))
+    await flush()
+    act(() => btn('drop').dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    act(() => root.render(<PinBoard slide={slide({ pinLocked: true })} team={team} theme={theme} />))
+    expect(host.querySelector('[data-pin]').textContent).toBe('none')
+    expect(host.textContent).toContain("You didn't lock in a pin")
   })
 })

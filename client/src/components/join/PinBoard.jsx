@@ -68,6 +68,12 @@ export default function PinBoard({ slide, team, theme, preview = false, onAnswer
     if (ok) setCommitted(pin)
   }
 
+  // After reveal, ranks past the TV's top 12 never show up there: each phone reads its own row.
+  const revealRow = data.pinRevealed && Array.isArray(data.pinResults) ? data.pinResults.find(r => r.teamId === team.id) ?? null : null
+  const outcome = data.pinRevealed && Array.isArray(data.pinResults)
+    ? (revealRow?.miles != null ? `Your pin: ${revealRow.miles.toLocaleString()} mi${revealRow.points > 0 ? ` · +${revealRow.points}` : ''}` : 'No pin locked in')
+    : null
+
   const font = `'${theme?.fonts?.body ?? 'DM Sans'}', 'DM Sans', sans-serif`
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', margin: '0 auto', fontFamily: font }}>
@@ -75,7 +81,7 @@ export default function PinBoard({ slide, team, theme, preview = false, onAnswer
         <p style={{ color: text, fontSize: 'clamp(1.15rem, 4.5vw, 1.35rem)', lineHeight: 1.45, margin: 0, fontWeight: 500 }}>{data.text}</p>
       )}
       <PinMapInteractive
-        pin={pin}
+        pin={locked ? committed : pin}
         onPin={p => { touchedRef.current = true; setPin(p) }}
         disabled={locked}
         highlight={highlight}
@@ -98,7 +104,7 @@ export default function PinBoard({ slide, team, theme, preview = false, onAnswer
       )}
       <p style={{ color: `${text}b3`, fontSize: '0.85rem', textAlign: 'center', margin: 0 }}>
         {locked
-          ? 'Pins locked'
+          ? (outcome ?? (committed ? 'Pins locked' : "You didn't lock in a pin"))
           : !pin
             ? 'Press and hold the map to drop your pin — pinch to zoom'
             : dirty
