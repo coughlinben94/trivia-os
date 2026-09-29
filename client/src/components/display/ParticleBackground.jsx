@@ -1192,16 +1192,25 @@ if (import.meta.env.DEV) {
 }
 
 // ─── Main Export ──────────────────────────────────────────────────────────
-export default function ParticleBackground({ theme, showId, slideIndex, stationOverride, showStationDebug = false, forceSnap = false }) {
+// Keyed by ring world id (Halloween spec §4.8): switching the show between
+// two ring worlds, or between a ring world and a non-ring theme, remounts the
+// instance below so its frozen ringWorldRef is rebuilt for the new world.
+// Every non-ring theme shares the key 'none' (switching between two of them
+// never remounts) and slide advances never change the key (Critical Rule 1).
+export default function ParticleBackground(props) {
+  const ringWorldId = RING_WORLDS[props.theme.id] ? props.theme.id : null
+  return <ParticleBackgroundInner key={ringWorldId ?? 'none'} {...props} />
+}
+
+function ParticleBackgroundInner({ theme, showId, slideIndex, stationOverride, showStationDebug = false, forceSnap = false }) {
   const gradientMood = GRADIENT_MOODS[theme.id]
   const AmbientComponent = gradientMood ? null : AMBIENT_MAP[theme.id]
   // The ring world is FROZEN at mount. RingAmbient builds its DOM once and
-  // never re-runs on worldData change (its own header rule), and a remount
-  // mid-show would land on station 0 (RingAmbient's lastSlideIndexRef starts
-  // equal to slideIndex, so ringNavAction says 'none') — so a palette applied
-  // while /display is open shows on the next reload, not live. Phase 4 of
-  // docs/superpowers/plans/2026-09-02-ring-palette-runtime.md is where that
-  // changes.
+  // never re-runs on worldData change (its own header rule) — so a palette
+  // applied while /display is open shows on the next reload, not live. Phase
+  // 4 of docs/superpowers/plans/2026-09-02-ring-palette-runtime.md is where
+  // that changes. A change of WORLD is different: the wrapper above re-keys
+  // this component, and the fresh RingAmbient aligns to slideIndex on mount.
   const ringWorldRef = useRef(null)
   if (ringWorldRef.current === null) {
     ringWorldRef.current = ringWorldFor(theme, showId) ?? false

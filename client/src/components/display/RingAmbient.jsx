@@ -969,7 +969,13 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   // with it happen before paint too. useLayoutEffect runs synchronously
   // after DOM mutations but before the browser paints, so the jump/turn is
   // already applied by the time anything is shown.
-  const lastSlideIndexRef = useRef(slideIndex)
+  // Seeded null, not slideIndex (2026-09-28, Halloween spec §4.8): a fresh
+  // mount mid-show (a theme switch between ring worlds remounts this) must
+  // land on slideIndex % PANES before first paint, not sit on station 0.
+  // null makes ringNavAction answer 'jump' on the first real index; at
+  // slideIndex 0 that jump is a no-op. The jump runs before the build effect
+  // below, which seeds its offsets from stationRef for exactly this case.
+  const lastSlideIndexRef = useRef(null)
   useLayoutEffect(() => {
     // == null: also catches an explicit null from a future call site, not just undefined
     if (slideIndex == null) return

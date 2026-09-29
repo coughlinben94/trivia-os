@@ -54,6 +54,9 @@ function worldForDuo(duoId) {
 // comment) fixes the camera to the correct station before first paint
 // instead. useLayoutEffect (not useEffect) so it lands before the browser
 // ever paints this instance's initial station-0 build.
+// 2026-09-28: RingAmbient now aligns itself on mount (lastSlideIndexRef
+// seeded null), so the silence described above is gone and this jumpTo is a
+// same-station no-op. Left in place; remove when this file is next touched.
 function SyncedRingAmbient({ worldData, showId, slideIndex, stationOverride, showStationDebug, forceSnap, exposeDebugGlobal }) {
   const ref = useRef(null)
   useLayoutEffect(() => {
