@@ -5,7 +5,7 @@ import { supabase } from '../../../lib/supabase.js'
 import UsMap, { PinMarker } from '../../shared/UsMap.jsx'
 import { useUsMapData } from '../../../hooks/useUsMapData.js'
 import { fitView } from '../../../lib/pinView.js'
-import { lonLatToMap } from '../../../lib/usMapGeo.js'
+import { lonLatToMap, MAP_W, MAP_H } from '../../../lib/usMapGeo.js'
 import { isValidPin } from '../../../lib/pinScoring.js'
 import { fitToBox } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
@@ -18,6 +18,8 @@ import ShinySignal from '../ShinySignal.jsx'
 // scoring pins, every pin shows in its team's color, and a ranked list shows
 // miles. Camera moves are JS-tweened SVG transforms (transform-only).
 const Q_BOX = { boxW: 1500, boxH: 150, floorPx: 40, ceilPx: 92, maxLines: 2, lineHeight: 1.15 }
+// Starting values for bar-distance legibility; tune at the Task 12 real-TV check.
+const TV_PIN_SIZE = 1.8, TV_LABEL = 22, TV_CITY_LABEL = 18
 const HOME = { k: 1, tx: 0, ty: 0 }
 
 function useTweenedView(target, ms, instant) {
@@ -25,6 +27,8 @@ function useTweenedView(target, ms, instant) {
   const from = useRef(target)
   const cur = useRef(target); cur.current = v
   useEffect(() => {
+    const same = (a, b) => a.k === b.k && a.tx === b.tx && a.ty === b.ty
+    if (same(cur.current, target)) return
     if (instant) { setV(target); return }
     from.current = cur.current
     const t0 = performance.now()
@@ -33,7 +37,7 @@ function useTweenedView(target, ms, instant) {
       const p = Math.min(1, (now - t0) / ms)
       const e = 1 - Math.pow(1 - p, 3)
       const a = from.current
-      setV({ k: a.k + (target.k - a.k) * e, tx: a.tx + (target.tx - a.tx) * e, ty: a.ty + (target.ty - a.ty) * e })
+      setV(prev => { const n = { k: a.k + (target.k - a.k) * e, tx: a.tx + (target.tx - a.tx) * e, ty: a.ty + (target.ty - a.ty) * e }; return same(prev, n) ? prev : n })
       if (p < 1) raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
@@ -109,14 +113,16 @@ export default function ShinyPinQuestion({ slide, show, theme }) {
             {data.text}
           </p>
         )}
-        <div style={{ width: '100%', aspectRatio: '1000 / 620', maxHeight: '62vh', alignSelf: 'center', position: 'relative', overflow: 'hidden', borderRadius: 20, background: 'rgba(255,255,255,0.05)', border: `1px solid ${ink}22` }}>
-          <UsMap view={view} states={states} ink={ink}>
+        <div style={{ width: '100%', aspectRatio: `${MAP_W} / ${MAP_H}`, maxHeight: '62vh', alignSelf: 'center', position: 'relative', overflow: 'hidden', borderRadius: 20, background: 'rgba(255,255,255,0.05)', border: `1px solid ${ink}22` }}>
+          <UsMap view={view} states={states} ink={ink} cityLabelSize={TV_CITY_LABEL}>
             {k => revealed && (
               <>
-                {target && <PinMarker lon={target.lon} lat={target.lat} k={k} color={SHINY_GOLD} label={data.answer || 'Answer'} />}
                 {results.filter(r => r.pin).map((r, i) => (
-                  <PinMarker key={r.teamId} lon={r.pin.lon} lat={r.pin.lat} k={k} color={colors[r.teamId] ?? '#4a90d9'} label={i < 5 ? (r.teamName ?? '') : String(i + 1)} />
+                  // scorePinRound sorts points-desc then miles-asc with no-pin rows last, so i is the rank of a pinned row.
+                  <PinMarker key={r.teamId} lon={r.pin.lon} lat={r.pin.lat} k={k} size={TV_PIN_SIZE} labelSize={TV_LABEL} color={colors[r.teamId] ?? '#4a90d9'} label={i < 5 ? (r.teamName ?? '') : String(i + 1)} />
                 ))}
+                {/* drawn last so guesses never paint over the true spot */}
+                {target && <PinMarker lon={target.lon} lat={target.lat} k={k} size={TV_PIN_SIZE} labelSize={TV_LABEL} color={SHINY_GOLD} label={data.answer || 'Answer'} />}
               </>
             )}
           </UsMap>

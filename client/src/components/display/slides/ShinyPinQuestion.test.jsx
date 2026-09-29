@@ -63,4 +63,14 @@ describe('ShinyPinQuestion', () => {
     await render({ pinRevealed: true, pinResults: [res(1)] })
     expect(host.textContent).toContain('Team 1')
   })
+  it('map box aspect ratio matches the map frame', async () => {
+    await render({})
+    expect(host.innerHTML).toContain('aspect-ratio: 1000 / 632')
+  })
+  it('revealed on first render schedules no camera tween when already at target', async () => {
+    const raf = vi.spyOn(window, 'requestAnimationFrame')
+    await render({ pinRevealed: true })
+    expect(raf).not.toHaveBeenCalled()
+    raf.mockRestore()
+  })
 })
