@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  parseRemoteMessage, refusalText, remoteStatus, CLOSE_BAD_SECRET, GREY_GATES,
+  parseRemoteMessage, refusalText, remoteStatus, CLOSE_BAD_SECRET, CLOSE_TOO_FAST, GREY_GATES,
   DISPLAY_COMMANDS, LOCAL_COMMANDS, DISPLAY_RELAY_URL, readRemoteLinkFlag, jukeboxView, REFUSAL_TEXT,
 } from './remoteProtocol.js'
 
@@ -46,6 +46,11 @@ describe('remoteStatus', () => {
   it('green when everything is live', () => expect(remoteStatus(ok)).toMatchObject({ tone: 'green', live: true }))
   it('red on a pairing refusal, even with the socket closed', () =>
     expect(remoteStatus({ ...ok, socket: 'closed', closeCode: CLOSE_BAD_SECRET }).text).toMatch(/Pairing code wrong/))
+  it('orange "too many taps" after a 4008 rate-limit close, not the Tailscale message', () =>
+    expect(remoteStatus({ ...ok, socket: 'connecting', closeCode: CLOSE_TOO_FAST }))
+      .toEqual({ tone: 'orange', live: false, text: 'Too many taps. Reconnecting.' }))
+  it('display-offline says to reload /display', () =>
+    expect(refusalText('display-offline')).toBe('TV window not linked. Reload /display on the laptop.'))
   it('red when the relay is unreachable', () => expect(remoteStatus({ ...ok, socket: 'closed' })).toMatchObject({ tone: 'red', live: false }))
   it('orange stale when the host is gone', () =>
     expect(remoteStatus({ ...ok, hostConnected: false })).toMatchObject({ tone: 'orange', live: false, text: 'Open Live Mode on the laptop' }))

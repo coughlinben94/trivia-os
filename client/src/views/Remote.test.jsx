@@ -362,6 +362,35 @@ describe('/remote Stream Deck parity (jukebox mode, volume, Duck, sounds)', () =
     expect(text()).toContain('The laptop would not change that')
   })
 
+  it('fast repeat taps are dropped: Duck within 300ms, volume/sounds/Stop all within 150ms', () => {
+    const ws = setup(STATE)
+    const count = c => ws.sent.filter(m => m.cmd === c).length
+    click(key('duck')); click(key('duck'))
+    expect(count('duck')).toBe(1)
+    act(() => vi.advanceTimersByTime(299))
+    click(key('duck'))
+    expect(count('duck')).toBe(1)
+    act(() => vi.advanceTimersByTime(301))
+    click(key('duck'))
+    expect(count('duck')).toBe(2)
+    click(key('vol-up')); click(key('vol-up'))
+    expect(count('vol.up')).toBe(1)
+    act(() => vi.advanceTimersByTime(150))
+    click(key('vol-up'))
+    expect(count('vol.up')).toBe(2)
+    click(key('sounds'))
+    click(drawer().querySelector('[data-sound="turtles"]')); click(drawer().querySelector('[data-sound="jackass"]'))
+    expect(count('sound.play')).toBe(1)
+    click(drawer().querySelector('[data-k="stop-all"]')); click(drawer().querySelector('[data-k="stop-all"]'))
+    expect(count('sound.stopAll')).toBe(1)
+  })
+
+  it('Back to Trivia fading out the music reads Fading, not Starting', () => {
+    setup(BREAK, { type: 'jukebox', linked: true, open: true, playing: true, handoffPending: true })
+    expect(key('jukebox-play').textContent).toContain('Fading…')
+    expect(key('jukebox-play').textContent).not.toContain('Starting')
+  })
+
   it('no em dash anywhere in jukebox mode or the sounds drawer', () => {
     setup()
     expect(text()).not.toContain('—')

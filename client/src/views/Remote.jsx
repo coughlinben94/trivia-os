@@ -110,6 +110,15 @@ export default function Remote() {
   const wsRef = useRef(null)
   const offsetRef = useRef(0) // laptopNow − iPadNow, from the latest beat
   const idRef = useRef(0)
+  // Drops a repeat tap of the same button inside `ms`, so quick double taps
+  // can't toggle Duck twice or trip the relay's 10-a-second close (4008).
+  const lastTapRef = useRef({})
+  const tap = (key, ms, fn) => () => {
+    const t = Date.now()
+    if (t - (lastTapRef.current[key] ?? -Infinity) < ms) return
+    lastTapRef.current[key] = t
+    fn()
+  }
 
   useHeadTags()
   useWakeLock()
@@ -307,9 +316,9 @@ export default function Remote() {
           <AudioBar
             local={local}
             block={localBlock}
-            onVolDown={() => send('vol.down', {}, !localBlock)}
-            onVolUp={() => send('vol.up', {}, !localBlock)}
-            onDuck={() => send('duck', {}, !localBlock)}
+            onVolDown={tap('vol.down', 150, () => send('vol.down', {}, !localBlock))}
+            onVolUp={tap('vol.up', 150, () => send('vol.up', {}, !localBlock))}
+            onDuck={tap('duck', 300, () => send('duck', {}, !localBlock))}
             onSounds={() => setDrawer('sounds')}
           />
         </aside>
@@ -433,8 +442,8 @@ export default function Remote() {
         <SoundGrid
           sounds={local?.sounds ?? []}
           off={!!localBlock}
-          onPlay={id => send('sound.play', { id }, !localBlock)}
-          onStopAll={() => send('sound.stopAll', {}, !localBlock)}
+          onPlay={id => tap('sound.play', 150, () => send('sound.play', { id }, !localBlock))()}
+          onStopAll={tap('sound.stopAll', 150, () => send('sound.stopAll', {}, !localBlock))}
         />
       </Sheet>
 
@@ -803,7 +812,7 @@ function JukeboxPanel({ view, ok, skipArmed, skipOff, onOpen, onExit, onPlay, on
           </span>
           <span className="flex items-center gap-2 text-lg font-semibold">
             <span className={`w-4 h-4 rounded-full border-[3px] border-current ${playing ? 'bg-current' : ''}`} aria-hidden />
-            {view.phase === 'open' && view.handoffPending ? 'Starting…' : playing ? 'Playing' : 'Stopped'}
+            {view.phase === 'open' && view.handoffPending ? (playing ? 'Fading…' : 'Starting…') : playing ? 'Playing' : 'Stopped'}
           </span>
         </button>
         <button

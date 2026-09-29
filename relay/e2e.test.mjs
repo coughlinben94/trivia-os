@@ -279,6 +279,17 @@ describe('stub display + relay + iPad (Stream Deck parity)', () => {
     expect(d.ran).toEqual([])
   })
 
+  it('a stale volume/Duck/sound tap is dropped as late by the relay and never runs', async () => {
+    stub(breakSlides())
+    const p = await ipad()
+    await until(() => p.local?.volume === 50)
+    for (const c of ['duck', 'vol.up', 'sound.stopAll']) {
+      expect(await p.tap(c, {}, { sentAt: Date.now() - 5000 })).toMatchObject({ refused: 'late' })
+    }
+    expect(runner.volume).toBe(50)
+    expect(p.local.ducked).toBe(false)
+  })
+
   it('Duck from the iPad drops to 20% and restores; volume keys; Pause blocks them', async () => {
     const h = stub(breakSlides())
     const p = await ipad()

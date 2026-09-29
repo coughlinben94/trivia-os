@@ -4,7 +4,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, useRef } from 'react'
 import { createRoot } from 'react-dom/client'
-import { useRemoteLink } from './useRemoteLink.js'
+import { useRemoteLink, useRemoteLinkFlag } from './useRemoteLink.js'
+import { REMOTE_LINK_KEY } from '../lib/remoteProtocol.js'
 
 class FakeWS {
   static OPEN = 1
@@ -98,5 +99,38 @@ describe('useRemoteLink', () => {
     act(() => vi.advanceTimersByTime(60000))
     expect(FakeWS.all).toHaveLength(1)
     expect(link.status).toBe('off')
+  })
+})
+
+// /display is pinned open all night; the /host chip's localStorage write
+// fires `storage` in it, so the peer follows the chip without a reload.
+describe('useRemoteLinkFlag (the /display side of the chip)', () => {
+  function FlagProbe() {
+    const ref = useRef(null)
+    ref.current = run
+    link = useRemoteLink({ enabled: useRemoteLinkFlag(), snapshot: { type: 'display-state' }, runCommandRef: ref })
+    return null
+  }
+  const flip = (v, key = REMOTE_LINK_KEY) => act(() => {
+    localStorage.setItem(REMOTE_LINK_KEY, v)
+    window.dispatchEvent(new StorageEvent('storage', { key }))
+  })
+  beforeEach(() => localStorage.clear())
+
+  it('flag off to on opens the peer; on to off closes it', () => {
+    act(() => root.render(<FlagProbe />))
+    expect(FakeWS.all).toHaveLength(0)
+    flip('1')
+    expect(FakeWS.all).toHaveLength(1)
+    const ws = FakeWS.all[0]
+    act(() => ws.open())
+    flip('0')
+    expect(ws.readyState).toBe(3)
+    expect(link.status).toBe('off')
+  })
+  it('ignores storage events for other keys', () => {
+    act(() => root.render(<FlagProbe />))
+    flip('1', 'something-else')
+    expect(FakeWS.all).toHaveLength(0)
   })
 })

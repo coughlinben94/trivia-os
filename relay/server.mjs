@@ -17,7 +17,7 @@ import { pathToFileURL } from 'node:url'
 import { WebSocketServer } from 'ws'
 import {
   HOST_PORT, REMOTE_PORT, CLOSE_REPLACED, CLOSE_BAD_SECRET, CLOSE_TOO_FAST, MAX_INBOUND_BYTES, BEAT_MS, parseRemoteMessage,
-  DISPLAY_PATH, DISPLAY_COMMANDS, LOCAL_COMMANDS, LOCAL_RATE_PER_SEC,
+  DISPLAY_PATH, DISPLAY_COMMANDS, LOCAL_COMMANDS, LOCAL_RATE_PER_SEC, COMMAND_TTL_MS,
 } from '../client/src/lib/remoteProtocol.js'
 import { createLocal, initSounds, DEFAULT_CONFIG_DIR } from './local.mjs'
 
@@ -145,7 +145,8 @@ export function createRelay({
 
   async function runLocal(ws, m) {
     // Name and id only: never args, never a path, never the secret.
-    log.log(`[relay] ${new Date().toISOString()} ${m.cmd} ${m.id}${m.cmd === 'sound.play' ? ` ${String(m.args.id).slice(0, 64)}` : ''}`)
+    // JSON-quoted so a newline in any of them can't forge a log line.
+    log.log(`[relay] ${new Date().toISOString()} ${JSON.stringify(m.cmd)} ${JSON.stringify(m.id)}${m.cmd === 'sound.play' ? ` ${JSON.stringify(String(m.args.id).slice(0, 64))}` : ''}`)
     const res = local ? await local.run(m.cmd, m.args) : { refuse: 'local-unavailable' }
     send(ws, res.refuse ? { type: 'result', id: m.id, refused: res.refuse } : { type: 'result', id: m.id, received: true })
     toRemotes(localState())
@@ -186,7 +187,12 @@ export function createRelay({
         if (isLocal || DISPLAY_COMMANDS.has(m.cmd)) {
           if (isLocal && tooFast()) { ws.close(CLOSE_TOO_FAST, 'too many commands'); return }
           if (hostPaused) { send(ws, { type: 'result', id: m.id, refused: 'paused' }); return }
-          if (isLocal) { runLocal(ws, m); return }
+          if (isLocal) {
+            // Same 1500ms cut the host and /display apply to their commands.
+            if (typeof m.sentAt !== 'number' || Date.now() - m.sentAt > COMMAND_TTL_MS) { send(ws, { type: 'result', id: m.id, refused: 'late' }); return }
+            runLocal(ws, m)
+            return
+          }
           if (!display) { send(ws, { type: 'result', id: m.id, refused: 'display-offline' }); return }
           send(display, m)
           return

@@ -66,7 +66,9 @@ describe('duck', () => {
     const local = make(r)
     await local.run('duck')
     expect(r.volume).toBe(12)
-    expect(JSON.parse(fs.readFileSync(path.join(dir, 'duck.json'), 'utf8'))).toEqual({ pre: 60 })
+    const saved = JSON.parse(fs.readFileSync(path.join(dir, 'duck.json'), 'utf8'))
+    expect(saved.pre).toBe(60)
+    expect(Math.abs(Date.now() - saved.at)).toBeLessThan(5000)
     expect(local.state()).toMatchObject({ ducked: true, volume: 12 })
     await local.run('duck')
     expect(r.volume).toBe(60)
@@ -98,6 +100,58 @@ describe('duck', () => {
     const r = fakeRunner({ volume: 60 })
     await make(r).run('duck')
     expect(r.volume).toBe(30)
+  })
+  const writeDuck = obj => fs.writeFileSync(path.join(dir, 'duck.json'), JSON.stringify(obj))
+  it('a fresh duck.json restores on the next press', async () => {
+    writeDuck({ pre: 70, at: Date.now() - 60 * 60 * 1000 })
+    const r = fakeRunner({ volume: 14 })
+    const local = make(r)
+    expect(local.state().ducked).toBe(true)
+    await local.run('duck')
+    expect(r.volume).toBe(70)
+  })
+  it('a duck.json older than 6 hours is ignored and deleted; the next press ducks normally', async () => {
+    writeDuck({ pre: 95, at: Date.now() - 7 * 60 * 60 * 1000 })
+    const r = fakeRunner({ volume: 40 })
+    const local = make(r)
+    expect(local.state().ducked).toBe(false)
+    expect(fs.existsSync(path.join(dir, 'duck.json'))).toBe(false)
+    await local.run('duck')
+    expect(r.volume).toBe(8)
+  })
+  it('a legacy duck.json with no timestamp counts as stale', async () => {
+    writeDuck({ pre: 95 })
+    const r = fakeRunner({ volume: 40 })
+    const local = make(r)
+    expect(local.state().ducked).toBe(false)
+    expect(fs.existsSync(path.join(dir, 'duck.json'))).toBe(false)
+    await local.run('duck')
+    expect(r.volume).toBe(8)
+  })
+  it('if the drop fails, duck state and duck.json are rolled back', async () => {
+    const r = fakeRunner({ volume: 60 })
+    const run = r.run
+    r.run = async (file, args) => { if (args[1].startsWith('set ')) throw new Error('boom'); return run(file, args) }
+    const local = make(r)
+    expect(await local.run('duck')).toEqual({ refuse: 'local-failed' })
+    expect(local.state().ducked).toBe(false)
+    expect(fs.existsSync(path.join(dir, 'duck.json'))).toBe(false)
+    r.run = run
+    await local.run('duck')
+    expect(r.volume).toBe(12)
+  })
+  it('commands run one at a time: two quick Duck presses end back at the original volume', async () => {
+    const r = fakeRunner({ volume: 60 })
+    const run = r.run
+    r.run = async (file, args) => { await new Promise(f => setTimeout(f, 30)); return run(file, args) }
+    const local = make(r)
+    await Promise.all([local.run('duck'), local.run('duck')])
+    expect(local.state().ducked).toBe(false)
+    expect(r.volume).toBe(60)
+    r.calls.length = 0
+    await Promise.all([local.run('duck'), local.run('vol.up'), local.run('duck')])
+    const sets = r.calls.map(c => c[1][1]).filter(s => s.startsWith('set ')).map(s => Number(s.split(' ').at(-1)))
+    expect(sets).toEqual([12, 22, 60]) // vol.up waits for the drop, never lands inside it
   })
   it('a junk duck.json is ignored rather than crashing', () => {
     fs.writeFileSync(path.join(dir, 'duck.json'), '{nope')
@@ -136,6 +190,14 @@ describe('sounds', () => {
     r.children[0].exits.forEach(f => f()) // the first one finished on its own
     await local.run('sound.stopAll')
     expect(r.children.map(c => c.killed)).toEqual([false, true])
+  })
+  it('a sound path that is a directory is marked missing', () => {
+    const d = path.join(dir, 'folder.mp3')
+    fs.mkdirSync(d)
+    writeSounds([{ id: 'd', label: 'D', path: d }])
+    const local = make(fakeRunner())
+    expect(local.state().sounds).toEqual([{ id: 'd', label: 'D', missing: true }])
+    return local.run('sound.play', { id: 'd' }).then(res => expect(res).toEqual({ refuse: 'sound-missing' }))
   })
   it('no sounds.json: empty list, any id refused', async () => {
     const local = make(fakeRunner())

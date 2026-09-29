@@ -13,6 +13,7 @@ export const DEFAULT_CONFIG_DIR = path.join(os.homedir(), '.config', 'trivia-rel
 const OSASCRIPT = '/usr/bin/osascript'
 const AFPLAY = '/usr/bin/afplay'
 const VOL_STEP = 10
+const DUCK_MAX_AGE_MS = 6 * 60 * 60 * 1000 // an older duck.json is from a past night, not tonight
 const GET_VOLUME = 'output volume of (get volume settings)'
 
 // The real runner: execFile never goes through a shell.
@@ -28,13 +29,14 @@ export const realRunner = {
 
 const clamp = n => Math.max(0, Math.min(100, Math.round(n)))
 const readJson = file => { try { return JSON.parse(fs.readFileSync(file, 'utf8')) } catch { return null } }
+const isFile = p => { try { return fs.statSync(p).isFile() } catch { return false } }
 
 function loadSounds(file) {
   const list = readJson(file)
   if (!Array.isArray(list)) return []
   return list
     .filter(s => s && typeof s.id === 'string' && s.id && typeof s.path === 'string' && path.isAbsolute(s.path))
-    .map(s => ({ id: s.id, label: typeof s.label === 'string' && s.label ? s.label : s.id, path: s.path, missing: !fs.existsSync(s.path) }))
+    .map(s => ({ id: s.id, label: typeof s.label === 'string' && s.label ? s.label : s.id, path: s.path, missing: !isFile(s.path) }))
 }
 
 export function createLocal({ configDir = DEFAULT_CONFIG_DIR, runner = realRunner, log = console } = {}) {
@@ -43,10 +45,14 @@ export function createLocal({ configDir = DEFAULT_CONFIG_DIR, runner = realRunne
   const duckRatio = ratio >= 0 && ratio <= 1 ? ratio : 0.2
   const sounds = loadSounds(path.join(configDir, 'sounds.json'))
   const saved = readJson(duckFile)
-  // Reloaded on start, so a relay restart while ducked can still restore.
-  let pre = Number.isFinite(saved?.pre) ? clamp(saved.pre) : null
+  // Reloaded on start, so a relay restart while ducked can still restore;
+  // a file with no timestamp or older than DUCK_MAX_AGE_MS is stale: drop it.
+  const fresh = Number.isFinite(saved?.pre) && Number.isFinite(saved?.at) && Date.now() - saved.at < DUCK_MAX_AGE_MS
+  if (!fresh) fs.rmSync(duckFile, { force: true })
+  let pre = fresh ? clamp(saved.pre) : null
   let volume = null
   const playing = new Set()
+  let chain = Promise.resolve() // local commands run one at a time, in arrival order
 
   const getVolume = async () => {
     const v = parseInt(await runner.run(OSASCRIPT, ['-e', GET_VOLUME]), 10)
@@ -63,9 +69,15 @@ export function createLocal({ configDir = DEFAULT_CONFIG_DIR, runner = realRunne
     if (pre == null) {
       const now = await getVolume()
       fs.mkdirSync(configDir, { recursive: true, mode: 0o700 })
-      fs.writeFileSync(duckFile, JSON.stringify({ pre: now })) // saved before the drop
+      fs.writeFileSync(duckFile, JSON.stringify({ pre: now, at: Date.now() })) // saved before the drop
       pre = now
-      await setVolume(now * duckRatio)
+      try {
+        await setVolume(now * duckRatio)
+      } catch (e) {
+        pre = null
+        fs.rmSync(duckFile, { force: true })
+        throw e
+      }
     } else {
       await setVolume(pre)
       fs.rmSync(duckFile, { force: true })
@@ -76,7 +88,7 @@ export function createLocal({ configDir = DEFAULT_CONFIG_DIR, runner = realRunne
   function play(id) {
     const s = sounds.find(x => x.id === id)
     if (!s) return { refuse: 'unknown-sound' }
-    if (!fs.existsSync(s.path)) return { refuse: 'sound-missing' }
+    if (!isFile(s.path)) return { refuse: 'sound-missing' }
     const child = runner.spawn(AFPLAY, [s.path])
     playing.add(child)
     child.onExit(() => playing.delete(child))
@@ -92,22 +104,29 @@ export function createLocal({ configDir = DEFAULT_CONFIG_DIR, runner = realRunne
       if (!runner) return
       try { await getVolume() } catch (e) { log.error('[relay] volume read failed', e.message) }
     },
-    // Returns { ok: true } or { refuse: reason }; never throws.
-    async run(cmd, args = {}) {
-      if (!runner) return { refuse: 'local-unavailable' }
-      try {
-        if (cmd === 'vol.up' || cmd === 'vol.down') await setVolume((await getVolume()) + (cmd === 'vol.up' ? VOL_STEP : -VOL_STEP))
-        else if (cmd === 'duck') await duck()
-        else if (cmd === 'sound.play') return play(args.id)
-        else if (cmd === 'sound.stopAll') [...playing].forEach(c => c.kill())
-        else return { refuse: 'unknown-command' }
-        return { ok: true }
-      } catch (e) {
-        log.error(`[relay] ${cmd} failed`, e.message)
-        return { refuse: 'local-failed' }
-      }
+    // Returns { ok: true } or { refuse: reason }; never throws. Queued on one
+    // chain so two Duck presses or a vol.up can never interleave mid-command.
+    run(cmd, args = {}) {
+      const result = chain.then(() => runOnce(cmd, args))
+      chain = result.catch(() => {})
+      return result
     },
     stopAll: () => [...playing].forEach(c => c.kill()),
+  }
+
+  async function runOnce(cmd, args) {
+    if (!runner) return { refuse: 'local-unavailable' }
+    try {
+      if (cmd === 'vol.up' || cmd === 'vol.down') await setVolume((await getVolume()) + (cmd === 'vol.up' ? VOL_STEP : -VOL_STEP))
+      else if (cmd === 'duck') await duck()
+      else if (cmd === 'sound.play') return play(args.id)
+      else if (cmd === 'sound.stopAll') [...playing].forEach(c => c.kill())
+      else return { refuse: 'unknown-command' }
+      return { ok: true }
+    } catch (e) {
+      log.error(`[relay] ${cmd} failed`, e.message)
+      return { refuse: 'local-failed' }
+    }
   }
 }
 
