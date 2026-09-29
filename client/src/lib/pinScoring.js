@@ -32,6 +32,13 @@ export function payableRoomSize(teams, scoreboardTeams) {
   return (teams ?? []).filter(t => sbNames.has(normalizeTeamName(t.name))).length
 }
 
+// Room size precedence: the size saved at first lock wins (so Retry Scoring
+// can't change who scores), then the host's override, then the payable count.
+export function resolvePinRoomSize({ saved, override, payable }) {
+  const ok = n => Number.isFinite(n) && n > 0
+  return ok(saved) ? saved : ok(override) ? override : payable
+}
+
 export function scorePinRound({ entries, correct, roomSize }) {
   const k = scoringGroupSize(roomSize)
   const correctOk = isValidPin(correct)

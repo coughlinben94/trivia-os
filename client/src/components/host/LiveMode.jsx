@@ -14,6 +14,8 @@ import { computeChoiceScoreUpdates, DEFAULT_CHOICE_POINTS } from '../../lib/choi
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
 import { scoreHuesCuesRound, computeHuesCuesScoreUpdates } from '../../lib/huesCuesScoring.js'
 import { computeHorseRaceScoreUpdates, DEFAULT_RACE_POINTS } from '../../lib/raceScoring.js'
+import { scorePinRound, computePinScoreUpdates, payableRoomSize, resolvePinRoomSize, isValidPin } from '../../lib/pinScoring.js'
+import PinRoomControl from './PinRoomControl.jsx'
 import { HUES_CUES_CODE_RE } from '../../lib/huesCuesGrid.js'
 import { nextPressGate } from '../../lib/nextPressCue.js'
 import { planHostCommand } from '../../lib/hostCommands.js'
@@ -247,6 +249,8 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   const [choiceScoreError, setChoiceScoreError] = useState(null)
   const [huesCuesBusy, setHuesCuesBusy] = useState(false)
   const [huesCuesScoreError, setHuesCuesScoreError] = useState(null)
+  const [pinBusy, setPinBusy] = useState(false)
+  const [pinScoreError, setPinScoreError] = useState(null)
   const [raceBusy, setRaceBusy] = useState(false)
   const [raceScoreError, setRaceScoreError] = useState(null)
   const [endShowConfirm, setEndShowConfirm] = useState(false)
@@ -273,7 +277,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // a real scoring round (three SELECTs + one upsert, normally 1-2s); past
   // that the host gets Next back and any real failure is already showing
   // its error on-screen via the Retry Scoring button.
-  const scoringBusy = matchingBusy || orderBusy || wagerBusy || choiceBusy || huesCuesBusy
+  const scoringBusy = matchingBusy || orderBusy || wagerBusy || choiceBusy || huesCuesBusy || pinBusy
   const scoringSinceRef = useRef(0)
   useEffect(() => { scoringSinceRef.current = scoringBusy ? Date.now() : 0 }, [scoringBusy])
   // iPad remote only (spec §6): horse-race scoring with its own 12s cap.
@@ -320,6 +324,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     setOrderScoreError(null)
     setChoiceScoreError(null)
     setHuesCuesScoreError(null)
+    setPinScoreError(null)
     setRaceScoreError(null)
   }, [currentSlide?.id])
   // Which phone-scored mechanic (if any) this slide is — the ONE lookup the
@@ -498,7 +503,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         if (extra === undefined) return // loadExtra already set its own error
       }
 
-      const { results, updates, unmatchedError } = buildResults({
+      const { results, updates, unmatchedError, extraData } = buildResults({
         answers, teams, scoreboardTeams,
         roundKey: roundKeyFor(show, slide),
         slideId: slide.id,
@@ -529,6 +534,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       // stored NOW; A only decides when the room gets to see them.
       const finalData = { ...slide.data, [lockField]: true, [lockedAtField]: lockedAt }
       if (resultsField && results) finalData[resultsField] = results
+      if (extraData) Object.assign(finalData, extraData)
       await actions.updateSlide(slide.id, { data: finalData })
     } finally {
       setBusy(false)
@@ -671,6 +677,42 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       },
       setBusy: setHuesCuesBusy,
       setError: setHuesCuesScoreError,
+    })
+  }
+
+  // Pin It: room-relative (top 40% by distance), scored against
+  // slide.data.pinAnswer. The room size is decided ONCE at first lock
+  // (payable teams, or the host's override) and saved on the slide, so
+  // "Retry Scoring" and late joiners can never change who scores. Unlock
+  // clears it (see PHONE_MECHANICS.pin.clearFields).
+  async function handleLockAndScorePin(slide) {
+    await lockAndScore({
+      slide,
+      lockField: 'pinLocked', lockedAtField: 'pinLockedAt',
+      resultsField: 'pinResults',
+      preCheck: s => isValidPin(s.data.pinAnswer) ? null : 'Set the true spot first — click the map in the slide editor',
+      lateLogLabel: 'pin lock',
+      buildResults: ({ answers, teams, scoreboardTeams, roundKey, slideId }) => {
+        const teamIdToName = new Map((teams ?? []).map(t => [t.id, t.name]))
+        const entries = (answers ?? []).map(a => ({ teamId: a.team_id, teamName: teamIdToName.get(a.team_id) ?? null, pin: a.answer }))
+        const roomSize = resolvePinRoomSize({
+          saved: slide.data.pinRoomSize,
+          override: slide.data.pinRoomSizeOverride,
+          payable: payableRoomSize(teams, scoreboardTeams),
+        })
+        const results = scorePinRound({ entries, correct: slide.data.pinAnswer, roomSize })
+        const updates = computePinScoreUpdates({ results, teams, scoreboardTeams, roundKey, slideId })
+        return {
+          results,
+          updates,
+          extraData: { pinRoomSize: roomSize },
+          unmatchedError: answers.length > 0 && updates.length === 0
+            ? 'No pins could be matched to the scoreboard — check team names match, then retry'
+            : null,
+        }
+      },
+      setBusy: setPinBusy,
+      setError: setPinScoreError,
     })
   }
 
@@ -1056,6 +1098,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     order: handleLockAndScoreOrder,
     choice: handleLockAndScoreChoice,
     huesCues: handleLockAndScoreHuesCues,
+    pin: handleLockAndScorePin,
   }
 
   // Mirrors currentSlide into a ref for the same reason actionsRef exists —
@@ -1550,6 +1593,14 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                 label: huesCuesBusy ? 'Scoring…' : d.huesCuesLocked ? '🔁 Retry Scoring' : '🔒 Lock Guesses & Score',
                 act: () => handleLockAndScoreHuesCues(currentSlide),
               },
+              pin: {
+                busy: pinBusy, error: pinScoreError, zeroErr: null,
+                status: d.pinLocked
+                  ? `Pins locked and scored (room of ${d.pinRoomSize ?? '?'}) — press A to reveal the true spot on the TV.`
+                  : 'Pin It — teams are dropping pins on their phones',
+                label: pinBusy ? 'Scoring…' : d.pinLocked ? '🔁 Retry Scoring' : '🔒 Lock Pins & Score',
+                act: () => handleLockAndScorePin(currentSlide),
+              },
             }[phoneMechanic]
             // isLocked (any lockField true) is checked separately from the
             // reveal gate below — Unlock stays available even after reveal
@@ -1564,6 +1615,13 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                 {!hideMainPanel && (
                   <>
                     <p className="text-xs text-gray-400 mb-3">{panel.status}</p>
+                    {phoneMechanic === 'pin' && !d.pinLocked && (
+                      <PinRoomControl
+                        showId={show.id}
+                        override={d.pinRoomSizeOverride}
+                        onOverride={v => actions.updateSlide(currentSlide.id, { data: { ...currentSlide.data, pinRoomSizeOverride: v } })}
+                      />
+                    )}
                     <button
                       onClick={panel.act}
                       disabled={panel.busy}

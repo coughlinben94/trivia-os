@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { scorePinRound, scoringGroupSize, payableRoomSize, isValidPin, PIN_POINTS } from './pinScoring.js'
+import { scorePinRound, scoringGroupSize, payableRoomSize, resolvePinRoomSize, isValidPin, PIN_POINTS } from './pinScoring.js'
 
 const CORRECT = { lat: 41.8781, lon: -87.6298 } // Chicago
 // ~1 degree of latitude = ~69 miles; build pins by offsetting latitude
@@ -83,5 +83,20 @@ describe('payableRoomSize', () => {
     const teams = [{ id: '1', name: ' Quiz Kids ' }, { id: '2', name: 'ghost' }, { id: '3', name: 'Pints' }]
     const sb = [{ id: 's1', name: 'quiz kids' }, { id: 's3', name: 'PINTS' }]
     expect(payableRoomSize(teams, sb)).toBe(2)
+  })
+})
+
+describe('resolvePinRoomSize', () => {
+  it('saved beats override beats payable', () => {
+    expect(resolvePinRoomSize({ saved: 7, override: 9, payable: 12 })).toBe(7)
+    expect(resolvePinRoomSize({ saved: undefined, override: 9, payable: 12 })).toBe(9)
+    expect(resolvePinRoomSize({ saved: undefined, override: undefined, payable: 12 })).toBe(12)
+  })
+  it('falls through on 0, NaN, negative or non-numbers', () => {
+    expect(resolvePinRoomSize({ saved: 0, override: 9, payable: 12 })).toBe(9)
+    expect(resolvePinRoomSize({ saved: NaN, override: 9, payable: 12 })).toBe(9)
+    expect(resolvePinRoomSize({ saved: 5, override: 0, payable: 12 })).toBe(5)
+    expect(resolvePinRoomSize({ saved: null, override: -2, payable: 12 })).toBe(12)
+    expect(resolvePinRoomSize({ saved: '8', override: null, payable: 12 })).toBe(12)
   })
 })
