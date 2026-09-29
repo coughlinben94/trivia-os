@@ -5,7 +5,7 @@ import { nanoid } from 'nanoid'
 import { supabase } from '../lib/supabase.js'
 import { deriveRoundCols, computeTotal, computePlaces, MEDALS } from '../lib/scoreboardMath.js'
 import { getTheme } from '../themes/index.js'
-import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentMediaShiny, isChoiceShiny, isHuesCuesShiny } from '../lib/shinySeries.js'
+import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentMediaShiny, isChoiceShiny, isHuesCuesShiny, isPinShiny } from '../lib/shinySeries.js'
 import { getWagerTier } from '../lib/wagerScoring.js'
 import { PHONE_MECHANICS, sortSlides } from '../lib/slideStepping.js'
 import MatchingBoard from '../components/join/MatchingBoard.jsx'
@@ -13,6 +13,7 @@ import WagerBoard from '../components/join/WagerBoard.jsx'
 import OrderBoard from '../components/join/OrderBoard.jsx'
 import ChoiceBoard from '../components/join/ChoiceBoard.jsx'
 import HuesCuesBoard from '../components/join/HuesCuesBoard.jsx'
+import PinBoard from '../components/join/PinBoard.jsx'
 import HorseRaceBoard from '../components/join/HorseRaceBoard.jsx'
 import ShrinkToFit from '../components/join/ShrinkToFit.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
@@ -733,6 +734,9 @@ function SlideBody({ slide, show, theme, team, onInteractiveAnswered, overridePa
       }
       if (d.isShiny && isHuesCuesShiny(d)) {
         return <HuesCuesBoard slide={slide} team={team} theme={theme} onAnswered={onInteractiveAnswered} />
+      }
+      if (d.isShiny && isPinShiny(d)) {
+        return <PinBoard slide={slide} team={team} theme={theme} onAnswered={onInteractiveAnswered} />
       }
       // All-at-once media (2026-08-26 rebuild): the TV shows every asset
       // together, so a phone stepping one asset at a time through
