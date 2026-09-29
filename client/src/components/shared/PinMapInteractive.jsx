@@ -148,6 +148,21 @@ export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disab
   }, [])
   useEffect(() => () => cancelTimer(), [])
 
+  // Touch pans must not also swipe the Join carousel (framer `drag` on an
+  // ancestor listens natively for pointerdown). React handlers run at the root,
+  // after that native listener, so the shield has to be native too, and it hands
+  // the event to the React-side logic itself since stopping here starves the root.
+  // ponytail: stops touch only; mouse keeps bubbling (host picker has no swipe parent).
+  const downRef = useRef(null); downRef.current = onPointerDown
+  const disabledRef = useRef(disabled); disabledRef.current = disabled
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const h = e => { downRef.current(e); if (e.pointerType === 'touch' && !disabledRef.current) e.stopPropagation() }
+    el.addEventListener('pointerdown', h)
+    return () => el.removeEventListener('pointerdown', h)
+  }, [])
+
   const zoomBtn = (label, f) => (
     <button
       type="button"
@@ -162,10 +177,16 @@ export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disab
   // Held past the US edge: the release will not drop, so show the preview faded.
   const outOfBounds = !!drag && !isValidPin(shown)
   return (
+    <div style={{ width: '100%' }}>
+      {!disabled && (
+        // Outside the gesture surface: a button over the map would swallow a hold on whatever is under it (Miami at k=1).
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 6 }}>
+          {zoomBtn('+', 1.6)}{zoomBtn('−', 1 / 1.6)}
+        </div>
+      )}
     <div
       ref={ref}
       data-pin-surface
-      onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerEnd}
       onPointerCancel={onPointerEnd}
@@ -182,11 +203,7 @@ export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disab
         {k => (shown && Number.isFinite(shown.lat) ? <g data-pin-preview opacity={outOfBounds ? 0.3 : 1}><PinMarker lon={shown.lon} lat={shown.lat} k={k} color={highlight} /></g> : null)}
       </UsMap>
       <MapLoadRetry states={states} ink={ink} />
-      {!disabled && (
-        <div style={{ position: 'absolute', right: 8, bottom: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {zoomBtn('+', 1.6)}{zoomBtn('−', 1 / 1.6)}
-        </div>
-      )}
+    </div>
     </div>
   )
 }
