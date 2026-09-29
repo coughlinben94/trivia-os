@@ -165,11 +165,20 @@ export function isConcurrentMediaShiny(data) {
 // between one-at-a-time and all-at-once after creation, which the old
 // frozen-at-creation grid shape never allowed.
 export function partsToGridView(data) {
+  const tiles = (data.parts ?? []).map(p => ({ color: null, mediaUrl: p?.mediaSlots?.[0]?.url ?? null }))
+  // Past 4 tiles one row shrinks them (6 => 183px on a 1920 stage, too small
+  // to read from across a bar). Wrap to two rows instead, filled row by row so
+  // reading order stays 1..N: columns[c] = [row 1 tile, row 2 tile].
+  const twoRows = tiles.length > 4
+  const nCols = twoRows ? Math.ceil(tiles.length / 2) : tiles.length
+  const columns = twoRows
+    ? Array.from({ length: nCols }, (_, c) => [tiles[c], tiles[c + nCols]].filter(Boolean))
+    : tiles.map(t => [t])
   return {
-    columns: (data.parts ?? []).map(p => [{ color: null, mediaUrl: p?.mediaSlots?.[0]?.url ?? null }]),
+    columns,
     columnLabels: false,
-    intraGap: 0,
-    interGap: 84,
+    intraGap: twoRows ? 24 : 0,
+    interGap: twoRows ? 24 : 84,
     text: data.text,
     answer: data.answer,
   }

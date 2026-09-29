@@ -358,6 +358,16 @@ describe('partsToGridView', () => {
     expect(view.interGap).toBe(84)
   })
 
+  it('wraps past 4 tiles into two rows, filled row by row', () => {
+    const view = partsToGridView({ parts: ['1','2','3','4','5','6'].map(n => media(n + '.jpg')) })
+    expect(view.columns.map(c => c.map(t => t.mediaUrl))).toEqual([['1.jpg', '4.jpg'], ['2.jpg', '5.jpg'], ['3.jpg', '6.jpg']])
+  })
+
+  it('odd counts leave the last slot empty, not a phantom tile', () => {
+    const view = partsToGridView({ parts: ['1','2','3','4','5'].map(n => media(n + '.jpg')) })
+    expect(view.columns.map(c => c.length)).toEqual([2, 2, 1])
+  })
+
   it('renders an empty tile for a part with no media yet', () => {
     const view = partsToGridView({ parts: [{}, media('2.jpg')] })
     expect(view.columns[0]).toEqual([{ color: null, mediaUrl: null }])
