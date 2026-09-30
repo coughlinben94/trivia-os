@@ -16,7 +16,6 @@ export function libraryCoverUp({ ringMode, libHandoffPending, showLive }) {
 export function effectiveVolume(masterVolume, trackGain) {
   return Math.max(0, Math.min(1, masterVolume * trackGain))
 }
-}
 
 // Space: play/stop. Returns what it did; 'modal' and 'handoff' mean it did
 // nothing and the key is not claimed (no preventDefault), as before.
