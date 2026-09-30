@@ -25,12 +25,12 @@
 // (see SyncedRingAmbient) instead of leaving it to drift from 0.
 // (1) was only half the fix — see DuoLayer below for the settle-slide cut
 // it still left, and the one-slide-either-side preload that replaced it.
-import { useLayoutEffect, useRef } from 'react'
+import { useId, useLayoutEffect, useMemo, useRef } from 'react'
 import RingAmbient from './RingAmbient.jsx'
 import { recolorWorld } from '../../lib/ringRecolor.js'
 import { midnightGalaxyRing } from '../../worlds/midnightGalaxy.ring.js'
 import { DUO_PALETTES, DUO_GRAPH } from '../../lib/duoGraph.js'
-import { isTransitionSlide, outgoingAndIncomingDuo } from '../../lib/duoTransition.js'
+import { isTransitionSlide, outgoingAndIncomingDuo, stepIndexForSlide, transitionWipeFor } from '../../lib/duoTransition.js'
 import { getTheme } from '../../themes/index.js'
 
 // Same module-scope memo pattern as ringWorldFor.js's own worldCache — a
@@ -94,35 +94,60 @@ function visibleDuosAt(showId, i) {
 // paint as incoming (else one full-screen frame of the new world) and off
 // before the first paint as current (else one frame of the masked-out
 // region showing bare backdrop, the outgoing world already being gone).
-function DuoLayer({ role, children }) {
+function wipePath(wipe, progress) {
+  if (progress <= 0) return 'M -300 -300 H -300 V 1300 H -300 Z'
+  if (progress >= 1) return 'M -300 -300 H 1300 V 1300 H -300 Z'
+  // direction +1 sweeps from left to right; -1 sweeps from right to left.
+  const travel = wipe.direction > 0 ? -800 + progress * 2600 : 1800 - progress * 2600
+  const slope = Math.tan(wipe.angleDeg * Math.PI / 180)
+  const xAt = (y) => travel + slope * (y - 500)
+    + Math.sign(wipe.direction) * wipe.bulge * 10 * Math.exp(-((y - wipe.centerY * 10) ** 2) / 180000)
+    + wipe.warp * 10 * Math.sin((y / 1000) * Math.PI * 2)
+  const ys = [0, 250, 500, 750, 1000]
+  const points = ys.map(y => ({ x: xAt(y), y }))
+  const curveThrough = (curvePoints) => curvePoints.slice(0, -1).map((point, i) => {
+    const previous = curvePoints[Math.max(0, i - 1)]
+    const next = curvePoints[i + 1]
+    const after = curvePoints[Math.min(curvePoints.length - 1, i + 2)]
+    const c1 = { x: point.x + (next.x - previous.x) / 6, y: point.y + (next.y - previous.y) / 6 }
+    const c2 = { x: next.x - (after.x - point.x) / 6, y: next.y - (after.y - point.y) / 6 }
+    return `C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${next.x} ${next.y}`
+  }).join(' ')
+  const curves = curveThrough(points)
+  const top = points[0].x, bottom = points.at(-1).x
+  const revealLeft = wipe.direction > 0
+  return revealLeft
+    ? `M ${top} 0 L -300 0 L -300 1000 L ${bottom} 1000 ${curveThrough([...points].reverse())} Z`
+    : `M ${top} 0 ${curves} L 1300 1000 L 1300 0 Z`
+}
+
+function DuoLayer({ role, children, wipe }) {
   const ref = useRef(null)
+  const pathRef = useRef(null)
+  const maskId = `duo-wipe-${useId().replaceAll(':', '')}`
+  const filterId = `${maskId}-soften`
   const masked = role === 'incoming'
 
   useLayoutEffect(() => {
     const el = ref.current
     const setMask = (m) => { el.style.maskImage = m; el.style.webkitMaskImage = m }
-    if (!masked) { setMask(''); return }
+    if (!masked || !wipe) { setMask(''); return }
+    setMask(`url("#${maskId}")`)
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setMask('linear-gradient(90deg, black 0%, black 100%)')
+      if (pathRef.current) pathRef.current.setAttribute('d', 'M -300 -300 H 1300 V 1300 H -300 Z')
       return
     }
     let raf, cancelled = false
     const t0 = performance.now()
     function tick() {
       if (cancelled) return
-      const t = (performance.now() - t0) / 1000
-      // Layered, non-commensurate sine periods — organic drift, not a
-      // metronome. Values match the validated v4 spike exactly.
-      const angle = 90 + 25 * Math.sin(t * 0.11) + 10 * Math.sin(t * 0.037 + 1.7)
-      const center = 50 + 18 * Math.sin(t * 0.07 + 0.6) + 7 * Math.sin(t * 0.023 + 3.1)
-      const feather = 26 + 8 * Math.sin(t * 0.05 + 2.2)
-      const lo = Math.max(0, center - feather), hi = Math.min(100, center + feather)
-      setMask(`linear-gradient(${angle}deg, transparent ${lo}%, black ${hi}%, black 100%)`)
-      raf = requestAnimationFrame(tick)
+      const progress = Math.min(1, (performance.now() - t0) / 1200)
+      if (pathRef.current) pathRef.current.setAttribute('d', wipePath(wipe, progress))
+      if (progress < 1) raf = requestAnimationFrame(tick)
     }
     tick()
-    return () => { cancelled = true; cancelAnimationFrame(raf); setMask('') }
-  }, [masked])
+    return () => { cancelled = true; if (raf != null) cancelAnimationFrame(raf); setMask('') }
+  }, [masked, wipe, maskId])
 
   return (
     <div
@@ -133,6 +158,16 @@ function DuoLayer({ role, children }) {
         visibility: role === 'hidden' ? 'hidden' : 'visible',
       }}
     >
+      <svg aria-hidden="true" viewBox="0 0 1000 1000" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+        <defs>
+          <filter id={filterId} x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation={wipe?.feather ? wipe.feather * 2 : 0} />
+          </filter>
+          <mask id={maskId} maskUnits="userSpaceOnUse" x="-300" y="-300" width="1600" height="1600">
+            <path ref={pathRef} d="M -300 -300 H 1300 V 1300 H -300 Z" fill="white" filter={`url(#${filterId})`} />
+          </mask>
+        </defs>
+      </svg>
       {children}
     </div>
   )
@@ -140,6 +175,11 @@ function DuoLayer({ role, children }) {
 
 export default function EvolvingRingAmbient({ showId, slideIndex, arrangement = midnightGalaxyRing, stationOverride, showStationDebug, forceSnap }) {
   const [current, incoming] = visibleDuosAt(showId, slideIndex)
+  const transitioning = isTransitionSlide(showId, slideIndex)
+  const wipe = useMemo(
+    () => transitioning ? transitionWipeFor(showId, stepIndexForSlide(showId, slideIndex)) : null,
+    [transitioning, showId, slideIndex],
+  )
 
   // Also keep the duos shown one slide either side mounted, hidden. Every
   // world that appears on an ordinary Next/Prev was then already mounted on
@@ -167,7 +207,7 @@ export default function EvolvingRingAmbient({ showId, slideIndex, arrangement = 
       {duos.map(duo => {
         const role = duo === incoming ? 'incoming' : duo === current ? 'current' : 'hidden'
         return (
-          <DuoLayer key={duo} role={role}>
+          <DuoLayer key={duo} role={role} wipe={role === 'incoming' ? wipe : null}>
             <SyncedRingAmbient
               worldData={worldForDuo(duo, arrangement)} showId={showId} slideIndex={slideIndex}
               stationOverride={stationOverride} showStationDebug={showStationDebug} forceSnap={forceSnap}

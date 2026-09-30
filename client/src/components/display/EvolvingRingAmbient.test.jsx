@@ -51,35 +51,37 @@ const alive = () => mounts.filter(m => m.alive)
 
 describe('EvolvingRingAmbient', () => {
   beforeEach(() => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true
     mounts.length = 0
     jumpToCalls.length = 0
     nextInstanceId = 0
   })
 
   it('never remounts a world while it stays on screen or one slide away — including at settle', async () => {
-    // show_b: transition at 2 (neon_garden -> electric_bloom, pinned in
-    // duoTransition.test.js), settles at 3, next transition at 4.
+    // show_b: transition at 3 (neon_garden -> electric_bloom, pinned in
+    // duoTransition.test.js), settles at 4, next transition at 6.
     const root = createRoot(document.createElement('div'))
-    const [a, b] = onScreen('show_b', 2)
+    const [a, b] = onScreen('show_b', 3)
 
-    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={1} />) })
+    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={2} />) })
     // Solo on a, with b pre-mounted (hidden) for the transition next slide.
     expect(alive().map(m => m.duo).sort()).toEqual([a, b].sort())
     const before = alive().map(m => m.id)
 
-    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={2} />) })
+    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={3} />) })
     expect(alive().map(m => m.id)).toEqual(before) // transition: nothing new, nothing lost
 
-    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={3} />) })
+    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={4} />) })
     // Settle: b is the SAME instance it was as the incoming half; a stays
     // mounted (Prev lands back on the transition); only the world for the
-    // NEXT transition (slide 4) is new.
+    // NEXT transition (slide 6) is preloaded on the following step.
     const bInst = mounts.find(m => m.duo === b)
     expect(bInst.alive).toBe(true)
     expect(mounts.filter(m => m.duo === b)).toHaveLength(1)
     expect(mounts.filter(m => m.duo === a)).toHaveLength(1)
-    const [, c] = onScreen('show_b', 4)
-    expect(alive().map(m => m.duo).sort()).toEqual([a, b, c].sort())
+    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={5} />) })
+    const [, c] = onScreen('show_b', 6)
+    expect(alive().map(m => m.duo).sort()).toEqual([b, c].sort())
 
     await act(async () => { root.unmount() })
   })
@@ -87,14 +89,16 @@ describe('EvolvingRingAmbient', () => {
   it('calls jumpTo on every freshly mounted instance, but never on a surviving one', async () => {
     const root = createRoot(document.createElement('div'))
 
-    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={1} />) })
-    expect(jumpToCalls).toEqual([{ instanceId: 0, target: 1 }, { instanceId: 1, target: 1 }])
-
     await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={2} />) })
-    expect(jumpToCalls).toHaveLength(2) // both survived, no new mounts
+    expect(jumpToCalls).toEqual([{ instanceId: 0, target: 2 }, { instanceId: 1, target: 2 }])
 
     await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={3} />) })
-    expect(jumpToCalls.slice(2)).toEqual([{ instanceId: 2, target: 3 }]) // only the new preload
+    expect(jumpToCalls).toHaveLength(2) // both survived, no new mounts
+
+    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={4} />) })
+    expect(jumpToCalls).toHaveLength(2) // next world is one slide away
+    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={5} />) })
+    expect(jumpToCalls.slice(2)).toEqual([{ instanceId: 2, target: 5 }]) // only the new preload
 
     await act(async () => { root.unmount() })
   })
@@ -130,5 +134,25 @@ describe('EvolvingRingAmbient', () => {
     for (const m of alive()) expect(m.worldData.stations.map(s => s.key)).toEqual(drawnKeys)
 
     await act(async () => { root.unmount() })
+  })
+
+  it('applies a stable SVG wipe only on a transition slide and reveals immediately for reduced motion', async () => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    window.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} })
+    const root = createRoot(container)
+
+    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={2} />) })
+    expect([...container.querySelectorAll('div')].some(el => el.style.maskImage)).toBe(false)
+
+    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={3} />) })
+    const maskedLayer = [...container.querySelectorAll('div')].find(el => el.style.maskImage)
+    expect(maskedLayer).toBeTruthy()
+    expect(maskedLayer.style.maskImage).toMatch(/duo-wipe-/)
+    const maskPath = maskedLayer.querySelector('mask path')
+    expect(maskPath.getAttribute('d')).toBe('M -300 -300 H 1300 V 1300 H -300 Z')
+
+    await act(async () => { root.unmount() })
+    document.body.removeChild(container)
   })
 })

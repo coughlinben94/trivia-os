@@ -96,9 +96,8 @@ describe('EvolvingRingAmbient — every single-step advance glides on screen', (
 
   const range = (a, b) => Array.from({ length: Math.abs(b - a) + 1 }, (_, k) => a < b ? a + k : a - k)
 
-  // show_b changes color every 2 slides (transitions at 2,4,6,8,10,13 — the
-  // tightest cadence the walk allows) and crosses the 12 -> 0 station wrap on
-  // a transition slide; show_a is the 3-slide cadence (3,6,9,12). Each real
+  // Seeded color changes now happen every 3-4 slides. Both walks cross the
+  // 12 -> 0 station wrap during these ranges. Each real
   // RingAmbient mount costs ~2s in jsdom, hence the short ranges.
   it.each([
     ['show_b', 0, 14], ['show_b', 14, 8],
@@ -108,14 +107,14 @@ describe('EvolvingRingAmbient — every single-step advance glides on screen', (
   }, 120_000)
 
   it('at settle the incoming world carries over as the current one — same DOM node, debug handle follows it', async () => {
-    // show_b: transition at 2 (outgoing -> incoming), settles at 3.
-    await show('show_b', 1)
-    await act(async () => { vi.advanceTimersByTime(SETTLE_MS) })
+    // show_b: transition at 3 (outgoing -> incoming), settles at 4.
     await show('show_b', 2)
-    const [under, over] = byPaintOrder(visibleStages(container))
-    expect(over.parentElement.style.maskImage).toMatch(/linear-gradient/)
     await act(async () => { vi.advanceTimersByTime(SETTLE_MS) })
     await show('show_b', 3)
+    const [under, over] = byPaintOrder(visibleStages(container))
+    expect(over.parentElement.style.maskImage).toMatch(/duo-wipe-/)
+    await act(async () => { vi.advanceTimersByTime(SETTLE_MS) })
+    await show('show_b', 4)
     const after = visibleStages(container)
     expect(after).toEqual([over])
     // The outgoing world stays mounted, hidden, so a Prev back onto the
@@ -127,7 +126,7 @@ describe('EvolvingRingAmbient — every single-step advance glides on screen', (
     // window.__world belongs to the world now on screen, not the unmounted
     // outgoing one or a hidden neighbor. Matched by backdrop color (the
     // stage's background is its world's last sky stop).
-    expect(window.__world.station).toBe(3)
+    expect(window.__world.station).toBe(4)
     const probe = document.createElement('div')
     probe.style.background = window.__world.WORLD.sky.at(-1)
     expect(probe.style.background).toBe(over.style.background)
@@ -143,12 +142,14 @@ describe('EvolvingRingAmbient — prefers-reduced-motion', () => {
     const container = document.createElement('div')
     document.body.appendChild(container)
     const root = createRoot(container)
-    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={1} />) })
     await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={2} />) })
-    const [, over] = byPaintOrder(visibleStages(container))
-    expect(over.parentElement.style.maskImage).toBe('linear-gradient(90deg, black 0%, black 100%)')
-    expect(raf).not.toHaveBeenCalled()
     await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={3} />) })
+    const [, over] = byPaintOrder(visibleStages(container))
+    expect(over.parentElement.style.maskImage).toMatch(/duo-wipe-/)
+    expect(over.parentElement.querySelector('mask path').getAttribute('d'))
+      .toBe('M -300 -300 H 1300 V 1300 H -300 Z')
+    expect(raf).not.toHaveBeenCalled()
+    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={4} />) })
     expect(visibleStages(container)).toEqual([over])
     expect(over.parentElement.style.maskImage).toBe('')
     await act(async () => { root.unmount() })

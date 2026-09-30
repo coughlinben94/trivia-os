@@ -1,6 +1,23 @@
 # Ring World Night Color Evolution — Design
 
-**Status:** draft, awaiting Ben's review before writing-plans.
+**Status:** implementation in progress; behavior decisions below approved by Ben on 2026-09-30. Feature remains off by default pending visual acceptance.
+
+## 2026-09-30 approved behavior decisions
+
+These decisions supersede the draft's open cadence and transition-shape questions below:
+
+- Treat each duo as its own two-color world. Use the existing connected duo graph as a branching
+  nexus; the seeded walk can take different connected jumps. There is no fixed-length slide or
+  station cycle.
+- Change worlds after a seeded random gap of **3 or 4 slides**. Recompute from the show ID and
+  transition number so reload and back-navigation replay the same route.
+- Use a full-bleed transition with the outgoing world underneath and the incoming world revealed
+  by a **gentle curved or bulging edge**. Vary reveal side, angle, vertical position, and curve per
+  transition, while keeping each result replayable.
+- Keep palette rows, colors, and weights exactly as certified. Current nodes already have different
+  two-color allocation ratios. Randomly inventing new ratios per transition would create
+  uncertified palette states and needs its own real-gate work before it can ship.
+- Keep color evolution off by default until Ben accepts the look on the real display route.
 
 ## Goal
 
@@ -10,7 +27,7 @@ instead of staying one fixed duo the whole show. Ben, in his own words across th
 - "in theory i want the random world to be colorful. like the space is in guardians of the galaxy"
 - "and it goes from ice to blue to red etc etc etc"
 - Trigger: **every X slides** (a slide-advance counter, not a clock or a manual button)
-- Sequence: **10-12 curated 2-color "duos"**, connected by a **branching pairing graph** — a duo can
+- Sequence: **17 curated 2-color "duos"** (current graph), connected by a **branching pairing graph** — a duo can
   have more than one valid next-duo, and an edge exists only because that specific transition "looks
   good" (his words: "ie look good" / "good") — an aesthetic call, not a formula
 - Vividness ask, clarified: **more hue *variety*** ("i want more color to make the build feel more
@@ -43,7 +60,7 @@ An independent critique pass (Opus 5.5, full session, cited file/line throughout
   host back-nav/reload without re-rolling" is `TeamPickerSlide.jsx`'s `seededShuffle(names, slide?.id
   ?? show.id)` — it stores nothing, it recomputes from a stable seed every render.
 
-**Decision: reuse this shelf as the graph's node set.** The 10-12 duos are (mostly) already certified
+**Decision: reuse this shelf as the graph's node set.** The current 17 duos are already certified
 presets. This project does not need a new certification model — it needs (1) more certified duo
 *variety* than the current shelf has (see "Duo variety" below), (2) a graph of which certified duos
 may follow which, and (3) the transition mechanism.
@@ -80,8 +97,8 @@ may follow which, and (3) the transition mechanism.
 
 ### 2. Trigger: every X slides
 
-X is a pacing/aesthetic value — STAYS-HUMAN, Ben's call, not chosen here. Counted in ring-visible
-slides (see above), so it tracks what the ring is actually doing, not raw slide-authoring structure
+**Resolved 2026-09-30:** use seeded 3–4 slide gaps. Count only slides that show the Ring World,
+not raw `current_slide_index`, so bonus or custom slides do not change the cadence.
 (bonus/custom/team-picker slides etc. that don't drive the ring at all shouldn't silently change the
 cadence).
 
@@ -105,10 +122,8 @@ newly-certified duos add real hue variety to the shelf. This does not touch `DEA
 `ANCHOR_WINDOW`, or any verification threshold — all explicitly off-limits (Ben's prior calls, cited
 in `weightedPalette.js`'s own comments and `ring-world-continuity.md` §4).
 
-**This is a real prerequisite for the graph, not parallel work**: a 10-12 node branching graph needs
-10-12 actually-distinct certified duos to be worth building at all. Recommend running (and if needed,
-improving) the sweep tool *before* authoring the graph, so Ben is picking edges between genuinely
-different-feeling duos rather than five purple variants.
+**This prerequisite is complete:** the current graph uses 17 certified duos spanning several hue
+families. Future nodes still need real certification before entering the walk.
 
 ### 4. Transition mechanism: live two-world split-screen
 
@@ -198,10 +213,10 @@ is actually built, not blocking the build.
 
 ## Open questions — Ben's call, not decided here (STAYS-HUMAN)
 
-1. X (the slide-count interval) — pacing, needs to be seen live, not guessed at in a spec.
-2. The actual 10-12 duos and the graph's edges — "looks good" is aesthetic, his to author, once the
-   sweep tool has produced more real variety to choose from.
-3. The split-screen's visual shape (line, wipe, something else) — pending the perf spike above.
+1. Ben's final visual acceptance of the current curved transition on the real display route.
+2. Whether the certified duo weights should gain additional ratio variants. Current ratios vary by
+   duo; no arbitrary per-transition weight mutation is certified.
+3. Whether the prototype's curve strength, feather, and 1.2-second duration feel right in person.
 4. Whether a host mid-transition back-nav should abort/reverse the split or let it resolve.
 
 ## Explicitly out of scope for this project

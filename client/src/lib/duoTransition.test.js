@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { stepIndexForSlide, outgoingAndIncomingDuo, isTransitionSlide } from './duoTransition.js'
+import { stepIndexForSlide, outgoingAndIncomingDuo, isTransitionSlide, transitionWipeFor } from './duoTransition.js'
 import { DUO_GRAPH } from './duoGraph.js'
 
 describe('stepIndexForSlide', () => {
@@ -20,17 +20,19 @@ describe('stepIndexForSlide', () => {
     }
   })
 
-  it('steps roughly every 2-3 slides, never less than 2 or more than 3 apart', () => {
-    const boundaries = []
-    let last = -1
-    for (let i = 0; i < 100; i++) {
-      const step = stepIndexForSlide('show_d', i)
-      if (step !== last) { boundaries.push(i); last = step }
-    }
-    for (let i = 1; i < boundaries.length; i++) {
-      const gap = boundaries[i] - boundaries[i - 1]
-      expect(gap).toBeGreaterThanOrEqual(2)
-      expect(gap).toBeLessThanOrEqual(3)
+  it('switches every 3-4 slides across show seeds', () => {
+    for (const seed of ['show_d', 'show_k', 'show_l', 'show_m']) {
+      const boundaries = []
+      let last = -1
+      for (let i = 0; i < 140; i++) {
+        const step = stepIndexForSlide(seed, i)
+        if (step !== last) { boundaries.push(i); last = step }
+      }
+      for (let i = 1; i < boundaries.length; i++) {
+        const gap = boundaries[i] - boundaries[i - 1]
+        expect(gap).toBeGreaterThanOrEqual(3)
+        expect(gap).toBeLessThanOrEqual(4)
+      }
     }
   })
 })
@@ -50,7 +52,7 @@ describe('outgoingAndIncomingDuo', () => {
     // step-AHEAD preview instead of what's actually incoming.
     // outgoing/incoming must read the opposite direction: outgoing = the
     // previous step's duo, incoming = the current step's.
-    const { outgoing, incoming } = outgoingAndIncomingDuo('show_b', DUO_GRAPH, 2)
+    const { outgoing, incoming } = outgoingAndIncomingDuo('show_b', DUO_GRAPH, 3)
     expect(incoming).toBe('electric_bloom')  // step 1's duo (the new current)
     expect(outgoing).toBe('neon_garden')     // step 0's duo (what it came from)
   })
@@ -95,5 +97,40 @@ describe('isTransitionSlide', () => {
     expect(boundary).toBeGreaterThan(0)
     expect(isTransitionSlide('show_j', boundary)).toBe(true)
     expect(isTransitionSlide('show_j', boundary)).toBe(true)
+  })
+})
+
+describe('transitionWipeFor', () => {
+  it('replays identical geometry for the same show and transition step', () => {
+    expect(transitionWipeFor('show_wipe', 4)).toEqual(transitionWipeFor('show_wipe', 4))
+  })
+
+  it('varies angle, position, direction, and curve across transition steps', () => {
+    const wipes = Array.from({ length: 8 }, (_, step) => transitionWipeFor('show_wipe', step))
+    expect(new Set(wipes.map(w => w.angleDeg)).size).toBeGreaterThan(1)
+    expect(new Set(wipes.map(w => w.centerY)).size).toBeGreaterThan(1)
+    expect(new Set(wipes.map(w => w.direction)).size).toBeGreaterThan(1)
+    expect(new Set(wipes.map(w => w.bulge)).size).toBeGreaterThan(1)
+    for (const wipe of wipes) {
+      expect(Number.isFinite(wipe.angleDeg)).toBe(true)
+      expect(wipe.angleDeg).toBeGreaterThanOrEqual(-12)
+      expect(wipe.angleDeg).toBeLessThanOrEqual(12)
+      expect(wipe.centerY).toBeGreaterThanOrEqual(25)
+      expect(wipe.centerY).toBeLessThanOrEqual(75)
+      expect([-1, 1]).toContain(wipe.direction)
+      expect(wipe.bulge).toBeGreaterThanOrEqual(12)
+      expect(wipe.bulge).toBeLessThanOrEqual(36)
+      expect(wipe.warp).toBeGreaterThanOrEqual(2)
+      expect(wipe.warp).toBeLessThanOrEqual(10)
+      expect(wipe.feather).toBeGreaterThanOrEqual(1.5)
+      expect(wipe.feather).toBeLessThanOrEqual(4)
+    }
+  })
+
+  it('does not depend on the order other transition steps are requested', () => {
+    const later = transitionWipeFor('show_order', 9)
+    transitionWipeFor('show_order', 2)
+    transitionWipeFor('another_show', 9)
+    expect(transitionWipeFor('show_order', 9)).toEqual(later)
   })
 })

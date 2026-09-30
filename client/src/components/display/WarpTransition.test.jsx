@@ -13,7 +13,7 @@ import WarpTransition from './WarpTransition.jsx'
 import { ThemeProvider } from '../shared/ThemeProvider.jsx'
 import { worldForDuo } from './EvolvingRingAmbient.jsx'
 import { resolveArrangement } from '../../lib/ringWorldFor.js'
-import { outgoingAndIncomingDuo } from '../../lib/duoTransition.js'
+import { outgoingAndIncomingDuo, isTransitionSlide } from '../../lib/duoTransition.js'
 import { DUO_GRAPH } from '../../lib/duoGraph.js'
 import { getTheme } from '../../themes/index.js'
 
@@ -50,11 +50,12 @@ describe('WarpTransition world under color evolution', () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true
     const ctxSpy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
     const incomingAt = i => JSON.stringify(outgoingAndIncomingDuo(SHOW, DUO_GRAPH, i).incoming)
-    const later = Array.from({ length: 60 }, (_, i) => i + 4).find(i => incomingAt(i) !== incomingAt(3))
+    const start = Array.from({ length: 60 }, (_, i) => i).find(i => isTransitionSlide(SHOW, i))
+    const later = Array.from({ length: 60 }, (_, i) => i + start + 1).find(i => incomingAt(i) !== incomingAt(start))
     expect(later).toBeDefined()
     // Sanity: the two indices really paint different grounds when mounted fresh.
     expect(ground({ overrides: { colorEvolution: true }, slideIndex: later }))
-      .not.toBe(ground({ overrides: { colorEvolution: true }, slideIndex: 3 }))
+      .not.toBe(ground({ overrides: { colorEvolution: true }, slideIndex: start }))
 
     const el = document.createElement('div')
     const root = createRoot(el)
@@ -64,7 +65,7 @@ describe('WarpTransition world under color evolution', () => {
       </ThemeProvider>
     )
     const bg = () => [...el.querySelectorAll('*')].map(n => n.style.background).find(Boolean)
-    act(() => root.render(tree(3)))
+    act(() => root.render(tree(start)))
     const before = bg()
     act(() => root.render(tree(later)))
     expect(bg()).toBe(before)
