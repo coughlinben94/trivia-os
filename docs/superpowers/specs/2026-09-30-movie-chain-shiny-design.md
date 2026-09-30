@@ -22,7 +22,7 @@ Add a phone-played shiny question where teams connect a visible starting movie t
 
 ## Data source and reliability
 
-Use Wikidata's CC0 structured data as the source: film cast (`P161`) and voice actor (`P725`). A Vercel API route mediates entity search and credit checks, uses bounded requests and short caching, and returns years with same-name movie suggestions. It never supplies a list of movies for a selected performer. It rejects direct validation of the ending movie while a question is unrevealed. The UI uses no third-party poster or profile images.
+Use Wikidata's CC0 structured data as the source: film cast (`P161`) and voice actor (`P725`). A Vercel API route mediates entity search and credit checks, uses bounded requests and short caching, and returns years with same-name movie suggestions. It never supplies a list of movies for a selected performer. The guided UI treats a search for the ending movie neutrally, without checking that last connection. The UI uses no third-party poster or profile images.
 
 Wikidata's cast can be incomplete. The host editor checks that each endpoint resolves to a film and shows the number of available cast entries. The host may correct a disputed result after reveal with an explicit per-team score override; this updates both the scoreboard and the team's verdict. If Wikidata is unavailable, search shows a retry state and keeps the unsaved chain; reveal remains pending with a retry action and does not assign speculative points. A team can independently look up film credits outside Trivia OS; this is a live trivia honor rule, not a security promise.
 

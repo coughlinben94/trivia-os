@@ -14,10 +14,10 @@
 
 ### Task 1: Wikidata lookup boundary
 
-**Files:** Create `api/_lib/wikidata.js`, `api/movie-chain.js`, `api/_lib/wikidata.test.js`; create `client/src/lib/movieChainApi.js`.
+**Files:** Create `api/_lib/wikidata.js`, `api/movie-chain.js`, `client/src/lib/wikidata.test.js`, `client/src/lib/movieChainApi.js`.
 
 - [ ] Write tests first for QID rejection, search results filtered to films, cast+voice claim extraction, year/label disambiguation, upstream timeout/failure, and neutral rejection when `check` is asked about the fixed destination. The fixture for a film has `claims.P31` containing `Q11424`, `claims.P161` containing a performer QID, and `claims.P725` containing a voice performer QID.
-- [ ] Run `npx vitest run api/_lib/wikidata.test.js`; confirm expected missing-module failure.
+- [ ] Run `npx vitest run client/src/lib/wikidata.test.js`; confirm expected missing-module failure.
 - [ ] Implement `searchMovies(query, fetcher)`, `getMovieCast(movieId, fetcher)`, and `checkMiddleCredit(movieId, personId, destinationId, fetcher)` in the library. Use `wbsearchentities` then `wbgetentities`, QID allowlists, `AbortSignal.timeout`, bounded result counts, and an in-process short cache. `checkMiddleCredit` returns `{kind:'destination'}` before any cast lookup when `movieId === destinationId`.
 - [ ] Expose `GET /api/movie-chain?action=search|cast|check` with a stable JSON error shape; the client wrapper handles non-2xx and request cancellation.
 - [ ] Run the targeted test and `npm run build`; commit this task.
