@@ -3,7 +3,7 @@
 // the iPad (through the /display relay peer) both call them, so each guard
 // below is one the keys already had.
 import { describe, it, expect, vi } from 'vitest'
-import { togglePlay, exitToShow } from './jukeboxControls.js'
+import { togglePlay, exitToShow, libraryCoverUp } from './jukeboxControls.js'
 
 const play = over => ({
   modalTrack: null, libHandoffPending: false, isPlaying: false, liveEnding: false,
@@ -92,5 +92,26 @@ describe('exitToShow (b, Back to Trivia)', () => {
     const s = exit({ onExitToShow: null })
     expect(exitToShow(s).result).toBe('no-exit')
     expect(s.firedRef.current).toBe(false)
+  })
+})
+
+// Ben, 2026-09-30: after going back to the show from a grading break, the
+// jukebox LIBRARY showed on the TV for a few seconds. "I never want it to be
+// visible at all." On the TV break overlay (ringMode) the library grid must
+// never paint, whatever the handoff state is.
+describe('libraryCoverUp', () => {
+  it('covers the library on the TV break overlay even after the handoff resolved', () => {
+    expect(libraryCoverUp({ ringMode: true, libHandoffPending: false, showLive: false })).toBe(true)
+  })
+  it('covers the library on the TV overlay while the handoff is pending', () => {
+    expect(libraryCoverUp({ ringMode: true, libHandoffPending: true, showLive: false })).toBe(true)
+  })
+  it('does not cover once the live screen is up (it draws its own backdrop)', () => {
+    expect(libraryCoverUp({ ringMode: true, libHandoffPending: true, showLive: true })).toBe(false)
+  })
+  it('keeps the standalone /music page unchanged: library visible unless a handoff is pending', () => {
+    expect(libraryCoverUp({ ringMode: false, libHandoffPending: false, showLive: false })).toBe(false)
+    expect(libraryCoverUp({ ringMode: false, libHandoffPending: true, showLive: false })).toBe(true)
+    expect(libraryCoverUp({ ringMode: false, libHandoffPending: true, showLive: true })).toBe(false)
   })
 })

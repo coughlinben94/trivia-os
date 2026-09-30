@@ -9,7 +9,7 @@ import { prefetchPalette } from '../hooks/usePalette'
 import { hasOverrides, TUNING_EVENT } from '../lib/gradientTuning'
 import Player from './Player'
 import LiveScreen, { EXIT_TOTAL_MS } from './LiveScreen'
-import { togglePlay, exitToShow } from '../lib/jukeboxControls.js'
+import { togglePlay, exitToShow, libraryCoverUp } from '../lib/jukeboxControls.js'
 import TestScreen from './TestScreen'
 import SongDetailModal from './SongDetailModal'
 
@@ -1690,7 +1690,7 @@ export default function Jukebox({ onLogout, initialLib, onExitToShow, ringMode =
           them. Nothing inside it: this is a should-be-invisible cover over a
           break that's about to start, not a loading screen worth designing.
           Only ever rendered on the initialLib (grading-break) path. */}
-      {libHandoffPending && !showLive && (
+      {libraryCoverUp({ ringMode, libHandoffPending, showLive }) && (
         <div className="fixed inset-0 bg-black z-50" />
       )}
 
