@@ -17,6 +17,9 @@ import OrderBoard from '../join/OrderBoard.jsx'
 import ChoiceBoard from '../join/ChoiceBoard.jsx'
 import HuesCuesBoard from '../join/HuesCuesBoard.jsx'
 import PinBoard from '../join/PinBoard.jsx'
+import MovieChainBoard from '../join/MovieChainBoard.jsx'
+import MovieChainEditor from './MovieChainEditor.jsx'
+import { movieChainConfigError } from '../../lib/movieChainScoring.js'
 import PinMapInteractive from '../shared/PinMapInteractive.jsx'
 import { isValidPin, parsePinPaste } from '../../lib/pinScoring.js'
 import { DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
@@ -1184,7 +1187,7 @@ function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, up
               field too gave the host two "what's correct" controls on
               screen, only one of which scoring ever reads — found live
               2026-09-06 walking through a real Mandela Effect slide. */}
-          {schema.type !== 'choice' && schema.type !== 'hues-cues' && (
+          {schema.type !== 'choice' && schema.type !== 'hues-cues' && schema.type !== 'movie-chain' && (
             <Field
               label={schema.type === 'wager' ? 'Answer — the true number' : schema.type === 'pin' ? 'Place name' : 'Answer'}
               hint={schema.type === 'wager' ? 'Every guess is scored by how close it lands to this. Must be a number.' : schema.type === 'pin' ? 'Shown on the TV at the reveal, e.g. "Apple Valley, MN". The true spot is set on the map below.' : undefined}
@@ -1230,6 +1233,17 @@ function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, up
               </div>
             </>
           )}
+
+          {schema.type === 'movie-chain' && <>
+            <MovieChainEditor data={data} onChange={onChange} />
+            {!movieChainConfigError(data) && <div className="flex flex-col gap-2">
+              <label className="block text-xs font-medium text-gray-700">Phone preview — live, matches what teams will see</label>
+              <div style={{ width: 300, margin: '0 auto', padding: '1.25rem 1rem', borderRadius: 20, background: theme.colors.bg }}>
+                <MovieChainBoard preview theme={theme} team={{ id: '__preview__', showId: show?.id ?? '__preview__' }}
+                  slide={{ id: slide.id, showId: show?.id, data: { ...data, movieChainLocked: false, movieChainRevealed: false } }} />
+              </div>
+            </div>}
+          </>}
         </>
       )}
 

@@ -117,6 +117,10 @@ export function isPinShiny(data) {
   return data.shinyInputSchema?.type === 'pin'
 }
 
+export function isMovieChainShiny(data) {
+  return data?.shinyInputSchema?.type === 'movie-chain'
+}
+
 // THE one place "is this slide shown all at once" is decided — the TV
 // dispatcher, the step-count math, and the host editor all read it here
 // rather than restating the condition (they used to disagree by luck).

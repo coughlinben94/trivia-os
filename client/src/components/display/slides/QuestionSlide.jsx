@@ -9,7 +9,8 @@ import ShinyBendleQuestion from './ShinyBendleQuestion.jsx'
 import ShinyChoiceQuestion from './ShinyChoiceQuestion.jsx'
 import ShinyHuesCuesQuestion from './ShinyHuesCuesQuestion.jsx'
 import ShinyPinQuestion from './ShinyPinQuestion.jsx'
-import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny, isVideoShiny, isMatchingShiny, isWagerShiny, isOrderShiny, isBendleShiny, isChoiceShiny, isHuesCuesShiny, isPinShiny, isConcurrentShiny, isConcurrentMediaShiny, partsToGridView } from '../../../lib/shinySeries.js'
+import ShinyMovieChainQuestion from './ShinyMovieChainQuestion.jsx'
+import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny, isVideoShiny, isMatchingShiny, isWagerShiny, isOrderShiny, isBendleShiny, isChoiceShiny, isHuesCuesShiny, isPinShiny, isMovieChainShiny, isConcurrentShiny, isConcurrentMediaShiny, partsToGridView } from '../../../lib/shinySeries.js'
 import { chunkParts } from '../../../lib/slideStepping.js'
 import { GridContent } from './GridSlide.jsx'
 import { fitToBox, QUESTION_BOX, QUOTE_BOX, useFitToBox, useFitListToBox, LIST_ITEM_FLOOR, LIST_ITEM_CEIL, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
@@ -1501,6 +1502,9 @@ function dispatchShinyContent({ slide, show, theme, transitionKey, isPreview }) 
   }
   if (isPinShiny(data)) {
     return <ShinyPinQuestion slide={slide} show={show} theme={theme} />
+  }
+  if (isMovieChainShiny(data)) {
+    return <ShinyMovieChainQuestion slide={slide} theme={theme} />
   }
   return <StandardQuestion slide={slide} theme={theme} show={show} transitionKey={transitionKey} isPreview={isPreview} />
 }

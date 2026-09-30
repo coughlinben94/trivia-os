@@ -21,7 +21,7 @@
 // Callers own the write + their own local-state update; nothing here
 // touches the network or React.
 
-import { isMatchingShiny, isWagerShiny, isOrderShiny, isChoiceShiny, isHuesCuesShiny, isPinShiny, isConcurrentShiny, isConcurrentMediaShiny } from './shinySeries.js'
+import { isMatchingShiny, isWagerShiny, isOrderShiny, isChoiceShiny, isHuesCuesShiny, isPinShiny, isMovieChainShiny, isConcurrentShiny, isConcurrentMediaShiny } from './shinySeries.js'
 
 // Chunks `parts` into fixed-size reveal groups of `groupSize`, in authored
 // order — the single implementation both revealStepCount's Next/Prev step
@@ -383,6 +383,7 @@ export const PHONE_MECHANICS = {
   pin:      { guard: isPinShiny,      lockFields: ['pinLocked'], revealField: 'pinRevealed', clearFields: ['pinRoomSize', 'pinResults'],
             // fresh entry only (withEntryState); Unlock keeps the host's override
             freshClearFields: ['pinRoomSizeOverride'] },
+  movieChain: { guard: isMovieChainShiny, lockFields: ['movieChainLocked'], revealField: 'movieChainRevealed', clearFields: ['movieChainResults', 'movieChainLockedAt'] },
 }
 
 // True when a slide already finished a phone-scored round (every lock field

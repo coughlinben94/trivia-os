@@ -34,6 +34,7 @@ export const FIXED_SHAPE_KINDS = {
   choice:      { hasOwnControls: false, nextStepHint: 'Creates a blank slide — set up the multiple-choice options afterward in the slide editor.' },
   'hues-cues': { hasOwnControls: false, nextStepHint: 'Creates a blank slide — set up the board afterward in the slide editor.' },
   pin:         { hasOwnControls: false, nextStepHint: 'Creates a blank slide — set the place and the true spot on the map afterward in the slide editor.' },
+  'movie-chain': { hasOwnControls: false, nextStepHint: 'Creates a blank slide — choose both movies and the shortest chain length afterward in the slide editor.' },
   grid:        { hasOwnControls: true, extraControls: gridExtraControls, buildSlideData: buildGridSlide, nextStepHint: null },
   venn:        { hasOwnControls: true, extraControls: vennExtraControls, buildSlideData: buildVennSlide, nextStepHint: null },
   bendle:      { hasOwnControls: true, extraControls: bendleExtraControls, buildSlideData: buildBendleSlide, nextStepHint: null },
