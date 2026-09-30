@@ -46,7 +46,9 @@ export function skipsLockedBackground(slide) {
   return isRingWorldSlide ||
     slide?.type === 'team-picker' || slide?.type === 'pre-show' ||
     slide?.type === 'round-intro' || slide?.type === 'swing-round-intro' ||
-    slide?.type === 'shiny-title' || slide?.type === 'bonus'
+    // A two-beat shiny-title's explainer beat (currentPart 1) is opaque like
+    // shiny content; beat 0 is the ambient announce card.
+    (slide?.type === 'shiny-title' && (slide.data?.currentPart ?? 0) < 1) || slide?.type === 'bonus'
 }
 
 // Per-slide content animation config — tune these without touching component logic

@@ -19,6 +19,7 @@ import { PRESHOW_BEN_PHOTO } from '../components/shared/BenPhoto.jsx'
 import { resolveShinyPart, isWagerShiny, isHuesCuesShiny, isPinShiny } from '../lib/shinySeries.js'
 import { preloadUsMapData } from '../hooks/useUsMapData.js'
 import { EASE_OUT } from '../lib/easings.js'
+import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../lib/shinyGold.js'
 import { resolvePreviewShow } from '../lib/previewSlide.js'
 import {
   computeNextStep,
@@ -543,7 +544,7 @@ function PreviewBadge() {
 
 // ─── Answer reveal overlay ─────────────────────────────────────────────────
 
-function AnswerRevealOverlay({ show, currentSlide }) {
+export function AnswerRevealOverlay({ show, currentSlide }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
   const visible = show.answer_reveal ?? show.showState?.answerReveal ?? false
@@ -558,6 +559,9 @@ function AnswerRevealOverlay({ show, currentSlide }) {
   // whole round. The mechanic has its own reveal, so this generic overlay is
   // suppressed on wager slides outright rather than merely phase-gated.
   const suppressed = currentSlide ? (isWagerShiny(currentSlide.data) || isHuesCuesShiny(currentSlide.data) || isPinShiny(currentSlide.data)) : false
+  const isShiny = !!currentSlide?.data?.isShiny
+  const accent = isShiny ? SHINY_GOLD : theme.colors.highlight
+  const glow = isShiny ? SHINY_GOLD_GLOW : theme.colors.accent
 
   return (
     <AnimatePresence>
@@ -569,16 +573,22 @@ function AnswerRevealOverlay({ show, currentSlide }) {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.22, ease: EASE_OUT }}
           className="absolute inset-0 flex items-center justify-center z-50"
-          style={{ backdropFilter: 'blur(18px)', backgroundColor: 'rgba(0,0,0,0.55)' }}
+          style={{ backdropFilter: 'blur(10px)', backgroundColor: 'rgba(0,0,0,0.4)' }}
         >
+          {/* Sized to its answer, not full width: the old w-full card was a
+              1792x232 near-black band — Ben (TV, 2026-09-30): "a black line
+              across the screen that the answer sat on". Border carries the
+              theme highlight, or the fixed shiny gold on a shiny question. */}
           <motion.div
+            data-testid="answer-card"
             initial={{ scale: reduce ? 1 : 0.92, opacity: 0 }}
             animate={{ scale: 1, opacity: 1, transition: { duration: 0.22, delay: 0.04, ease: EASE_OUT } }}
             exit={{ scale: reduce ? 1 : 0.95, opacity: 0, transition: { duration: 0.15, ease: EASE_OUT } }}
-            className="px-16 py-12 rounded-3xl text-center w-full mx-16"
+            className="px-16 py-12 rounded-3xl text-center max-w-[80%]"
             style={{
               background: theme.colors.bg,
-              boxShadow: '0 32px 80px rgba(0,0,0,0.6)',
+              border: `3px solid ${accent}`,
+              boxShadow: `0 0 60px ${glow}66, 0 32px 80px rgba(0,0,0,0.6)`,
             }}
           >
             <p

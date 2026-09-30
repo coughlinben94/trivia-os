@@ -1,4 +1,5 @@
 import { nanoid } from 'nanoid'
+import { hasExplainer, EXPLAINER_BEAT_PARTS } from './shinyExplainers.js'
 
 // Multi-part shiny series (data.parts.length > 1) store one text/answer/media
 // per part on a single slide; ordinary shiny/regular questions keep their
@@ -283,6 +284,9 @@ export function buildShinyTitleSlide(fmt, groupId, roundId = null) {
       shinyFormatName: fmt.name,
       shinyFormatIcon: fmt.icon,
       ...(fmt.default_subtitle ? { introSubtitle: fmt.default_subtitle } : {}),
+      // Two-beat title (announce card, then "how it works") for formats with
+      // an explainer — see lib/shinyExplainers.js.
+      ...(hasExplainer(fmt.id) ? { parts: EXPLAINER_BEAT_PARTS.map(p => ({ ...p })), currentPart: 0 } : {}),
     },
   }
 }

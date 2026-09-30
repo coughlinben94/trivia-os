@@ -968,3 +968,36 @@ describe('computeNextStep re-entry of scored slides', () => {
     expect(dataOf(fwd, 'o').orderRevealed).toBe(true)
   })
 })
+
+// 2026-09-30: a shiny-title for a format with an explainer is a two-beat slide
+// (title, then explainer) stepped by the same data.parts/currentPart logic as
+// every other multi-part slide — no new slide type, no grouping changes.
+describe('two-beat shiny-title (explainer)', () => {
+  const grp = { isShiny: true, shinyGroupId: 'g1' }
+  const twoBeat = (currentPart = 0) => slide('t', 0, 'shiny-title', { ...grp, parts: [{}, {}], currentPart })
+  const live = (slides, cur) => ({ slides, currentSlideIndex: cur, currentSlideId: slides[cur].id })
+
+  it('first Next stays on the title and moves to the explainer beat', async () => {
+    const slides = [twoBeat(0), slide('a', 1, 'question', grp)]
+    const patch = await computeNextStep(live(slides, 0), noTeams)
+    expect(dataOf(patch, 't').currentPart).toBe(1)
+    expect(patch.current_slide_index).toBeUndefined()
+  })
+  it('second Next leaves the title for the content slide', async () => {
+    const slides = [twoBeat(1), slide('a', 1, 'question', grp)]
+    const patch = await computeNextStep(live(slides, 0), noTeams)
+    expect(patch.current_slide_index).toBe(1)
+  })
+  it('Prev from the content slide lands on the explainer beat, not the title beat', async () => {
+    const slides = [twoBeat(0), slide('a', 1, 'question', grp)]
+    const patch = await computePrevStep(live(slides, 1), noTeams)
+    expect(patch.current_slide_index).toBe(0)
+    expect(dataOf(patch, 't').currentPart).toBe(1)
+  })
+  it('Prev on the explainer beat goes back to the title beat, same slide', async () => {
+    const slides = [twoBeat(1), slide('a', 1, 'question', grp)]
+    const patch = await computePrevStep(live(slides, 0), noTeams)
+    expect(dataOf(patch, 't').currentPart).toBe(0)
+    expect(patch.current_slide_index).toBeUndefined()
+  })
+})
