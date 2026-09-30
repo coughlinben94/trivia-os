@@ -59,9 +59,12 @@ Supabase migration.
 
 Only formats that need an extra action/scoring explanation opt in. The
 registry-driven design supplies the action copy, scoring summary, example
-renderer/data, and any assets for each eligible format. That same definition
+renderer/data, and any assets for each eligible format. The three interactive
+formats are identified by their stable `shinyInputSchema.type` values because
+their database format IDs are generated. “Not So Different” uses its existing
+fixed format ID because it is a sample-only exception. The same registry
 determines whether a title receives the extra beat and what it renders; adding
-a format must not require maintaining separate format-ID allowlists in the
+a format must not require maintaining separate eligibility allowlists in the
 builder and TV renderer. This is a constrained code-owned catalog, not a
 host-editable slide editor.
 
@@ -114,15 +117,18 @@ not be used as the source for this card.
 
 ## Architecture and data flow
 
-Use one code-owned definition per eligible shiny format. A definition supplies
-the short action instruction, the concise scoring summary, and its sample
-renderer and sample data/assets. Scoring values and thresholds come from shared
-constants used by both the scorer and the card; if a live rule currently exists
-only as a literal in scoring logic, extract it before the card duplicates it.
-The definition is also the source of truth for title-beat eligibility,
-component selection, and asset warming. Keep format-specific visuals separate
-from the shared card layout so the map, color grid, and audio-layer example can
-use their actual mechanic without forcing them into one animation.
+Use one code-owned definition per eligible shiny format. A definition is
+selected by either a stable `input_schema.type` or a fixed format ID and supplies
+the short action instruction, concise scoring summary, sample renderer key,
+and sample data/assets. The title builder stamps the input-schema type onto new
+title slide data so rendering uses the same selector. Scoring values and
+thresholds come from shared constants used by both the scorer and the card; if
+a live rule currently exists only as a literal in scoring logic, extract it
+before the card duplicates it. The definition is also the source of truth for
+title-beat eligibility, component selection, and asset warming. Keep
+format-specific visuals separate from the shared card layout so the map, color
+grid, and audio-layer example can use their actual mechanic without forcing
+them into one animation.
 
 The title slide's existing `currentPart` state selects the title or rules-card
 beat. The card receives theme and format definition, renders without writing
@@ -152,8 +158,9 @@ show data, and holds until the host's next navigation action.
    reduced-motion settings. The Bendle card does not play sample audio.
 6. Existing “Not So Different” sample-only behavior stays intact, and older
    saved title cards remain unchanged.
-7. The registry is the only format-ID source for adding eligibility, rendering,
-   and warming example assets.
+7. The registry is the only source for title-beat eligibility, rendering, and
+   warming example assets; it selects interactive formats by schema type and
+   the existing sample-only format by fixed ID.
 8. Shared scoring constants feed both the live scorer and the card, so their
    scoring summaries cannot silently drift apart.
 
