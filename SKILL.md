@@ -210,6 +210,9 @@ client/src/
                                  client/src/components/display/slides/ShinyPinQuestion.jsx (TV),
                                  client/src/components/shared/PinMapInteractive.jsx (gesture) and
                                  client/src/components/shared/UsMap.jsx (map render)
+      Movie Chain files       — client/src/components/join/MovieChainBoard.jsx (phone),
+                                 client/src/components/display/slides/ShinyMovieChainQuestion.jsx (TV),
+                                 client/src/lib/movieChainScoring.js (rules), api/movie-chain.js (Wikidata)
     display/
       ParticleBackground.jsx  — 21 GPU-only ambient themes, three-way routing:
                                  8 keep a bespoke scene, 1 (midnight-galaxy)
