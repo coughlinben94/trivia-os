@@ -3,6 +3,10 @@
 // run the exact same path with the exact same guards (spec §17.2). The
 // keydown handlers still do their own key/repeat/input-focus checks first.
 
+export function effectiveVolume(masterVolume, trackGain) {
+  return Math.max(0, Math.min(1, masterVolume * trackGain))
+}
+
 // Space: play/stop. Returns what it did; 'modal' and 'handoff' mean it did
 // nothing and the key is not claimed (no preventDefault), as before.
 export function togglePlay({ modalTrack, libHandoffPending, isPlaying, liveEnding, handleStop, startShuffle }) {
