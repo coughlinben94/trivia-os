@@ -15,7 +15,8 @@
 - `client/src/lib/shinyExplainers.js` — single source for explainer eligibility, action/scoring copy, renderer key, and assets; interactive formats match by stable input-schema type, while the existing sample-only format matches by its fixed ID.
 - `client/src/lib/shinySeries.js` — reads the registry when it builds a new shiny title's second beat and stamps its input-schema type for renderer lookup.
 - `client/src/components/display/slides/ShinyTitleSlide.jsx` — reads the same definition to render the shared rules-card shell and format renderer, and warm its assets.
-- `client/src/components/display/explainers/ShinyRulesCard.jsx` — shared persistent action/scoring/example layout.
+- `client/src/components/display/explainers/ShinyExampleFrame.jsx` — shared themed frame and Example label used by every explainer.
+- `client/src/components/display/explainers/ShinyRulesCard.jsx` — shared persistent action/scoring layout composed with the Example frame.
 - `client/src/components/display/explainers/BendleExplainer.jsx` — three step/point visual, no audio, no fixed stem order.
 - `client/src/components/display/explainers/PinItExplainer.jsx` — sample map, guesses, target, and scoring group.
 - `client/src/components/display/explainers/HuesCuesExplainer.jsx` — clue, selected square, target, and outlined distance zones.
@@ -57,8 +58,8 @@
 - Modify: `client/src/components/display/slides/ShinyTitleSlide.jsx`
 - Modify: `client/src/components/display/explainers/NotSoDifferentExplainer.jsx`
 
-- [ ] Build `ShinyRulesCard` with three visible regions: one action sentence, one scoring line/diagram, and one `Example` region. Keep action and scoring visible throughout the example.
-- [ ] Pass the registry definition to the card and its renderer. For `mode: 'sample'`, render the existing `NotSoDifferentExplainer` without action/scoring fields and preserve its four photos, prompt, answer, duration, and final hold.
+- [ ] Build `ShinyExampleFrame` for the shared themed layout and Example label. Compose `ShinyRulesCard` from it with one action sentence and one scoring line/diagram, keeping action and scoring visible throughout each rules example.
+- [ ] Pass the registry definition to the card and its renderer. For `mode: 'sample'`, render `NotSoDifferentExplainer` inside `ShinyExampleFrame`, without action/scoring fields. Preserve its four photos, prompt, answer, duration, and final hold.
 - [ ] For `mode: 'rules'`, render the shared card shell around the renderer selected by `rendererKey`.
 - [ ] Warm all registry `assets` while the title card is visible. Keep the shared registry as the only place with explainer selectors.
 - [ ] Use theme fonts/colors and high-contrast large type. Every spatial animation respects `useReducedMotion`; reduced motion retains content and uses opacity only.

@@ -283,10 +283,11 @@ export function buildShinyTitleSlide(fmt, groupId, roundId = null) {
       shinyFormatId:   fmt.id,
       shinyFormatName: fmt.name,
       shinyFormatIcon: fmt.icon,
+      ...(fmt.input_schema?.type ? { shinyInputType: fmt.input_schema.type } : {}),
       ...(fmt.default_subtitle ? { introSubtitle: fmt.default_subtitle } : {}),
       // Two-beat title (announce card, then "how it works") for formats with
       // an explainer — see lib/shinyExplainers.js.
-      ...(hasExplainer(fmt.id) ? { parts: EXPLAINER_BEAT_PARTS.map(p => ({ ...p })), currentPart: 0 } : {}),
+      ...(hasExplainer(fmt.id, fmt.input_schema?.type) ? { parts: EXPLAINER_BEAT_PARTS.map(p => ({ ...p })), currentPart: 0 } : {}),
     },
   }
 }

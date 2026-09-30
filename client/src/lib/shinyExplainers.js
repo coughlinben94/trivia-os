@@ -1,22 +1,71 @@
-// Shiny formats that get a short "how it works" animation right after their
-// title card. The title slide becomes a two-beat slide: beat 0 is the normal
-// announce card, beat 1 is the explainer. Stepping is the generic
-// data.parts/currentPart logic in slideStepping.js — Next goes beat 0 → 1,
-// the next Next leaves the slide; Prev walks back — so there is no new slide
-// type and no grouping change. ShinyTitleSlide.jsx maps format id → component
-// (keep the two lists in sync; a format in only one does nothing).
-// Only NEW title slides get the second beat (buildShinyTitleSlide); titles
-// already stored in a show stay one-beat.
+import { BENDLE_STEP_POINTS } from './bendleScoring.js'
+import { HUES_CUES_SCORE_BANDS } from './huesCuesScoring.js'
+import { PIN_MIN_ROOM_FOR_FRACTION, PIN_POINTS, PIN_WINNER_FRACTION } from './pinScoring.js'
+
+// The title card becomes a two-beat slide: announce, then explain. Existing
+// title slides stay unchanged; buildShinyTitleSlide stamps these parts only
+// when a new title resolves to a definition below.
 export const EXPLAINER_BEAT_PARTS = [{}, {}]
 
-const EXPLAINER_FORMAT_IDS = new Set(['fmt_not_so_different'])
+const notSoDifferentPhotos = ['harry', 'niall', 'louis', 'zayn']
+  .map(name => `/explainers/not-so-different/${name}.jpg`)
 
-export const hasExplainer = formatId => EXPLAINER_FORMAT_IDS.has(formatId)
+const pinPercent = Math.round(100 * PIN_WINNER_FRACTION.numerator / PIN_WINNER_FRACTION.denominator)
 
-// Photos each explainer shows, warmed by ShinyTitleSlide while the title card
-// is still up so nothing pops in blank. Credits: public/explainers/<name>/CREDITS.md.
-const EXPLAINER_IMAGES = {
-  fmt_not_so_different: ['harry', 'niall', 'louis', 'zayn'].map(n => `/explainers/not-so-different/${n}.jpg`),
+// This is the only eligibility/catalog list. Interactive formats match by
+// their stable schema type (their database IDs are generated); the existing
+// sample-only format keeps its fixed ID.
+export const SHINY_EXPLAINERS = Object.freeze([
+  Object.freeze({
+    formatId: 'fmt_not_so_different',
+    mode: 'sample',
+    rendererKey: 'notSoDifferent',
+    assets: notSoDifferentPhotos,
+  }),
+  Object.freeze({
+    inputType: 'bendle',
+    mode: 'rules',
+    rendererKey: 'bendle',
+    action: 'Write down the song title as each mix step plays. No phone entry.',
+    scoring: [`Earlier guesses score more: ${BENDLE_STEP_POINTS.join(' / ')} points by step.`],
+    assets: [],
+  }),
+  Object.freeze({
+    inputType: 'pin',
+    mode: 'rules',
+    rendererKey: 'pinIt',
+    action: 'Place one pin on the map on your phone, then lock it in.',
+    scoring: [
+      `Top ${pinPercent}% (rounded up) earn +${PIN_POINTS} points.`,
+      `Under ${PIN_MIN_ROOM_FOR_FRACTION} teams: closest pin only. Ties at the rounded-mile cutoff also score.`,
+    ],
+    assets: [],
+    preloadMapData: true,
+  }),
+  Object.freeze({
+    inputType: 'hues-cues',
+    mode: 'rules',
+    rendererKey: 'huesCues',
+    action: 'Choose a color square on your phone and lock it in.',
+    scoring: [
+      `Exact +${HUES_CUES_SCORE_BANDS[0].points} · one square +${HUES_CUES_SCORE_BANDS[1].points} · two squares +${HUES_CUES_SCORE_BANDS[2].points}.`,
+      'Diagonal neighbors count as one square.',
+    ],
+    assets: [],
+  }),
+])
+
+export function getShinyExplainer(selector, inputType) {
+  const normalized = typeof selector === 'string'
+    ? { formatId: selector, inputType }
+    : (selector ?? {})
+  return SHINY_EXPLAINERS.find(definition =>
+    (definition.formatId && definition.formatId === normalized.formatId)
+    || (definition.inputType && definition.inputType === normalized.inputType)
+  ) ?? null
 }
 
-export const explainerImageUrls = formatId => EXPLAINER_IMAGES[formatId] ?? []
+// Keep the original helpers available to the existing build and warm-up
+// callers. Passing the schema type adds lookup for generated format IDs.
+export const hasExplainer = (formatId, inputType) => !!getShinyExplainer(formatId, inputType)
+export const explainerImageUrls = (formatId, inputType) => getShinyExplainer(formatId, inputType)?.assets ?? []

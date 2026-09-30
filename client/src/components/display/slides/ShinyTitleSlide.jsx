@@ -1,12 +1,24 @@
 import { useEffect } from 'react'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { warmImages } from '../../../lib/warmImages.js'
-import { explainerImageUrls } from '../../../lib/shinyExplainers.js'
+import { getShinyExplainer } from '../../../lib/shinyExplainers.js'
+import { preloadUsMapData } from '../../../hooks/useUsMapData.js'
 import ShinyIntroScreen from '../ShinyIntroScreen.jsx'
 import NotSoDifferentExplainer from '../explainers/NotSoDifferentExplainer.jsx'
+import ShinyExampleFrame from '../explainers/ShinyExampleFrame.jsx'
+import ShinyRulesCard from '../explainers/ShinyRulesCard.jsx'
+import BendleExplainer from '../explainers/BendleExplainer.jsx'
+import PinItExplainer from '../explainers/PinItExplainer.jsx'
+import HuesCuesExplainer from '../explainers/HuesCuesExplainer.jsx'
 
-// Format id → "how it works" animation. Keep in sync with lib/shinyExplainers.js.
-const EXPLAINERS = { fmt_not_so_different: NotSoDifferentExplainer }
+// Renderer keys are defined by the shared format registry; this map has no
+// format IDs, so eligibility remains in one place.
+const EXPLAINER_RENDERERS = {
+  notSoDifferent: NotSoDifferentExplainer,
+  bendle: BendleExplainer,
+  pinIt: PinItExplainer,
+  huesCues: HuesCuesExplainer,
+}
 
 // The standalone title card that opens every shiny series (type
 // 'shiny-title'). It is a PERMANENT slide in the show order — the first
@@ -22,11 +34,22 @@ const EXPLAINERS = { fmt_not_so_different: NotSoDifferentExplainer }
 // stamps this shape.
 export default function ShinyTitleSlide({ slide, show }) {
   const { theme } = useTheme()
-  // Warm the explainer's photos while the title card is still up, same
-  // "warm ahead of need" as the question slides (lib/warmImages.js).
-  const formatId = slide.data?.shinyFormatId
-  useEffect(() => { warmImages(explainerImageUrls(formatId)) }, [formatId])
-  const Explainer = (slide.data?.currentPart ?? 0) >= 1 ? EXPLAINERS[slide.data?.shinyFormatId] : null
-  if (Explainer) return <div data-testid="shiny-explainer"><Explainer /></div>
+  const definition = getShinyExplainer(slide.data?.shinyFormatId, slide.data?.shinyInputType)
+  useEffect(() => {
+    if (!definition) return
+    warmImages(definition.assets)
+    if (definition.preloadMapData) preloadUsMapData()
+  }, [definition])
+  const Renderer = EXPLAINER_RENDERERS[definition?.rendererKey]
+  if ((slide.data?.currentPart ?? 0) >= 1 && definition && Renderer) {
+    const example = <Renderer definition={definition} />
+    return (
+      <div data-testid="shiny-explainer">
+        {definition.mode === 'rules'
+          ? <ShinyRulesCard definition={definition}>{example}</ShinyRulesCard>
+          : <ShinyExampleFrame>{example}</ShinyExampleFrame>}
+      </div>
+    )
+  }
   return <ShinyIntroScreen slide={slide} theme={theme} show={show} />
 }

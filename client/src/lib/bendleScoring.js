@@ -35,11 +35,7 @@ export const AVAILABLE_STEMS = ['drums', 'bass', 'other', 'guitar']
 // position varies per slide. (2026-09-08, Ben: "what if i wanted bass first
 // drums second sometimes" / "if i want bass first, or guitar first, doesnt
 // matter" — the order itself is the point, not the points.)
-const STEP_POSITIONS = [
-  { points: 20 },
-  { points: 15 },
-  { points: 10 },
-]
+export const BENDLE_STEP_POINTS = Object.freeze([20, 15, 10])
 
 // 'other' keeps the id 'full' it always had (pre-reorder BENDLE_TIERS named
 // its tier that, not 'other') — kept for continuity with any historical
@@ -51,13 +47,13 @@ const TIER_IDS = { drums: 'drums', bass: 'bass', other: 'full' }
 // ['bass', 'drums', 'other']. Falls back to the default order for anything
 // malformed (missing, wrong length) rather than throwing on a live TV.
 export function buildBendleTiers(stepOrder) {
-  const order = Array.isArray(stepOrder) && stepOrder.length === STEP_POSITIONS.length
+  const order = Array.isArray(stepOrder) && stepOrder.length === BENDLE_STEP_POINTS.length
     ? stepOrder
     : DEFAULT_STEP_ORDER
   return order.map((stem, i) => ({
     id: TIER_IDS[stem] ?? stem,
     label: i === 0 ? `${STEM_LABELS[stem] ?? stem} Only` : `+ ${STEM_LABELS[stem] ?? stem}`,
-    points: STEP_POSITIONS[i].points,
+    points: BENDLE_STEP_POINTS[i],
     stems: [stem],
   }))
 }

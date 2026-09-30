@@ -79,8 +79,10 @@ Initial coverage:
 The “We’re Not So Different, You and I…” explainer remains sample-led: four
 clues, the connection prompt, and the answer. Its one-answer written mechanic
 is already clear from the sample, so it does not need a scoring/rules panel in
-this phase. Other familiar, paper-answer shiny formats stay out of the registry
-until there is a concrete reason to explain them.
+this phase. It does use the same shared themed Example frame as the other
+formats, keeping its four-photo reveal, prompt, answer, and timing intact.
+Other familiar, paper-answer shiny formats stay out of the registry until
+there is a concrete reason to explain them.
 
 ### Timing, compatibility, and accessibility
 
