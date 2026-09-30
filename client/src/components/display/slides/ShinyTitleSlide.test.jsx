@@ -13,6 +13,9 @@ vi.mock('../../../lib/hostPhotos.js', () => ({
   getUsedHostPhotoUrls: () => new Set(),
 }))
 
+const { warmImagesMock } = vi.hoisted(() => ({ warmImagesMock: vi.fn() }))
+vi.mock('../../../lib/warmImages.js', () => ({ warmImages: warmImagesMock }))
+
 describe('<ShinyTitleSlide>', () => {
   let container, root
 
@@ -95,6 +98,19 @@ describe('<ShinyTitleSlide> explainer beat', () => {
   it('beat 1 shows the explainer', () => {
     render(slideAt(1))
     expect(container.querySelector('[data-testid="shiny-explainer"]')).not.toBeNull()
+  })
+  it('beat 1 shows four real headshots and reveals the answer', () => {
+    render(slideAt(1))
+    const imgs = [...container.querySelectorAll('[data-testid="shiny-explainer"] img')]
+    expect(imgs).toHaveLength(4)
+    for (const img of imgs) expect(img.getAttribute('src')).toMatch(/^\/explainers\/not-so-different\/[a-z]+\.jpg$/)
+    expect(container.textContent).toContain('One Direction')
+  })
+  it('warms the headshots while the title card (beat 0) is still up', () => {
+    warmImagesMock.mockClear()
+    render(slideAt(0))
+    expect(warmImagesMock).toHaveBeenCalledTimes(1)
+    expect(warmImagesMock.mock.calls[0][0]).toHaveLength(4)
   })
   it('the explainer is opaque: skipsLockedBackground is false on beat 1, true on beat 0', async () => {
     const { skipsLockedBackground } = await import('../SlideRenderer.jsx')

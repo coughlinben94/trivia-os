@@ -12,3 +12,11 @@ export const EXPLAINER_BEAT_PARTS = [{}, {}]
 const EXPLAINER_FORMAT_IDS = new Set(['fmt_not_so_different'])
 
 export const hasExplainer = formatId => EXPLAINER_FORMAT_IDS.has(formatId)
+
+// Photos each explainer shows, warmed by ShinyTitleSlide while the title card
+// is still up so nothing pops in blank. Credits: public/explainers/<name>/CREDITS.md.
+const EXPLAINER_IMAGES = {
+  fmt_not_so_different: ['harry', 'niall', 'louis', 'zayn'].map(n => `/explainers/not-so-different/${n}.jpg`),
+}
+
+export const explainerImageUrls = formatId => EXPLAINER_IMAGES[formatId] ?? []
