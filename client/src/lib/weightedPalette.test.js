@@ -443,9 +443,8 @@ describe('derivePalette — cross-color drift separation', () => {
 })
 
 describe('derivePalette — curated duo adjacent hues', () => {
-  // Proposed 15° floor for Ben's visual review, not an approved aesthetic
-  // threshold. Check final hues after position-dependent drift, for both
-  // same-source and different-source neighbors.
+  // Approved 15° minimum for final hues after position-dependent drift,
+  // covering both same-source and different-source neighbors.
   it.each(Object.entries(DUO_PALETTES))('%s keeps every adjacent station hue at least 15° apart', (_, palette) => {
     const out = derivePalette({ ...palette, currentHues: midnightGalaxyRing.stations.map(station => station.hue) })
     for (let i = 0; i < out.assignment.length; i++) {
@@ -456,14 +455,14 @@ describe('derivePalette — curated duo adjacent hues', () => {
 })
 
 describe('derivePalette — same-color spacing preserves cross-color gaps', () => {
-  // The proposed adjacency floor applies to every rendered hue pair, so a
+  // The approved adjacency floor applies to every rendered hue pair, so a
   // same-color repair cannot create a near-identical different-color pair.
   it.each([
     ['purple_blue', 6, 7],
     ['purple_blue', 8, 9],
     ['amazon_dusk', 6, 7],
     ['cyan_mirage', 6, 7],
-  ])('%s keeps the station %i–%i cross-color gap above the proposed floor', (name, a, b) => {
+  ])('%s keeps the station %i–%i cross-color gap above the approved floor', (name, a, b) => {
     const palette = DUO_PALETTES[name]
     const out = derivePalette({ ...palette, currentHues: midnightGalaxyRing.stations.map(station => station.hue) })
 

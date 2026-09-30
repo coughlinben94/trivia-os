@@ -288,11 +288,11 @@ export function projectLadderOffset(anchorHex, oklchDeg, clampDeg = ANCHOR_WINDO
   return Math.max(-clampDeg, Math.min(clampDeg, d))
 }
 
-// PROTOTYPE: 15° is a proposed same-color floor for Ben's review. The
-// bounded beam assigns ladder rungs around the whole ring at once. It keeps
-// every adjacent pair above that proposed floor, regardless of source
-// color. This avoids repairing one edge by collapsing another boundary.
-const PROPOSED_SAME_COLOR_GAP = 15
+// Approved same-color floor: every adjacent final hue pair must stay at least
+// 15° apart. The bounded beam assigns ladder rungs around the whole ring at
+// once, minimizing changes while avoiding a repair that collapses another
+// boundary.
+const MIN_ADJACENT_HUE_GAP = 15
 function palettePickOrders(assignment, counts, ladders, anchors, rot, stationCount) {
   const ordinal = []
   const seen = counts.map(() => 0)
@@ -302,7 +302,7 @@ function palettePickOrders(assignment, counts, ladders, anchors, rot, stationCou
     return ((Math.round(anchors[color].deg + rot(color, position) + ladders[color][pick]) % 360) + 360) % 360
   }
   const edgeIsSafe = (leftHue, rightHue) =>
-    hueDelta(leftHue, rightHue) >= PROPOSED_SAME_COLOR_GAP
+    hueDelta(leftHue, rightHue) >= MIN_ADJACENT_HUE_GAP
   const beamWidth = 128
   let beam = [{ used: counts.map(() => 0), picks: [], deviation: 0, maxSameGap: 0, firstHue: null, lastHue: null }]
 
