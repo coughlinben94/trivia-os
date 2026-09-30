@@ -288,6 +288,63 @@ export function projectLadderOffset(anchorHex, oklchDeg, clampDeg = ANCHOR_WINDO
   return Math.max(-clampDeg, Math.min(clampDeg, d))
 }
 
+// PROTOTYPE: 15° is a proposed same-color floor for Ben's review. The
+// bounded beam assigns ladder rungs around the whole ring at once. It keeps
+// every adjacent pair above that proposed floor, regardless of source
+// color. This avoids repairing one edge by collapsing another boundary.
+const PROPOSED_SAME_COLOR_GAP = 15
+function palettePickOrders(assignment, counts, ladders, anchors, rot, stationCount) {
+  const ordinal = []
+  const seen = counts.map(() => 0)
+  for (const color of assignment) ordinal.push(seen[color]++)
+  const hueAt = (position, pick) => {
+    const color = assignment[position]
+    return ((Math.round(anchors[color].deg + rot(color, position) + ladders[color][pick]) % 360) + 360) % 360
+  }
+  const edgeIsSafe = (leftHue, rightHue) =>
+    hueDelta(leftHue, rightHue) >= PROPOSED_SAME_COLOR_GAP
+  const beamWidth = 128
+  let beam = [{ used: counts.map(() => 0), picks: [], deviation: 0, maxSameGap: 0, firstHue: null, lastHue: null }]
+
+  for (let position = 0; position < stationCount; position++) {
+    const color = assignment[position]
+    const next = []
+    for (const state of beam) {
+      for (let pick = 0; pick < counts[color]; pick++) {
+        const bit = 1 << pick
+        if (state.used[color] & bit) continue
+        const hue = hueAt(position, pick)
+        if (position > 0 && !edgeIsSafe(state.lastHue, hue)) continue
+
+        const used = state.used.slice()
+        used[color] |= bit
+        const gap = position > 0 && assignment[position - 1] === color
+          ? hueDelta(state.lastHue, hue)
+          : 0
+        next.push({
+          used,
+          picks: [...state.picks, pick],
+          deviation: state.deviation + Math.abs(pick - ordinal[position]),
+          maxSameGap: Math.max(state.maxSameGap, gap),
+          firstHue: position === 0 ? hue : state.firstHue,
+          lastHue: hue,
+        })
+      }
+    }
+    if (!next.length) return null
+    next.sort((a, b) => a.deviation - b.deviation || a.maxSameGap - b.maxSameGap)
+    beam = next.slice(0, beamWidth)
+  }
+
+  const complete = beam.filter(state => edgeIsSafe(state.lastHue, state.firstHue))
+  if (!complete.length) return null
+  complete.sort((a, b) => a.deviation - b.deviation || a.maxSameGap - b.maxSameGap)
+  const orders = counts.map(k => Array(k))
+  const finalSeen = counts.map(() => 0)
+  assignment.forEach((color, i) => { orders[color][finalSeen[color]++] = complete[0].picks[i] })
+  return orders
+}
+
 // Rotate a colour onto another colour's OKLab hue, keeping its OWN lightness
 // and chroma. This is how every near-white tint in the world (star casts, hot
 // cores, the comet's glare) follows a recolour without changing how BRIGHT it
@@ -350,17 +407,23 @@ export function derivePalette({ colors, weights, stationCount = 13, baseTheme, c
   const rot = (c, i) => plans[c].dir * plans[c].arc * (1 - Math.cos(2 * Math.PI * i / stationCount)) / 2
   const ladders = counts.map((k, c) =>
     hueLadder(k, LADDER_HALF).map(off => projectLadderOffset(colors[c], off)))
-  const seen = counts.map(() => 0)
-  const hues = assignment.map((c, i) => {
-    const k = counts[c]
-    const j = seen[c]++
-    // Outside-in at drift 0 (unchanged behaviour); ring order under drift,
-    // so the ladder and the drift bump move the SAME way (Fable's Phase 2.5
-    // "why step 2/adjacent-rung" finding — outside-in fights drift).
-    const pick = drift.arc > 0 ? j : (j % 2 === 0 ? Math.floor(j / 2) : k - 1 - Math.floor(j / 2))
-    const h = anchors[c].deg + rot(c, i) + ladders[c][pick]
-    return ((Math.round(h) % 360) + 360) % 360
-  })
+  const sequentialOrders = counts.map(k => Array.from({ length: k }, (_, j) => j))
+  const huesForOrders = orders => {
+    const seen = counts.map(() => 0)
+    return assignment.map((c, i) => {
+      const j = seen[c]++
+      const pick = orders[c][j]
+      const h = anchors[c].deg + rot(c, i) + ladders[c][pick]
+      return ((Math.round(h) % 360) + 360) % 360
+    })
+  }
+  const hasAdjacentSameColor = assignment.some((color, i) => color === assignment[(i + 1) % stationCount])
+  const pickOrders = drift.arc <= 0
+    ? counts.map(k => Array.from({ length: k }, (_, j) =>
+      j % 2 === 0 ? Math.floor(j / 2) : k - 1 - Math.floor(j / 2)))
+    : !hasAdjacentSameColor ? sequentialOrders
+      : palettePickOrders(assignment, counts, ladders, anchors, rot, stationCount) || sequentialOrders
+  const hues = huesForOrders(pickOrders)
   const hueAnchorsAt = Array.from({ length: stationCount }, (_, i) =>
     anchors.map((a, c) => ({ deg: ((Math.round(a.deg + rot(c, i)) % 360) + 360) % 360, window: a.window })))
 

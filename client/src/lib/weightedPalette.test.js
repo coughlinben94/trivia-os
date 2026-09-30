@@ -4,6 +4,8 @@ import {
   atLightness, derivePalette, rotateOklabHue, projectLadderOffset, driftPlan,
 } from './weightedPalette.js'
 import { rgbToOklab, oklabToRgb, hexToRgb } from './oklab.js'
+import { DUO_PALETTES } from './duoGraph.js'
+import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
 
 const BASE = {
   colors: {
@@ -388,10 +390,7 @@ describe('drift', () => {
     })
   })
 
-  it('adjacent same-colour rungs are handed out in RING ORDER under drift, not outside-in', () => {
-    // At drift 0 the ladder still alternates outside-in (unchanged behaviour).
-    // At any drift > 0, consecutive same-colour stations must get adjacent
-    // ladder rungs (6 degrees apart), because drift + outside-in fights itself.
+  it('drifted same-color neighbors separate without a large adjacent jump', () => {
     const out = derivePalette({
       colors: ['#a855f7', '#3b82f6'], weights: [0.60, 0.40], stationCount: 13,
       baseTheme: BASE, currentHues: CURRENT_HUES, drift: { arc: 60 },
@@ -403,13 +402,8 @@ describe('drift', () => {
       const j = (i + 1) % 13
       if (out.assignment[i] === out.assignment[j]) {
         found = true
-        // Their ladder-only contribution (hue minus the rotated anchor at
-        // each station) must be ~6 apart, not up to 36 apart. OKLCH→HSL
-        // projection is nonlinear per anchor; 10° tolerance accounts for that.
-        const c = out.assignment[i]
-        const rungI = hueDelta(out.hues[i], out.hueAnchorsAt[i][c].deg)
-        const rungJ = hueDelta(out.hues[j], out.hueAnchorsAt[j][c].deg)
-        expect(Math.abs(rungI - rungJ)).toBeLessThanOrEqual(10)
+        const gap = hueDelta(out.hues[i], out.hues[j])
+        expect(gap).toBeGreaterThanOrEqual(15)
       }
     }
     expect(found).toBe(true)
@@ -445,5 +439,35 @@ describe('derivePalette — cross-color drift separation', () => {
       const [a, b] = anchorsAtStation
       expect(hueDelta(a.deg, b.deg)).toBeGreaterThan(20)
     }
+  })
+})
+
+describe('derivePalette — curated duo adjacent hues', () => {
+  // Proposed 15° floor for Ben's visual review, not an approved aesthetic
+  // threshold. Check final hues after position-dependent drift, for both
+  // same-source and different-source neighbors.
+  it.each(Object.entries(DUO_PALETTES))('%s keeps every adjacent station hue at least 15° apart', (_, palette) => {
+    const out = derivePalette({ ...palette, currentHues: midnightGalaxyRing.stations.map(station => station.hue) })
+    for (let i = 0; i < out.assignment.length; i++) {
+      const j = (i + 1) % out.assignment.length
+      expect(hueDelta(out.hues[i], out.hues[j])).toBeGreaterThanOrEqual(15)
+    }
+  })
+})
+
+describe('derivePalette — same-color spacing preserves cross-color gaps', () => {
+  // The proposed adjacency floor applies to every rendered hue pair, so a
+  // same-color repair cannot create a near-identical different-color pair.
+  it.each([
+    ['purple_blue', 6, 7],
+    ['purple_blue', 8, 9],
+    ['amazon_dusk', 6, 7],
+    ['cyan_mirage', 6, 7],
+  ])('%s keeps the station %i–%i cross-color gap above the proposed floor', (name, a, b) => {
+    const palette = DUO_PALETTES[name]
+    const out = derivePalette({ ...palette, currentHues: midnightGalaxyRing.stations.map(station => station.hue) })
+
+    expect(out.assignment[a]).not.toBe(out.assignment[b])
+    expect(hueDelta(out.hues[a], out.hues[b])).toBeGreaterThanOrEqual(15)
   })
 })
