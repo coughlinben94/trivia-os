@@ -3,6 +3,16 @@
 // run the exact same path with the exact same guards (spec §17.2). The
 // keydown handlers still do their own key/repeat/input-focus checks first.
 
+// Whether the black cover sits over the library grid. On the TV break overlay
+// (ringMode) the library must never paint (Ben, 2026-09-30: "I never want it to
+// be visible at all") — before this it was covered only while a handoff was
+// pending, so a stopped jukebox left the library on the TV until the show
+// finished advancing. The standalone /music page keeps its library.
+export function libraryCoverUp({ ringMode, libHandoffPending, showLive }) {
+  if (showLive) return false // LiveScreen draws its own backdrop
+  return ringMode || libHandoffPending
+}
+
 // Space: play/stop. Returns what it did; 'modal' and 'handoff' mean it did
 // nothing and the key is not claimed (no preventDefault), as before.
 export function togglePlay({ modalTrack, libHandoffPending, isPlaying, liveEnding, handleStop, startShuffle }) {
