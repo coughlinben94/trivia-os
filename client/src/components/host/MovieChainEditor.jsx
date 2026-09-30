@@ -5,6 +5,7 @@ import { movieChainConfigError } from '../../lib/movieChainScoring.js'
 function MovieField({ label, field, value, onChange }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
+  const [searched, setSearched] = useState(false)
   const [castInfo, setCastInfo] = useState(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -21,39 +22,41 @@ function MovieField({ label, field, value, onChange }) {
 
   async function search() {
     if (query.trim().length < 2 || busy) return
-    setBusy(true); setError('')
-    try { setResults(await movieChainRequest('search', { q: query.trim() })) }
+    setBusy(true); setError(''); setSearched(false)
+    try { setResults(await movieChainRequest('search', { q: query.trim() })); setSearched(true) }
     catch (err) { setError(err.message) }
     finally { setBusy(false) }
   }
 
   async function choose(movie) {
-    setResults([]); setQuery('')
+    setResults([]); setQuery(''); setSearched(false)
     onChange(field, movie)
     setCastInfo(null); setError('')
   }
 
   return (
     <div className="space-y-2">
-      <label className="block text-sm font-semibold text-gray-800">{label}</label>
+      <label className="block text-sm font-semibold text-gray-800" htmlFor={`movie-chain-${field}`}>{label}</label>
       {movie && <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-900">{movie.title} {movie.year ? `(${movie.year})` : ''}</div>}
       <div className="flex gap-2">
         <input
+          id={`movie-chain-${field}`}
           value={query}
-          onChange={event => setQuery(event.target.value)}
+          onChange={event => { setQuery(event.target.value); setSearched(false) }}
           onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); search() } }}
           placeholder={`Search ${label.toLowerCase()}`}
-          className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900"
+          className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500"
         />
         <button type="button" aria-label={`Search ${label.toLowerCase()}`} onClick={search} disabled={busy || query.trim().length < 2}
-          className="rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">{busy ? 'Searching…' : 'Search'}</button>
+          className="host-button min-h-11 rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">{busy ? 'Searching…' : 'Search'}</button>
       </div>
       {results.length > 0 && <div className="max-h-44 overflow-y-auto rounded-lg border border-gray-200 bg-white">
         {results.map(result => <button type="button" key={result.id} data-movie-id={result.id} onClick={() => choose(result)}
-          className="block w-full px-3 py-2 text-left text-sm text-gray-900 hover:bg-gray-100">
+          className="host-button block min-h-11 w-full px-3 py-2 text-left text-sm text-gray-900 hover:bg-gray-100">
           {result.title} {result.year ? `(${result.year})` : ''}
         </button>)}
       </div>}
+      {searched && results.length === 0 && <p role="status" className="text-xs text-gray-600">No films found. Try a shorter title.</p>}
       {castInfo && castInfo.id === movie?.id && <p className="text-xs text-gray-500">{castInfo.count} credited performer{castInfo.count === 1 ? '' : 's'} in Wikidata</p>}
       {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
     </div>
