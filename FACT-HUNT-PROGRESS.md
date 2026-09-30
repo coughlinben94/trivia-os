@@ -149,3 +149,36 @@ accepted 2 / bounced 1
 Moonage Daydream | score 4 | learned: nowhere I can name | only Guardians song added after the script
 Kung Fu Hustle | score 4 | learned: nowhere I can name | Ten Rings copied from the iron rings in that movie
 Thomas | bounce:unverified | rights-holders banned tying anyone to the tracks | second source was a 10-things list
+
+## 2026-09-28 — fact-hunt-quick-2026-09-28 (quick 10, Track 1 only)
+wave 1 DISPATCHED: A stack(wizard of oz, sonic the hedgehog, courage the cowardly dog) q3 · B well Cool-facts q3 · C well Sitcoms q2 · D well Nerd canon q2 edge=yes. Bank file stale (built 2026-09-22); hunters told to also query DB for rows since 2026-09-22 12:40.
+wave 1 (track 1, stack+Cool-facts+Sitcoms+Nerd canon): returned 10 / intake-bounced 0 / grader-bounced 0 / accepted 10 / edge 0 · flushed (10 rows confirmed) · dupe line: 10 facts checked · 0 bounced as dupes (semantic or lexical or same-wave) · 0 skipped, no embedding
+score-kills: none (lowest score 3: Sonic, Intl Orange, Alice Cooper, Rock Around the Clock, Gandalf). NOTE 0% grader bounce = broken-grader flag per durable rule 4; grader did real fetches and caught 3 unsupported fragments, which I trimmed before flush.
+
+## 2026-09-28 — fact-hunt-quick-2026-09-28-2 (quick 10, Track 1 only, rerun)
+wave 1 DISPATCHED: A stack(star wars, radiohead, mary poppins) q3 · B well Disney/Pixar/parks q3 · C well Music q2 · D well Sports-as-pop-culture q1 + Brands/toys/retail/drinks q1 edge=yes. Bank file appended through run 1 (3519 lines). Same session also reruns shiny+PYL QI generators.
+
+## 2026-09-28 — fact-hunt-quick-2026-09-28-3 (wave 3, 12 facts, Track 1, added because Ben asked "why only 10")
+wave 1 DISPATCHED: A stack(jurassic park, close encounters of the third kind, addams family) q3 · B Comedy films+Internet/meme q3 · C Cryptids/haunted/true-crime+Myth/folklore/D&D q3 · D Michigan/family+Theme-parks/roadside/Vegas q3 edge=yes. Round-2 grader (fact-hunt-quick-2026-09-28-2) still pending at dispatch time; its 9 candidates are not yet in the bank file.
+wave (run 2, track 1): returned 10 / intake-bounced 1 (Mustang: only door was a Ford/Dearborn place tie, no stub, no matching bounce tag) / grader-bounced 2 (Mary Poppins unverified, Hudson unverified; both stubbed) / accepted 3 (Radiohead, Mater, Winged Wheelers) / edge 0 · flushed · dupe line: 9 facts checked · 0 bounced as dupes · 0 skipped, no embedding
+score-kills (sub-3, not tombstoned):
+Tatooine | score 2 | Luke's home world named for Tunisian town Tataouine, Sidi Driss hotel | grader: learned bar: Star Wars filming-location trivia staple; Gazette never says Lucas took the name
+Windsor | score 2 | Journey "South Detroit" is Windsor | grader: learned bar: the lyric every Michigan bar argues about
+Swampers | score 2 | Sweet Home Alabama Swampers named by Denny Cordell | grader: learned bar: the chorus gives the answer, Cordell coining it is a small detail
+Crayola | score 2 | craie + oleaginous, -ola suffix trend | grader: learned bar: brand's own FAQ line, listicle staple
+
+wave (run 3, track 1, agent fact-hunt-quick-2026-09-28-3): returned 14 / intake-bounced 0 / grader-bounced 3 (Jurassic Park unverified, Hodag unverified, Metallic Pea sayable; all stubbed) / accepted 5 (Addams Family, Squonk, Displacer beast, Hush Puppies, Blurb) / edge 0 · flushed · dupe line: 14 facts checked · 0 bounced as dupes (semantic or lexical or same-wave) · 0 skipped, no embedding
+trimmed at flush: Displacer beast (dropped unsupported Gygax-2005 fragment), Hush Puppies (dropped unconfirmed "first non-athletic casual shoe"), Blurb (dropped unfound "sound like a publisher" fragment + its bridge)
+score-kills (sub-3, not tombstoned):
+Close Encounters | score 2 | title from Hynek's UFO scale + Smoking Pipe cameo | grader: learned bar: standard IMDb/listicle nugget; each source carries half; "1972" on neither
+Bad Axe | score 2 | Huron County town named for broken axe | grader: no reveal, name means what it says; rename attempts rest on local blog
+Flamingo | score 2 | Bugsy/Virginia Hill legend vs Wilkerson | grader: learned bar: Bugsy (1991); Wilkerson counter leads with debunk
+The Day the Music Died | score 2 | Wayne's World Mirthmobile plate F3B 259 = Feb 3 1959 | grader: learned bar: Wayne's World trivia staple; answer comes straight from American Pie lyric; Fraser Engines = generic
+Chicken | score 2 | Leeroy Jenkins last line | grader: learned bar: the meme's punchline is the answer
+Freelance | score 2 | Ivanhoe coinage | grader: learned bar: author-coined-words listicle staple
+
+wave (topical, track 1 + track 2 YouTube, agent fact-hunt-topical-2026-09-28): returned 18 (4 deaths, 3 screen, 4 music/games, 4 sports/Michigan, 3 YouTube) / intake-bounced 0 / grader-bounced 8 (Phanatic, Suddenly, Chicken and eggs, New Radicals, Sly Cooper, Twin Peaks, Chiefs, Jack in the Box; all stubbed) / accepted 3 (Vecna, Banshee, Thunderdome) / edge 0 · flushed · dupe line: 18 facts checked · 0 bounced as dupes (semantic or lexical or same-wave) · 0 skipped, no embedding
+trimmed at flush: Vecna (dropped unsupported "Dying Earth"), Banshee (dropped unsupported "local paper printed the definition")
+score-kills (sub-3, not tombstoned): Stair car 2 (Civil War easter-egg staple, Marvel vein) · Catalina Wine Mixer 2 (answer is the movie's catchphrase, "it's real now" is every article's first line) · Clint Eastwood/Richard Harrison 2 (first paragraph of Harrison's Wikipedia, only door is an unknown actor) · All I Want for Christmas Is You/Ella Langley 2 (headline not a hinge, same record-swap shape as Avatar) · Reynolds 2 (shared surname not a join; Turd Ferguson door already mined) · Emma Thompson 2 (Wikipedia-lead résumé fact) · Ted/Scrubs Blanks 2 (Scrubs fans already know; tribute bar door is stale, Mar 3 2026)
+sources: youtube Jorphdan 1/1, Matthew Meredith 1/0, ComeToCatalina 1/0, Secret Galaxy 1/0 inserted into fact_hunt_sources.
+NOTE reddit skipped for Track 2: agent-reach's Reddit backend (OpenCLI) reuses Ben's real Chrome login, banned for background/subagent work per standing rule.

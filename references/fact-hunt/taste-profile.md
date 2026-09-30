@@ -81,7 +81,7 @@ A bridge is a **second door into the same answer from a different fandom**, type
 
 ## 5. Ben's actual verdicts (the only positive signal — study these before hunting)
 
-**Live list (paste into every hunter as `{{recent_verdicts}}` and into the grader as `{{verdict_rows}}`; these rows outrank the frozen lists below):** keeps `select answer, fact, bridges from fact_hunt_entries where status='used' or 'kept' = any(tags) order by round_date desc;` — last 40 kills `select answer, fact from fact_hunt_entries where status='tombstoned' and not (tags && array['bounce:sayable','bounce:mined','bounce:unverified','bounce:dupe']) order by created_at desc limit 40;` — a row whose fact starts with `bounced:` is a pipeline stub, not a Ben verdict, and stays out of this list.
+**Live list (paste into every hunter as `{{recent_verdicts}}` and into the grader as `{{verdict_rows}}`; these rows outrank the frozen lists below):** keeps `select answer, fact, bridges from fact_hunt_entries where status='used' or 'kept' = any(tags) order by round_date desc;` — last 40 kills `select answer, fact from fact_hunt_entries where status='tombstoned' and (status_note is null or status_note <> 'not-using') and not (tags && array['bounce:sayable','bounce:mined','bounce:unverified','bounce:dupe']) order by created_at desc limit 40;` — a row whose fact starts with `bounced:` is a pipeline stub, not a Ben verdict, and stays out of this list. `status_note = 'not-using'` (fact-bank.html's "Not Using" button) is also excluded — Ben just doesn't want that one, it's not a taste judgment on the kind of fact; `'dont-care'` and `'bad-fact'` both stay in as real kills.
 
 The three lists below are the frozen 2026-09-01 baseline (hand-typed; the live queries grow past them each round).
 
