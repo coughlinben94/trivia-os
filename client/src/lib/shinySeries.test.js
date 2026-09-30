@@ -539,3 +539,15 @@ describe('idsToDeleteWith', () => {
   })
 })
 
+
+describe('buildShinyTitleSlide — explainer beat', () => {
+  it('a format with an explainer gets a two-beat title (parts + currentPart 0)', () => {
+    const { data } = buildShinyTitleSlide({ id: 'fmt_not_so_different', name: 'NSD', icon: '👁️' }, 'sgrp_abc')
+    expect(data.parts).toHaveLength(2)
+    expect(data.currentPart).toBe(0)
+  })
+  it('a format without one gets no parts at all', () => {
+    const { data } = buildShinyTitleSlide({ id: 'fmt_venn', name: 'V', icon: '🍿' }, 'sgrp_abc')
+    expect(data).not.toHaveProperty('parts')
+  })
+})

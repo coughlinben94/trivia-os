@@ -1,5 +1,9 @@
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import ShinyIntroScreen from '../ShinyIntroScreen.jsx'
+import NotSoDifferentExplainer from '../explainers/NotSoDifferentExplainer.jsx'
+
+// Format id → "how it works" animation. Keep in sync with lib/shinyExplainers.js.
+const EXPLAINERS = { fmt_not_so_different: NotSoDifferentExplainer }
 
 // The standalone title card that opens every shiny series (type
 // 'shiny-title'). It is a PERMANENT slide in the show order — the first
@@ -15,5 +19,7 @@ import ShinyIntroScreen from '../ShinyIntroScreen.jsx'
 // stamps this shape.
 export default function ShinyTitleSlide({ slide, show }) {
   const { theme } = useTheme()
+  const Explainer = (slide.data?.currentPart ?? 0) >= 1 ? EXPLAINERS[slide.data?.shinyFormatId] : null
+  if (Explainer) return <div data-testid="shiny-explainer"><Explainer /></div>
   return <ShinyIntroScreen slide={slide} theme={theme} show={show} />
 }

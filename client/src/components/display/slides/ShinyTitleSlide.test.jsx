@@ -63,3 +63,42 @@ describe('<ShinyTitleSlide>', () => {
     expect(container.textContent).not.toContain('Bluegrass Cover')
   })
 })
+
+describe('<ShinyTitleSlide> explainer beat', () => {
+  let container, root
+  beforeEach(() => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true
+    globalThis.FontFace = class { load() { return Promise.resolve(this) } }
+    if (!document.fonts) document.fonts = { add() {}, delete() {}, ready: Promise.resolve() }
+    if (!Range.prototype.getClientRects) Range.prototype.getClientRects = () => [{}]
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+  afterEach(() => { act(() => root.unmount()); container.remove() })
+
+  const slideAt = currentPart => ({
+    id: 'slide-title', type: 'shiny-title', roundId: 'round-1',
+    data: {
+      isShiny: true, shinyGroupId: 'sgrp_x', shinyFormatId: 'fmt_not_so_different',
+      seriesTheme: "We're not so different, you and I...", parts: [{}, {}], currentPart,
+    },
+  })
+  const render = slide => act(() => {
+    root.render(<ThemeProvider><ShinyTitleSlide slide={slide} show={{ slides: [slide] }} /></ThemeProvider>)
+  })
+
+  it('beat 0 shows the title, no explainer', () => {
+    render(slideAt(0))
+    expect(container.querySelector('[data-testid="shiny-explainer"]')).toBeNull()
+  })
+  it('beat 1 shows the explainer', () => {
+    render(slideAt(1))
+    expect(container.querySelector('[data-testid="shiny-explainer"]')).not.toBeNull()
+  })
+  it('the explainer is opaque: skipsLockedBackground is false on beat 1, true on beat 0', async () => {
+    const { skipsLockedBackground } = await import('../SlideRenderer.jsx')
+    expect(skipsLockedBackground(slideAt(0))).toBe(true)
+    expect(skipsLockedBackground(slideAt(1))).toBe(false)
+  })
+})
