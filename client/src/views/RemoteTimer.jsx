@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { timerView, TIMES_UP } from '../lib/showTimer.js'
-import { TIMER_PRESETS, TIMER_MAX_MINUTES } from '../lib/remoteProtocol.js'
+import { timerView, TIMES_UP, clockLabel } from '../lib/showTimer.js'
+import { TIMER_PRESETS_SECONDS, TIMER_STEP_SECONDS, TIMER_MIN_SECONDS, TIMER_MAX_SECONDS } from '../lib/remoteProtocol.js'
 
 // The iPad's timer: a tile on the main screen that shows the clock, and a
-// drawer (Remote.jsx's Sheet) to start, pause, add a minute and cancel. Every
+// drawer (Remote.jsx's Sheet) to start, pause, add 30 s or a minute and cancel.
+// Times are whole seconds in 30 s steps, always drawn M:SS. Every
 // press is a `timer.*` command to the laptop, which writes the same
 // shows.special_event.timer its own Timer card does. Looks come from the
 // --rl-* vars Remote.jsx sets on its root; no fonts or colours here.
@@ -21,6 +22,7 @@ export function useTimerView(timer, offsetMs) {
   return timerView(timer, now, -offsetMs)
 }
 
+const mss = sec => clockLabel(sec * 1000)
 const WORD = { running: 'Running', urgent: 'Running', paused: 'Paused', done: TIMES_UP }
 
 // A shape as well as words: dot = running, bars = paused, ring = finished.
@@ -86,8 +88,8 @@ const go = `bg-[color:var(--rl-next)] text-[color:var(--rl-nextink)] active:bg-[
 // send(cmd, args): sends one command (Remote.jsx's send, with its tap guard).
 export function TimerPanel({ timer, offsetMs, block, send }) {
   const view = useTimerView(timer, offsetMs)
-  const [minutes, setMinutes] = useState(null) // chosen number of minutes, or null
-  const [custom, setCustom] = useState(false) // the number pad is open
+  const [seconds, setSeconds] = useState(null) // chosen duration in seconds, or null
+  const [adjust, setAdjust] = useState(false) // the +/- stepper is open
   const [cancelArmed, setCancelArmed] = useState(false)
   useEffect(() => {
     if (!cancelArmed) return undefined
@@ -100,13 +102,11 @@ export function TimerPanel({ timer, offsetMs, block, send }) {
   const shown = view.phase !== 'idle'
   const timerId = timer?.id
   const can = !block
-  const canStart = can && minutes != null
-  const pick = m => { setCustom(false); setMinutes(m) }
-  const digit = d => setMinutes(cur => {
-    const next = (cur ?? 0) * 10 + d
-    return next < 1 || next > TIMER_MAX_MINUTES ? cur : next
-  })
-  const clearPick = () => { setMinutes(null); setCustom(false) }
+  const canStart = can && seconds != null
+  const pick = n => { setAdjust(false); setSeconds(n) }
+  const step = d => setSeconds(cur => Math.min(TIMER_MAX_SECONDS, Math.max(TIMER_MIN_SECONDS, (cur ?? 60) + d)))
+  const openAdjust = () => { setAdjust(true); setSeconds(cur => cur ?? 60) }
+  const clearPick = () => { setSeconds(null); setAdjust(false) }
   const sendCancel = () => { setCancelArmed(false); send('timer.cancel', { timerId }) }
 
   const big = `min-h-[80px] rounded-[var(--rl-r)] px-5 text-2xl font-bold flex items-center justify-center gap-2 ${press} ${focus}`
@@ -135,61 +135,63 @@ export function TimerPanel({ timer, offsetMs, block, send }) {
 
       <div>
         <p className="text-[1rem] leading-6 font-semibold text-[color:var(--rl-text-75)] mb-2">
-          {live ? 'Replace with a new time' : 'Minutes'}
+          {live ? 'Replace with a new time' : 'Pick a time'}
         </p>
-        <div className="grid grid-cols-6 gap-2">
-          {TIMER_PRESETS.map(m => (
+        <div className="grid grid-cols-7 gap-2">
+          {TIMER_PRESETS_SECONDS.map(n => (
             <button
-              key={m}
-              data-k={`preset-${m}`}
-              onClick={() => pick(m)}
-              aria-pressed={!custom && minutes === m}
-              className={`min-h-[72px] rounded-[var(--rl-r)] text-3xl font-bold tabular-nums ${press} ${focus} ${
-                !custom && minutes === m ? 'bg-[color:var(--rl-text)] text-[color:var(--rl-nextink)]' : raised
+              key={n}
+              data-k={`preset-${n}`}
+              onClick={() => pick(n)}
+              aria-pressed={!adjust && seconds === n}
+              className={`min-h-[72px] rounded-[var(--rl-r)] text-2xl font-bold tabular-nums ${press} ${focus} ${
+                !adjust && seconds === n ? 'bg-[color:var(--rl-text)] text-[color:var(--rl-nextink)]' : raised
               }`}
             >
-              {m}
+              {mss(n)}
             </button>
           ))}
           <button
             data-k="preset-custom"
-            onClick={() => { setCustom(true); setMinutes(null) }}
-            aria-pressed={custom}
+            onClick={openAdjust}
+            aria-pressed={adjust}
             className={`min-h-[72px] rounded-[var(--rl-r)] text-xl font-bold ${press} ${focus} ${
-              custom ? 'bg-[color:var(--rl-text)] text-[color:var(--rl-nextink)]' : raised
+              adjust ? 'bg-[color:var(--rl-text)] text-[color:var(--rl-nextink)]' : raised
             }`}
           >
-            Other
+            Adjust
           </button>
         </div>
-        {custom && (
-          <div className="mt-2 grid grid-cols-6 gap-2">
-            {[1, 2, 3, 4, 5].map(d => <PadKey key={d} d={d} onTap={digit} />)}
-            <button data-k="pad-back" aria-label="Delete a digit" onClick={() => setMinutes(cur => (cur >= 10 ? Math.trunc(cur / 10) : null))}
-              className={`min-h-[64px] rounded-[var(--rl-r)] text-3xl font-bold ${press} ${focus} ${raised}`}>{'⌫'}</button>
-            {[6, 7, 8, 9, 0].map(d => <PadKey key={d} d={d} onTap={digit} />)}
-            <span className="min-h-[64px] grid place-items-center text-xl font-semibold text-[color:var(--rl-text-75)]">min</span>
+        {adjust && (
+          <div className="mt-2 grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
+            <button data-k="step-down" aria-label="30 seconds less" disabled={seconds <= TIMER_MIN_SECONDS}
+              onClick={() => step(-TIMER_STEP_SECONDS)}
+              className={`min-h-[80px] rounded-[var(--rl-r)] text-5xl font-bold ${press} ${focus} ${raised} ${off}`}>{'−'}</button>
+            <span data-k="step-value" className="px-4 text-[3.5rem] leading-none tabular-nums text-center min-w-[9rem]" style={{ fontFamily: 'var(--rl-display)' }}>
+              {mss(seconds ?? 60)}
+            </span>
+            <button data-k="step-up" aria-label="30 seconds more" disabled={seconds >= TIMER_MAX_SECONDS}
+              onClick={() => step(TIMER_STEP_SECONDS)}
+              className={`min-h-[80px] rounded-[var(--rl-r)] text-5xl font-bold ${press} ${focus} ${raised} ${off}`}>+</button>
           </div>
         )}
       </div>
 
       {live ? (
         <>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <button data-k="timer-pause" disabled={!can}
               onClick={() => send(view.phase === 'paused' ? 'timer.resume' : 'timer.pause', { timerId })}
               className={`${big} ${raised} ${off}`}>
               {view.phase === 'paused' ? 'Resume' : 'Pause'}
             </button>
-            <button data-k="timer-add" disabled={!can} onClick={() => send('timer.add', { timerId })} className={`${big} ${raised} ${off}`}>
-              +1 min
-            </button>
+            <AddButtons can={can} timerId={timerId} send={send} className={`${big} ${raised} ${off}`} />
           </div>
           <div className="grid grid-cols-1 gap-3">
             <button data-k="timer-restart" disabled={!canStart}
-              onClick={() => { send('timer.start', { minutes, replace: true }); clearPick() }}
+              onClick={() => { send('timer.start', { seconds, replace: true }); clearPick() }}
               className={`${big} ${go}`}>
-              {minutes != null ? `Replace with ${minutes} min` : 'Replace timer'}
+              {seconds != null ? `Replace with ${mss(seconds)}` : 'Replace timer'}
             </button>
           </div>
           <div className="grid grid-cols-1 gap-3 mt-2">
@@ -201,15 +203,15 @@ export function TimerPanel({ timer, offsetMs, block, send }) {
           </div>
         </>
       ) : (
-        <div className={`grid gap-3 ${done ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        <div className={`grid gap-3 ${done ? 'grid-cols-3' : 'grid-cols-1'}`}>
           <button data-k="timer-start" disabled={!canStart}
-            onClick={() => { send('timer.start', { minutes }); clearPick() }}
-            className={`${big} min-h-[96px] text-3xl ${done ? 'col-span-2' : ''} ${go}`}>
-            {minutes != null ? `Start ${minutes} min` : 'Pick the minutes'}
+            onClick={() => { send('timer.start', { seconds }); clearPick() }}
+            className={`${big} min-h-[96px] text-3xl ${done ? 'col-span-3' : ''} ${go}`}>
+            {seconds != null ? `Start ${mss(seconds)}` : 'Pick a time'}
           </button>
           {done && (
             <>
-              <button data-k="timer-add" disabled={!can} onClick={() => send('timer.add', { timerId })} className={`${big} ${raised} ${off}`}>+1 min</button>
+              <AddButtons can={can} timerId={timerId} send={send} className={`${big} ${raised} ${off}`} />
               <button data-k="timer-cancel" disabled={!can} onClick={() => send('timer.cancel', { timerId })} className={`${big} ${raised} ${off}`}>Clear</button>
             </>
           )}
@@ -219,11 +221,11 @@ export function TimerPanel({ timer, offsetMs, block, send }) {
   )
 }
 
-function PadKey({ d, onTap }) {
+function AddButtons({ can, timerId, send, className }) {
   return (
-    <button data-k={`pad-${d}`} onClick={() => onTap(d)}
-      className={`min-h-[64px] rounded-[var(--rl-r)] text-3xl font-bold tabular-nums ${press} ${focus} ${raised}`}>
-      {d}
-    </button>
+    <>
+      <button data-k="timer-add30" disabled={!can} onClick={() => send('timer.add', { timerId, seconds: 30 })} className={className}>+30 s</button>
+      <button data-k="timer-add" disabled={!can} onClick={() => send('timer.add', { timerId, seconds: 60 })} className={className}>+1 min</button>
+    </>
   )
 }

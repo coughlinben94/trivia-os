@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import {
-  parseMinutes, startTimer, pauseTimer, resumeTimer, addTime, timerView, TIMES_UP,
+  parseDuration, startTimer, pauseTimer, resumeTimer, addTime, timerView, TIMES_UP,
 } from '../../lib/showTimer.js'
 
 // Live Mode's countdown timer card. Writes shows.special_event.timer through
@@ -32,7 +32,7 @@ export default function TimerControl({ show, actions }) {
 
   const view = timerView(timer, now, 0)
   const live = view.phase !== 'idle' && view.phase !== 'done' // running, urgent or paused
-  const ms = parseMinutes(text)
+  const ms = parseDuration(text)
   const canStart = ms != null
 
   function send(next) {
@@ -66,12 +66,11 @@ export default function TimerControl({ show, actions }) {
         <input
           ref={inputRef}
           type="text"
-          inputMode="decimal"
           value={text}
           onChange={e => setText(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); start() } }}
-          placeholder="minutes (e.g. 1.5)"
-          aria-label="Timer minutes"
+          placeholder="1:30, 90s or 1.5 min"
+          aria-label="Timer length"
           className="flex-1 min-w-0 px-3 py-1.5 rounded-lg border border-gray-200 text-sm"
         />
         <button
@@ -84,7 +83,7 @@ export default function TimerControl({ show, actions }) {
         </button>
       </div>
       {text.trim() !== '' && !canStart && (
-        <p className="text-xs text-red-600 mt-2">Type minutes from 0.05 to 180, like 5 or 1.5.</p>
+        <p className="text-xs text-red-600 mt-2">Type a time like 1:30, 90s or 1.5 (minutes). From 3 seconds to 3 hours.</p>
       )}
 
       {view.phase !== 'idle' && (
@@ -97,6 +96,12 @@ export default function TimerControl({ show, actions }) {
               {view.phase === 'paused' ? 'Resume' : 'Pause'}
             </button>
           )}
+          <button
+            onClick={() => send(addTime(timer, 30000, Date.now()))}
+            className={`${btn} bg-gray-100 text-gray-700 hover:bg-gray-200`}
+          >
+            +30 s
+          </button>
           <button
             onClick={() => send(addTime(timer, 60000, Date.now()))}
             className={`${btn} bg-gray-100 text-gray-700 hover:bg-gray-200`}
