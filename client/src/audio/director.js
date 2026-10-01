@@ -49,7 +49,10 @@ const safe = (fn, ...args) => {
 }
 
 export function createDirector(overrides = {}) {
-  const d = { ...browserDeps(), ...overrides }
+  const raw = { ...browserDeps(), ...overrides }
+  // Reporting is guarded HERE, not trusted to the injected sinks: a broken Sentry (or a
+  // test double that throws) must never break playback.
+  const d = { ...raw, breadcrumb: (...a) => safe(raw.breadcrumb, ...a), event: (...a) => safe(raw.event, ...a) }
   let ctx = null
   let gestureSeen = false
   let preview = false

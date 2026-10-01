@@ -21,6 +21,11 @@ the "failure is loud" part alone: breadcrumbs plus the locked-audio cue, with
 no director refactor. Decision needed: ship that first, or go straight to
 stage 1.
 
+Plan 1 of 3 (foundation: `audio/director.js` + `lib/slideClip.js`, no slide changed)
+is built on branch `feat/audio-director` (2026-10-01). Plan 2 moves the question
+clips and the Next triggers onto it; Plan 3 moves everything else and deletes dead
+code. Plan: `docs/superpowers/plans/2026-10-01-audio-director-1-foundation.md`.
+
 ## Problem
 
 Tonight (2026-09-29) round 1: Next presses did not start sound, on both plain

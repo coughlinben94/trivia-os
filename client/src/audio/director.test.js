@@ -542,3 +542,81 @@ describe('director plays YouTube clips', () => {
     expect(b.state).toBe('playing')
   })
 })
+
+describe('director never throws into the show', () => {
+  it('a breadcrumb or event sink that throws does not break play()', async () => {
+    const f = makeFakes({ ctx: new FakeContext('running') })
+    f.deps.breadcrumb = vi.fn(() => { throw new Error('sentry down') })
+    f.deps.event = vi.fn(() => { throw new Error('sentry down') })
+    const d = createDirector(f.deps)
+    expect(() => d.play({ kind: 'file', url: '/a.mp3' }, { slideId: 's1' })).not.toThrow()
+    await flush()
+  })
+
+  it('a context whose createMediaElementSource throws falls back to element volume and still plays', async () => {
+    const f = makeFakes({ ctx: new FakeContext('running') })
+    f.ctx.createMediaElementSource = () => { throw new Error('graph failed') }
+    const d = createDirector(f.deps)
+    const h = d.play({ kind: 'file', url: '/a.mp3', gainDb: -6 }, { slideId: 's1' })
+    await flush()
+    expect(f.elements[0].volume).toBeCloseTo(0.5012, 3)
+    expect(h.state).toBe('playing')
+  })
+
+  it('a YouTube claim() that throws becomes a blocked handle, not an exception', () => {
+    const yt = fakeYoutube()
+    yt.claim = vi.fn(() => { throw new Error('iframe api exploded') })
+    const f = makeFakes({ ctx: new FakeContext('running'), youtube: yt })
+    const d = createDirector(f.deps)
+    let h
+    expect(() => { h = d.play({ kind: 'youtube', videoId: 'v' }, { slideId: 's1' }) }).not.toThrow()
+    expect(h.state).toBe('blocked')
+    expect(h.reason).toBe('start-threw')
+  })
+
+  it('an onEnded callback that throws does not stop the others or the director', async () => {
+    const f = makeFakes({ ctx: new FakeContext('running') })
+    const d = createDirector(f.deps)
+    const h = d.play({ kind: 'file', url: '/a.mp3' }, { slideId: 's1' })
+    await flush()
+    const second = vi.fn()
+    h.onEnded(() => { throw new Error('bad cb') })
+    h.onEnded(second)
+    expect(() => f.elements[0].emit('ended')).not.toThrow()
+    expect(second).toHaveBeenCalled()
+  })
+
+  it('stop() after ended, and a second stop(), are harmless', async () => {
+    const f = makeFakes({ ctx: new FakeContext('running') })
+    const d = createDirector(f.deps)
+    const h = d.play({ kind: 'file', url: '/a.mp3' }, { slideId: 's1' })
+    await flush()
+    f.elements[0].emit('ended')
+    expect(() => { h.stop(); h.stop(); h.retry() }).not.toThrow()
+    expect(h.state).toBe('ended')
+  })
+
+  it('snapshot.blocked lists only blocked clips and clears when they stop', async () => {
+    const f = makeFakes({ ctx: new FakeContext('running') })
+    const orig = f.deps.makeElement.getMockImplementation()
+    f.deps.makeElement.mockImplementation(() => { const el = orig(); el.playMode = 'reject'; return el })
+    const d = createDirector(f.deps)
+    const a = d.play({ kind: 'file', url: '/a.mp3' }, { slideId: 's1' })
+    const b = d.play({ kind: 'file', url: '/b.mp3' }, { slideId: 's2' })
+    await flush()
+    expect(d.getSnapshot().blocked.map(x => x.slideId).sort()).toEqual(['s1', 's2'])
+    a.stop()
+    expect(d.getSnapshot().blocked.map(x => x.slideId)).toEqual(['s2'])
+    b.stop()
+    expect(d.getSnapshot().blocked).toEqual([])
+  })
+})
+
+describe('module hygiene', () => {
+  it('the app singleton exists and has the public API', async () => {
+    const mod = await import('./director.js')
+    for (const k of ['status', 'unlock', 'installGestureUnlock', 'subscribe', 'getSnapshot', 'setPreview', 'warm', 'play', 'retryBlocked']) {
+      expect(typeof mod.director[k]).toBe('function')
+    }
+  })
+})
