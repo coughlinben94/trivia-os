@@ -294,9 +294,48 @@ export function createDirector(overrides = {}) {
     return handle
   }
 
-  // Replaced in Task 5.
-  function startYoutube(/* clip, ctl */) {
-    throw new Error('youtube playback is implemented in Plan 1, Task 5')
+  // YouTube: claim the pre-warmed hidden player (lib/youtubeWarmAudio.js owns the
+  // iframe pool) and drive it. warm() and claim() both receive end as null-or-number
+  // so they agree on the pool key videoId:start:end.
+  function startYoutube(clip, ctl) {
+    const h = d.youtube.claim(clip.videoId, clip.start, clip.end)
+    let player = null
+    let endTimer = null
+    const check = () => !!player && youtubeIsSounding(player)
+
+    h.onStateChange?.(s => {
+      if (s === 0) ctl.ended() // YouTube's ENDED
+      else if (s === 1 && player && youtubeIsSounding(player)) ctl.playing()
+    })
+
+    const go = () => {
+      ctl.arm(check) // FIRST: the player may never become ready (API blocked) — that must still be reported
+      h.whenReady(p => {
+        player = p
+        safe(() => {
+          p.setVolume(clip.volume)
+          p.unMute()
+          p.seekTo(clip.start, true)
+          p.playVideo()
+        })
+      })
+      // Backstop for a clip with an end: the player's own `end` normally stops it and
+      // reports ENDED; if it never does, end the handle ourselves shortly after.
+      if (clip.end != null) {
+        if (endTimer != null) d.clearTimer(endTimer)
+        endTimer = d.setTimer(() => ctl.ended(), Math.max(0, clip.end - clip.start) * 1000 + 500)
+      }
+    }
+
+    ctl.setRetry(() => { unlock(); go() })
+    ctl.setStop(() => {
+      if (endTimer != null) d.clearTimer(endTimer)
+      endTimer = null
+      safe(() => h.destroy())
+    })
+    // After a NATURAL end, re-warm so the next play of this clip is instant (replay restarts from the start).
+    ctl.setOnEnded(() => safe(d.youtube.warm, clip.videoId, clip.start, clip.end))
+    go()
   }
 
   function retryBlocked() {

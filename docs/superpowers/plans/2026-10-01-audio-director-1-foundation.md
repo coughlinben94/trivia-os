@@ -1032,6 +1032,18 @@ describe('director plays file clips', () => {
     expect(h.state).toBe('playing')
   })
 
+  it("a handle's own retry() performs the unlock (a gesture), not just retryBlocked()", async () => {
+    const f = makeFakes({ ctx: new FakeContext('suspended') })
+    withPlayMode(f, 'reject')
+    const d = createDirector(f.deps)
+    const h = d.play(clip, { slideId: 's1' })
+    await flush()
+    expect(h.state).toBe('blocked')
+    const before = f.ctx.resumeCalls
+    h.retry()
+    expect(f.ctx.resumeCalls).toBeGreaterThan(before)
+  })
+
   it('a retry that is STILL silent raises the block again (not a silent second failure)', async () => {
     const f = makeFakes({ ctx: new FakeContext('running') })
     withPlayMode(f, 'reject')
@@ -1308,7 +1320,7 @@ Expected: the file-clip tests FAIL with `director.play is implemented in Plan 1,
 - [ ] **Step 4: Run the tests, confirm they pass**
 
 Run: `npx vitest run client/src/audio/director.test.js`
-Expected: PASS — `Tests  31 passed (31)` (Task 3's 15 + 16 here).
+Expected: PASS — `Tests  32 passed (32)` (Task 3's 15 + 17 here).
 
 - [ ] **Step 5: Mutation check**
 
@@ -1428,6 +1440,18 @@ describe('director plays YouTube clips', () => {
     expect(h.state).toBe('playing')
   })
 
+  it("a YouTube handle's own retry() performs the unlock (a gesture) before driving the player", () => {
+    const f = makeFakes({ ctx: new FakeContext('suspended'), youtube: fakeYoutube({ state: 2 }) })
+    const d = createDirector(f.deps)
+    const h = d.play(clip, { slideId: 's1' })
+    vi.advanceTimersByTime(2000)
+    expect(h.state).toBe('blocked')
+    expect(f.deps.makeContext).not.toHaveBeenCalled() // the YouTube path needs no Web Audio graph until a gesture
+    h.retry()
+    expect(f.deps.makeContext).toHaveBeenCalledTimes(1)
+    expect(f.ctx.resumeCalls).toBe(1)
+  })
+
   it('ENDED (state 0): onEnded fires, the claim is destroyed, and the clip is re-warmed for an instant replay', () => {
     const f = makeFakes({ ctx: new FakeContext('running'), youtube: fakeYoutube({ state: 1 }) })
     const d = createDirector(f.deps)
@@ -1458,6 +1482,7 @@ describe('director plays YouTube clips', () => {
     const h = d.play(clip, { slideId: 's1' })
     h.stop()
     expect(f.youtube.claims[0].destroyed).toBe(true)
+    expect(vi.getTimerCount()).toBe(0) // the end backstop and the sound check are both gone
     vi.advanceTimersByTime(60000)
     expect(h.state).toBe('stopped')
   })
@@ -1548,7 +1573,7 @@ Expected: the YouTube tests FAIL with `youtube playback is implemented in Plan 1
 - [ ] **Step 4: Run the tests, confirm they pass**
 
 Run: `npx vitest run client/src/audio/director.test.js`
-Expected: PASS — `Tests  44 passed (44)`.
+Expected: PASS — `Tests  46 passed (46)`.
 
 - [ ] **Step 5: Mutation check**
 
