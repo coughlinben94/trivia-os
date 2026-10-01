@@ -4,6 +4,7 @@ import { sortedSlides } from '../../hooks/useShow.js'
 import { getTheme, THEMES } from '../../themes/index.js'
 import { resolveShinyPart } from '../../lib/shinySeries.js'
 import { audioPlayPending as audioPlayPendingFor, audioPartOf } from '../../lib/audioPending.js'
+import TimerControl from './TimerControl.jsx'
 import ScorePanel from './ScorePanel.jsx'
 import FocusWarning from './FocusWarning.jsx'
 import LateTeamPopover from './LateTeamPopover.jsx'
@@ -2185,6 +2186,8 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
               <p className="text-xs text-gray-400 font-mono truncate">{theme.colors.bg}</p>
             </div>
           </div>
+
+          <TimerControl show={show} actions={actions} />
 
           {/* iPad remote (spec §7). Switches are buttons, not checkboxes:
               handleKeyDown ignores keys while an <input> has focus, which
