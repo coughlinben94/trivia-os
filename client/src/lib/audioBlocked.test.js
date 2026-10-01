@@ -55,3 +55,23 @@ describe('mediaIsSounding', () => {
     expect(mod.mediaIsSounding({ paused: true, ended: true }, { state: 'running' })).toBe(true)
   })
 })
+
+describe('reportBlocked', () => {
+  it('sends one Sentry warning tagged area:audio per clip per page load', () => {
+    mod.reportBlocked('youtube', { slideId: 's1', part: 0 })
+    mod.reportBlocked('youtube', { slideId: 's1', part: 0 })
+    expect(Sentry.captureMessage).toHaveBeenCalledTimes(1)
+    expect(Sentry.captureMessage.mock.calls[0][0]).toBe('audio: play blocked (youtube)')
+    expect(Sentry.captureMessage.mock.calls[0][1]).toMatchObject({ level: 'warning', tags: { area: 'audio' }, extra: { slideId: 's1', part: 0 } })
+  })
+  it('different clips and kinds report separately', () => {
+    mod.reportBlocked('youtube', { slideId: 's1', part: 0 })
+    mod.reportBlocked('youtube', { slideId: 's1', part: 1 })
+    mod.reportBlocked('upload', { slideId: 's1', part: 0 })
+    expect(Sentry.captureMessage).toHaveBeenCalledTimes(3)
+  })
+  it('never throws if Sentry does', () => {
+    Sentry.captureMessage.mockImplementation(() => { throw new Error('down') })
+    expect(() => mod.reportBlocked('upload', { slideId: 'x' })).not.toThrow()
+  })
+})
