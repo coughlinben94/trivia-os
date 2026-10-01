@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase.js'
+import { usePhoneAnswerSave } from '../../hooks/usePhoneAnswerSave.js'
 import { seededShuffle } from '../../lib/orderScoring.js'
 import ShrinkToFit from './ShrinkToFit.jsx'
 
@@ -14,7 +15,7 @@ export default function OrderBoard({ slide, team, theme, preview = false, onAnsw
   const locked = !!data.orderLocked
   const text = theme?.colors?.text ?? '#ffffff'
   const highlight = theme?.colors?.highlight ?? '#f5c842'
-  const [saveFailed, setSaveFailed] = useState(false)
+  const { saveAnswer: submit, saveFailed } = usePhoneAnswerSave({ preview, slide, team, board: 'OrderBoard', noun: 'order' })
 
   // answer: item ids in tap order (position = sequence number - 1) — the
   // exact shape scoreOrderSubmission compares against correctOrder. This is
@@ -50,42 +51,6 @@ export default function OrderBoard({ slide, team, theme, preview = false, onAnsw
     if (!preview) return
     setAnswer([])
   }, [preview, itemsKey])
-
-  // Chained rather than fired-and-forgotten so two rapid taps (tap, then a
-  // quick undo) can't land out of order — same class of bug MatchingBoard's
-  // saveChainRef guards against, applied here to phone_answers writes.
-  const saveChainRef = useRef(Promise.resolve())
-
-  const submit = useCallback((nextAnswer) => {
-    if (preview) return Promise.resolve(true)
-    const run = saveChainRef.current.then(async () => {
-      const upsert = supabase.from('phone_answers').upsert(
-        // submitted_at NOT sent — see MatchingBoard.jsx's identical upsert:
-        // a server-side trigger (2026-08-26) owns this column now instead
-        // of trusting the phone's own clock.
-        { show_id: slide.showId ?? team.showId, slide_id: slide.id, team_id: team.id, answer: nextAnswer },
-        { onConflict: 'slide_id,team_id' }
-      )
-      // Raced against a timeout, not just awaited — a request that never
-      // settles would otherwise wedge every save queued behind it in the
-      // chain. The abandoned fetch may still resolve later; nothing awaits
-      // it by then, which is fine — we've already moved on.
-      let error
-      try {
-        ;({ error } = await Promise.race([
-          upsert,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('order save timed out')), 8000)),
-        ]))
-      } catch (err) {
-        error = err
-      }
-      if (error) console.error('[OrderBoard] answer save failed:', error)
-      setSaveFailed(!!error)
-      return !error
-    })
-    saveChainRef.current = run.catch(() => false)
-    return run
-  }, [preview, slide.id, slide.showId, team.id, team.showId])
 
   // Builds the order LOCALLY — nothing saves until Lock In (below) is
   // tapped. Was autosave-per-tap with no explicit submit button (2026-08-25,
