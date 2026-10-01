@@ -79,9 +79,9 @@
 // ---------- constants (design px at 1920x1080, world in metres) ----------
 const W=1920, H=1080, VX=960, VY=540;        // vanishing point = dead centre: open space has no horizon
 const F=1371, E=0;                            // focal length px; the camera sits on the flight axis
-const D=8, NS=3, L=NS*D, REST=9;              // metres per station, 3 stations, loop length, landmark rest distance
-const ZFAR=36, ZMIN=2.6, ZDRAW=2.4, STOPS=24;   // nothing is drawn closer than ZMIN: whatever comes within 4 m has faded out by 2.6 m
-const DUR=4000, AUTO_MS=7000, CREEP_MS=40000;
+const D=80, NS=3, L=NS*D, REST=36;            // metres per station (10x the first cut), 3 stations, loop length, landmark rest distance
+const ZFAR=130, ZMIN=2.6, ZDRAW=2.4;   // nothing is drawn closer than ZMIN: whatever comes within 4 m has faded out by 2.6 m
+const DUR=Math.round(1000*(parseFloat(new URLSearchParams(location.search).get('dur'))||14)), AUTO_MS=DUR+4000, CREEP_MS=40000;   // ?dur=seconds per leg
 const SAFE={x0:384,y0:302,x1:1536,y1:777};
 const NAMES=['ringed planet','pulsar','comet'];
 
@@ -102,7 +102,7 @@ const clamp=(v,a=0,b=1)=>v<a?a:v>b?b:v;
 const lerp=(a,b,t)=>a+(b-a)*t;
 const fm=n=>Math.round(n*100)/100;
 const P=(X,h,z)=>[VX+X*F/z, VY+(E-h)*F/z];
-const fogAmt=z=>1-Math.exp(-Math.max(0,z-2.5)/17);
+const fogAmt=z=>1-Math.exp(-Math.max(0,z-6)/70);
 const $=id=>document.getElementById(id);
 // cubic-bezier easing for the walk (ease in and out), solved numerically
 function bez(x1,y1,x2,y2){const cx=3*x1,bx=3*(x2-x1)-cx,ax=1-cx-bx,cy=3*y1,by=3*(y2-y1)-cy,ay=1-cy-by;
@@ -202,33 +202,70 @@ function comet(Z,X,h){
   return {Z,X,h,body,light,bb:[-5.6,-1.2,1.2,2.2],landmark:true};
 }
 
-// ---------- the world: a fixed list of items for one loop, rebuilt from nothing ----------
+// ---------- scale + set pieces ----------
+function scaleItem(it,k,op=1){
+  const wrap=svg=>svg?`<g transform="scale(${k})" opacity="${op}">${svg}</g>`:svg;
+  return {...it,body:wrap(it.body),light:wrap(it.light),bb:it.bb.map(v=>v*k)};
+}
+// a ring structure you fly THROUGH: dark panels, a lit inner edge, warm beacons around it
+function gate(Z,R,t,seed){
+  const r=rngFor(seed,11), N=28, id='ga'+(uid++), lid='gl'+(uid++);
+  let panels='', beacons='';
+  for(let i=0;i<N;i++){
+    const a0=i/N*Math.PI*2+.012, a1=(i+1)/N*Math.PI*2-.012, ro=R*(1+(r()-.5)*.05), ri=R-t*(.85+r()*.3);
+    const q=[[Math.cos(a0)*ri,Math.sin(a0)*ri],[Math.cos(a1)*ri,Math.sin(a1)*ri],[Math.cos(a1)*ro,Math.sin(a1)*ro],[Math.cos(a0)*ro,Math.sin(a0)*ro]];
+    const sh=Math.floor(8+r()*14);
+    panels+=`<path d="${pathOf(q)}" fill="rgb(${sh},${sh-2},${sh+6})"/>`;
+    panels+=`<path d="M${fm(q[0][0])} ${fm(q[0][1])}L${fm(q[1][0])} ${fm(q[1][1])}" stroke="${KEY}" stroke-opacity="${fm(.5*GAIN)}" stroke-width="${fm(R*.012)}" fill="none"/>`;
+    if(i%3===0){const am=(a0+a1)/2, bx=Math.cos(am)*(ri+t*.45), by=Math.sin(am)*(ri+t*.45);
+      beacons+=`<circle cx="${fm(bx)}" cy="${fm(by)}" r="${fm(t*.9)}" fill="url(#${lid})"/><circle cx="${fm(bx)}" cy="${fm(by)}" r="${fm(t*.07)}" fill="#fff4dc"/>`}
+  }
+  const body=`${panels}`;
+  const light=`<defs><radialGradient id="${lid}"><stop offset="0" stop-color="#ffe8b8" stop-opacity=".9"/><stop offset=".3" stop-color="#ffb347" stop-opacity=".45"/><stop offset="1" stop-color="#ff8a2a" stop-opacity="0"/></radialGradient></defs>${beacons}`;
+  return {Z,X:0,h:0,body,light,bb:[-R*1.05,-R*1.05,R*1.05,R*1.05],gate:true,appear:[26,62]};
+}
+
+// ---------- the world: a fixed list of items for one 240 m loop, rebuilt from nothing ----------
 const ITEMS=(function(){
-  const it=[], r=rngFor(2026,10,2);
-  // landmarks float to the sides of the flight path, each resting outside the text box
-  it.push(ringedPlanet(0*D+REST,  5.2,  1.3));
-  it.push(pulsar(1*D+REST,       -5.0, -1.2));
-  it.push(comet(2*D+REST,         4.9, -1.5));
-  // tumbling asteroids all round the flight path, never on the axis
-  for(let i=0;i<30;i++){
-    const ang=r()*Math.PI*2, rad=4.6+r()*5.4, big=rad>8.2;
-    it.push(asteroid(r()*L, Math.cos(ang)*rad, Math.sin(ang)*rad*.8, big?2.4+r()*1.4:.5+r()*1.3, Math.floor(r()*1e9), r()<.12));
-  }
-  // dust clouds: the fog of this world, tinted by the duo
-  for(let i=0;i<18;i++){
-    const ang=r()*Math.PI*2, rad=r()*9;
-    it.push(dust(r()*L, Math.cos(ang)*rad, Math.sin(ang)*rad*.7, 7+r()*9, r()<.6?FILL:KEY, .09+r()*.1));
-  }
-  // space dust streaming past
-  for(let i=0;i<70;i++){
-    const ang=r()*Math.PI*2, rad=1.6+Math.sqrt(r())*16;
-    it.push(mote(r()*L, Math.cos(ang)*rad, Math.sin(ang)*rad*.75, r));
-  }
+  const it=[], r=rngFor(2026,10,3);
+  const ring=(k,Zoff)=>k*D+REST+Zoff;
+  // landmarks float to the sides of the flight path, each resting outside the text box; 4x the first cut so the next one is readable from 80 m away
+  it.push(scaleItem(ringedPlanet(ring(0,0),  5.2,  1.3),4,.8)); it[0].X=20.8; it[0].h=5.2;
+  it.push(scaleItem(pulsar(ring(1,0),       -5.0, -1.2),4)); it[1].X=-20; it[1].h=-4.8;
+  it.push(scaleItem(comet(ring(2,0),         4.9, -1.5),4)); it[2].X=19.6; it[2].h=-6;
+  // ---- set pieces: the adventure between stations
+  it.push(gate(ring(0,.42*D),15,2.8,1));                         // leg 1: fly through a ring structure
+  it.push(gate(ring(2,.8*D),10,2.1,2));                          // leg 3: a smaller gate near the end
+  { const gp=scaleItem(ringedPlanet(ring(1,.6*D),-4.6,-1.4),10); gp.X=-46; gp.h=-14; it.push(gp) }   // leg 2: skim past a giant ringed planet
+  { const mn=scaleItem(ringedPlanet(ring(1,.62*D),0,0),1.6); mn.X=-22; mn.h=11; mn.body=mn.body.replace(/<g transform="rotate\(-16\)">.*?<\/g>/gs,''); it.push(mn) }  // and a small moon
+  // ---- asteroids in three tiers, with a rhythm: open space, a gate, a giant planet, a dense canyon
+  // density(Z): where along a leg we are decides how much rock there is (gates and the giant planet get clear air)
+  const leg=Z=>{const q=((Z-REST)%L+L)%L;return[Math.floor(q/D),(q%D)/D]};
+  const density=Z=>{const[k,u]=leg(Z);
+    if(k===0)return Math.abs(u-.42)<.12?.04:.4;                 // leg 1: sparse, clear around the gate
+    if(k===1)return u>.45&&u<.8?.08:.35;                        // leg 2: wide open past the giant planet
+    return u>.15&&u<.7?1:(Math.abs(u-.8)<.1?.05:.35)};           // leg 3: canyon, then a clear gate
+  const place=(n,make)=>{let made=0,guard=0;while(made<n&&guard++<n*40){const Z=r()*L;if(r()<density(Z)){make(Z);made++}}};
+  place(54,Z=>{const ang=r()*Math.PI*2,rad=4.6+r()*5.4,big=rad>8.2;
+    it.push(asteroid(Z,Math.cos(ang)*rad,Math.sin(ang)*rad*.8,big?2.4+r()*1.4:.5+r()*1.3,Math.floor(r()*1e9),r()<.1))});
+  place(24,Z=>{const ang=r()*Math.PI*2,rad=12+r()*18;
+    it.push(asteroid(Z,Math.cos(ang)*rad,Math.sin(ang)*rad*.8,3+r()*6,Math.floor(r()*1e9),r()<.12))});
+  // ---- leg 3 canyon: a dense lane of rocks around the axis
+  for(let i=0;i<40;i++){ const ang=r()*Math.PI*2, rad=3.6+r()*3.2;
+    it.push(asteroid(ring(2,.18*D+r()*.5*D), Math.cos(ang)*rad, Math.sin(ang)*rad*.8, .7+r()*1.8, Math.floor(r()*1e9), r()<.08)); }
+  // ---- dust and nebula walls: the fog of this world, tinted by the duo
+  for(let i=0;i<48;i++){ const ang=r()*Math.PI*2, rad=r()*14;
+    it.push(dust(r()*L, Math.cos(ang)*rad, Math.sin(ang)*rad*.7, 8+r()*20, r()<.6?FILL:KEY, .08+r()*.1)); }
+  for(let i=0;i<22;i++){ const ang=r()*Math.PI*2, rad=22+r()*30;
+    it.push(dust(r()*L, Math.cos(ang)*rad, Math.sin(ang)*rad*.7, 60+r()*90, r()<.55?FILL:KEY, .07+r()*.08)); }
+  // ---- space dust streaming past
+  for(let i=0;i<150;i++){ const ang=r()*Math.PI*2, rad=1.8+Math.sqrt(r())*22;
+    it.push(mote(r()*L, Math.cos(ang)*rad, Math.sin(ang)*rad*.75, r)); }
   return it;
 })();
 
 // ---------- legibility: lights come on as you arrive, and dim while crossing the text box ----------
-const lightOp=(Z0,zr,z)=>clamp((REST+5.5-z)/4.5)*1;     // landmarks and beacons glow only when close
+const lightOp=(Z0,zr,z)=>clamp((REST+30-z)/25);          // landmarks and beacons glow only in the last ~30 m of an approach
 function boxDim(X,h,z){
   const p=P(X,h,z);
   const dx=Math.max(SAFE.x0-p[0],0,p[0]-SAFE.x1), dy=Math.max(SAFE.y0-p[1],0,p[1]-SAFE.y1);
@@ -236,7 +273,7 @@ function boxDim(X,h,z){
 }
 function fadeOf(z,solid){ // depth haze, a fade-in at the far limit (no pop-in), and a soft fade as something passes the camera
   const haze=1-(solid?.3:.62)*fogAmt(z);                          // solid things (rocks) stay solid; only glows and dust thin out
-  const near=clamp((z-ZMIN)/1.4), far=clamp((ZFAR-z)/D);
+  const near=clamp((z-ZMIN)/1.4), far=clamp((ZFAR-z)/40);
   return haze*near*far;
 }
 
@@ -263,6 +300,7 @@ function mountEl(it,z0,animate,kind){
   const isLight=kind==='light';
   const opAt=z=>{
     let o=fadeOf(z,it.rock||it.landmark);
+    if(it.appear)o*=clamp((it.appear[1]-z)/(it.appear[1]-it.appear[0]));   // set pieces only appear as you close in
     if(isLight)o*=lightOp(it.Z,0,z)*boxDim(it.X,it.h,z);        // glows come on as you arrive, dim over the text box
     else if(it.landmark)o*=boxDim(it.X,it.h,z);                   // the bright parts of a landmark (core, beams, tail) dim too
     return o;
@@ -274,6 +312,7 @@ function mountEl(it,z0,animate,kind){
   const ER=Math.hypot(it.X,it.h)+Math.max(bx1-bx0,by1-by0)/2;
   const speedFade=t=>{const zA=z0-D*EASE(Math.max(0,t-.01)),zB=z0-D*EASE(Math.min(1,t+.01));
     const sp=Math.abs(ER*F/Math.max(zB,.3)-ER*F/Math.max(zA,.3))/(.02*DUR/1000*60);return clamp(1-(sp-30)/50)};
+  const zlo=Math.min(z0,z1), STOPS=zlo>90?20:zlo>40?56:120;
   for(let i=0;i<=STOPS;i++){
     const t=i/STOPS, z=z0-D*EASE(t), k=zd/Math.max(z,ZMIN*.5);
     kfs.push({offset:t,transform:`scale(${k.toFixed(5)})`,opacity:fm(opAt(Math.max(z,ZMIN*.5))*speedFade(t))});
@@ -356,7 +395,7 @@ function advance(){
   settleCamera(DUR);
   build(station,true);
   // the craft banks and drifts through each leg of the flight
-  $('cam').animate([{transform:'translate(0,0) rotate(0deg)'},{transform:'translate(7px,-4px) rotate(1.1deg)',offset:.35},{transform:'translate(-5px,3px) rotate(-.7deg)',offset:.75},{transform:'translate(0,0) rotate(0deg)'}],{duration:DUR,easing:'ease-in-out'});
+  $('cam').animate([{transform:'translate(0,0) rotate(0deg)'},{transform:'translate(9px,-5px) rotate(1.4deg)',offset:.14},{transform:'translate(-7px,4px) rotate(-1.1deg)',offset:.32},{transform:'translate(6px,-3px) rotate(.9deg)',offset:.5},{transform:'translate(-8px,5px) rotate(-1.3deg)',offset:.68},{transform:'translate(4px,-2px) rotate(.6deg)',offset:.86},{transform:'translate(0,0) rotate(0deg)'}],{duration:DUR,easing:'ease-in-out'});
   timers.push(setTimeout(()=>{station=(station+1)%NS;walking=false;render();setCreep(true)},DUR+60));
 }
 function jump(s){if(walking)return;clearTimers();station=((s%NS)+NS)%NS;setCreep(false);render();timers.push(setTimeout(()=>setCreep(true),30))}
