@@ -88,6 +88,61 @@ describe('<TimerOverlay>', () => {
   })
 })
 
+describe('<TimerOverlay> design details', () => {
+  let container, root
+  beforeEach(() => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true
+    globalThis.FontFace = class { load() { return Promise.resolve(this) } }
+    if (!document.fonts) document.fonts = { add() {}, delete() {}, ready: Promise.resolve() }
+    sessionStorage.clear()
+    vi.useFakeTimers(); vi.setSystemTime(1_000_000)
+    container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container)
+  })
+  afterEach(() => { act(() => root.unmount()); container.remove(); vi.useRealTimers() })
+  const render = timer => act(() => { root.render(<ThemeProvider><TimerOverlay show={{ id: 's', special_event: { timer } }} /></ThemeProvider>) })
+  const panel = () => container.querySelector('[data-timer-overlay]')
+
+  it('the urgent pulse is a CSS animation (runs off the main thread), and only in the last 10 seconds', () => {
+    render(startTimer(60000, Date.now()))
+    expect(container.querySelector('.timer-pulse-urgent')).toBeNull()
+    act(() => root.unmount()); root = createRoot(container)
+    render(startTimer(8000, Date.now()))
+    expect(container.querySelector('.timer-pulse-urgent')).not.toBeNull()
+  })
+
+  it('the finished state pulses with a CSS animation too', async () => {
+    render(startTimer(2000, Date.now()))
+    await act(async () => { vi.advanceTimersByTime(2500) })
+    expect(container.querySelector('.timer-pulse-done')).not.toBeNull()
+  })
+
+  it('every character sits in a fixed-width cell, so the panel never jitters as digits change', () => {
+    const widths = label => {
+      const cells = [...container.querySelectorAll('[data-timer-cell]')]
+      return { text: cells.map(c => c.textContent).join(''), w: cells.map(c => c.style.width) }
+    }
+    render({ id: 'a', state: 'paused', totalMs: 600000, remainingMs: 71000, endsAt: 0, sentAt: 1 }) // 1:11
+    const a = widths()
+    expect(a.text).toBe('1:11')
+    act(() => root.unmount()); root = createRoot(container)
+    render({ id: 'b', state: 'paused', totalMs: 600000, remainingMs: 9000, endsAt: 0, sentAt: 1 })  // 0:09
+    const b = widths()
+    expect(b.text).toBe('0:09')
+    expect(a.w).toEqual(b.w) // a 1 and a 0, an 11 and a 09: same cell widths, so same panel width
+  })
+
+  it('sits clear of the shiny sparkle in the top-left corner', () => {
+    render(startTimer(60000, Date.now()))
+    expect(parseFloat(panel().style.left)).toBeGreaterThanOrEqual(6)
+  })
+
+  it('PAUSED is big enough to read from across the room', () => {
+    render({ id: 'p', state: 'paused', totalMs: 60000, remainingMs: 42000, endsAt: 0, sentAt: 1 })
+    const paused = [...container.querySelectorAll('div')].find(d => d.textContent === 'PAUSED')
+    expect(parseFloat(paused.style.fontSize)).toBeGreaterThanOrEqual(4)
+  })
+})
+
 describe('timer colours on every theme', () => {
   it('digits and urgent highlight read against the panel background', () => {
     for (const t of THEMES) {

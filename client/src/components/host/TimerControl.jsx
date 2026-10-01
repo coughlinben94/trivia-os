@@ -13,6 +13,14 @@ export default function TimerControl({ show, actions }) {
   const timer = show?.special_event?.timer ?? null
   const [text, setText] = useState('')
   const [now, setNow] = useState(() => Date.now())
+  // Cancel kills a live countdown on every TV, so while one is running it takes two
+  // taps (same arm-then-confirm the phone boards use for "Clear all"); it disarms itself.
+  const [cancelArmed, setCancelArmed] = useState(false)
+  useEffect(() => {
+    if (!cancelArmed) return undefined
+    const t = setTimeout(() => setCancelArmed(false), 3000)
+    return () => clearTimeout(t)
+  }, [cancelArmed])
   const inputRef = useRef(null)
 
   useEffect(() => {
@@ -38,7 +46,7 @@ export default function TimerControl({ show, actions }) {
     setText('')
   }
 
-  const btn = 'px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors'
+  const btn = 'px-3 py-2 rounded-lg text-sm font-semibold transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.97]'
   return (
     <div className="bg-white border border-gray-100 rounded-2xl px-5 py-4 shrink-0" data-timer-control>
       <div className="flex items-center justify-between gap-3">
@@ -96,10 +104,15 @@ export default function TimerControl({ show, actions }) {
             +1 min
           </button>
           <button
-            onClick={() => send(null)}
-            className={`${btn} border border-gray-200 text-gray-600 hover:bg-gray-50 ml-auto`}
+            onClick={() => {
+              if (view.phase === 'done') { send(null); return }
+              if (!cancelArmed) { setCancelArmed(true); return }
+              setCancelArmed(false)
+              send(null)
+            }}
+            className={`${btn} border ml-auto ${cancelArmed ? 'border-red-300 text-red-600 bg-red-50' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
           >
-            {view.phase === 'done' ? 'Clear' : 'Cancel'}
+            {view.phase === 'done' ? 'Clear' : cancelArmed ? 'Tap again to cancel' : 'Cancel'}
           </button>
         </div>
       )}

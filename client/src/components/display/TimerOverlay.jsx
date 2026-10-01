@@ -24,6 +24,15 @@ function writeStore(key, value) {
   try { sessionStorage.setItem(key, String(value)) } catch { /* private mode: fine */ }
 }
 
+// Each character in its own fixed-width cell. A proportional font (and many display
+// fonts ignore tabular-nums) makes "1:11" wider than "0:09", so the panel's right
+// edge would twitch every second. Cell widths are font-agnostic.
+function FixedDigits({ label }) {
+  return [...label].map((ch, i) => (
+    <span key={i} data-timer-cell style={{ display: 'inline-block', width: ch === ':' ? '0.32em' : '0.62em', textAlign: 'center' }}>{ch}</span>
+  ))
+}
+
 export default function TimerOverlay({ show }) {
   const { theme } = useTheme()
   const reduce = useReducedMotion()
@@ -89,12 +98,9 @@ export default function TimerOverlay({ show }) {
   const done = phase === 'done'
   const long = view.label.length > 5
 
-  // Transform/opacity only; reduced motion gets a still panel.
-  const pulse = reduce ? {} : urgent
-    ? { animate: { scale: [1, 1.07, 1] }, transition: { duration: 1, repeat: Infinity, ease: EASE_OUT } }
-    : done
-      ? { animate: { opacity: [1, 0.55, 1] }, transition: { duration: 0.9, repeat: Infinity, ease: EASE_OUT } }
-      : {}
+  // The pulses are CSS animations (index.css: transform/opacity only, still under
+  // prefers-reduced-motion), not framer's main-thread scale.
+  const pulseClass = urgent ? 'timer-pulse-urgent' : done ? 'timer-pulse-done' : undefined
 
   return (
     <>
@@ -111,7 +117,8 @@ export default function TimerOverlay({ show }) {
             exit={{ opacity: 0, transition: { duration: 0.2, ease: EASE_EXIT } }}
             className="absolute z-[70] pointer-events-none"
             style={{
-              left: '2.5cqw',
+              // clear of the shiny sparkle (top 28px, left 30px) that owns this corner
+              left: '6cqw',
               top: '3cqh',
               transformOrigin: 'top left',
               padding: '1.6cqh 2.4cqh',
@@ -124,7 +131,7 @@ export default function TimerOverlay({ show }) {
               whiteSpace: 'nowrap',
             }}
           >
-            <motion.div {...pulse} style={{ transformOrigin: 'center' }}>
+            <div className={pulseClass} style={{ transformOrigin: 'center' }}>
               {done ? (
                 <div style={{ fontFamily: `'${theme.fonts.display}', sans-serif`, fontSize: '10cqh', lineHeight: 1.05, color: theme.colors.highlight }}>
                   Time&rsquo;s up!
@@ -139,15 +146,15 @@ export default function TimerOverlay({ show }) {
                     color: urgent ? theme.colors.highlight : theme.colors.text,
                   }}
                 >
-                  {view.label}
+                  <FixedDigits label={view.label} />
                 </div>
               )}
               {phase === 'paused' && (
-                <div style={{ fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`, fontSize: '2.6cqh', fontWeight: 700, letterSpacing: '0.2em', color: theme.colors.textMuted, marginTop: '0.6cqh' }}>
+                <div style={{ fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`, fontSize: '4cqh', lineHeight: 1, fontWeight: 700, letterSpacing: '0.2em', color: theme.colors.textMuted, marginTop: '0.6cqh' }}>
                   PAUSED
                 </div>
               )}
-            </motion.div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

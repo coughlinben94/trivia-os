@@ -72,6 +72,7 @@ describe('<TimerControl>', () => {
     act(() => button('+1 min').click())
     expect(actions.setShowTimer.mock.calls[1][0].endsAt).toBe(5_000_000 + 150000)
     act(() => button('Cancel').click())
+    act(() => button('Tap again to cancel').click())
     expect(actions.setShowTimer.mock.calls[2][0]).toBeNull()
   })
 
@@ -95,5 +96,29 @@ describe('<TimerControl>', () => {
     type('1')
     act(() => button('Start').click())
     expect(document.activeElement).not.toBe(input())
+  })
+
+  it('Cancel takes two taps while a timer is running, so a stray click cannot kill a live countdown', () => {
+    render(startTimer(90000, Date.now()))
+    act(() => button('Cancel').click())
+    expect(actions.setShowTimer).not.toHaveBeenCalled()
+    expect(button('Tap again to cancel')).toBeTruthy()
+    act(() => button('Tap again to cancel').click())
+    expect(actions.setShowTimer).toHaveBeenCalledTimes(1)
+    expect(actions.setShowTimer).toHaveBeenLastCalledWith(null)
+  })
+
+  it('the Cancel arm drops back by itself after a few seconds', async () => {
+    render(startTimer(90000, Date.now()))
+    act(() => button('Cancel').click())
+    expect(button('Tap again to cancel')).toBeTruthy()
+    await act(async () => { vi.advanceTimersByTime(3500) })
+    expect(button('Cancel')).toBeTruthy()
+    expect(actions.setShowTimer).not.toHaveBeenCalled()
+  })
+
+  it('every button gives instant press feedback', () => {
+    render(startTimer(90000, Date.now()))
+    for (const b of container.querySelectorAll('button')) expect(b.className).toContain('active:scale-[0.97]')
   })
 })
