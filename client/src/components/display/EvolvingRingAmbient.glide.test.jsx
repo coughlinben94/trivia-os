@@ -8,11 +8,10 @@
 // So right after a single-step advance renders, every VISIBLE .ring-stage
 // must carry `go`. Anything visible without it is a hard cut.
 //
-// Bug this guards (2026-09-26): the settle slide right after a color
-// transition used to remount the whole visible world (the "incoming" half
-// lived under a different parent than the "current" slot, so React could not
-// carry it over), and the incoming half of the transition slide itself was a
-// fresh mount too — both snapped while everything else glided.
+// Bug this guards (2026-09-26): a world change used to remount the visible
+// world and snap while everything else glided. Since 2026-10-01 a world
+// change is a single continuous ring (panes repainted in place), so there is
+// nothing to remount — the tests below also pin that.
 //
 // Fake timers drain turn()'s busy lock (SURGE_MS + 60) between steps with a
 // bounded advanceTimersByTime — never runAllTimers, which would chase the
@@ -106,46 +105,41 @@ describe('EvolvingRingAmbient — every single-step advance glides on screen', (
     expect(await walk(showId, range(a, b))).toEqual([])
   }, 120_000)
 
-  it('one world per slide; the world carries over as the same DOM node, debug handle follows it', async () => {
-    // show_b: the world changes arriving at slide 3, and stays through 4.
+  // Mid-layer elements of one pane, in the first strip copy.
+  const paneEls = (pane) => {
+    const mid = [...container.querySelectorAll('.ring-surge')].find(n => n.children.length === 2 && n.children[0].querySelector('[data-pane]'))
+    return [...mid.children[0].querySelectorAll(`[data-pane="${pane}"]`)]
+  }
+
+  it('one ring for the whole walk; the switch slide is an empty pane with a bleed from each side', async () => {
+    // show_b: the world changes arriving at slide 3 (and again at 6).
     await show('show_b', 2)
+    expect(container.querySelectorAll('.ring-stage')).toHaveLength(1)
+    const [stage] = container.querySelectorAll('.ring-stage')
+    // pane 3 is the gap: only the two bleed layers, no objects.
+    const gap = paneEls(3)
+    expect(gap).toHaveLength(2)
+    expect(gap.every(n => n.className.includes('scrim'))).toBe(true)
+    expect(paneEls(2).length).toBeGreaterThan(2) // an ordinary pane has real content
     await act(async () => { vi.advanceTimersByTime(SETTLE_MS) })
     await show('show_b', 3)
-    const visible = visibleStages(container)
-    expect(visible).toHaveLength(1) // never two worlds on one slide
-    const [over] = visible
-    expect(over.parentElement.style.opacity).toBe('1')
-    expect(container.querySelector('mask')).toBeNull() // no wipe machinery
-    // The outgoing world stays mounted, transparent, so a Prev back onto
-    // slide 2 can fade it back in.
-    const under = [...container.querySelectorAll('.ring-stage')].find(s => s !== over)
-    expect(isVisible(under, container)).toBe(false)
-    await act(async () => { vi.advanceTimersByTime(SETTLE_MS) })
-    await show('show_b', 4)
-    expect(visibleStages(container)).toEqual([over])
-    expect(over.classList.contains('go')).toBe(true)
-    // window.__world belongs to the world now on screen. Matched by backdrop
-    // color (the stage's background is its world's last sky stop).
-    expect(window.__world.station).toBe(4)
-    const probe = document.createElement('div')
-    probe.style.background = window.__world.WORLD.sky.at(-1)
-    expect(probe.style.background).toBe(over.style.background)
+    expect(container.querySelectorAll('.ring-stage')).toHaveLength(1)
+    expect(container.querySelector('.ring-stage')).toBe(stage) // same DOM node, never remounted
+    expect(stage.classList.contains('go')).toBe(true) // and it glided there
+    expect(window.__world.station).toBe(3)
   }, 60_000)
-})
 
-describe('EvolvingRingAmbient — prefers-reduced-motion', () => {
-  it('swaps worlds with no fade', async () => {
-    globalThis.IS_REACT_ACT_ENVIRONMENT = true
-    global.ResizeObserver = class { observe() {} disconnect() {} }
-    window.matchMedia = (q) => ({ matches: q.includes('reduce'), addEventListener() {}, removeEventListener() {} })
-    const container = document.createElement('div')
-    document.body.appendChild(container)
-    const root = createRoot(container)
-    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={2} />) })
-    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={3} />) })
-    const [over] = visibleStages(container)
-    expect(over.parentElement.style.transition).toMatch(/opacity 0ms/)
-    await act(async () => { root.unmount() })
-    document.body.removeChild(container)
+  it('repaints a pane in the next world once its old slide is far behind, in both strip copies', async () => {
+    // Slide 3 leaves the +-6 window at slide 10; pane 3 then belongs to slide
+    // 16. Jump rather than walk — each real mount is slow in jsdom.
+    await show('show_b', 2)
+    const mid = [...container.querySelectorAll('.ring-surge')].find(n => n.children.length === 2 && n.children[0].querySelector('[data-pane]'))
+    expect(mid.children[1].querySelectorAll('[data-pane="3"]')).toHaveLength(2) // gap, both copies
+    await act(async () => { vi.advanceTimersByTime(SETTLE_MS) })
+    await show('show_b', 10)
+    for (const copy of mid.children) {
+      const els = [...copy.querySelectorAll('[data-pane="3"]')]
+      expect(els.length).toBeGreaterThan(2) // no longer the bleed-only gap
+    }
   }, 60_000)
 })

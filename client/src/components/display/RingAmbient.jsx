@@ -151,6 +151,412 @@ const dom = ringDom('ring-', ENGINE)
 // slides with the pan any more — the sky itself leans, on its own slower
 // clock, with the region's own headline object visibly lighting it.
 
+// One mid-layer station's content (headline, source glow, companion, detail
+// specks), appended to `host`. Pulled out of buildLayerContent's loop so a
+// single station can be rebuilt later in another world's colours (the
+// per-pane world switch, see repaintPanes in the component). Shapes and
+// positions draw from rng(i, ...) streams, never from hue, so a rebuild with
+// a different world's hues lands every object in the same place.
+function buildMidStation(engine, world, arc, host, regionHues, i) {
+  const st = world.stations[i]
+  // Each property below draws from its OWN seeded stream, keyed by
+  // station index + a distinct per-property constant — not one shared
+  // stream read sequentially. See concepts/world-07-ring.html's
+  // identical comment for why (2026-08-08: a bandY fix reshuffled 4 of
+  // 12 stations' companion kind/hue as a pure side effect of consuming
+  // a different number of r() calls upstream, with no logical
+  // connection between the two — separate streams make that class of
+  // bug structurally impossible).
+  const rHeadline = rng(i, 0x5EED1)
+  const rPairBand = rng(i, 0x5EED2) // only the shared upper/lower coin-flip (spec §7.5 — this one draw IS intentionally shared)
+  const rCompanion = rng(i, 0x5EED3)
+  const rDetail = rng(i, 0x5EED4)
+  const lou = loudnessOf(arc, i)
+  const fill = fillOf(engine, arc, i)
+  const x0 = i * engine.W
+
+  // headline form — 576-880px longest edge, full tier range regardless
+  // of loudness (was lerp(576,880, lou*0.75+r()*0.25) — quiet stations
+  // got stuck near the 576 floor, loud ones near 880, so a quiet
+  // station read as a small/sparse frame instead of "large and dim."
+  // Loudness now speaks through alpha/detail-count only, below.
+  // 2026-08-12: synced from world-07-ring.html — pulsar shrunk 0.78x
+  // (Ben: "can be smaller"). See that file's comment for why scaling
+  // the whole box shrinks the object proportionally in one change.
+  // 2026-08-12 round 3 (Ben, st11: "make longer") — synced from
+  // world-07-ring.html: ribbon's own visual "length" is this width, so
+  // it gets a wider tier instead of the shared 576-880 range.
+  // 2026-08-13 round 2: synced from world-07-ring.html — widened past
+  // frame width (Ben: "make it go longer but ends off screen") so the
+  // far end actually exits the frame instead of just reading longer
+  // within it — see that file's identical comment for the full math.
+  // 2026-08-16: synced from world-07-ring.html (2026-08-12, Ben: "half
+  // on one slide half on another"). This branch never made it across
+  // when the rest of that round was synced, so st9's asteroid field
+  // shipped as an ordinary corner-hugged headline here while the
+  // reviewed build had it spanning the st9/st10 boundary. Ported
+  // verbatim — including the fact that the spanning `hh` consumes NO
+  // rHeadline() draw and `headLeft` bypasses cornerX(), which is what
+  // keeps this station's seeded stream in step with the other build.
+  // See that file's own comment for the full reasoning.
+  const isSpanningField = st.prim === 'asteroidField'
+  const hw = isSpanningField ? lerp(900, 1300, rHeadline())
+    : st.prim === 'ribbon' ? lerp(1600, 2000, rHeadline())
+    // 2026-08-13: synced from world-07-ring.html — streak's visual
+    // length is its width (Ben, st7: "doesn't have a major asset").
+    : st.prim === 'streak' ? lerp(860, 1180, rHeadline())
+      : lerp(576, 880, rHeadline()) * (st.prim === 'pulsar' ? 0.78 : 1)
+  const hh = st.prim === 'streak' ? hw * 0.30
+    : st.prim === 'ribbon' ? hw * 0.34
+    : isSpanningField ? hw * 0.42
+      : hw * (0.62 + rHeadline() * 0.26)
+  const alpha = lerp(0.34, 0.55, lou)
+  const head = dom.makePrim(st.prim, hw, hh, st.hue, alpha, rHeadline, true, fill, st.variant) // isHeadline: only per-station breathe (spec §8); variant: per-station prim treatment (st3's dust ring)
+  // 2026-08-12: synced from world-07-ring.html — this file was still on
+  // the pre-corner-bias uniform draw ([0.08,0.98] of remaining travel
+  // room, the very formula that measured mean centroid x=920 but still
+  // read as "top-center, not a corner" per Ben's st0 complaint on the
+  // OTHER build). Now shares ringPrimitives.js's `cornerX` — a fixed
+  // pixel margin from the frame edge instead of a fraction of
+  // remaining space, so the corner-push effect doesn't dilute for wide
+  // headlines. See that function's own comment for the full history.
+  // 2026-08-12: synced from world-07-ring.html — optional per-station
+  // `bandUpper` override (st11, Ben: "move to bottom right"), same
+  // pattern as `cornerLeft`. Draw still always happens.
+  // 2026-09-03 (Phase 1, docs/superpowers/plans/2026-09-02-ring-station-
+  // variety.md): placement (cornerLeft/bandUpper/companionUpper/
+  // companionBoost/maxDetail) now reads from SLOTS[i], not st.* — a
+  // future noun draw can put a different prim in this slot without the
+  // slot's own corner/band grammar re-rolling underneath it. `st.*`
+  // fields of the same name may still exist in the station data as
+  // historical attribution (the comments explaining WHY a station was
+  // pinned) but are no longer read here; SLOTS is the single source of
+  // truth for placement. pairBandDraw is still rolled and discarded when
+  // overridden — the draw must always happen so this station's
+  // rPairBand stream count never changes.
+  const pairBandDraw = rPairBand() < 0.5
+  const pairUpper = SLOTS[i].bandUpper // see bandY's forceUpper comment (spec §7.5)
+  // Corner choice drawn explicitly (not inside cornerX) so the
+  // occluder below can read it and place itself at the opposite corner.
+  // 2026-08-12: synced from world-07-ring.html — optional per-station
+  // `cornerLeft` override (st6, Ben: "needs to be on other bottom
+  // corner"), same pattern as the existing `ring`/`accent` flags. The
+  // draw still always happens so this station's rHeadline stream
+  // count is identical whether or not it's overridden.
+  const cornerDraw = rHeadline() < 0.5
+  const headlineCornerLeft = SLOTS[i].cornerLeft
+  // 2026-08-26 (ring-verify Bug C): boundary-centered placement put
+  // exactly 50% of this headline's box outside st9's own frame — the
+  // bleed check's own "ACCIDENTAL CLIP (>35%)" call, confirmed real by
+  // design-council review, not the deliberate 10-35% corner-bleed the
+  // rest of the ring uses. Reverted to the same cornerX() every other
+  // headline uses (isSpanningField still governs this station's size
+  // tier/aspect below — only its POSITION was the bug).
+  let headLeft = dom.cornerX(rHeadline, hw, x0, headlineCornerLeft)
+  // 2026-08-13: synced from world-07-ring.html — `planet` centers its
+  // min(w,h) disc in a wider box, leaving ~(hw-hh)/2 of dead horizontal
+  // inset between the box edge (which cornerX corner-hugs) and the
+  // visible disc edge. Shift the box by that inset so the DISC edge
+  // lands at cornerX's own margin (Ben, st4: "more towards corner").
+  // See that file's identical comment for the full reasoning.
+  if (st.prim === 'planet') {
+    const discInset = (hw - Math.min(hw, hh)) / 2
+    headLeft += headlineCornerLeft ? -discInset : discInset
+    // 2026-08-13: synced from world-07-ring.html — the planet's d-glow
+    // halo overflows the disc (GLOW_FRAC=1.35, mirrored here) and its
+    // brightest band crossed the station boundary, painting a bright
+    // arc on the NEIGHBOR station's slide (Ben, st4: "half on one page
+    // half on other"). Soft-mask only the glow at the boundary; see
+    // that file's identical comment for the full reasoning.
+    const discSize = Math.min(hw, hh)
+    const glowLeft = headLeft + (hw - discSize) / 2 + (discSize - discSize * 1.35) / 2
+    const glowW = discSize * 1.35
+    const glowEl2 = head.querySelector('[class*="d-glow"]')
+    if (glowEl2) {
+      const FEATHER = 24
+      // 2026-08-24: drawPlanetDisc now sets its own mask on this same
+      // element (the dark-side glow falloff — see its glowMask comment).
+      // Assigning here used to OVERWRITE it, silently restoring the
+      // full-wrap corona this station was flagged for. Stack instead:
+      // multi-layer mask + intersect composite multiplies the two.
+      const stackMask = (m) => {
+        const prev = glowEl2.style.maskImage
+        const combined = prev ? `${prev}, ${m}` : m
+        glowEl2.style.maskImage = combined; glowEl2.style.webkitMaskImage = combined
+        if (prev) { glowEl2.style.maskComposite = 'intersect'; glowEl2.style.webkitMaskComposite = 'source-in' }
+      }
+      if (headlineCornerLeft && glowLeft < x0) {
+        const b = x0 - glowLeft
+        stackMask(`linear-gradient(to right, transparent ${b.toFixed(0)}px, black ${(b + FEATHER).toFixed(0)}px)`)
+      } else if (!headlineCornerLeft && glowLeft + glowW > x0 + ENGINE.W) {
+        const b = (x0 + ENGINE.W) - glowLeft
+        stackMask(`linear-gradient(to right, black ${(b - FEATHER).toFixed(0)}px, transparent ${b.toFixed(0)}px)`)
+      }
+    }
+  }
+  // 2026-08-13: synced from world-07-ring.html — same dead-padding fix
+  // as `planet` above, for `ring` (st0). See that file's identical
+  // comment for the full reasoning.
+  if (st.prim === 'ring') {
+    const ringBodySize = Math.min(hw, hh) * 0.52
+    const ringRx = Math.min(ringBodySize * (st.variant === 'dust' ? 1.22 : 1.08), hw / 2 - 4)
+    const discInset = hw / 2 - ringRx
+    headLeft += headlineCornerLeft ? -discInset : discInset
+  }
+  // 2026-08-13: synced from world-07-ring.html — same dead-padding fix
+  // for `dots` (st2, Ben: "move closer to corner"): the cluster's dense
+  // mass is centered in the box (~0.28*hw reach), so shift the box until
+  // the mass edge, not the box edge, sits at cornerX's margin. See that
+  // file's identical comment for the measurement.
+  if (st.prim === 'dots') {
+    const discInset = hw / 2 - hw * 0.28
+    headLeft += headlineCornerLeft ? -discInset : discInset
+  }
+  // skipMinBleed dropped with the headLeft fix above — it existed only
+  // to keep the old boundary-centered placement's ~50% horizontal crop
+  // from stacking with the normal forced vertical bleed and going even
+  // further past the 35% cap. Normal cornerX placement doesn't need it.
+  const headTop = dom.bandY(rHeadline, hh, pairUpper, dom.rotatedBandH(st.prim, hw, hh))
+  head.style.left = px(headLeft)
+  head.style.top = px(headTop)
+  host.appendChild(head)
+  // 2026-08-12 round 2 (Ben, st10: "put this more towards corner") —
+  // synced from world-07-ring.html. `spikes` centers its core+rays
+  // dead-on at 50%/50% via CSS regardless of where the frame itself
+  // sits, so a corner-tucked frame still reads as "somewhere in the
+  // quadrant." Nudge just the core+ray group toward the frame's own
+  // corner post-hoc — see that file's own comment for the full reasoning.
+  if (st.prim === 'spikes') {
+    const cxPct = headlineCornerLeft ? 30 : 70, cyPct = pairUpper ? 30 : 70
+    head.querySelectorAll('[class*="s-core"], [class*="s-spk"]').forEach((n) => {
+      n.style.left = cxPct + '%'; n.style.top = cyPct + '%'
+    })
+    // 2026-08-12 round 3 (Ben, st10: "two assets, just need one") —
+    // synced from world-07-ring.html: d-glow keeps its CSS `inset:0`
+    // default (centers on the full frame) even after the core+rays
+    // above shift toward the corner, reading as a second star. Recenter
+    // it on the same corner point, same size as before.
+    const glowEl = head.querySelector('[class*="d-glow"]')
+    if (glowEl) {
+      glowEl.style.inset = 'auto'
+      glowEl.style.width = px(hw); glowEl.style.height = px(hh)
+      glowEl.style.left = px(hw * cxPct / 100 - hw / 2)
+      glowEl.style.top = px(hh * cyPct / 100 - hh / 2)
+    }
+  }
+  const headCx = headLeft + hw / 2, headCy = headTop + hh / 2
+
+  // ── SKY-REGION SOURCE GLOW (2026-08-16) ── synced from
+  // world-07-ring.html. Only the region's own `regionSource` station
+  // draws one: an enlarged, low-alpha light-field centred on that
+  // station's headline object and inserted BEFORE it, so the object
+  // (and every element appended after it) silhouettes in front of the
+  // light instead of being painted over by it. This is the "why is the
+  // sky green here" half of the region — the sky tint itself lives on
+  // the never-transformed sky layer (see the mount effect below).
+  // Station-box sized + edge-feathered inside makeSourceGlow so a
+  // corner-anchored headline's glow can't spill onto the neighbouring
+  // slide (the mask also stops it painting over the PREVIOUS station's
+  // objects, which sharing this mid-layer host would otherwise allow).
+  // NOT for `eclipse` (2026-09-06, design critique): this glow peaks at
+  // the object's centre on the assumption the object is opaque and
+  // silhouettes in front of it. The eclipse is corona-first — its centre
+  // is a HOLE showing sky — so the shared glow shone straight through
+  // it and made the "moon" the brightest broad region in frame. Its own
+  // donut-shaped d-glow already lights the sky around the rim in the
+  // region hue, so it needs no separate source. Same skip in
+  // world-07-ring.html.
+  if (st.regionSource && SKY_REGIONS[st.region] && st.prim !== 'eclipse') {
+    // Visual centre, not box centre: `spikes` re-centres its core+rays
+    // (and its own d-glow) on the corner point above, so the light has
+    // to follow them or it reads as a second, offset source.
+    let gcx = headCx, gcy = headCy
+    if (st.prim === 'spikes') {
+      gcx = headLeft + hw * (headlineCornerLeft ? 0.30 : 0.70)
+      gcy = headTop + hh * (pairUpper ? 0.30 : 0.70)
+    }
+    host.insertBefore(dom.makeSourceGlow(st.region, regionHues[st.region], x0, gcx, gcy, Math.max(hw, hh)), head)
+  }
+
+  // The per-station wash block that used to sit here (radial ellipse
+  // dome, `greenWash`/`orangeWash`, four rounds of geometry/alpha
+  // tuning) is DELETED 2026-08-16 in both builds — full history in git,
+  // reasoning in ringPrimitives.js's SKY_REGIONS comment. Do not
+  // reintroduce a colored box on the mid layer: that layer is exactly
+  // what made the color slide in with the pan instead of settling after
+  // it.
+
+  // Any station with `ring:true` in its data — see world-07-ring.html's
+  // identical comment (same fix, both builds, /simplify's station-data-
+  // flag generalization) and makeNebulaRing's own comment in
+  // ringPrimitives.js.
+  // 2026-08-12: synced from world-07-ring.html — uniform 1.30x scale
+  // centered exactly on the blob's own core reads as an eyeball (Ben:
+  // "woah, what is that???? not a fan"). Uneven axis scale + an offset
+  // off-center breaks the concentric iris/pupil read.
+  if (st.ring) {
+    const nrW = hw * 1.55, nrH = hh * 0.95
+    const nring = dom.makeNebulaRing(nrW, nrH, st.hue, fill)
+    nring.style.left = px(headCx - nrW / 2 + hw * 0.16)
+    nring.style.top = px(headCy - nrH / 2 - hh * 0.10)
+    host.appendChild(nring)
+  }
+
+  // one feature-tier companion — this IS the station's declared pair
+  // (spec §7.5): two elements linked by a shared visual property, not
+  // two independent random placements (a collage, not a pair). Shared
+  // property: hue echo within ±18° for non-accent stations (inside the
+  // spec's 20° budget); accent stations intentionally push the
+  // companion hue ~168° away (the world's one complementary-accent
+  // mechanic), so hue can't carry the pair there — the connecting
+  // bridge does, drawn for accent stations regardless of hue.
+  // 2026-08-12: synced from world-07-ring.html — this file was still on
+  // the old proximity-orbit placement (pairAng/pairRad around the
+  // headline's own centroid), never ported the st1/st3 clearance fix
+  // either. Superseded entirely: Ben, fresh review, generalizing st0's
+  // specific complaint — "two items squished together in the same
+  // corner is no bueno — ie a spiral not by a planet." Once headlines
+  // are corner-anchored, keeping the companion close means jamming two
+  // objects into the same corner. The pairing signal (hue-echo/bridge)
+  // never depended on physical closeness, so companion now takes the
+  // OPPOSITE corner from its headline — same treatment as the
+  // occluder below.
+  // noCompanion (st5 pulsar, 2026-08-13): synced from world-07-ring.html
+  // — see that file's identical comment for the full reasoning (round-6
+  // mis-marked this station's own companion as neighbor bleed).
+  if (!st.noCompanion) {
+    const others = ['blob', 'dots', 'lens', 'streak'].filter(k => k !== st.prim)
+    const rolled = others[Math.floor(rCompanion() * others.length)]
+    // companionKind (st1, 2026-08-13): synced from world-07-ring.html —
+    // forces st1's companion to 'dots' instead of the rolled 'blob',
+    // see that file's identical comment.
+    const ck = st.companionKind || rolled
+    // companionBoost (st6/st7, 2026-08-13): synced from
+    // world-07-ring.html — see that file's identical comment. Both
+    // stations sit at the ARC trough, so the loudness-driven alpha
+    // bottomed out invisible; floors applied AFTER the seeded rolls
+    // (same rCompanion() call count, no stream reshuffle).
+    // 2026-08-13 round 2: same floors extended to EVERY lens companion
+    // (`ck === 'lens'`), synced from world-07-ring.html — see that
+    // file's identical comment. Math.max is idempotent, so st7
+    // (flag + lens) doesn't double-apply.
+    const cwRoll = lerp(230, 420, rCompanion())
+    const boostComp = SLOTS[i].companionBoost || ck === 'lens'
+    const cw = boostComp ? Math.max(cwRoll, 380) : cwRoll
+    const ch = ck === 'streak' ? cw * 0.30 : cw * (0.60 + rCompanion() * 0.28)
+    // 2026-09-02 palette-aware, synced with world-07-ring.html: an accent's
+    // companion is now the farthest hue anchor, not a fixed +168. Same
+    // rCompanion() call count — the lerp only ever evaluated on the
+    // non-accent branch, and still does.
+    const compHue = st.accent
+      ? accentCompanionHue(st.hue, st.hueAnchors ?? world.hueAnchors)
+      : st.hue + lerp(-18, 18, rCompanion())
+    const compAlphaRoll = lerp(0.30, 0.48, lou) * 0.8
+    const compAlpha = boostComp ? Math.max(compAlphaRoll, 0.55) : compAlphaRoll
+    const comp = dom.makePrim(ck, cw, ch, compHue, compAlpha, rCompanion, false, fill)
+    const compLeft = dom.cornerX(rCompanion, cw, x0, !headlineCornerLeft)
+    // companionUpper (st2, 2026-08-14): synced from world-07-ring.html —
+    // per-station band override (true = upper); unset keeps !pairUpper,
+    // the diagonal-opposite standing rule. See that file's comment.
+    const compUpper = SLOTS[i].companionUpper
+    const compTop = dom.bandY(rCompanion, ch, compUpper, dom.rotatedBandH(ck, cw, ch))
+    comp.style.left = px(compLeft)
+    comp.style.top = px(compTop)
+    host.appendChild(comp)
+  }
+
+  // Pair-bridge connector: synced from world-07-ring.html, then
+  // REMOVED OUTRIGHT there in the same pass — see that file's own
+  // comment for the full history. Short version: it worked as a local
+  // connector when the companion orbited near the headline; once the
+  // companion moved to the diagonal-opposite corner, the same bridge
+  // started spanning nearly the full frame diagonal instead. Ben,
+  // fresh batch: "3-4 long lines not needed." Drops accent stations'
+  // only spec §7.5 pairing signal — flagged in the other file, not
+  // repeated here.
+
+  // detail-tier specks, count follows loudness. k===0 is forced toward
+  // the tier floor (spec §7.3 scale ladder): the worst-case headline
+  // (576px) divided by a detail element that happened to draw near the
+  // old ceiling (154px) measured at 3.7x — under the required >=6x.
+  // Forcing one detail element per station into [58,70] guarantees
+  // 576/70 = 8.2x even in the worst-case headline draw; the ladder no
+  // longer depends on two independent random draws going its way.
+  // maxDetail (2026-08-26, ring-verify Bug A: elements-per-station 2-5,
+  // spec §1): loud stations' own headline+companion+dn(up to 4) already
+  // sits at 6 before counting any neighbor-corner bleed — st0-4/9-12
+  // measured 6-8. Detail dots are the one Feature-and-below tier not
+  // protected by the §7.5 declared-pair rule (headline/companion stay
+  // untouched), so they're the surplus to trim. Per-station cap, not a
+  // formula-wide cut, so untouched stations (already 2-5) keep their
+  // loudness-scaled dot count exactly as before.
+  const dn = Math.min(Math.round(lerp(1, 4, lou)), SLOTS[i].maxDetail)
+  for (let k = 0; k < dn; k++) {
+    const dw = k === 0 ? lerp(58, 70, rDetail()) : lerp(58, 154, rDetail())
+    const d = dom.makePrim('dots', dw, dw * 0.9, st.hue, lerp(0.34, 0.60, lou) * 0.7, rDetail, false, fill)
+    // 2026-08-12 round 2 (Ben, st1: "too much going on") — synced from
+    // world-07-ring.html: keeps ambient detail specks in the middle
+    // 64% of frame width, clear of the corner zones headline/companion/
+    // occluder already occupy, instead of a fully uniform [0,W] draw
+    // that could land right on top of one by chance.
+    d.style.left = px(x0 + lerp(0.18, 0.82, rDetail()) * engine.W - dw / 2)
+    // 2026-08-14: synced from world-07-ring.html — skipMinBleed opts
+    // these small ambient specks out of bandY's headline corner-bleed
+    // floor (Ben: "star clusters... really close to the borders...
+    // brought into the scene a little more"). See that file's comment.
+    d.style.top = px(dom.bandY(rDetail, dw * 0.9, undefined, undefined, true))
+    host.appendChild(d)
+  }
+
+  // fillCorner (st9 asteroid field, Ben: "need something here" on the
+  // bottom-left) — synced from world-07-ring.html: the spanning-field
+  // headline is centered on the st9/st10 boundary so this station's
+  // own bottom-left corner stays bare; a small explicit dust cluster
+  // fills it, outside the corner-avoiding detail loop above.
+  if (st.fillCorner) {
+    // 2026-08-12 round 3 (Ben: "need a planet here") — synced from
+    // world-07-ring.html: swapped the dust speck for makeOccluder's
+    // own small lit-planet disc.
+    const fw = lerp(90, 130, rDetail())
+    const fc = dom.makeOccluder(fw, st.hue + 20, fill)
+    fc.style.left = px(x0 + engine.W * 0.10 - fw / 2)
+    fc.style.top = px(engine.H * 0.84 - fw * 0.45)
+    host.appendChild(fc)
+  }
+
+  // Spec §7.2 occlusion disc (the >=1-in-3-station subtractive planet-
+  // disc) removed 2026-08-13, Ben's explicit call — see the
+  // occluderStations removal note above this station loop for why.
+}
+
+// Builds one station into a scratch div, then moves its children onto `host`
+// tagged data-pane=i so repaintPanes can find and replace exactly them. Order
+// is preserved; the only DOM difference from before is the attribute.
+function appendPane(host, i, build) {
+  const tmp = document.createElement('div')
+  build(tmp)
+  for (const n of [...tmp.childNodes]) { n.setAttribute('data-pane', i); host.appendChild(n) }
+}
+
+// The empty pane a world switch lands on: no objects, only the two worlds'
+// light bleeding in from each edge (spec: docs/superpowers/plans/
+// 2026-10-01-ring-per-station-world-switch.md). spec.bleeds = [{ side, color,
+// reach }] with reach a 0..1 fraction of the frame width; whatever the two
+// reaches leave uncovered stays plain dark, which is the visible "shift".
+function buildGapPane(host, i, spec) {
+  for (const b of spec.bleeds) {
+    const w = b.reach * ENGINE.W
+    const el = dom.el('scrim')
+    el.style.left = px(i * ENGINE.W + (b.side === 'left' ? 0 : ENGINE.W - w))
+    el.style.top = '0'
+    el.style.width = px(w)
+    el.style.height = px(ENGINE.H)
+    el.style.opacity = '0.4'
+    el.style.background = `radial-gradient(ellipse 100% 65% at ${b.side === 'left' ? '0%' : '100%'} 50%, ${b.color}, transparent)`
+    host.appendChild(el)
+  }
+}
+
 // ═══ BUILD ═══ dispatches per-layer content building.
 function buildLayerContent(engine, world, arc, host, L, showId) {
   // 2026-09-02 palette-aware, synced with world-07-ring.html: region hues are
@@ -301,375 +707,7 @@ function buildLayerContent(engine, world, arc, host, L, showId) {
     // if the floor itself should retire.
 
     for (let i = 0; i < engine.PANES; i++) {
-      const st = world.stations[i]
-      // Each property below draws from its OWN seeded stream, keyed by
-      // station index + a distinct per-property constant — not one shared
-      // stream read sequentially. See concepts/world-07-ring.html's
-      // identical comment for why (2026-08-08: a bandY fix reshuffled 4 of
-      // 12 stations' companion kind/hue as a pure side effect of consuming
-      // a different number of r() calls upstream, with no logical
-      // connection between the two — separate streams make that class of
-      // bug structurally impossible).
-      const rHeadline = rng(i, 0x5EED1)
-      const rPairBand = rng(i, 0x5EED2) // only the shared upper/lower coin-flip (spec §7.5 — this one draw IS intentionally shared)
-      const rCompanion = rng(i, 0x5EED3)
-      const rDetail = rng(i, 0x5EED4)
-      const lou = loudnessOf(arc, i)
-      const fill = fillOf(engine, arc, i)
-      const x0 = i * engine.W
-
-      // headline form — 576-880px longest edge, full tier range regardless
-      // of loudness (was lerp(576,880, lou*0.75+r()*0.25) — quiet stations
-      // got stuck near the 576 floor, loud ones near 880, so a quiet
-      // station read as a small/sparse frame instead of "large and dim."
-      // Loudness now speaks through alpha/detail-count only, below.
-      // 2026-08-12: synced from world-07-ring.html — pulsar shrunk 0.78x
-      // (Ben: "can be smaller"). See that file's comment for why scaling
-      // the whole box shrinks the object proportionally in one change.
-      // 2026-08-12 round 3 (Ben, st11: "make longer") — synced from
-      // world-07-ring.html: ribbon's own visual "length" is this width, so
-      // it gets a wider tier instead of the shared 576-880 range.
-      // 2026-08-13 round 2: synced from world-07-ring.html — widened past
-      // frame width (Ben: "make it go longer but ends off screen") so the
-      // far end actually exits the frame instead of just reading longer
-      // within it — see that file's identical comment for the full math.
-      // 2026-08-16: synced from world-07-ring.html (2026-08-12, Ben: "half
-      // on one slide half on another"). This branch never made it across
-      // when the rest of that round was synced, so st9's asteroid field
-      // shipped as an ordinary corner-hugged headline here while the
-      // reviewed build had it spanning the st9/st10 boundary. Ported
-      // verbatim — including the fact that the spanning `hh` consumes NO
-      // rHeadline() draw and `headLeft` bypasses cornerX(), which is what
-      // keeps this station's seeded stream in step with the other build.
-      // See that file's own comment for the full reasoning.
-      const isSpanningField = st.prim === 'asteroidField'
-      const hw = isSpanningField ? lerp(900, 1300, rHeadline())
-        : st.prim === 'ribbon' ? lerp(1600, 2000, rHeadline())
-        // 2026-08-13: synced from world-07-ring.html — streak's visual
-        // length is its width (Ben, st7: "doesn't have a major asset").
-        : st.prim === 'streak' ? lerp(860, 1180, rHeadline())
-          : lerp(576, 880, rHeadline()) * (st.prim === 'pulsar' ? 0.78 : 1)
-      const hh = st.prim === 'streak' ? hw * 0.30
-        : st.prim === 'ribbon' ? hw * 0.34
-        : isSpanningField ? hw * 0.42
-          : hw * (0.62 + rHeadline() * 0.26)
-      const alpha = lerp(0.34, 0.55, lou)
-      const head = dom.makePrim(st.prim, hw, hh, st.hue, alpha, rHeadline, true, fill, st.variant) // isHeadline: only per-station breathe (spec §8); variant: per-station prim treatment (st3's dust ring)
-      // 2026-08-12: synced from world-07-ring.html — this file was still on
-      // the pre-corner-bias uniform draw ([0.08,0.98] of remaining travel
-      // room, the very formula that measured mean centroid x=920 but still
-      // read as "top-center, not a corner" per Ben's st0 complaint on the
-      // OTHER build). Now shares ringPrimitives.js's `cornerX` — a fixed
-      // pixel margin from the frame edge instead of a fraction of
-      // remaining space, so the corner-push effect doesn't dilute for wide
-      // headlines. See that function's own comment for the full history.
-      // 2026-08-12: synced from world-07-ring.html — optional per-station
-      // `bandUpper` override (st11, Ben: "move to bottom right"), same
-      // pattern as `cornerLeft`. Draw still always happens.
-      // 2026-09-03 (Phase 1, docs/superpowers/plans/2026-09-02-ring-station-
-      // variety.md): placement (cornerLeft/bandUpper/companionUpper/
-      // companionBoost/maxDetail) now reads from SLOTS[i], not st.* — a
-      // future noun draw can put a different prim in this slot without the
-      // slot's own corner/band grammar re-rolling underneath it. `st.*`
-      // fields of the same name may still exist in the station data as
-      // historical attribution (the comments explaining WHY a station was
-      // pinned) but are no longer read here; SLOTS is the single source of
-      // truth for placement. pairBandDraw is still rolled and discarded when
-      // overridden — the draw must always happen so this station's
-      // rPairBand stream count never changes.
-      const pairBandDraw = rPairBand() < 0.5
-      const pairUpper = SLOTS[i].bandUpper // see bandY's forceUpper comment (spec §7.5)
-      // Corner choice drawn explicitly (not inside cornerX) so the
-      // occluder below can read it and place itself at the opposite corner.
-      // 2026-08-12: synced from world-07-ring.html — optional per-station
-      // `cornerLeft` override (st6, Ben: "needs to be on other bottom
-      // corner"), same pattern as the existing `ring`/`accent` flags. The
-      // draw still always happens so this station's rHeadline stream
-      // count is identical whether or not it's overridden.
-      const cornerDraw = rHeadline() < 0.5
-      const headlineCornerLeft = SLOTS[i].cornerLeft
-      // 2026-08-26 (ring-verify Bug C): boundary-centered placement put
-      // exactly 50% of this headline's box outside st9's own frame — the
-      // bleed check's own "ACCIDENTAL CLIP (>35%)" call, confirmed real by
-      // design-council review, not the deliberate 10-35% corner-bleed the
-      // rest of the ring uses. Reverted to the same cornerX() every other
-      // headline uses (isSpanningField still governs this station's size
-      // tier/aspect below — only its POSITION was the bug).
-      let headLeft = dom.cornerX(rHeadline, hw, x0, headlineCornerLeft)
-      // 2026-08-13: synced from world-07-ring.html — `planet` centers its
-      // min(w,h) disc in a wider box, leaving ~(hw-hh)/2 of dead horizontal
-      // inset between the box edge (which cornerX corner-hugs) and the
-      // visible disc edge. Shift the box by that inset so the DISC edge
-      // lands at cornerX's own margin (Ben, st4: "more towards corner").
-      // See that file's identical comment for the full reasoning.
-      if (st.prim === 'planet') {
-        const discInset = (hw - Math.min(hw, hh)) / 2
-        headLeft += headlineCornerLeft ? -discInset : discInset
-        // 2026-08-13: synced from world-07-ring.html — the planet's d-glow
-        // halo overflows the disc (GLOW_FRAC=1.35, mirrored here) and its
-        // brightest band crossed the station boundary, painting a bright
-        // arc on the NEIGHBOR station's slide (Ben, st4: "half on one page
-        // half on other"). Soft-mask only the glow at the boundary; see
-        // that file's identical comment for the full reasoning.
-        const discSize = Math.min(hw, hh)
-        const glowLeft = headLeft + (hw - discSize) / 2 + (discSize - discSize * 1.35) / 2
-        const glowW = discSize * 1.35
-        const glowEl2 = head.querySelector('[class*="d-glow"]')
-        if (glowEl2) {
-          const FEATHER = 24
-          // 2026-08-24: drawPlanetDisc now sets its own mask on this same
-          // element (the dark-side glow falloff — see its glowMask comment).
-          // Assigning here used to OVERWRITE it, silently restoring the
-          // full-wrap corona this station was flagged for. Stack instead:
-          // multi-layer mask + intersect composite multiplies the two.
-          const stackMask = (m) => {
-            const prev = glowEl2.style.maskImage
-            const combined = prev ? `${prev}, ${m}` : m
-            glowEl2.style.maskImage = combined; glowEl2.style.webkitMaskImage = combined
-            if (prev) { glowEl2.style.maskComposite = 'intersect'; glowEl2.style.webkitMaskComposite = 'source-in' }
-          }
-          if (headlineCornerLeft && glowLeft < x0) {
-            const b = x0 - glowLeft
-            stackMask(`linear-gradient(to right, transparent ${b.toFixed(0)}px, black ${(b + FEATHER).toFixed(0)}px)`)
-          } else if (!headlineCornerLeft && glowLeft + glowW > x0 + ENGINE.W) {
-            const b = (x0 + ENGINE.W) - glowLeft
-            stackMask(`linear-gradient(to right, black ${(b - FEATHER).toFixed(0)}px, transparent ${b.toFixed(0)}px)`)
-          }
-        }
-      }
-      // 2026-08-13: synced from world-07-ring.html — same dead-padding fix
-      // as `planet` above, for `ring` (st0). See that file's identical
-      // comment for the full reasoning.
-      if (st.prim === 'ring') {
-        const ringBodySize = Math.min(hw, hh) * 0.52
-        const ringRx = Math.min(ringBodySize * (st.variant === 'dust' ? 1.22 : 1.08), hw / 2 - 4)
-        const discInset = hw / 2 - ringRx
-        headLeft += headlineCornerLeft ? -discInset : discInset
-      }
-      // 2026-08-13: synced from world-07-ring.html — same dead-padding fix
-      // for `dots` (st2, Ben: "move closer to corner"): the cluster's dense
-      // mass is centered in the box (~0.28*hw reach), so shift the box until
-      // the mass edge, not the box edge, sits at cornerX's margin. See that
-      // file's identical comment for the measurement.
-      if (st.prim === 'dots') {
-        const discInset = hw / 2 - hw * 0.28
-        headLeft += headlineCornerLeft ? -discInset : discInset
-      }
-      // skipMinBleed dropped with the headLeft fix above — it existed only
-      // to keep the old boundary-centered placement's ~50% horizontal crop
-      // from stacking with the normal forced vertical bleed and going even
-      // further past the 35% cap. Normal cornerX placement doesn't need it.
-      const headTop = dom.bandY(rHeadline, hh, pairUpper, dom.rotatedBandH(st.prim, hw, hh))
-      head.style.left = px(headLeft)
-      head.style.top = px(headTop)
-      host.appendChild(head)
-      // 2026-08-12 round 2 (Ben, st10: "put this more towards corner") —
-      // synced from world-07-ring.html. `spikes` centers its core+rays
-      // dead-on at 50%/50% via CSS regardless of where the frame itself
-      // sits, so a corner-tucked frame still reads as "somewhere in the
-      // quadrant." Nudge just the core+ray group toward the frame's own
-      // corner post-hoc — see that file's own comment for the full reasoning.
-      if (st.prim === 'spikes') {
-        const cxPct = headlineCornerLeft ? 30 : 70, cyPct = pairUpper ? 30 : 70
-        head.querySelectorAll('[class*="s-core"], [class*="s-spk"]').forEach((n) => {
-          n.style.left = cxPct + '%'; n.style.top = cyPct + '%'
-        })
-        // 2026-08-12 round 3 (Ben, st10: "two assets, just need one") —
-        // synced from world-07-ring.html: d-glow keeps its CSS `inset:0`
-        // default (centers on the full frame) even after the core+rays
-        // above shift toward the corner, reading as a second star. Recenter
-        // it on the same corner point, same size as before.
-        const glowEl = head.querySelector('[class*="d-glow"]')
-        if (glowEl) {
-          glowEl.style.inset = 'auto'
-          glowEl.style.width = px(hw); glowEl.style.height = px(hh)
-          glowEl.style.left = px(hw * cxPct / 100 - hw / 2)
-          glowEl.style.top = px(hh * cyPct / 100 - hh / 2)
-        }
-      }
-      const headCx = headLeft + hw / 2, headCy = headTop + hh / 2
-
-      // ── SKY-REGION SOURCE GLOW (2026-08-16) ── synced from
-      // world-07-ring.html. Only the region's own `regionSource` station
-      // draws one: an enlarged, low-alpha light-field centred on that
-      // station's headline object and inserted BEFORE it, so the object
-      // (and every element appended after it) silhouettes in front of the
-      // light instead of being painted over by it. This is the "why is the
-      // sky green here" half of the region — the sky tint itself lives on
-      // the never-transformed sky layer (see the mount effect below).
-      // Station-box sized + edge-feathered inside makeSourceGlow so a
-      // corner-anchored headline's glow can't spill onto the neighbouring
-      // slide (the mask also stops it painting over the PREVIOUS station's
-      // objects, which sharing this mid-layer host would otherwise allow).
-      // NOT for `eclipse` (2026-09-06, design critique): this glow peaks at
-      // the object's centre on the assumption the object is opaque and
-      // silhouettes in front of it. The eclipse is corona-first — its centre
-      // is a HOLE showing sky — so the shared glow shone straight through
-      // it and made the "moon" the brightest broad region in frame. Its own
-      // donut-shaped d-glow already lights the sky around the rim in the
-      // region hue, so it needs no separate source. Same skip in
-      // world-07-ring.html.
-      if (st.regionSource && SKY_REGIONS[st.region] && st.prim !== 'eclipse') {
-        // Visual centre, not box centre: `spikes` re-centres its core+rays
-        // (and its own d-glow) on the corner point above, so the light has
-        // to follow them or it reads as a second, offset source.
-        let gcx = headCx, gcy = headCy
-        if (st.prim === 'spikes') {
-          gcx = headLeft + hw * (headlineCornerLeft ? 0.30 : 0.70)
-          gcy = headTop + hh * (pairUpper ? 0.30 : 0.70)
-        }
-        host.insertBefore(dom.makeSourceGlow(st.region, regionHues[st.region], x0, gcx, gcy, Math.max(hw, hh)), head)
-      }
-
-      // The per-station wash block that used to sit here (radial ellipse
-      // dome, `greenWash`/`orangeWash`, four rounds of geometry/alpha
-      // tuning) is DELETED 2026-08-16 in both builds — full history in git,
-      // reasoning in ringPrimitives.js's SKY_REGIONS comment. Do not
-      // reintroduce a colored box on the mid layer: that layer is exactly
-      // what made the color slide in with the pan instead of settling after
-      // it.
-
-      // Any station with `ring:true` in its data — see world-07-ring.html's
-      // identical comment (same fix, both builds, /simplify's station-data-
-      // flag generalization) and makeNebulaRing's own comment in
-      // ringPrimitives.js.
-      // 2026-08-12: synced from world-07-ring.html — uniform 1.30x scale
-      // centered exactly on the blob's own core reads as an eyeball (Ben:
-      // "woah, what is that???? not a fan"). Uneven axis scale + an offset
-      // off-center breaks the concentric iris/pupil read.
-      if (st.ring) {
-        const nrW = hw * 1.55, nrH = hh * 0.95
-        const nring = dom.makeNebulaRing(nrW, nrH, st.hue, fill)
-        nring.style.left = px(headCx - nrW / 2 + hw * 0.16)
-        nring.style.top = px(headCy - nrH / 2 - hh * 0.10)
-        host.appendChild(nring)
-      }
-
-      // one feature-tier companion — this IS the station's declared pair
-      // (spec §7.5): two elements linked by a shared visual property, not
-      // two independent random placements (a collage, not a pair). Shared
-      // property: hue echo within ±18° for non-accent stations (inside the
-      // spec's 20° budget); accent stations intentionally push the
-      // companion hue ~168° away (the world's one complementary-accent
-      // mechanic), so hue can't carry the pair there — the connecting
-      // bridge does, drawn for accent stations regardless of hue.
-      // 2026-08-12: synced from world-07-ring.html — this file was still on
-      // the old proximity-orbit placement (pairAng/pairRad around the
-      // headline's own centroid), never ported the st1/st3 clearance fix
-      // either. Superseded entirely: Ben, fresh review, generalizing st0's
-      // specific complaint — "two items squished together in the same
-      // corner is no bueno — ie a spiral not by a planet." Once headlines
-      // are corner-anchored, keeping the companion close means jamming two
-      // objects into the same corner. The pairing signal (hue-echo/bridge)
-      // never depended on physical closeness, so companion now takes the
-      // OPPOSITE corner from its headline — same treatment as the
-      // occluder below.
-      // noCompanion (st5 pulsar, 2026-08-13): synced from world-07-ring.html
-      // — see that file's identical comment for the full reasoning (round-6
-      // mis-marked this station's own companion as neighbor bleed).
-      if (!st.noCompanion) {
-        const others = ['blob', 'dots', 'lens', 'streak'].filter(k => k !== st.prim)
-        const rolled = others[Math.floor(rCompanion() * others.length)]
-        // companionKind (st1, 2026-08-13): synced from world-07-ring.html —
-        // forces st1's companion to 'dots' instead of the rolled 'blob',
-        // see that file's identical comment.
-        const ck = st.companionKind || rolled
-        // companionBoost (st6/st7, 2026-08-13): synced from
-        // world-07-ring.html — see that file's identical comment. Both
-        // stations sit at the ARC trough, so the loudness-driven alpha
-        // bottomed out invisible; floors applied AFTER the seeded rolls
-        // (same rCompanion() call count, no stream reshuffle).
-        // 2026-08-13 round 2: same floors extended to EVERY lens companion
-        // (`ck === 'lens'`), synced from world-07-ring.html — see that
-        // file's identical comment. Math.max is idempotent, so st7
-        // (flag + lens) doesn't double-apply.
-        const cwRoll = lerp(230, 420, rCompanion())
-        const boostComp = SLOTS[i].companionBoost || ck === 'lens'
-        const cw = boostComp ? Math.max(cwRoll, 380) : cwRoll
-        const ch = ck === 'streak' ? cw * 0.30 : cw * (0.60 + rCompanion() * 0.28)
-        // 2026-09-02 palette-aware, synced with world-07-ring.html: an accent's
-        // companion is now the farthest hue anchor, not a fixed +168. Same
-        // rCompanion() call count — the lerp only ever evaluated on the
-        // non-accent branch, and still does.
-        const compHue = st.accent
-          ? accentCompanionHue(st.hue, st.hueAnchors ?? world.hueAnchors)
-          : st.hue + lerp(-18, 18, rCompanion())
-        const compAlphaRoll = lerp(0.30, 0.48, lou) * 0.8
-        const compAlpha = boostComp ? Math.max(compAlphaRoll, 0.55) : compAlphaRoll
-        const comp = dom.makePrim(ck, cw, ch, compHue, compAlpha, rCompanion, false, fill)
-        const compLeft = dom.cornerX(rCompanion, cw, x0, !headlineCornerLeft)
-        // companionUpper (st2, 2026-08-14): synced from world-07-ring.html —
-        // per-station band override (true = upper); unset keeps !pairUpper,
-        // the diagonal-opposite standing rule. See that file's comment.
-        const compUpper = SLOTS[i].companionUpper
-        const compTop = dom.bandY(rCompanion, ch, compUpper, dom.rotatedBandH(ck, cw, ch))
-        comp.style.left = px(compLeft)
-        comp.style.top = px(compTop)
-        host.appendChild(comp)
-      }
-
-      // Pair-bridge connector: synced from world-07-ring.html, then
-      // REMOVED OUTRIGHT there in the same pass — see that file's own
-      // comment for the full history. Short version: it worked as a local
-      // connector when the companion orbited near the headline; once the
-      // companion moved to the diagonal-opposite corner, the same bridge
-      // started spanning nearly the full frame diagonal instead. Ben,
-      // fresh batch: "3-4 long lines not needed." Drops accent stations'
-      // only spec §7.5 pairing signal — flagged in the other file, not
-      // repeated here.
-
-      // detail-tier specks, count follows loudness. k===0 is forced toward
-      // the tier floor (spec §7.3 scale ladder): the worst-case headline
-      // (576px) divided by a detail element that happened to draw near the
-      // old ceiling (154px) measured at 3.7x — under the required >=6x.
-      // Forcing one detail element per station into [58,70] guarantees
-      // 576/70 = 8.2x even in the worst-case headline draw; the ladder no
-      // longer depends on two independent random draws going its way.
-      // maxDetail (2026-08-26, ring-verify Bug A: elements-per-station 2-5,
-      // spec §1): loud stations' own headline+companion+dn(up to 4) already
-      // sits at 6 before counting any neighbor-corner bleed — st0-4/9-12
-      // measured 6-8. Detail dots are the one Feature-and-below tier not
-      // protected by the §7.5 declared-pair rule (headline/companion stay
-      // untouched), so they're the surplus to trim. Per-station cap, not a
-      // formula-wide cut, so untouched stations (already 2-5) keep their
-      // loudness-scaled dot count exactly as before.
-      const dn = Math.min(Math.round(lerp(1, 4, lou)), SLOTS[i].maxDetail)
-      for (let k = 0; k < dn; k++) {
-        const dw = k === 0 ? lerp(58, 70, rDetail()) : lerp(58, 154, rDetail())
-        const d = dom.makePrim('dots', dw, dw * 0.9, st.hue, lerp(0.34, 0.60, lou) * 0.7, rDetail, false, fill)
-        // 2026-08-12 round 2 (Ben, st1: "too much going on") — synced from
-        // world-07-ring.html: keeps ambient detail specks in the middle
-        // 64% of frame width, clear of the corner zones headline/companion/
-        // occluder already occupy, instead of a fully uniform [0,W] draw
-        // that could land right on top of one by chance.
-        d.style.left = px(x0 + lerp(0.18, 0.82, rDetail()) * engine.W - dw / 2)
-        // 2026-08-14: synced from world-07-ring.html — skipMinBleed opts
-        // these small ambient specks out of bandY's headline corner-bleed
-        // floor (Ben: "star clusters... really close to the borders...
-        // brought into the scene a little more"). See that file's comment.
-        d.style.top = px(dom.bandY(rDetail, dw * 0.9, undefined, undefined, true))
-        host.appendChild(d)
-      }
-
-      // fillCorner (st9 asteroid field, Ben: "need something here" on the
-      // bottom-left) — synced from world-07-ring.html: the spanning-field
-      // headline is centered on the st9/st10 boundary so this station's
-      // own bottom-left corner stays bare; a small explicit dust cluster
-      // fills it, outside the corner-avoiding detail loop above.
-      if (st.fillCorner) {
-        // 2026-08-12 round 3 (Ben: "need a planet here") — synced from
-        // world-07-ring.html: swapped the dust speck for makeOccluder's
-        // own small lit-planet disc.
-        const fw = lerp(90, 130, rDetail())
-        const fc = dom.makeOccluder(fw, st.hue + 20, fill)
-        fc.style.left = px(x0 + engine.W * 0.10 - fw / 2)
-        fc.style.top = px(engine.H * 0.84 - fw * 0.45)
-        host.appendChild(fc)
-      }
-
-      // Spec §7.2 occlusion disc (the >=1-in-3-station subtractive planet-
-      // disc) removed 2026-08-13, Ben's explicit call — see the
-      // occluderStations removal note above this station loop for why.
+      appendPane(host, i, (stHost) => buildMidStation(engine, world, arc, stHost, regionHues, i))
     }
   }
 
@@ -694,7 +732,7 @@ export const RING_RETURN = 'return'
 // stations: [PANES x {key,prim,hue,accent}] } — see concepts/world-07-ring.html's
 // own WORLD literal. qColours is accepted but unused here (question-colour
 // styling belongs to the out-of-scope question-rendering system).
-const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, stationOverride, showStationDebug = false, forceSnap = false, exposeDebugGlobal = true, showId }, ref) {
+const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, stationOverride, showStationDebug = false, forceSnap = false, exposeDebugGlobal = true, showId, panePlan }, ref) {
   // The ground behind the stage. Was a hardcoded '#01010a' — a blue-black
   // tuned to the purple world, which stayed blue-black under every recolour.
   // The sky ramp's terminal stop is the same near-black, already generated
@@ -717,6 +755,14 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   const shootTimerRef = useRef(null)
   const skyTintsRef = useRef(null)
   const skyWeightsRef = useRef(null)
+  // Per-pane world switch (optional): panePlan(slide, station, solidCenter)
+  // returns PANES specs — a world to paint that pane with, or an { empty,
+  // bleeds } gap. paintedRef remembers what each pane currently shows so only
+  // changed panes are rebuilt. Absent -> every pane keeps worldData, exactly
+  // as before.
+  const panePlanRef = useRef(panePlan)
+  panePlanRef.current = panePlan
+  const paintedRef = useRef([])
 
   // One choke point so turn()/jumpTo() can't drift on the animate flag —
   // turns animate (that's the whole effect), jumps snap (authoritative
@@ -769,7 +815,9 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     const skyTints = dom.makeSkyTints(skyRegionHues(worldData.stations)) // 2026-09-02 palette-aware, synced with world-07-ring.html
     for (const t of Object.values(skyTints)) skyInner.appendChild(t)
     skyTintsRef.current = skyTints
-    skyWeightsRef.current = skyRegionWeights(worldData.stations)
+    // Plain sky in per-pane mode: region tints bake one world's hues, which
+    // would clash once the ring shows another duo. Empty weights -> all 0.
+    skyWeightsRef.current = panePlanRef.current ? [] : skyRegionWeights(worldData.stations)
     sky.appendChild(skyInner)
     design.appendChild(sky)
 
@@ -856,6 +904,8 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     // mount-at-rest path (stationRef.current === 0, true for every existing
     // live show) stays byte-identical to before this fix.
     if (stationRef.current !== 0) dom.clampSafeBoxStarPeaks(design)
+    paintedRef.current = Array.from({ length: ENGINE.PANES }, () => worldData)
+    applyPanes(lastSlideIndexRef.current, stationRef.current)
     shootLoop()
 
     // React 18 StrictMode double-invokes this effect in dev; clear what we
@@ -965,6 +1015,10 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     if (action === 'turn') turn()
     else if (action === 'turn-back') turn(-1)
     else if (action === 'jump') jumpTo(slideIndex)
+    // The station this slide lands on: stationRef plus any turns still queued
+    // behind a glide in flight (stationRef only moves when a turn starts).
+    const queued = queuedTurnsRef.current.reduce((a, d) => a + d, 0)
+    applyPanes(slideIndex, ((stationRef.current + queued) % ENGINE.PANES + ENGINE.PANES) % ENGINE.PANES)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slideIndex, forceSnap])
 
@@ -1020,12 +1074,41 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
       if (returnStationRef.current == null) return
       jumpTo(returnStationRef.current)
       returnStationRef.current = null
+      applyPanes(lastSlideIndexRef.current, stationRef.current) // restore pane 10 etc. to the real mapping
       return
     }
     returnStationRef.current = stationRef.current
     jumpTo(stationOverride)
+    // The break shows the eclipse pane, never a gap: paint just that pane
+    // with the current slide's own world (solidCenter).
+    applyPanes(lastSlideIndexRef.current, stationRef.current, stationRef.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stationOverride])
+
+  // Repaint every pane whose assigned world/gap changed. `station` is where
+  // `slide` sits on the ring (callers pass the station it is landing on, so a
+  // queued turn or a grading-break lag can't skew the mapping). Both mid-layer
+  // copies are repainted or the 12 -> 0 wrap would show a jump. Panes that
+  // change are the far ones (6-7 stations from the camera), off screen.
+  function applyPanes(slide, station, onlyPane) {
+    const planFn = panePlanRef.current
+    const mid = surgeElsRef.current.mid
+    if (!planFn || !mid || slide == null) return
+    const plan = planFn(slide, station, onlyPane != null)
+    plan.forEach((spec, pane) => {
+      if (onlyPane != null && pane !== onlyPane) return
+      const key = spec.empty ? JSON.stringify(spec) : spec
+      if (paintedRef.current[pane] === key) return
+      paintedRef.current[pane] = key
+      const arc = spec.empty ? null : buildArc(ENGINE, spec)
+      for (const copy of mid.children) {
+        copy.querySelectorAll(`[data-pane="${pane}"]`).forEach(n => n.remove())
+        appendPane(copy, pane, spec.empty
+          ? (h) => buildGapPane(h, pane, spec)
+          : (h) => buildMidStation(ENGINE, spec, arc, h, skyRegionHues(spec.stations), pane))
+      }
+    })
+  }
 
   function writeOffsets() {
     const surgeEls = surgeElsRef.current

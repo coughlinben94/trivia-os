@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { stepIndexForSlide, outgoingAndIncomingDuo, isTransitionSlide, transitionWipeFor } from './duoTransition.js'
+import { stepIndexForSlide, outgoingAndIncomingDuo, isTransitionSlide, gapBleedFor } from './duoTransition.js'
 import { DUO_GRAPH } from './duoGraph.js'
 
 describe('stepIndexForSlide', () => {
@@ -100,37 +100,27 @@ describe('isTransitionSlide', () => {
   })
 })
 
-describe('transitionWipeFor', () => {
-  it('replays identical geometry for the same show and transition step', () => {
-    expect(transitionWipeFor('show_wipe', 4)).toEqual(transitionWipeFor('show_wipe', 4))
+describe('gapBleedFor', () => {
+  it('replays identical numbers for the same show and step, in any call order', () => {
+    const later = gapBleedFor('show_gap', 9)
+    gapBleedFor('show_gap', 2)
+    gapBleedFor('other_show', 9)
+    expect(gapBleedFor('show_gap', 9)).toEqual(later)
   })
 
-  it('varies angle, position, direction, and curve across transition steps', () => {
-    const wipes = Array.from({ length: 8 }, (_, step) => transitionWipeFor('show_wipe', step))
-    expect(new Set(wipes.map(w => w.angleDeg)).size).toBeGreaterThan(1)
-    expect(new Set(wipes.map(w => w.centerY)).size).toBeGreaterThan(1)
-    expect(new Set(wipes.map(w => w.direction)).size).toBeGreaterThan(1)
-    expect(new Set(wipes.map(w => w.bulge)).size).toBeGreaterThan(1)
-    for (const wipe of wipes) {
-      expect(Number.isFinite(wipe.angleDeg)).toBe(true)
-      expect(wipe.angleDeg).toBeGreaterThanOrEqual(-12)
-      expect(wipe.angleDeg).toBeLessThanOrEqual(12)
-      expect(wipe.centerY).toBeGreaterThanOrEqual(25)
-      expect(wipe.centerY).toBeLessThanOrEqual(75)
-      expect([-1, 1]).toContain(wipe.direction)
-      expect(wipe.bulge).toBeGreaterThanOrEqual(12)
-      expect(wipe.bulge).toBeLessThanOrEqual(36)
-      expect(wipe.warp).toBeGreaterThanOrEqual(2)
-      expect(wipe.warp).toBeLessThanOrEqual(10)
-      expect(wipe.feather).toBeGreaterThanOrEqual(1.5)
-      expect(wipe.feather).toBeLessThanOrEqual(4)
+  it('keeps each side in 30-70% and always leaves a dark gap between them', () => {
+    const seen = new Set()
+    for (let step = 0; step < 60; step++) {
+      const { left, right } = gapBleedFor('show_gap', step)
+      seen.add(left.toFixed(3))
+      // Scaling down to keep the black gap can pull a side under 0.30 only
+      // when both rolled high; it can never exceed 0.70 or go non-positive.
+      expect(left).toBeGreaterThan(0.19)
+      expect(left).toBeLessThanOrEqual(0.7)
+      expect(right).toBeGreaterThan(0.19)
+      expect(right).toBeLessThanOrEqual(0.7)
+      expect(left + right).toBeLessThanOrEqual(0.9 + 1e-9)
     }
-  })
-
-  it('does not depend on the order other transition steps are requested', () => {
-    const later = transitionWipeFor('show_order', 9)
-    transitionWipeFor('show_order', 2)
-    transitionWipeFor('another_show', 9)
-    expect(transitionWipeFor('show_order', 9)).toEqual(later)
+    expect(seen.size).toBeGreaterThan(10) // really varies
   })
 })

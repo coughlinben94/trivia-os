@@ -28,23 +28,25 @@ vi.mock('../../lib/ringRecolor.js', () => ({
 }))
 
 vi.mock('./RingAmbient.jsx', () => ({
-  default: forwardRef(function MockRingAmbient({ worldData }, ref) {
+  default: forwardRef(function MockRingAmbient({ worldData, panePlan }, ref) {
     const [m] = useState(() => {
       const duo = Object.keys(DUO_PALETTES).find(k => DUO_PALETTES[k] === worldData.palette)
       const rec = { id: nextInstanceId++, duo, alive: true, worldData }
       mounts.push(rec)
       return rec
     })
+    m.panePlan = panePlan
     useEffect(() => () => { m.alive = false }, [m])
     useImperativeHandle(ref, () => ({ jumpTo: (target) => jumpToCalls.push({ instanceId: m.id, target }) }))
     return null
   }),
 }))
 
-const { default: EvolvingRingAmbient } = await import('./EvolvingRingAmbient.jsx')
+const { default: EvolvingRingAmbient, panePlanFor, worldForDuo } = await import('./EvolvingRingAmbient.jsx')
 
 const onScreen = (showId, i) => [outgoingAndIncomingDuo(showId, DUO_GRAPH, i).incoming]
 const alive = () => mounts.filter(m => m.alive)
+const duoOfWorld = (w) => Object.keys(DUO_PALETTES).find(k => DUO_PALETTES[k] === w.palette)
 
 describe('EvolvingRingAmbient', () => {
   beforeEach(() => {
@@ -54,66 +56,73 @@ describe('EvolvingRingAmbient', () => {
     nextInstanceId = 0
   })
 
-  it('never remounts a world while it stays on screen or one slide away — including at settle', async () => {
-    // show_b: transition at 3 (neon_garden -> electric_bloom, pinned in
-    // duoTransition.test.js), settles at 4, next transition at 6.
+  it('mounts exactly one ring and never remounts it across slides, jumps, or world changes', async () => {
     const root = createRoot(document.createElement('div'))
+    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={2} />) })
+    expect(alive()).toHaveLength(1)
+    expect(jumpToCalls).toEqual([{ instanceId: 0, target: 2 }])
+    // 3 = first slide of a new duo (transition), 7 / 1 = multi-slide skips.
+    for (const i of [3, 4, 5, 6, 7, 1, 14]) {
+      await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={i} />) })
+    }
+    expect(mounts).toHaveLength(1)
+    expect(jumpToCalls).toHaveLength(1)
+    expect(typeof mounts[0].panePlan).toBe('function')
+    await act(async () => { root.unmount() })
+  })
+
+  describe('panePlanFor', () => {
+    // show_b: world changes arriving at slide 3 (a -> b), then again at 6.
     const [a] = onScreen('show_b', 2)
     const [b] = onScreen('show_b', 3)
+    const arr = midnightGalaxyRing
+    const duo = (spec) => duoOfWorld(spec)
 
-    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={2} />) })
-    // Solo on a, with b pre-mounted (hidden) for the transition next slide.
-    expect(alive().map(m => m.duo).sort()).toEqual([a, b].sort())
-    const before = alive().map(m => m.id)
+    it('paints every pane, with the empty gap exactly on the first slide of the new duo', () => {
+      const plan = panePlanFor('show_b', arr, 3, 3)
+      expect(plan).toHaveLength(13)
+      expect(plan.every(Boolean)).toBe(true)
+      expect(plan[3].empty).toBe(true) // slide 3 = the switch
+      expect(duo(plan[2])).toBe(a)     // slide 2, still the old world
+      expect(duo(plan[4])).toBe(b)     // slide 4, the new world
+      expect(duo(plan[5])).toBe(b)
+      expect(plan[6].empty).toBe(true) // slide 6 = the next switch
+    })
 
-    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={3} />) })
-    expect(alive().map(m => m.id)).toEqual(before) // transition: nothing new, nothing lost
+    it('puts each gap bleed in its own world\'s color, left old / right new, with a dark gap between', () => {
+      const gap = panePlanFor('show_b', arr, 3, 3)[3]
+      const [l, r] = gap.bleeds
+      const hue = (d, p) => worldForDuo(d, arr).stations[p].hue
+      expect(l).toMatchObject({ side: 'left', color: `hsl(${hue(a, 2)} 65% 45%)` }) // pane 2's own objects
+      expect(r).toMatchObject({ side: 'right', color: `hsl(${hue(b, 4)} 65% 45%)` }) // pane 4's own objects
+      expect(l.reach).toBeGreaterThan(0.19)
+      expect(r.reach).toBeGreaterThan(0.19)
+      expect(l.reach + r.reach).toBeLessThanOrEqual(0.9 + 1e-9)
+    })
 
-    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={4} />) })
-    // b is the SAME instance it was on arrival; a is no longer a neighbor
-    // (slides 3-5 are all b), so it unmounts; the world for the NEXT change
-    // (slide 6) is preloaded on the following step.
-    const bInst = mounts.find(m => m.duo === b)
-    expect(bInst.alive).toBe(true)
-    expect(mounts.filter(m => m.duo === b)).toHaveLength(1)
-    expect(mounts.filter(m => m.duo === a)).toHaveLength(1)
-    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={5} />) })
-    const [c] = onScreen('show_b', 6)
-    expect(alive().map(m => m.duo).sort()).toEqual([b, c].sort())
+    it('follows the ring\'s own station, not slide % 13 (a grading break leaves it one behind)', () => {
+      const plan = panePlanFor('show_b', arr, 3, 10)
+      expect(plan[10].empty).toBe(true)
+      expect(duo(plan[9])).toBe(a)
+      expect(duo(plan[11])).toBe(b)
+      expect(plan.every(Boolean)).toBe(true) // wraps 12 -> 0 without a hole
+    })
 
-    await act(async () => { root.unmount() })
-  })
+    it('never leaves the grading-break center pane empty', () => {
+      const plan = panePlanFor('show_b', arr, 3, 10, true)
+      expect(plan[10].empty).toBeUndefined()
+      expect(duo(plan[10])).toBe(b)
+    })
 
-  it('calls jumpTo on every freshly mounted instance, but never on a surviving one', async () => {
-    const root = createRoot(document.createElement('div'))
+    it('is a pure function of its inputs (back-nav and reload recompute the same plan)', () => {
+      expect(panePlanFor('show_b', arr, 8, 8)).toEqual(panePlanFor('show_b', arr, 8, 8))
+    })
 
-    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={2} />) })
-    expect(jumpToCalls).toEqual([{ instanceId: 0, target: 2 }, { instanceId: 1, target: 2 }])
-
-    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={3} />) })
-    expect(jumpToCalls).toHaveLength(2) // both survived, no new mounts
-
-    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={4} />) })
-    expect(jumpToCalls).toHaveLength(2) // next world is one slide away
-    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={5} />) })
-    expect(jumpToCalls.slice(2)).toEqual([{ instanceId: 2, target: 5 }]) // only the new preload
-
-    await act(async () => { root.unmount() })
-  })
-
-  it('replaces stale worlds on a multi-slide skip with no transition frame rendered', async () => {
-    // RingAmbient ignores a changed worldData prop after mount, so a world
-    // must be keyed by its duo — a skip to a new duo has to mount it, not
-    // silently keep the old one.
-    const root = createRoot(document.createElement('div'))
-
-    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={1} />) })
-    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={7} />) })
-    const want = [...new Set([6, 7, 8].flatMap(i => onScreen('show_b', i)))].sort()
-    expect(alive().map(m => m.duo).sort()).toEqual(want)
-    expect(onScreen('show_b', 7).every(d => !onScreen('show_b', 1).includes(d))).toBe(true) // really a new duo
-
-    await act(async () => { root.unmount() })
+    it('handles the start of the show, where earlier slides do not exist', () => {
+      const plan = panePlanFor('show_b', arr, 0, 0)
+      expect(plan.every(Boolean)).toBe(true)
+      expect(plan.filter(p => p.empty)).toHaveLength(2) // slides 3 and 6, both within 6 ahead of slide 0
+    })
   })
 
   it('recolors the arrangement it is given, not always the fixed authored order', async () => {
@@ -132,23 +141,5 @@ describe('EvolvingRingAmbient', () => {
     for (const m of alive()) expect(m.worldData.stations.map(s => s.key)).toEqual(drawnKeys)
 
     await act(async () => { root.unmount() })
-  })
-
-  it('shows one world per slide: only the current duo is opaque, no mask, instant swap for reduced motion', async () => {
-    const container = document.createElement('div')
-    document.body.appendChild(container)
-    window.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} })
-    const root = createRoot(container)
-
-    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={2} />) })
-    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={3} />) })
-    const layers = [...container.firstChild.children]
-    expect(layers.filter(el => el.style.opacity === '1')).toHaveLength(1)
-    expect(layers.every(el => !el.style.maskImage)).toBe(true)
-    expect(container.querySelector('svg, mask')).toBeNull()
-    expect(layers.find(el => el.style.opacity === '1').style.transition).toMatch(/opacity 0ms/)
-
-    await act(async () => { root.unmount() })
-    document.body.removeChild(container)
   })
 })
