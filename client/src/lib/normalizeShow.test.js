@@ -24,3 +24,10 @@ describe('normalizeShow: audio_playing', () => {
     expect(n.slides).toEqual([])
   })
 })
+
+describe('normalizeShow: special_event (host timer)', () => {
+  it('carries it, null when absent', () => {
+    expect(normalizeShow(row({ special_event: { timer: { id: 'a' } } })).special_event).toEqual({ timer: { id: 'a' } })
+    expect(normalizeShow(row({})).special_event).toBeNull()
+  })
+})
