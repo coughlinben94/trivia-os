@@ -39,7 +39,7 @@ describe('playTimerChime', () => {
   it('resolves false (and schedules nothing) on a locked tab, so the overlay can show its cue', async () => {
     globalThis.AudioContext = class extends FakeAC { constructor() { super('suspended') } }
     const p = playTimerChime()
-    await vi.advanceTimersByTimeAsync(1000)
+    await vi.advanceTimersByTimeAsync(1600) // the chime waits up to 1.5s for a late resume
     expect(await p).toBe(false)
     expect(made[0].oscs).toHaveLength(0)
   })
@@ -48,7 +48,7 @@ describe('playTimerChime', () => {
     let state = 'suspended'
     globalThis.AudioContext = class extends FakeAC { constructor() { super('suspended'); Object.defineProperty(this, 'state', { get: () => state }) } }
     const p = playTimerChime()
-    await vi.advanceTimersByTimeAsync(1000)
+    await vi.advanceTimersByTimeAsync(1600)
     expect(await p).toBe(false)
     state = 'running'
     expect(await playTimerChime()).toBe(true)
@@ -57,7 +57,7 @@ describe('playTimerChime', () => {
 
   it('no AudioContext at all resolves false, never throws', async () => {
     const p = playTimerChime()
-    await vi.advanceTimersByTimeAsync(1000)
+    await vi.advanceTimersByTimeAsync(1600)
     expect(await p).toBe(false)
   })
 
@@ -65,5 +65,38 @@ describe('playTimerChime', () => {
     globalThis.AudioContext = class extends FakeAC { constructor() { super('suspended') } }
     expect(() => unlockTimerAudio()).not.toThrow()
     expect(made[0].resumes).toBe(1)
+  })
+})
+
+// From main (host timer review): a slow resume must still ring, a never-resuming context must give up.
+function fakeContext({ resumeAfterMs }) {
+  const ac = {
+    state: 'suspended', currentTime: 0, destination: {},
+    resume: () => new Promise(r => setTimeout(() => { ac.state = 'running'; r() }, resumeAfterMs)),
+    createOscillator: () => ({ type: '', frequency: {}, connect: n => n, start: vi.fn(), stop: vi.fn() }),
+    createGain: () => ({ gain: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() }, connect: n => n }),
+  }
+  return ac
+}
+
+describe('playTimerChime resume wait (from main)', () => {
+  beforeEach(() => { vi.resetModules() }) // a fresh director per case: these import the module dynamically
+  it('still rings when the audio context takes ~800ms to resume', async () => {
+    vi.useFakeTimers()
+    const ac = fakeContext({ resumeAfterMs: 800 })
+    globalThis.AudioContext = function () { return ac }
+    const { playTimerChime } = await import('./timerChime.js')
+    const p = playTimerChime()
+    await vi.advanceTimersByTimeAsync(900)
+    expect(await p).toBe(true)
+  })
+  it('gives up (so the click-for-sound cue shows) when the context never resumes', async () => {
+    vi.useFakeTimers()
+    const ac = { ...fakeContext({ resumeAfterMs: 1 }), resume: () => new Promise(() => {}) }
+    globalThis.AudioContext = function () { return ac }
+    const { playTimerChime } = await import('./timerChime.js')
+    const p = playTimerChime()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(await p).toBe(false)
   })
 })

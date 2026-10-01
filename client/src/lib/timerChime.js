@@ -30,7 +30,7 @@ function ding(ac, at, freq) {
 // unavailable. The overlay shows its own "Click for sound" on false.
 export async function playTimerChime() {
   try {
-    const ac = await director.audioContext({ label: 'timer chime', waitMs: 400 })
+    const ac = await director.audioContext({ label: 'timer chime', waitMs: 1500 }) // 1.5s: a busy TV tab can take a while to resume; giving up early shows the cue on a context about to run
     if (!ac) return false
     const t0 = ac.currentTime + 0.05
     for (let i = 0; i < 3; i++) {

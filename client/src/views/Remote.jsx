@@ -3,6 +3,7 @@ import { motion, MotionConfig, AnimatePresence, useReducedMotion } from 'framer-
 import { EASE_OUT, EASE_PANEL, EASE_EXIT } from '../lib/easings.js'
 import { REMOTE_LOOK, lookCssVars, lookFontsHref, LOOK_DERIVED } from '../lib/remoteLook.js'
 import { SCORE_MIN, SCORE_MAX } from '../lib/scoreCellWrite.js'
+import { TimerTile, TimerPanel } from './RemoteTimer.jsx'
 import { DEFAULT_REMOTE_URL, CLOSE_BAD_SECRET, BEAT_MS, STALE_BEAT_MS, GREY_GATES, refusalText, remoteStatus, jukeboxView } from '../lib/remoteProtocol.js'
 
 // /remote — the iPad host remote (spec docs/superpowers/specs/2026-09-28-
@@ -108,7 +109,7 @@ export default function Remote() {
   const [beat, setBeat] = useState(null) // { at, visibility } of the last laptop beat
   const [notice, setNotice] = useState(null)
   const [now, setNow] = useState(() => Date.now())
-  const [drawer, setDrawer] = useState(null) // 'jump' | 'fix' | 'sounds' | 'scores' | null
+  const [drawer, setDrawer] = useState(null) // 'jump' | 'fix' | 'sounds' | 'scores' | 'timer' | null
   // The one score.set in flight from the Scores drawer:
   // { id, state: 'saving'|'saved'|'refused'|'unsure', scoreSet?, reason? }
   // 'unsure': the link dropped mid-save, so the outcome never came.
@@ -261,6 +262,10 @@ export default function Remote() {
   const jumpBlock = !live ? 'Laptop not ready' : snap.paused ? 'Paused on the laptop' : snap.jumpBusy ? 'Jumping…' : snap.busy ? 'Laptop is busy' : null
   const fixBlock = jumpBlock ?? (!fix?.mechanic ? splitMsg(refusalText('nothing-to-fix'))[0] : null)
 
+  // The timer lives on the laptop (shows.special_event.timer, sent in the snapshot).
+  const timerBlock = !live ? 'Laptop not ready' : snap.paused ? 'Paused on the laptop' : null
+  const sendTimer = (cmd, args) => tap(cmd, 300, () => send(cmd, args, !timerBlock))()
+
   // Jukebox mode (spec §17.2): the laptop is on a grading-break slide.
   const jb = jukeboxView({ snap, jukebox })
   // A second tap arms-then-sends; the arm lapses after 4s or off the break.
@@ -403,6 +408,8 @@ export default function Remote() {
           {snap && snap.upNext.length === 0 && <p className="text-2xl font-bold text-[color:var(--rl-text-75)]">End of show</p>}
           {!snap && <p className="text-xl text-[color:var(--rl-text-75)]">Nothing yet</p>}
           {/* Volume, Duck, Sounds: on the relay, so they work even without Live Mode */}
+          <div className="landscape:mt-auto portrait:ml-auto portrait:w-[22rem] flex flex-col gap-3 min-w-0 shrink-0">
+          <TimerTile timer={snap?.timer ?? null} offsetMs={offsetRef.current} block={timerBlock} onOpen={() => setDrawer('timer')} />
           <AudioBar
             local={local}
             block={localBlock}
@@ -411,6 +418,7 @@ export default function Remote() {
             onDuck={tap('duck', 300, () => send('duck', {}, !localBlock))}
             onSounds={() => setDrawer('sounds')}
           />
+          </div>
         </aside>
 
         {jb ? (
@@ -541,6 +549,10 @@ export default function Remote() {
           onSet={sendScore}
           onClearSend={() => { setScoreSend(null); scoreSendIdRef.current = null; setNotice(null) }}
         />
+      </Sheet>
+
+      <Sheet open={drawer === 'timer'} onClose={() => setDrawer(null)} title="Timer" subtitle="Shows on the TVs">
+        <TimerPanel timer={snap?.timer ?? null} offsetMs={offsetRef.current} block={timerBlock} send={sendTimer} />
       </Sheet>
 
       <Sheet open={drawer === 'sounds'} onClose={() => setDrawer(null)} title="Sounds" subtitle={localBlock ?? 'Plays on the laptop speakers'}>

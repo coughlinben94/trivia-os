@@ -424,7 +424,7 @@ actions.saveResults()               // aggregates team_scores → final_scores +
 
 ### Host timer (2026-10-01, branch `feat/host-timer`)
 
-Live Mode's `TimerControl` card writes `shows.special_event = { timer }` via `actions.setShowTimer` (no migration; the column existed, unused). `/display` draws it with `TimerOverlay.jsx` (mounted once in `Display.jsx`, top-left of the stage, z-[70]) over ANY slide; chime is synthesized (`lib/timerChime.js`), plays once per timer id. Math + clock-skew rules live in `lib/showTimer.js` (read its header). Threaded by hand through `normalizeShow`, `showStateMerge`, `previewSlide` (preview strips it). No hotkey, not on the iPad remote.
+Live Mode's `TimerControl` card writes `shows.special_event = { timer }` via `actions.setShowTimer` (no migration; the column existed, unused). `/display` draws it with `TimerOverlay.jsx` (mounted once in `Display.jsx`, top-left of the stage, z-[70]) over ANY slide; chime is synthesized (`lib/timerChime.js`), plays once per timer id. Math + clock-skew rules live in `lib/showTimer.js` (read its header). Threaded by hand through `normalizeShow`, `showStateMerge`, `previewSlide` (preview strips it). No hotkey. iPad remote: a Timer tile (bottom of the Up next panel) + drawer (`views/RemoteTimer.jsx`) send `timer.start|pause|resume|add|cancel` (whole minutes 1-180; a Start over a live timer needs `replace:true`; pause/resume/add/cancel carry `timerId`); planned in `hostCommands.js`, performed in LiveMode via `applyTimerStep`, the timer rides the snapshot as `timer`. Relay unchanged.
 
 ### Audio: "Next plays audio" (rewritten 2026-10-01, branch `fix/audio-fail-loud`)
 

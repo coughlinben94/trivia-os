@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   parseMinutes, startTimer, pauseTimer, resumeTimer, addTime, timerView, shouldChime,
   calibrateOffset, clockLabel, MAX_MS,
+  TIMES_UP,
 } from './showTimer.js'
 
 describe('parseMinutes', () => {
@@ -14,6 +15,20 @@ describe('parseMinutes', () => {
   it('rejects junk, zero, negatives, too small and too big', () => {
     for (const bad of ['', 'abc', '0', '-2', '1e3', '0.01', '181', '1.2.3', null, undefined]) expect(parseMinutes(bad)).toBeNull()
     expect(parseMinutes('180')).toBe(MAX_MS)
+  })
+})
+
+describe('TIMES_UP', () => {
+  it('is one wording, used on the TV, the laptop and the iPad', () => {
+    expect(TIMES_UP).toBe('Time’s up!')
+  })
+})
+
+describe('timerView, damaged rows', () => {
+  it('a timer with missing or non-numeric times is treated as no timer (never "Time\u2019s up" forever)', () => {
+    for (const bad of [{ id: 'x', state: 'running' }, { id: 'x', state: 'running', endsAt: 'soon' }, { id: 'x', state: 'paused' }, { id: 'x', state: 'running', endsAt: NaN }]) {
+      expect(timerView(bad, 1_000_000, 0).phase, JSON.stringify(bad)).toBe('idle')
+    }
   })
 })
 

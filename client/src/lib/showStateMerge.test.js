@@ -71,10 +71,38 @@ describe('mergeShowStateRow: special_event (host timer)', () => {
     const p = { ...prev, special_event: t(5) }
     expect(mergeShowStateRow(p, { id: 's1', answer_reveal: true }).special_event).toEqual(t(5))
   })
-  it('takes a newer timer, a cancel (null), and ignores an older echo', () => {
+  it('takes a newer timer and ignores an older echo, including one with no timer at all', () => {
     const p = { ...prev, special_event: t(5) }
     expect(mergeShowStateRow(p, { id: 's1', special_event: t(9) }).special_event).toEqual(t(9))
-    expect(mergeShowStateRow(p, { id: 's1', special_event: null }).special_event).toBeNull()
     expect(mergeShowStateRow(p, { id: 's1', special_event: t(2) }).special_event).toEqual(t(5))
+    // The host clears its OWN copy the instant it cancels (setShowTimer is optimistic), so a row
+    // with no timer arriving while the host still holds one is an older echo, never a cancel.
+    expect(mergeShowStateRow(p, { id: 's1', special_event: null }).special_event).toEqual(t(5))
+  })
+  it('after the host cancels, the local copy is empty and an echo of the cancel keeps it empty', () => {
+    const cancelled = { ...prev, special_event: null }
+    expect(mergeShowStateRow(cancelled, { id: 's1', special_event: null }).special_event).toBeNull()
+  })
+
+  describe('special_event timer', () => {
+    const withTimer = sentAt => ({ ...prev, special_event: { timer: { id: 't', sentAt } } })
+    it('an older echo of a timer write cannot undo a newer local timer', () => {
+      const next = mergeShowStateRow(withTimer(2000), { id: 's1', special_event: { timer: { id: 'old', sentAt: 1000 } } })
+      expect(next.special_event.timer.id).toBe('t')
+    })
+    it('a newer row timer wins', () => {
+      const next = mergeShowStateRow(withTimer(1000), { id: 's1', special_event: { timer: { id: 'new', sentAt: 2000 } } })
+      expect(next.special_event.timer.id).toBe('new')
+    })
+    it('an older echo that has NO timer (e.g. from a Next press) cannot wipe a timer the host just started', () => {
+      expect(mergeShowStateRow(withTimer(2000), { id: 's1', special_event: null }).special_event.timer.id).toBe('t')
+      expect(mergeShowStateRow(withTimer(2000), { id: 's1', special_event: {} }).special_event.timer.id).toBe('t')
+    })
+    it('with no local timer, a row without one stays without one', () => {
+      expect(mergeShowStateRow(prev, { id: 's1', special_event: null }).special_event).toBeNull()
+    })
+    it('a column absent from the payload keeps ours', () => {
+      expect(mergeShowStateRow(withTimer(2000), { id: 's1' }).special_event.timer.id).toBe('t')
+    })
   })
 })

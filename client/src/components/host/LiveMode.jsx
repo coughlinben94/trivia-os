@@ -5,6 +5,7 @@ import { getTheme, THEMES } from '../../themes/index.js'
 import { resolveShinyPart } from '../../lib/shinySeries.js'
 import { audioPlayPending as audioPlayPendingFor, audioPartOf } from '../../lib/audioPending.js'
 import TimerControl from './TimerControl.jsx'
+import { applyTimerStep } from '../../lib/showTimer.js'
 import ScorePanel from './ScorePanel.jsx'
 import FocusWarning from './FocusWarning.jsx'
 import LateTeamPopover from './LateTeamPopover.jsx'
@@ -1484,6 +1485,8 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       scoreQueueDepth: scoreChainRef.current.depth(),
       scoreCols: deriveRoundCols(show),
       modalJustClosed: Date.now() - modalClosedAtRef.current < 1000,
+      // iPad Timer drawer: the same shows.special_event.timer the Timer card writes.
+      timer: show.special_event?.timer ?? null,
     })
     if (plan.refuse === 'lock-blocked') {
       // Surface in the panel that owns this phase's error line.
@@ -1527,6 +1530,10 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         else unlockCurrentSlide()
         break
       case 'rescore': runRemote('rescore', scoreActionFor(phoneMechanic, currentSlide)); break
+      // iPad Timer drawer: the Timer card's own math, written the same way.
+      case 'timer-start': case 'timer-pause': case 'timer-resume': case 'timer-add': case 'timer-cancel':
+        actions.setShowTimer(applyTimerStep(plan, show.special_event?.timer ?? null, Date.now()))
+        break
       // iPad Scores drawer: returns { ok, later }, the outcome follows (hostReply).
       case 'scores-get':
       case 'scores-hide':
@@ -1575,6 +1582,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       busy: remoteBusyNow(), paused: remotePaused,
       rounds: show.rounds, jumpBusy: remoteRun === 'jump', fix: remoteFix,
       scoreQueueDepth: scoreChainRef.current.depth(), scores: scoreRemoteRef.current.view(),
+      timer: show.special_event?.timer ?? null,
     }),
   })
   // The score table just closed: once its 1s guard is over, re-read an open drawer.

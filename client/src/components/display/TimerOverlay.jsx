@@ -3,7 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import AudioBlockedCue from './AudioBlockedCue.jsx'
 import { EASE_OUT, EASE_EXIT } from '../../lib/easings.js'
-import { timerView, shouldChime, calibrateOffset } from '../../lib/showTimer.js'
+import { timerView, shouldChime, calibrateOffset, TIMES_UP } from '../../lib/showTimer.js'
 import { playTimerChime, unlockTimerAudio } from '../../lib/timerChime.js'
 
 // Host countdown timer, a layer over whatever slide is live (not a slide type).
@@ -14,6 +14,7 @@ import { playTimerChime, unlockTimerAudio } from '../../lib/timerChime.js'
 // (the stage is a size container), so it scales with the TV. State and clock-skew
 // handling live in lib/showTimer.js.
 const OFFSET_KEY = 'trivia.timerClockOffset'
+const MAX_OFFSET_STEP_MS = 3000
 const PLAYED_KEY = 'trivia.timerChimed'
 
 function readStore(key) {
@@ -41,11 +42,21 @@ export default function TimerOverlay({ show }) {
   // while this page is open (it just arrived over realtime, so sentAt is ~now on
   // the host clock). A timer already there at load keeps the offset saved from
   // an earlier one in this tab, else 0.
+  //
+  // A write that arrives late (a realtime reconnect refetch after the TV's wifi
+  // blipped) carries an OLD sentAt, and its age would be mistaken for clock skew.
+  // Once an offset is known, a clock only drifts a little, so a sample more than
+  // MAX_OFFSET_STEP_MS away from it is a late delivery, not a new skew: ignore it.
+  // The very first sample is always taken (the skew can legitimately be many seconds).
   const offsetRef = useRef(Number(readStore(OFFSET_KEY)) || 0)
+  const calibratedRef = useRef(readStore(OFFSET_KEY) != null)
   const firstSentAtRef = useRef(timer?.sentAt)
   useEffect(() => {
     if (!timer || timer.sentAt === firstSentAtRef.current) return
-    offsetRef.current = calibrateOffset(Date.now(), timer)
+    const sample = calibrateOffset(Date.now(), timer)
+    if (calibratedRef.current && Math.abs(sample - offsetRef.current) > MAX_OFFSET_STEP_MS) return
+    calibratedRef.current = true
+    offsetRef.current = sample
     writeStore(OFFSET_KEY, offsetRef.current)
   }, [timer?.sentAt]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -109,7 +120,7 @@ export default function TimerOverlay({ show }) {
             data-timer-overlay
             data-phase={phase}
             role="timer"
-            aria-label={done ? "Time's up" : `Timer ${view.label}`}
+            aria-label={done ? TIMES_UP : `Timer ${view.label}`}
             initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.94 }}
             animate={{ opacity: 1, scale: 1, transition: { duration: 0.22, ease: EASE_OUT } }}
             exit={{ opacity: 0, transition: { duration: 0.2, ease: EASE_EXIT } }}
@@ -132,7 +143,7 @@ export default function TimerOverlay({ show }) {
             <div className={pulseClass} style={{ transformOrigin: 'center' }}>
               {done ? (
                 <div style={{ fontFamily: `'${theme.fonts.display}', sans-serif`, fontSize: '10cqh', lineHeight: 1.05, color: theme.colors.highlight }}>
-                  Time&rsquo;s up!
+                  {TIMES_UP}
                 </div>
               ) : (
                 <div
