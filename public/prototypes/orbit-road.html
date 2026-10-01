@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orbit road, three stations (throwaway prototype)</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0a0a0a;color:#d6d0c4;font-family:system-ui,-apple-system,sans-serif;padding:20px 24px 40px}
+  h1{font-size:1.05rem;font-weight:700;margin-bottom:4px}
+  .sub{font-size:.82rem;color:#9a9488;max-width:1100px;line-height:1.55;margin-bottom:12px}
+  #fit{position:relative;width:min(100%, calc((100vh - 190px) * 16 / 9));aspect-ratio:16/9;margin:0 auto;overflow:hidden;border-radius:8px;box-shadow:0 0 0 1px #2a2a2a,0 24px 60px rgba(0,0,0,.7)}
+  .controls{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;justify-content:center;margin:12px auto 6px;font-size:.82rem}
+  button{background:#1b1820;color:#e8e2f4;border:1px solid #4a4160;border-radius:7px;padding:8px 16px;font-size:.84rem;font-weight:600;cursor:pointer}
+  button:hover{background:#26212f}
+  button.on{background:#4a4160}
+  label{display:flex;gap:6px;align-items:center;cursor:pointer;color:#a8a196}
+  #stLabel{font-variant-numeric:tabular-nums;color:#f0e8ff;font-weight:700;min-width:210px;text-align:center}
+  body.bare{padding:0;background:#000;overflow:hidden}
+  body.bare h1,body.bare .sub,body.bare .controls{display:none}
+  body.bare #fit{width:1920px;height:1080px;border-radius:0;box-shadow:none}
+
+  /* 1920x1080 design frame, scaled to fit */
+  #stage{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;overflow:hidden;background:#030207}
+  #rig,#cam,.creep,.fill{position:absolute;inset:0}
+  .bleed{position:absolute;inset:-48px}
+  #cam{transform-origin:960px 1400px}
+  .creep{transform-origin:960px 700px}
+  .it{position:absolute}
+  .it>svg{position:absolute;left:0;top:0;overflow:visible}
+  /* idle: after the slow push-in the camera breathes so a long question never sits on a still image */
+  #rig{transform-origin:960px 1400px}
+  @keyframes idle{from{transform:translateY(-3px) rotate(-.12deg)}to{transform:translateY(3px) rotate(.12deg)}}
+  #rig.idle{animation:idle 7.3s ease-in-out -3.65s infinite alternate}
+  /* reduced motion: one declaration point, freezes, never vanishes */
+  @media (prefers-reduced-motion: reduce){ #stage *{animation:none !important;transition:none !important} }
+  #stage.rm *{animation:none !important;transition:none !important}
+
+  #safe{position:absolute;left:384px;top:302px;width:1152px;height:475px;border:3px dashed rgba(255,241,220,.45);border-radius:8px;pointer-events:none;display:none}
+  #safe::after{content:'text safe box 60% x 44%';position:absolute;left:12px;top:8px;font-size:18px;color:rgba(255,241,220,.5)}
+  #stage.showSafe #safe{display:block}
+  #q{position:absolute;left:384px;top:302px;width:1152px;height:475px;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 60px;color:#fff1dc;font:700 70px/1.15 system-ui,-apple-system,sans-serif;text-shadow:0 2px 12px rgba(0,0,0,.7)}
+  #stage.noQ #q{display:none}
+</style>
+</head>
+<body>
+<h1>Orbit road, three stations (throwaway prototype)</h1>
+<div class="sub">One experiment: the same loop-of-stations idea, but the camera <b>travels forward along a debris road</b> instead of sliding sideways, and the next landmark is visible ahead before you reach it. Nothing here is wired into the app. Everything is drawn by code from one number, the station, so a refresh or jump always lands on the same picture. Motion is transform and opacity only, no animation loop. Press <b>Advance</b>. Query: <code>?duo=electric_bloom|mint_drift|neon_garden|purple_blue|amber_rose</code>, <code>?bare=1</code> for a clean 1920x1080 frame.</div>
+
+<div id="fit">
+  <div id="stage" class="showSafe">
+    <div id="rig"><div id="cam">
+      <div id="sky" class="fill"></div>
+      <div class="creep" id="creepW"><div id="world" class="fill"></div></div>
+      <div id="lightsTop" class="fill"></div>
+      <div id="hush" class="fill"></div>
+      <div id="topdark" class="bleed"></div>
+      <div id="vig" class="bleed"></div>
+    </div></div>
+    <div id="q">Which planet has the most known moons?</div>
+    <div id="safe"></div>
+  </div>
+</div>
+
+<div class="controls">
+  <button id="back">Back</button>
+  <button id="adv">Advance station</button>
+  <button id="reset">Reset</button>
+  <button id="auto">Auto-play (7s)</button>
+  <span id="stLabel">station 0</span>
+  <label><input type="checkbox" id="cSafe" checked> safe box</label>
+  <label><input type="checkbox" id="cQ" checked> sample question</label>
+  <label><input type="checkbox" id="cRm"> simulate reduced motion</label>
+</div>
+
+<script>
+(function(){
+'use strict';
+// ---------- constants (design px at 1920x1080, world in metres) ----------
+const W=1920, H=1080, VX=960, VY=700;        // vanishing point = horizon, low in frame
+const F=1371, E=1.7;                          // focal length px, eye height m
+const D=8, NS=3, L=NS*D, REST=9;              // metres per station, 3 stations, loop length, landmark rest distance
+const ZFAR=34, ZMIN=0.9, ZDRAW=2.4, STOPS=24;
+const DUR=4000, AUTO_MS=7000, CREEP_MS=40000;
+const SAFE={x0:384,y0:302,x1:1536,y1:777};
+const NAMES=['ringed planet','pulsar','comet'];
+
+const PALS={
+  electric_bloom:['#f0298b','#3f1ef5'], mint_drift:['#63e4a3','#5134f9'],
+  neon_garden:['#f943aa','#36f357'], purple_blue:['#a855f7','#3b82f6'], amber_rose:['#f59e0b','#f43f5e']
+};
+const params=new URLSearchParams(location.search);
+const DUO=PALS[params.get('duo')]?params.get('duo'):'electric_bloom';
+const KEY=PALS[DUO][0], FILL=PALS[DUO][1];
+// Light budget: a bright key colour (green reads far brighter than violet at the same alpha)
+// gets proportionally less glow and dust, so every duo lands in the same brightness range.
+const lumaOf=h=>{const c=hex2rgb(h);return (0.2126*c[0]+0.7152*c[1]+0.0722*c[2])/255};
+const GAIN=Math.min(1,0.34/Math.max(lumaOf(PALS[DUO][0]),lumaOf(PALS[DUO][1])*0.8));
+const LIGHT=[0.6,-0.8];                        // key light direction on screen (up and to the right)
+
+const clamp=(v,a=0,b=1)=>v<a?a:v>b?b:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+const fm=n=>Math.round(n*100)/100;
+const P=(X,h,z)=>[VX+X*F/z, VY+(E-h)*F/z];
+const fogAmt=z=>1-Math.exp(-Math.max(0,z-2.5)/17);
+const $=id=>document.getElementById(id);
+// cubic-bezier easing for the walk (ease in and out), solved numerically
+function bez(x1,y1,x2,y2){const cx=3*x1,bx=3*(x2-x1)-cx,ax=1-cx-bx,cy=3*y1,by=3*(y2-y1)-cy,ay=1-cy-by;
+  const X=t=>((ax*t+bx)*t+cx)*t, Y=t=>((ay*t+by)*t+cy)*t;
+  return x=>{let lo=0,hi=1,t=x;for(let i=0;i<30;i++){const v=X(t);if(Math.abs(v-x)<1e-6)break;if(v<x)lo=t;else hi=t;t=(lo+hi)/2}return Y(t)}}
+const EASE=bez(.45,.05,.25,1);
+// seeded rng (mulberry32) so the picture is a pure function of the station
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function rngFor(...k){let h=2166136261;for(const v of k){h=Math.imul(h^(v+0x9e3779b9),16777619);h^=h>>>13}return mulberry32(h>>>0)}
+function hex2rgb(h){const n=parseInt(h.slice(1),16);return[n>>16&255,n>>8&255,n&255]}
+const rgba=(h,a)=>{const c=hex2rgb(h);return `rgba(${c[0]},${c[1]},${c[2]},${a})`};
+
+// ---------- hand-authored rock silhouettes (u across, d down; base at d=0, tops negative) ----------
+const ROCKS=[
+  [[-1,0],[-.9,-.35],[-.6,-.7],[-.15,-.95],[.35,-.85],[.8,-.5],[1,-.12],[.9,0]],                            // chunky boulder
+  [[-.7,0],[-.6,-.5],[-.2,-1.15],[.05,-1.4],[.3,-.9],[.55,-.4],[.8,0]],                                      // leaning shard
+  [[-1.2,0],[-1,-.3],[-.3,-.45],[.5,-.5],[1.1,-.25],[1.3,0]],                                                // flat slab
+  [[-.8,0],[-.7,-.6],[-.5,-1.3],[-.3,-.7],[-.1,-.5],[.15,-.9],[.35,-1.7],[.55,-.8],[.8,-.3],[.9,0]],        // twin spire
+  [[-1,0],[-1,-.3],[-.75,-.65],[-.3,-.85],[.2,-.9],[.7,-.65],[.95,-.3],[1,0]]                               // rounded lump
+];
+function rockPoly(r,size,mirror){
+  const T=ROCKS[Math.floor(r()*ROCKS.length)];
+  return T.map(p=>[(mirror?-p[0]:p[0])*size*(1+(r()-.5)*.06), p[1]*size*(1+(r()-.5)*.06)]);
+}
+function pathOf(pts){return 'M'+pts.map(p=>fm(p[0])+' '+fm(p[1])).join('L')+'Z'}
+function centroid(pts){let x=0,y=0;for(const p of pts){x+=p[0];y+=p[1]}return[x/pts.length,y/pts.length]}
+// edges facing the key light get a thin rim of the duo's key colour
+function rimEdges(pts){
+  const c=centroid(pts),out=[];
+  for(let i=0;i<pts.length;i++){
+    const a=pts[i],b=pts[(i+1)%pts.length];
+    const dx=b[0]-a[0],dy=b[1]-a[1],m=Math.hypot(dx,dy)||1;
+    let nx=dy/m,ny=-dx/m;
+    const mx=(a[0]+b[0])/2-c[0],my=(a[1]+b[1])/2-c[1];
+    if(nx*mx+ny*my<0){nx=-nx;ny=-ny}
+    const dot=nx*LIGHT[0]+ny*LIGHT[1];
+    if(dot>0.45&&!(a[1]===0&&b[1]===0))out.push({a,b,dot});
+  }
+  return out;
+}
+function bboxOf(pts,pad){let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;for(const p of pts){if(p[0]<x0)x0=p[0];if(p[0]>x1)x1=p[0];if(p[1]<y0)y0=p[1];if(p[1]>y1)y1=p[1]}return[x0-pad,y0-pad,x1+pad,y1+pad]}
+
+// ---------- item factories. Each returns {X,h,Z,body,light,bb} ----------
+// body/light: svg strings in item-local metres (u right, d down, origin = ground contact or centre)
+let uid=0;
+function rock(Z,X,size,seed,beacon){
+  const r=rngFor(seed,7), mirror=X<0, pts=rockPoly(r,size,mirror);
+  const id='rk'+(uid++), w=bboxOf(pts,0)[2]-bboxOf(pts,0)[0];
+  const rims=rimEdges(pts).map(e=>`<path d="M${fm(e.a[0])} ${fm(e.a[1])}L${fm(e.b[0])} ${fm(e.b[1])}" stroke="${KEY}" stroke-opacity="${fm((.16+e.dot*.36)*GAIN)}" stroke-width="${fm(Math.max(size*.011,.012))}" stroke-linecap="round" fill="none"/>`).join('');
+  const body=`<defs><linearGradient id="${id}" x1="${mirror?1:0}" y1="0" x2="${mirror?0:1}" y2="0"><stop offset="0" stop-color="#050408"/><stop offset="1" stop-color="#14111a"/></linearGradient></defs><path d="${pathOf(pts)}" fill="url(#${id})"/>${rims}`;
+  let light=null, bb=bboxOf(pts,size*.04);
+  if(beacon){
+    const b=pts[Math.floor(pts.length*.4)], lx=b[0]*.7, ly=b[1]*.55;
+    const lid='bl'+(uid++);
+    light=`<defs><radialGradient id="${lid}"><stop offset="0" stop-color="#ffe8b8" stop-opacity=".95"/><stop offset=".25" stop-color="#ffb347" stop-opacity=".5"/><stop offset="1" stop-color="#ff8a2a" stop-opacity="0"/></radialGradient></defs><circle cx="${fm(lx)}" cy="${fm(ly)}" r="${fm(size*.55)}" fill="url(#${lid})"/><circle cx="${fm(lx)}" cy="${fm(ly)}" r="${fm(Math.max(size*.04,.03))}" fill="#fff4dc"/>`;
+    bb=[Math.min(bb[0],lx-size*.6),Math.min(bb[1],ly-size*.6),Math.max(bb[2],lx+size*.6),Math.max(bb[3],ly+size*.6)];
+  }
+  return {Z,X,h:0,body,light,bb,lift:0.0};
+}
+function dust(Z,X,h,wid,col,a,seed){
+  const id='du'+(uid++), rx=wid/2, ry=wid*.2;
+  const body=`<defs><radialGradient id="${id}"><stop offset="0" stop-color="${col}" stop-opacity="${fm(a*GAIN)}"/><stop offset=".55" stop-color="${col}" stop-opacity="${fm(a*GAIN*.4)}"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></radialGradient></defs><ellipse cx="0" cy="0" rx="${fm(rx)}" ry="${fm(ry)}" fill="url(#${id})"/>`;
+  return {Z,X,h,body,light:null,bb:[-rx,-ry,rx,ry],dustItem:true};
+}
+function speck(Z,X,r){
+  const s=.04+r()*.17, lit=r()<.22, c=lit?KEY:'#3a3342', a=lit?.8*GAIN:.7;
+  const pts=[[-s,0],[-s*.6,-s*.7],[s*.2,-s*.9],[s,-s*.2],[s*.8,0]];
+  return {Z,X,h:0,body:`<path d="${pathOf(pts)}" fill="${c}" fill-opacity="${a}"/>`,light:null,bb:bboxOf(pts,s*.1),speck:true};
+}
+// ringed planet (hand-built: dark body, lit limb, tilted ring split front/back)
+function ringedPlanet(Z,X,h){
+  const R=1.65, id='pl'+(uid++);
+  const back=`<defs><linearGradient id="${id}r" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${KEY}" stop-opacity="0"/><stop offset=".3" stop-color="${KEY}" stop-opacity="${fm(.55*GAIN)}"/><stop offset=".7" stop-color="${FILL}" stop-opacity="${fm(.5*Math.min(1,GAIN*1.4))}"/><stop offset="1" stop-color="${FILL}" stop-opacity="0"/></linearGradient>
+  <radialGradient id="${id}" cx=".66" cy=".3" r=".95"><stop offset="0" stop-color="#3a3044"/><stop offset=".35" stop-color="#17121e"/><stop offset=".75" stop-color="#07060a"/><stop offset="1" stop-color="#030207"/></radialGradient></defs>
+  <g transform="rotate(-16)"><ellipse cx="0" cy="0" rx="${fm(R*2.5)}" ry="${fm(R*.62)}" fill="none" stroke="url(#${id}r)" stroke-width="${fm(R*.16)}" opacity=".7"/></g>
+  <circle cx="0" cy="0" r="${R}" fill="url(#${id})"/>
+  <path d="M${fm(R*.55)} ${fm(-R*.84)}A${R} ${R} 0 0 1 ${fm(R*.98)} ${fm(-R*.15)}" fill="none" stroke="${KEY}" stroke-opacity="${fm(.75*GAIN)}" stroke-width="${fm(R*.05)}" stroke-linecap="round"/>
+  <g transform="rotate(-16)"><path d="M${fm(-R*2.5)} 0A${fm(R*2.5)} ${fm(R*.62)} 0 0 0 ${fm(R*2.5)} 0" fill="none" stroke="url(#${id}r)" stroke-width="${fm(R*.16)}" opacity=".85"/></g>`;
+  const gid='pg'+(uid++);
+  const light=`<defs><radialGradient id="${gid}" cx=".66" cy=".3" r=".7"><stop offset="0" stop-color="${KEY}" stop-opacity="${fm(.5*GAIN)}"/><stop offset="1" stop-color="${KEY}" stop-opacity="0"/></radialGradient></defs><circle cx="${fm(R*.3)}" cy="${fm(-R*.2)}" r="${fm(R*1.9)}" fill="url(#${gid})"/>`;
+  return {Z,X,h,body:back,light,bb:[-R*2.7,-R*1.9,R*2.7,R*1.9],landmark:true};
+}
+function pulsar(Z,X,h){
+  const gid='ps'+(uid++), id2=gid+'b';
+  const beam=(sgn)=>`<polygon points="0,${fm(-.05)} ${fm(sgn*5)},${fm(-1.1)} ${fm(sgn*5)},${fm(-.7)} 0,${fm(.05)}" fill="url(#${id2})"/>`;
+  const body=`<defs><linearGradient id="${id2}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity=".8"/><stop offset=".4" stop-color="${KEY}" stop-opacity="${fm(.4*GAIN)}"/><stop offset="1" stop-color="${KEY}" stop-opacity="0"/></linearGradient></defs>
+    <g transform="rotate(-38)">${beam(1)}${beam(-1)}</g><circle cx="0" cy="0" r=".09" fill="#fff8f0"/>`;
+  const light=`<defs><radialGradient id="${gid}"><stop offset="0" stop-color="#fff" stop-opacity=".9"/><stop offset=".15" stop-color="${KEY}" stop-opacity="${fm(.55*GAIN)}"/><stop offset="1" stop-color="${FILL}" stop-opacity="0"/></radialGradient></defs><circle cx="0" cy="0" r="1.9" fill="url(#${gid})"/>`;
+  return {Z,X,h,body,light,bb:[-5.4,-2.2,5.4,2.2],landmark:true};
+}
+function comet(Z,X,h){
+  const gid='cm'+(uid++), tid=gid+'t';
+  const tail=[[0,0],[-1.2,.35],[-2.8,.7],[-5.2,1.4],[-5.4,1.1],[-2.9,.2],[-1.2,-.12]];
+  const body=`<defs><linearGradient id="${tid}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${KEY}" stop-opacity="0"/><stop offset=".8" stop-color="${FILL}" stop-opacity=".25"/><stop offset="1" stop-color="#fff" stop-opacity=".45"/></linearGradient></defs>
+    <path d="${pathOf(tail.map(p=>[p[0],p[1]]))}" fill="url(#${tid})"/><circle cx="0" cy="0" r=".16" fill="#f4fbff"/>`;
+  const light=`<defs><radialGradient id="${gid}"><stop offset="0" stop-color="#fff" stop-opacity=".8"/><stop offset=".25" stop-color="${KEY}" stop-opacity="${fm(.45*GAIN)}"/><stop offset="1" stop-color="${FILL}" stop-opacity="0"/></radialGradient></defs><circle cx="0" cy="0" r="1.1" fill="url(#${gid})"/>`;
+  return {Z,X,h,body,light,bb:[-5.6,-1.2,1.2,2.2],landmark:true};
+}
+
+// ---------- the world: a fixed list of items for one loop, rebuilt from nothing ----------
+const ITEMS=(function(){
+  const it=[];
+  // landmarks beside the road, one per station, resting outside the text box
+  it.push(ringedPlanet(0*D+REST, 4.7, 2.6));
+  it.push(pulsar(1*D+REST, -4.7, 3.0));
+  it.push(comet(2*D+REST, 4.7, 3.7));
+  // rocks lining both sides of the road, seeded
+  const r=rngFor(2026,10,1);
+  for(let side=-1;side<=1;side+=2){
+    for(let z=1.2;z<L;z+=2.3){
+      const Z=z+r()*1.6, X=side*(2.3+r()*3.4), size=.5+r()*1.1;
+      it.push(rock(Z,X,size,Math.floor(r()*1e9),r()<.14));
+    }
+  }
+  // big boulders framing the edges (the near trunks of this world)
+  for(let k=0;k<4;k++){
+    const Z=k*(L/4)+r()*2, side=k%2?1:-1;
+    it.push(rock(Z,side*(6.2+r()*2.2),2.6+r()*1.4,Math.floor(r()*1e9),false));
+  }
+  // dust banks: the fog of this world, tinted by the duo, sweeping past
+  for(let z=0;z<L;z+=1.7){
+    const side=r()<.5?-1:1, col=r()<.6?FILL:KEY;
+    it.push(dust(z+r()*1.2, side*(r()*7), .3+r()*2.6, 6+r()*8, col, .1+r()*.1, 0));
+  }
+  // the road itself: a faint dust lane and small debris
+  for(let z=0;z<L;z+=2.4) it.push(dust(z+r()*1.2, (r()-.5)*1.4, 0, 3.2, '#5a4e6a', .13, 0));
+  for(let z=.4;z<L;z+=.7){
+    const X=(r()<.5?-1:1)*(.3+r()*2.0);
+    it.push(speck(z+r()*.5, X, r));
+  }
+  return it;
+})();
+
+// ---------- legibility: lights come on as you arrive, and dim while crossing the text box ----------
+const lightOp=(Z0,zr,z)=>clamp((REST+5.5-z)/4.5)*1;     // landmarks and beacons glow only when close
+function boxDim(X,h,z){
+  const p=P(X,h,z), padX=260, padY=200;
+  const inX=p[0]>SAFE.x0-padX&&p[0]<SAFE.x1+padX, inY=p[1]>SAFE.y0-padY&&p[1]<SAFE.y1+padY;
+  return (inX&&inY)?.45:1;
+}
+function fadeOf(z){ // depth haze, and a soft fade as something passes the camera
+  const haze=1-.62*fogAmt(z);
+  const near=clamp((z-ZMIN)/.8);
+  return haze*near;
+}
+
+// ---------- mounting ----------
+const world=$('world'), stage=$('stage');
+let station=0, walking=false, timers=[];
+function zrel(it,c){return ((it.Z-c*D)%L+L)%L}
+
+function mountEl(it,z0,animate,kind){
+  const z1=animate?z0-D:z0;
+  const zd=animate?clamp(Math.min(z0,z1),ZDRAW,z0):z0;
+  const s=F/zd;
+  const [bx0,by0,bx1,by1]=it.bb;
+  const [ax,ay]=P(it.X,it.h,zd);
+  const left=ax+bx0*s, top=ay+by0*s, wpx=(bx1-bx0)*s, hpx=(by1-by0)*s;
+  if(wpx<1||hpx<1)return null;
+  const el=document.createElement('div'); el.className='it';
+  el.style.cssText=`left:${fm(left)}px;top:${fm(top)}px;width:${fm(wpx)}px;height:${fm(hpx)}px;transform-origin:${fm(VX-left)}px ${fm(VY-top)}px`;
+  el.innerHTML=`<svg width="${fm(wpx)}" height="${fm(hpx)}" viewBox="${fm(bx0)} ${fm(by0)} ${fm(bx1-bx0)} ${fm(by1-by0)}">${kind==='light'?it.light:it.body}</svg>`;
+  const isLight=kind==='light';
+  const opAt=z=>{
+    let o=fadeOf(z);
+    if(isLight)o*=lightOp(it.Z,0,z)*boxDim(it.X,it.h,z);        // glows come on as you arrive, dim over the text box
+    else if(it.landmark)o*=boxDim(it.X,it.h,z);                   // the bright parts of a landmark (core, beams, tail) dim too
+    return o;
+  };
+  if(!animate){ el.style.opacity=fm(opAt(z0)); return el; }
+  const kfs=[];
+  for(let i=0;i<=STOPS;i++){
+    const t=i/STOPS, z=z0-D*EASE(t), k=zd/Math.max(z,ZMIN*.5);
+    kfs.push({offset:t,transform:`scale(${k.toFixed(5)})`,opacity:fm(opAt(Math.max(z,ZMIN*.5)))});
+  }
+  el.__anim=()=>el.animate(kfs,{duration:DUR,easing:'linear',fill:'forwards'});
+  el.style.opacity=fm(opAt(z0));
+  return el;
+}
+function collect(c,animate){
+  const out=[];
+  for(const it of ITEMS){
+    const zr=zrel(it,c);
+    for(let k=0;;k++){
+      const z0=zr+k*L;
+      if(z0>ZFAR+(animate?D:0))break;
+      const z1=animate?z0-D:z0;
+      if(Math.max(z0,z1)<ZMIN)continue;
+      if(z0<=ZMIN&&!animate)continue;
+      out.push([it,z0]);
+    }
+  }
+  out.sort((a,b)=>b[1]-a[1]);          // far first so near items paint on top
+  return out;
+}
+function build(c,animate){
+  world.textContent='';
+  const frag=document.createDocumentFragment(), anims=[];
+  for(const [it,z0] of collect(c,animate)){
+    const body=mountEl(it,z0,animate,'body'); if(body){frag.appendChild(body); if(body.__anim)anims.push(body)}
+    if(it.light){ const lg=mountEl(it,z0,animate,'light'); if(lg){frag.appendChild(lg); if(lg.__anim)anims.push(lg)} }
+  }
+  world.appendChild(frag);
+  for(const el of anims) el.__anim();
+}
+
+// ---------- scene shell: sky, vanishing-point glow, hush, top darkness, vignette ----------
+function paintShell(){
+  // far sky: static stars (they sit at infinity) over a faint nebula behind the vanishing point
+  const r=rngFor(99,3); let stars='';
+  for(let i=0;i<150;i++){
+    const x=r()*W,y=r()*(VY+60),s=.5+r()*1.4,a=.25+r()*.55;
+    stars+=`<circle cx="${fm(x)}" cy="${fm(y)}" r="${fm(s)}" fill="${r()<.2?KEY:'#e8e4f8'}" fill-opacity="${fm(a*.7)}"/>`;
+  }
+  $('sky').innerHTML=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><defs>
+    <radialGradient id="neb" gradientUnits="userSpaceOnUse" cx="${VX}" cy="${VY}" r="900"><stop offset="0" stop-color="${KEY}" stop-opacity="${fm(.26*GAIN)}"/><stop offset=".45" stop-color="${FILL}" stop-opacity="${fm(.14*GAIN)}"/><stop offset="1" stop-color="${FILL}" stop-opacity="0"/></radialGradient>
+    <linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#030207"/><stop offset="1" stop-color="#0a0710"/></linearGradient></defs>
+    <rect width="${W}" height="${H}" fill="url(#sg)"/><rect width="${W}" height="${H}" fill="url(#neb)"/>${stars}</svg>`;
+  // quiet but full centre: a low, even veil in the middle of the frame so the text area reads as place, not void
+  $('hush').innerHTML=`<svg width="${W}" height="${H}"><defs><radialGradient id="hu" gradientUnits="userSpaceOnUse" cx="${VX}" cy="560" r="780" gradientTransform="translate(${VX} 560) scale(1 .62) translate(${-VX} -560)"><stop offset="0" stop-color="#0d0a14" stop-opacity=".0"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs></svg>`;
+  $('topdark').style.background='linear-gradient(180deg,rgba(2,1,6,.78) 0%,rgba(2,1,6,.38) 14%,rgba(2,1,6,0) 30%)';
+  $('vig').style.background='radial-gradient(ellipse 78% 74% at 50% 52%,rgba(0,0,0,0) 58%,rgba(0,0,0,.55) 100%)';
+}
+
+// ---------- walking ----------
+function clearTimers(){timers.forEach(clearTimeout);timers=[]}
+function setCreep(on){
+  const c=$('creepW');
+  if(!on){c.style.transition='none';c.style.transform='scale(1)';$('rig').classList.remove('idle');void c.offsetWidth;return}
+  c.style.transition=`transform ${CREEP_MS}ms ease-out`;c.style.transform='scale(1.045)';
+  timers.push(setTimeout(()=>$('rig').classList.add('idle'),CREEP_MS));
+}
+function render(){build(station,false);ui()}
+function advance(){
+  if(walking)return;
+  const rm=stage.classList.contains('rm')||matchMedia('(prefers-reduced-motion: reduce)').matches;
+  clearTimers(); setCreep(false);
+  if(rm){ station=(station+1)%NS; render(); const w=$('creepW'); w.animate([{opacity:0},{opacity:1}],{duration:400,easing:'ease-in-out'}); timers.push(setTimeout(()=>setCreep(true),30)); return }
+  walking=true;
+  build(station,true);
+  // a slight bank and settle through the walk: a craft turning, not a sheet sliding
+  $('cam').animate([{transform:'translate(0,0) rotate(0deg)'},{transform:'translate(0,5px) rotate(.3deg)',offset:.35},{transform:'translate(0,2px) rotate(-.2deg)',offset:.75},{transform:'translate(0,0) rotate(0deg)'}],{duration:DUR,easing:'ease-in-out'});
+  timers.push(setTimeout(()=>{station=(station+1)%NS;walking=false;render();setCreep(true)},DUR+60));
+}
+function jump(s){if(walking)return;clearTimers();station=((s%NS)+NS)%NS;setCreep(false);render();timers.push(setTimeout(()=>setCreep(true),30))}
+function ui(){$('stLabel').textContent=`station ${station} of ${NS}: ${NAMES[station]}`}
+
+// test hook: pause every walk animation at a fraction of the walk (for measurement)
+window.__orbit={
+  get station(){return station}, DUR, advance, jump,
+  scrub(frac){for(const a of document.getAnimations()){a.pause();a.currentTime=frac*DUR}},
+};
+
+paintShell();
+$('adv').onclick=advance; $('back').onclick=()=>jump(station-1); $('reset').onclick=()=>jump(0);
+let autoT=null;
+$('auto').onclick=()=>{ if(autoT){clearInterval(autoT);autoT=null;$('auto').classList.remove('on')} else {$('auto').classList.add('on');advance();autoT=setInterval(advance,AUTO_MS)} };
+$('cSafe').onchange=e=>stage.classList.toggle('showSafe',e.target.checked);
+$('cQ').onchange=e=>stage.classList.toggle('noQ',!e.target.checked);
+$('cRm').onchange=e=>stage.classList.toggle('rm',e.target.checked);
+if(params.get('bare')){document.body.classList.add('bare');stage.classList.remove('showSafe');stage.style.transform='scale(1)'}
+if(params.get('noq'))stage.classList.add('noQ');
+if(params.get('nosafe'))stage.classList.remove('showSafe');
+function fit(){if(document.body.classList.contains('bare'))return;const f=$('fit');stage.style.transform=`scale(${f.clientWidth/W})`}
+addEventListener('resize',fit);fit();
+render();setCreep(true);
+})();
+</script>
+</body>
+</html>
