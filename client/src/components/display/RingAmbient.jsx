@@ -544,15 +544,24 @@ function appendPane(host, i, build) {
 // reach }] with reach a 0..1 fraction of the frame width; whatever the two
 // reaches leave uncovered stays plain dark, which is the visible "shift".
 function buildGapPane(host, i, spec) {
+  // Each bleed runs OVER_PX past the pane edge into its neighbour and ramps
+  // up from fully transparent, so no vertical seam shows at the pane boundary
+  // while the camera glides in or out (Ben, 2026-10-01: "the straight down
+  // lines going to and from that black slide aren't good"). Peak sits on the
+  // boundary; it fades to nothing again toward the middle of the pane.
+  const OVER_PX = 260
   for (const b of spec.bleeds) {
     const w = b.reach * ENGINE.W
+    const left = b.side === 'left'
     const el = dom.el('scrim')
-    el.style.left = px(i * ENGINE.W + (b.side === 'left' ? 0 : ENGINE.W - w))
+    el.style.left = px(i * ENGINE.W + (left ? -OVER_PX : ENGINE.W - w))
     el.style.top = '0'
-    el.style.width = px(w)
+    el.style.width = px(w + OVER_PX)
     el.style.height = px(ENGINE.H)
     el.style.opacity = '0.4'
-    el.style.background = `radial-gradient(ellipse 100% 65% at ${b.side === 'left' ? '0%' : '100%'} 50%, ${b.color}, transparent)`
+    el.style.background = `linear-gradient(to ${left ? 'right' : 'left'}, transparent 0, ${b.color} ${OVER_PX}px, transparent 100%)`
+    const fade = 'linear-gradient(to bottom, transparent, #000 35%, #000 65%, transparent)'
+    el.style.maskImage = fade; el.style.webkitMaskImage = fade
     host.appendChild(el)
   }
 }
