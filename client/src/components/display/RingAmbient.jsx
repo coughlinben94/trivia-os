@@ -121,10 +121,19 @@ const RING_CSS = `
 ${ringCss('ring-')}
 .ring-stage.go .ring-surge{transition:transform var(--surge-ms) cubic-bezier(${EASE_SURGE.join(',')})}
 .ring-scrim{position:absolute;pointer-events:none}
+/* Settle fade (2026-10-01, Ben: "when the ring switches forward or back, the
+   stars dim as it settles. why?"). The safe-box clamp (clampSafeBoxStarPeaks)
+   writes each centre star's twinkle peak --op once a turn lands, which used to
+   snap. Registering --op as a number lets it transition. Scoped to
+   .ring-star-settle, which only unlock() sets and jumpTo() clears, so snaps
+   (mount, jump, the verify gate's own jumpTo path) stay instant. */
+@property --op{syntax:'<number>';inherits:false;initial-value:1}
+.ring-star-settle .ring-star{transition:--op 700ms cubic-bezier(.25,.46,.45,.94)}
 
 @media (prefers-reduced-motion:reduce){
   .ring-surge{transition:none!important}
   .ring-star,.ring-pf,.ring-pf-breathe,.ring-shoot{animation-play-state:paused!important}
+  .ring-star-settle .ring-star{transition:none!important}
   .ring-drift,.ring-driftRun{animation-play-state:paused!important}
   .ring-rock-spin{animation-play-state:paused!important}
 }
@@ -1394,6 +1403,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   // turn drains exactly once busy actually frees up.
   function unlock() {
     busyRef.current = false
+    designElRef.current.classList.add('ring-star-settle') // fade the clamp in, don't snap it
     dom.clampSafeBoxStarPeaks(designElRef.current) // item 3: re-clamp at rest, new station
     if (queuedTurnsRef.current.length > 0) {
       turn(queuedTurnsRef.current.shift())
@@ -1521,6 +1531,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     writeOffsets()
     layoutScrim(stationRef.current)
     writeSkyTints(stationRef.current, false) // snap — see applySkyTints on why a jump must not leave a transition in flight
+    designElRef.current.classList.remove('ring-star-settle') // a jump snaps, as it always did
     dom.clampSafeBoxStarPeaks(designElRef.current) // item 3: re-clamp at rest, new station
   }
 

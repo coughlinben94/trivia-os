@@ -186,4 +186,16 @@ describe('EvolvingRingAmbient — every single-step advance glides on screen', (
     expect(window.__world.station).toBe(10)
     expect(paneEls(10).length).toBeGreaterThan(2)
   }, 60_000)
+
+  it('the star clamp fades in after a glide settles, and still snaps after a jump', async () => {
+    await show('show_b', 1)
+    await act(async () => { vi.advanceTimersByTime(SETTLE_MS) })
+    const design = container.querySelector('#design')
+    expect(design.classList.contains('ring-star-settle')).toBe(false) // mount: nothing to fade
+    await show('show_b', 2) // single step -> turn() -> unlock() after SURGE_MS
+    await act(async () => { vi.advanceTimersByTime(SETTLE_MS) })
+    expect(design.classList.contains('ring-star-settle')).toBe(true)
+    await show('show_b', 9) // multi-slide skip -> jumpTo(): instant
+    expect(design.classList.contains('ring-star-settle')).toBe(false)
+  }, 60_000)
 })
