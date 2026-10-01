@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase.js'
+import { usePhoneAnswerSave } from '../../hooks/usePhoneAnswerSave.js'
 import { LANE_COLORS } from '../../lib/raceMath.js'
 import ShrinkToFit from './ShrinkToFit.jsx'
 
@@ -20,36 +21,11 @@ export default function HorseRaceBoard({ slide, team, theme, preview = false, on
   const text = theme?.colors?.text ?? '#ffffff'
   const highlight = theme?.colors?.highlight ?? '#f5c842'
   const [saving, setSaving] = useState(false)
-  const [saveFailed, setSaveFailed] = useState(false)
+  const { saveAnswer: submit, saveFailed } = usePhoneAnswerSave({ preview, slide, team, board: 'HorseRaceBoard', noun: 'horse-race' })
 
   const [selected, setSelected] = useState(null)
   const [committedSelected, setCommittedSelected] = useState(null)
 
-  const saveChainRef = useRef(Promise.resolve())
-
-  const submit = useCallback((nextSelected) => {
-    if (preview) return Promise.resolve(true)
-    const run = saveChainRef.current.then(async () => {
-      const upsert = supabase.from('phone_answers').upsert(
-        { show_id: slide.showId ?? team.showId, slide_id: slide.id, team_id: team.id, answer: nextSelected },
-        { onConflict: 'slide_id,team_id' }
-      )
-      let error
-      try {
-        ;({ error } = await Promise.race([
-          upsert,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('horse-race save timed out')), 8000)),
-        ]))
-      } catch (err) {
-        error = err
-      }
-      if (error) console.error('[HorseRaceBoard] pick save failed:', error)
-      setSaveFailed(!!error)
-      return !error
-    })
-    saveChainRef.current = run.catch(() => false)
-    return run
-  }, [preview, slide.id, slide.showId, team.id, team.showId])
 
   function tapContender(name) {
     if (locked) return
