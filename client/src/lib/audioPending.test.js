@@ -3,7 +3,7 @@
 // the /display window stepped past an audio question with no sound (confirmed
 // live 2026-08-24 for the team-picker; the prime suspect for 2026-09-29).
 import { describe, it, expect } from 'vitest'
-import { audioPlayPending, tvAudioStepPatch, computeTvNextStep } from './audioPending.js'
+import { audioPlayPending, tvAudioStepPatch, computeTvNextStep, computeTvPrevStep, withAudioReset } from './audioPending.js'
 
 const yt = (over = {}) => ({
   id: 'q1',
@@ -108,6 +108,43 @@ describe('computeTvNextStep (what /display Next does on a raw shows row)', () =>
   })
 })
 
+// Review of ad52e56: the TV step path never cleared audio_playing, so after the
+// TV played Q5 and moved on, Left-Arrow back to Q5 autoplayed it on arrival
+// (the 2026-09-14 Round 2 Q8 bug by a new route). Host has always cleared it.
+describe('withAudioReset', () => {
+  const played = { slideId: 'q1', playing: true }
+  it('clears the mark when the patch moves to a different slide', () => {
+    expect(withAudioReset({ current_slide_id: 'z', current_slide_index: 2 }, played)).toEqual({ current_slide_id: 'z', current_slide_index: 2, audio_playing: null })
+  })
+  it('keeps the mark when the patch stays on the marked slide', () => {
+    expect(withAudioReset({ current_slide_id: 'q1' }, played)).toEqual({ current_slide_id: 'q1' })
+  })
+  it('leaves patches alone that do not change slides or when nothing is marked', () => {
+    expect(withAudioReset({ answer_reveal: true }, played)).toEqual({ answer_reveal: true })
+    expect(withAudioReset({ current_slide_id: 'z' }, null)).toEqual({ current_slide_id: 'z' })
+    expect(withAudioReset(null, played)).toBeNull()
+  })
+})
+
+describe('TV step clears a stale audio mark when it leaves the slide', () => {
+  const slides = [
+    { id: 'a', type: 'title', data: {} },
+    { id: 'q1', type: 'question', data: { isShiny: true, shinyType: 'audio', mediaSlots: [{ type: 'youtube', videoId: 'abc' }] } },
+    { id: 'z', type: 'title', data: {} },
+  ]
+  const row = { id: 's', slides, current_slide_index: 1, current_slide_id: 'q1', audio_playing: { slideId: 'q1', playing: true } }
+  it('Next off the played slide clears audio_playing', async () => {
+    const patch = await computeTvNextStep(row, async () => 0)
+    expect(patch.current_slide_id).toBe('z')
+    expect(patch.audio_playing).toBeNull()
+  })
+  it('Prev off the played slide clears audio_playing', async () => {
+    const patch = await computeTvPrevStep(row, async () => 0)
+    expect(patch.current_slide_id).toBe('a')
+    expect(patch.audio_playing).toBeNull()
+  })
+})
+
 // Wiring guard: stepShow lives inside Display.jsx (a 2000-line view with no
 // test harness), so a revert to the ungated computeNextStep there would pass
 // every pure test above. These read the source so that revert fails loudly.
@@ -117,7 +154,9 @@ describe('wiring (source guards)', () => {
   const live = readFileSync(new URL('../components/host/LiveMode.jsx', import.meta.url), 'utf8')
   it('/display steps through computeTvNextStep, never the bare computeNextStep', () => {
     expect(display).toMatch(/await computeTvNextStep\(showRow, fetchTeamCount\)/)
+    expect(display).toMatch(/await computeTvPrevStep\(showRow, fetchTeamCount\)/)
     expect(display).not.toMatch(/await computeNextStep\(/)
+    expect(display).not.toMatch(/await computePrevStep\(/)
   })
   it('/host uses the shared gate, not a private copy', () => {
     expect(live).toMatch(/audioPlayPendingFor\(currentSlide, show\.audio_playing\)/)

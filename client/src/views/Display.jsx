@@ -21,9 +21,8 @@ import { preloadUsMapData } from '../hooks/useUsMapData.js'
 import { EASE_OUT } from '../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../lib/shinyGold.js'
 import { resolvePreviewShow } from '../lib/previewSlide.js'
-import { computeTvNextStep } from '../lib/audioPending.js'
+import { computeTvNextStep, computeTvPrevStep } from '../lib/audioPending.js'
 import {
-  computePrevStep,
   sortSlides,
   cursorAfterStep,
   teamPickerCursor,
@@ -679,7 +678,7 @@ async function stepShow(showRow, direction) {
   // on this window used to step past an audio question silently.
   const patch = direction > 0
     ? await computeTvNextStep(showRow, fetchTeamCount)
-    : await computePrevStep(args, fetchTeamCount)
+    : await computeTvPrevStep(showRow, fetchTeamCount)
   if (!patch) return { advanced: false, denied: false, cursor: null }
   const { data, error } = await supabase
     .from('shows')

@@ -6,6 +6,7 @@ import { deriveRoundCols, computeTotal, roundScoreTotal } from '../lib/scoreboar
 import { renumberRoundQuestions } from '../lib/questionNumbering.js'
 import { createPendingCounter } from '../lib/pendingWrites.js'
 import { trackWrite } from '../lib/writeTracking.js'
+import { withAudioReset as withAudioResetFor } from '../lib/audioPending.js'
 import { mergeShowStateRow, SHOW_STATE_COLUMNS } from '../lib/showStateMerge.js'
 import { HOST_PHOTOS_BUCKET, listHostPhotos } from '../lib/hostPhotos.js'
 import { archiveShow } from '../lib/questionRows.js'
@@ -741,9 +742,7 @@ export function useShow() {
   // slide change always leaves the flag either matching the new slide or
   // cleared — never stale.
   function withAudioReset(patch) {
-    if (!show?.audio_playing || patch.current_slide_id === undefined) return patch
-    if (patch.current_slide_id === show.audio_playing.slideId) return patch
-    return { ...patch, audio_playing: null }
+    return withAudioResetFor(patch, show?.audio_playing)
   }
 
   async function applyStepPatch(rawPatch) {
