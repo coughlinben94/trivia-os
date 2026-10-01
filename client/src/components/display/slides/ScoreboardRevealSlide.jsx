@@ -18,7 +18,7 @@ import {
   REVEAL_CROWN_SETTLE,
 } from '../../../lib/scoreboardMath.js'
 import { EASE_OUT, EASE_BAR } from '../../../lib/easings.js'
-import { colorsByName, normalizeTeamName } from '../../../lib/teamColors.js'
+import { colorsByName, emojisByName, normalizeTeamName } from '../../../lib/teamColors.js'
 
 // Everything here is sized in cq units off the stage (a `container-type: size`
 // box — see StageFrame) and off the team count, never rem/px. Ben runs 21
@@ -111,7 +111,7 @@ function ScoreRow({ team, rank, isLeader, maxScore, theme, m, delay, reduce }) {
             margin: 0,
           }}
         >
-          {team.name}
+          {team.emoji ? `${team.emoji} ` : ''}{team.name}
         </p>
 
         {/* Score bar — scaleX via CSS transition (GPU-composited, off the main
@@ -171,10 +171,11 @@ export default function ScoreboardRevealSlide({ slide, show }) {
       if (sbTeams?.length) {
         // scoreboard_teams has no color column; the pick lives on teams.color.
         const { data: colorRows } = await supabase
-          .from('teams').select('name, color').eq('show_id', show.id)
+          .from('teams').select('name, color, emoji').eq('show_id', show.id)
         const byName = colorsByName(colorRows ?? [])
+        const emojiByName = emojisByName(colorRows ?? [])
         const sorted = sbTeams
-          .map(t => ({ ...t, color: byName.get(normalizeTeamName(t.name)), total: computeTotal(t.scores, cols) }))
+          .map(t => ({ ...t, color: byName.get(normalizeTeamName(t.name)), emoji: emojiByName.get(normalizeTeamName(t.name)), total: computeTotal(t.scores, cols) }))
           .sort((a, b) => b.total - a.total)
         const places = computePlaces(sorted)
         setRanked(sorted.map((t, i) => ({ ...t, place: places[i] })))

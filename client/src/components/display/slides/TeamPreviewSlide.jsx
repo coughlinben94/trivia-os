@@ -13,7 +13,7 @@ export default function TeamPreviewSlide({ slide, show }) {
     if (!show?.id) return
     supabase
       .from('teams')
-      .select('id, name, color')
+      .select('id, name, color, emoji')
       .eq('show_id', show.id)
       .order('registered_at', { ascending: true })
       .then(({ data }) => { if (data) setTeams(data) })
@@ -95,6 +95,7 @@ export default function TeamPreviewSlide({ slide, show }) {
                 background: team.color, boxShadow: '0 0 0 0.08em rgba(0,0,0,0.45)',
               }} />
             )}
+            {team.emoji && <span aria-hidden>{team.emoji}</span>}
             {team.name}
           </motion.div>
         ))}

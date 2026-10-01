@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import { deriveRoundCols, computeTotal, computePlaces, normalizeRoundScore, MEDALS, SPLIT_TEAM_THRESHOLD, splitByRank } from '../../lib/scoreboardMath.js'
 import { EASE_OUT, EASE_DROP } from '../../lib/easings.js'
-import { colorsByName, normalizeTeamName } from '../../lib/teamColors.js'
+import { colorsByName, emojisByName, normalizeTeamName } from '../../lib/teamColors.js'
 
 // ─── Layout math ───────────────────────────────────────────────────────────
 // The stage is a `container-type: size` box (see StageFrame), so every size
@@ -113,7 +113,7 @@ function CountUp({ value, reduce, style }) {
 }
 
 // ─── Single team row ───────────────────────────────────────────────────────
-function TeamRow({ team, rank, cols, template, metrics, delay, isTop, zebra, reduce, color, showDot }) {
+function TeamRow({ team, rank, cols, template, metrics, delay, isTop, zebra, reduce, color, emoji, showDot }) {
   const { theme } = useTheme()
   const c = theme.colors
   const medal = MEDALS[rank - 1] ?? null
@@ -211,7 +211,7 @@ function TeamRow({ team, rank, cols, template, metrics, delay, isTop, zebra, red
           margin: 0,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
-          {team.name || '(unnamed)'}
+          {emoji ? `${emoji} ` : ''}{team.name || '(unnamed)'}
         </p>
       </div>
 
@@ -263,6 +263,7 @@ function ScoreboardContent({ show }) {
   const reduce = useReducedMotion()
   const [ranked, setRanked] = useState([])
   const [teamColors, setTeamColors] = useState(() => new Map())
+  const [teamEmojis, setTeamEmojis] = useState(() => new Map())
   const cols = deriveRoundCols(show)
   // load() is a closure created once per show.id (see the effect's deps
   // below, kept narrow on purpose so the realtime channel doesn't
@@ -314,13 +315,14 @@ function ScoreboardContent({ show }) {
   // walk-in, a renamed row) simply gets no mark.
   useEffect(() => {
     let cancelled = false
-    supabase.from('teams').select('name, color').eq('show_id', show.id).then(({ data }) => {
-      if (!cancelled && data) setTeamColors(colorsByName(data))
+    supabase.from('teams').select('name, color, emoji').eq('show_id', show.id).then(({ data }) => {
+      if (!cancelled && data) { setTeamColors(colorsByName(data)); setTeamEmojis(emojisByName(data)) }
     })
     return () => { cancelled = true }
   }, [show.id])
 
   const colorOf = team => teamColors.get(normalizeTeamName(team.name))
+  const emojiOf = team => teamEmojis.get(normalizeTeamName(team.name))
   const hasColors = ranked.some(colorOf)
   const isSplit = ranked.length > SPLIT_TEAM_THRESHOLD
   const splitCols = isSplit ? [] : cols
@@ -449,6 +451,7 @@ function ScoreboardContent({ show }) {
                 zebra={i % 2 === 1}
                 reduce={reduce}
                 color={colorOf(team)}
+                emoji={emojiOf(team)}
                 showDot={hasColors}
               />
             )
