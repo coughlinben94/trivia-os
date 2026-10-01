@@ -11,8 +11,8 @@ export const LAST_CALL_DEFAULT_SUBTITLE = 'Get your drinks in before the next ro
 
 // Bar bell, synthesized — no asset file. A few inharmonic partials (bell
 // ratios) with exponential decay, struck three times: ding-ding ... ding.
-// Only audible once the TV has had its setup click (Display.jsx's
-// onFirstInteraction); a cold tab just stays silent, the sign still shows.
+// Only audible once the TV has had its setup click (the audio director unlocks on the first
+// gesture); a cold tab just stays silent (and is reported), the sign still shows.
 export const PARTIALS = [[0.5, 0.35], [1, 1], [1.19, 0.45], [1.5, 0.3], [2, 0.5], [2.74, 0.22], [3.76, 0.12]]
 export const STRIKES = [0, 0.32, 1.05]
 
