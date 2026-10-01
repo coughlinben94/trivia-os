@@ -989,6 +989,18 @@ describe('director plays file clips', () => {
     expect(h.reason).toBe('not-sounding')
   })
 
+  it('an element whose own play() NEVER settles is still reported (the check does not wait for play())', async () => {
+    const f = makeFakes({ ctx: new FakeContext('running') })
+    withPlayMode(f, 'hang')
+    const d = createDirector(f.deps)
+    const h = d.play(clip, { slideId: 's1' })
+    await flush()
+    expect(h.state).toBe('pending')
+    vi.advanceTimersByTime(2000)
+    expect(h.state).toBe('blocked')
+    expect(h.reason).toBe('not-sounding')
+  })
+
   it('while blocked it keeps re-checking: a slow start that finally sounds clears itself', async () => {
     const f = makeFakes({ ctx: new FakeContext('suspended') })
     f.ctx.resumeMode = 'hang'
@@ -1054,7 +1066,8 @@ describe('director plays file clips', () => {
     expect(h.state).toBe('stopped')
     expect(f.elements[0].paused).toBe(true)
     expect(f.ctx.sources[0].disconnect).toHaveBeenCalled()
-    vi.advanceTimersByTime(5000) // the 2s check must not fire for a stopped clip
+    expect(vi.getTimerCount()).toBe(0) // no timer survives a stopped clip
+    vi.advanceTimersByTime(5000)
     expect(f.events).toEqual([])
     expect(h.state).toBe('stopped')
   })
@@ -1105,7 +1118,10 @@ Expected: the file-clip tests FAIL with `director.play is implemented in Plan 1,
 
 **In `client/src/audio/director.js`, replace the stub**
 ```js
-  function play(/* rawClip, { slideId } */) {
+  // Task 3 stub: validates and honors preview; real playback arrives in Task 4.
+  function play(rawClip, { slideId = null } = {}) {
+    const clip = normalizeClip(rawClip)
+    if (preview) return previewHandle(clip, slideId)
     throw new Error('director.play is implemented in Plan 1, Task 4')
   }
 ```
@@ -1292,7 +1308,7 @@ Expected: the file-clip tests FAIL with `director.play is implemented in Plan 1,
 - [ ] **Step 4: Run the tests, confirm they pass**
 
 Run: `npx vitest run client/src/audio/director.test.js`
-Expected: PASS — `Tests  32 passed (32)` (Task 3's 18 + 14 here; the preview-leaving test now passes).
+Expected: PASS — `Tests  31 passed (31)` (Task 3's 15 + 16 here).
 
 - [ ] **Step 5: Mutation check**
 

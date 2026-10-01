@@ -122,11 +122,181 @@ export function createDirector(overrides = {}) {
     return { key: clipKey(slideId, clip), slideId, clip, state: 'preview', reason: null, onEnded() {}, stop() {}, retry() {} }
   }
 
-  // Task 3 stub: validates and honors preview; real playback arrives in Task 4.
+  // One handle per playing clip. `ctl` is the private control surface the start
+  // functions use; callers only ever see the handle.
+  function createHandle(clip, slideId) {
+    const key = clipKey(slideId, clip)
+    const t0 = d.now()
+    let state = 'pending'
+    let reason = null
+    let watch = null
+    let poll = null
+    let checkFn = () => false
+    let stopImpl = () => {}
+    let retryImpl = () => {}
+    let onEndedImpl = () => {} // runs only on a NATURAL end (not on stop()), e.g. re-warm for an instant replay
+    const endedCbs = []
+    const done = () => state === 'stopped' || state === 'ended'
+    const stopTimers = () => {
+      if (watch != null) d.clearTimer(watch)
+      if (poll != null) d.clearTimer(poll)
+      watch = null
+      poll = null
+    }
+
+    const handle = {
+      key, slideId, clip,
+      get state() { return state },
+      get reason() { return reason },
+      onEnded(cb) { endedCbs.push(cb) },
+      stop() {
+        if (done()) return
+        state = 'stopped'
+        stopTimers()
+        safe(stopImpl)
+        handles.delete(key)
+        emit()
+      },
+      // From the "Click for sound" button (a real gesture): clear the block and try again.
+      retry() {
+        if (done()) return
+        if (state === 'blocked') {
+          state = 'pending'
+          reason = null
+          emit()
+        }
+        safe(retryImpl)
+      },
+    }
+
+    function reportBlockedOnce() {
+      d.breadcrumb('audio blocked', { kind: clip.kind, slideId, part: clip.part, reason })
+      if (reported.has(key)) return
+      reported.add(key)
+      d.event('warning', `audio: play blocked (${clip.kind})`, { slideId, part: clip.part, reason })
+    }
+
+    function startPoll() {
+      const tick = () => {
+        poll = null
+        if (state !== 'blocked') return
+        if (safe(checkFn)) { ctl.playing(); return }
+        poll = d.setTimer(tick, BLOCKED_RECHECK_MS)
+      }
+      poll = d.setTimer(tick, BLOCKED_RECHECK_MS)
+    }
+
+    const ctl = {
+      setStop(fn) { stopImpl = fn },
+      setRetry(fn) { retryImpl = fn },
+      setOnEnded(fn) { onEndedImpl = fn },
+      // Start (or restart) the 2s "is it really sounding?" check. Call BEFORE anything
+      // that can hang (resume(), play()).
+      arm(check) {
+        checkFn = check
+        stopTimers()
+        watch = d.setTimer(() => {
+          watch = null
+          if (done()) return
+          if (safe(checkFn)) ctl.playing()
+          else ctl.block('not-sounding')
+        }, SOUND_CHECK_MS)
+      },
+      playing() {
+        if (done() || state === 'playing') return
+        const afterBlock = state === 'blocked'
+        state = 'playing'
+        reason = null
+        stopTimers()
+        d.breadcrumb('audio started', { kind: clip.kind, slideId, part: clip.part, ms: d.now() - t0, afterBlock })
+        emit()
+      },
+      block(why) {
+        if (done() || state === 'blocked') return
+        state = 'blocked'
+        reason = why
+        if (watch != null) { d.clearTimer(watch); watch = null }
+        reportBlockedOnce()
+        startPoll()
+        emit()
+      },
+      ended() {
+        if (done()) return
+        state = 'ended'
+        stopTimers()
+        safe(stopImpl)
+        safe(onEndedImpl)
+        endedCbs.forEach(cb => safe(cb))
+        handles.delete(key)
+        emit()
+      },
+    }
+    return { handle, ctl }
+  }
+
+  // Uploaded file: an <audio> routed through a GainNode on the SHARED context, so
+  // loudness normalization can boost (gain > 1) and one context serves the whole tab.
+  function startFile(clip, ctl) {
+    const c = ensureContext()
+    const el = d.makeElement()
+    el.preload = 'auto'
+    el.loop = clip.loop
+    el.src = clip.url
+    let src = null
+    if (c) {
+      try {
+        src = c.createMediaElementSource(el)
+        const gain = c.createGain()
+        gain.gain.value = dbToGain(clip.gainDb)
+        src.connect(gain)
+        gain.connect(c.destination)
+      } catch { src = null }
+    }
+    // No context (or the graph failed): fall back to the element's own volume, which cannot boost.
+    if (!src) el.volume = Math.min(1, dbToGain(clip.gainDb))
+    if (clip.start) el.currentTime = clip.start
+    el.addEventListener('ended', () => ctl.ended())
+
+    const check = () => mediaIsSounding(el, c)
+    const go = () => {
+      ctl.arm(check) // FIRST: resume() and play() can each hang forever without a gesture
+      if (c && c.state !== 'running') safe(() => c.resume()?.catch?.(() => {}))
+      let p
+      try { p = el.play() } catch { ctl.block('play-threw'); return }
+      p?.then?.(
+        () => { if (!c || c.state === 'running') ctl.playing() },
+        err => ctl.block(err?.name === 'NotAllowedError' ? 'not-allowed' : 'play-rejected'),
+      )
+    }
+    ctl.setRetry(() => { unlock(); go() })
+    ctl.setStop(() => {
+      safe(() => el.pause())
+      safe(() => src?.disconnect())
+      safe(() => el.removeAttribute?.('src'))
+    })
+    go()
+  }
+
   function play(rawClip, { slideId = null } = {}) {
-    const clip = normalizeClip(rawClip)
+    const clip = normalizeClip(rawClip) // a malformed clip throws to the CALLER, never into the show
     if (preview) return previewHandle(clip, slideId)
-    throw new Error('director.play is implemented in Plan 1, Task 4')
+    handles.get(clipKey(slideId, clip))?.stop()
+    const { handle, ctl } = createHandle(clip, slideId)
+    handles.set(handle.key, handle)
+    d.breadcrumb('audio requested', { kind: clip.kind, slideId, part: clip.part })
+    try {
+      if (clip.kind === 'youtube') startYoutube(clip, ctl)
+      else startFile(clip, ctl)
+    } catch {
+      ctl.block('start-threw')
+    }
+    emit()
+    return handle
+  }
+
+  // Replaced in Task 5.
+  function startYoutube(/* clip, ctl */) {
+    throw new Error('youtube playback is implemented in Plan 1, Task 5')
   }
 
   function retryBlocked() {
