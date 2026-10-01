@@ -111,6 +111,23 @@ describe('ForestAmbient', () => {
     expect(clones()).toBe(0)
   })
 
+  it('strobeSafe (preview ?nostrobe=1) dims the generated walk keyframes; default is unchanged', async () => {
+    const opacities = (css) => [...css.matchAll(/opacity:([0-9.]+)/g)].map(m => +m[1])
+    const walkCss = async (world) => {
+      const { ref } = await mount({ worldData: world })
+      await act(async () => { ref.current.turn() })
+      const css = kf()
+      await act(async () => { root.render(null) })
+      return css
+    }
+    const plain = await walkCss(WORLD)
+    const safe = await walkCss({ ...WORLD, strobeSafe: true })
+    const sum = a => a.reduce((x, y) => x + y, 0)
+    expect(safe).not.toBe(plain)
+    expect(sum(opacities(safe))).toBeLessThan(sum(opacities(plain)))
+    expect(Math.max(...opacities(safe))).toBeLessThanOrEqual(Math.max(...opacities(plain)))
+  })
+
   it('reversal: turn(-1) during a walk cuts back to the start', async () => {
     const { ref } = await mount({ slideIndex: 6 })
     await act(async () => { ref.current.turn(1) })

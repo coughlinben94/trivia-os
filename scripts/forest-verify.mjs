@@ -36,7 +36,8 @@ import { SAFE_BOX, lumaStats, contrastRatio, easeInOut, compositeStack, diffStat
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const PORT = 5206, BASE = `http://localhost:${PORT}`
-const URL_PATH = '/ambient?ring=1&world=haunted-october'
+// FOREST_QUERY="nostrobe=1&dur=7000&step=14" appends preview switches (AmbientAudit) so the gates can be run on a variant.
+const URL_PATH = '/ambient?ring=1&world=haunted-october' + (process.env.FOREST_QUERY ? '&' + process.env.FOREST_QUERY : '')
 const W = 1920, H = 1080, NS = 13, REST_T = 1000
 const MEAN_CAP = 34, P995_CAP = 68, P995_HEADROOM = 62 // spec §2.5, LOCKED
 const CONTRAST_MIN = 7 // spec gate 5

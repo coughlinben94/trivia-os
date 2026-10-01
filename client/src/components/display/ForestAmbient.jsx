@@ -53,6 +53,7 @@ const ForestAmbient = forwardRef(function ForestAmbient({ worldData, slideIndex,
       root: designElRef.current,
       forest: makeForest({ walk: walkRef.current, seed: seedRef.current }),
       walk: walkRef.current,
+      strobeSafe: !!worldData?.strobeSafe,
     })
   }
 

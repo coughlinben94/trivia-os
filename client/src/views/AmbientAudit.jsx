@@ -33,6 +33,15 @@ export default function AmbientAudit() {
     // ?world=<id> picks any registered ring world (ring-verify's --world);
     // absent = midnight-galaxy, the page's only world before 2026-09-28.
     const base = RING_WORLDS[params.get('world')] ?? midnightGalaxyRing
+    // Forest preview switches (Ben 2026-10-01): ?nostrobe=1 dims fast trunks, ?dur=<ms> and ?step=<m> set the walk
+    // (shipped default stays 4000 ms / 6 m until he picks). Only meaningful for a forest world.
+    if (base.renderer === 'forest') {
+      const dur = parseInt(params.get('dur'), 10), step = parseFloat(params.get('step'))
+      const noStrobe = params.get('nostrobe') === '1'
+      if (dur > 0 || step > 0 || noStrobe) {
+        return { ...base, walk: { durMs: dur > 0 ? dur : base.walk.durMs, stepM: step > 0 ? step : base.walk.stepM }, strobeSafe: noStrobe }
+      }
+    }
     const colorsParam = params.get('colors')
     const stationsParam = params.get('stations')
     if (!colorsParam && !stationsParam) return base

@@ -52,7 +52,7 @@ const CSS = `
 .fs-grain{position:absolute;inset:0;pointer-events:none;mix-blend-mode:overlay;opacity:.035;background:url(data:image/png;base64,${GRAIN}) repeat}
 `
 
-export function createForestScene({ doc, root, forest, walk }) {
+export function createForestScene({ doc, root, forest, walk, strobeSafe = false }) {
   const win = doc.defaultView
   const { W, H, VX, VY, F, D, NS, ZMIN, M, KCAP, STOPS, CAPFADE, EASE, clamp, fm, fm4 } = forest.constants
   const DUR = walk.durMs
@@ -152,7 +152,11 @@ export function createForestScene({ doc, root, forest, walk }) {
       const fpS = DUR / STOPS / 16.67, sp = ks.map(([t, k, zz], i) => { const n = ks[Math.min(i + 1, ks.length - 1)], pv = ks[Math.max(i - 1, 0)]; return Math.abs(it.X) * F * Math.abs(1 / n[2] - 1 / pv[2]) / ((n[0] === pv[0] ? 1 : 2) * fpS) })
       const stops = ks.map(([t, k, zz], si) => {
         const m = tcap < 0 ? 1 : clamp((tcap - t) / ft); for (const j of animL) lstops[j].push(`${fm(t * 100)}%{opacity:${fm4(it.lops[j](zz) * (j === it.fastDim ? clamp(1 - (sp[si] - 7) / 10, 0.35, 1) : 1))}}`)
-        return `${fm(t * 100)}%{transform:scale(${fm4(k)});opacity:${fm4(it.op(zz) * m)}}`
+        // strobeSafe (preview switch ?nostrobe=1, Ben 2026-10-01 'i want to see it without it'): any item the generator
+        // estimates above ~4 px/frame dims toward 0.3 by 7 px/frame, WHOLE item (v3's own dim only touches one sub-layer
+        // and only reaches 0.35 near 13.5 px/frame, which is why the strobe gate flagged 7 dark layers near 8.6 px/frame).
+        const sf = strobeSafe ? clamp(1 - (sp[si] - 4) / 3 * 0.7, 0.3, 1) : 1
+        return `${fm(t * 100)}%{transform:scale(${fm4(k)});opacity:${fm4(it.op(zz) * m * sf)}}`
       })
       css.push(`@keyframes ${anim}{${stops.join('')}}`); lstops.forEach((s, j) => { if (s.length) css.push(`@keyframes ${anim}l${j}{${s.join('')}}`) })
       el.style.animation = `${anim} ${DUR}ms linear forwards`
