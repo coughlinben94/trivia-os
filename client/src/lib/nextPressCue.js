@@ -4,6 +4,8 @@
 // part stepping -> plain advance). Labels only — never decides or performs
 // a press, so a drift here misleads the host's eyes, not the show.
 import { pendingLockPhase, pendingReveal, revealStepCount } from './slideStepping.js'
+import { isDropShiny } from './shinySeries.js'
+import { dropStepCount, dropSequence, dropOptions } from './dropScoring.js'
 
 // The slide the press lands on, as "Show Round 3" / "Show Grading break" etc.
 function landingLabel(slide) {
@@ -47,6 +49,19 @@ export function nextPressGate({ slide, nextSlide, audioPending = false, scoringB
   // Locked but not yet revealed: A reveals it. The keyboard's Next still
   // advances here (pre-existing); the remote refuses and lights Answer.
   if (pendingReveal(slide)) return { label: 'Press Answer to reveal', gate: 'reveal-owed' }
+  // The Drop: each Next after the lock drops one wrong tile.
+  if (d && isDropShiny(d) && d.dropLocked) {
+    const total = dropStepCount(d)
+    const step = d.dropStep ?? 0
+    if (step < total) {
+      // Name the tile that falls next (letter as on the TV + its text) so the host can narrate before pressing.
+      const opts = dropOptions(d)
+      const idx = opts.findIndex(o => o.id === dropSequence(d)[step])
+      const letter = idx >= 0 ? String.fromCharCode(65 + idx) : '?'
+      const name = opts[idx]?.label?.trim()
+      return { label: name ? `Drop tile ${letter} · ${name.slice(0, 18)}` : `Drop tile ${letter}`, gate: 'reveal-part' }
+    }
+  }
   if (audioPending) return { label: 'Play clip', gate: 'audio' }
   // computeNextStep's invoke-gated walkout song (slideStepping.js ~:510).
   const w = d?.walkoutSong

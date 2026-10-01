@@ -15,6 +15,7 @@ import MatchingBoard from '../join/MatchingBoard.jsx'
 import WagerBoard from '../join/WagerBoard.jsx'
 import OrderBoard from '../join/OrderBoard.jsx'
 import ChoiceBoard from '../join/ChoiceBoard.jsx'
+import DropBoard from '../join/DropBoard.jsx'
 import HuesCuesBoard from '../join/HuesCuesBoard.jsx'
 import PinBoard from '../join/PinBoard.jsx'
 import MovieChainBoard from '../join/MovieChainBoard.jsx'
@@ -24,6 +25,7 @@ import PinMapInteractive from '../shared/PinMapInteractive.jsx'
 import { isValidPin, parsePinPaste } from '../../lib/pinScoring.js'
 import { DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { DEFAULT_CHOICE_POINTS } from '../../lib/choiceScoring.js'
+import { DEFAULT_DROP_TOTAL, dropChip, dropOptions } from '../../lib/dropScoring.js'
 import { WAGER_TIERS, parseWagerNumber } from '../../lib/wagerScoring.js'
 import { DEFAULT_STEP_ORDER, STEM_LABELS, AVAILABLE_STEMS, buildBendleTiers } from '../../lib/bendleScoring.js'
 import { getHuesCuesGrid, HUES_CUES_COLS, nearestHuesCuesCell } from '../../lib/huesCuesGrid.js'
@@ -528,6 +530,10 @@ function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, up
   // as Order/Matching's own defaults.
   const choiceOptions = data.options ?? [{ id: 'c0', label: '', image: '' }, { id: 'c1', label: '', image: '' }]
   const choiceCorrectIds = data.correctIds ?? []
+
+  // The Drop is always exactly 4 tiles. Static ids so a correct pick made
+  // before any label is typed still points at an option that persists.
+  const dropTiles = Array.from({ length: 4 }, (_, i) => data.options?.[i] ?? { id: `d${i}`, label: '', image: '' })
 
   // Persists correctOrder into `data` the moment real items exist, instead of
   // only ever computing it as the local `orderCorrectOrder` fallback above —
@@ -1166,6 +1172,32 @@ function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, up
             </>
           )}
 
+          {/* The Drop — 4 tiles, one correct, teams split the points over them. */}
+          {schema.type === 'drop' && (
+            <>
+              <DropBuilder
+                options={dropTiles}
+                correctId={data.correctId ?? null}
+                total={data.dropTotal ?? DEFAULT_DROP_TOTAL}
+                onChangeOptions={opts => onChange('options', opts)}
+                onBatchChange={onBatchChange}
+                onChangeTotal={n => onChange('dropTotal', n)}
+                onMediaUpload={async file => { const r = await uploadMedia(file); return r?.url }}
+              />
+              <div className="flex flex-col gap-2">
+                <label className="block text-xs font-medium text-gray-700">Phone preview — live, matches what teams will see</label>
+                <div style={{ width: 300, margin: '0 auto', padding: '1.25rem 1rem', borderRadius: 20, background: theme.colors.bg }}>
+                  <DropBoard
+                    preview
+                    theme={theme}
+                    team={{ id: '__preview__', showId: show?.id ?? '__preview__' }}
+                    slide={{ id: slide.id, showId: show?.id, data: { ...data, options: dropTiles, dropLocked: false } }}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
           {/* Question text — not for list or matching types */}
           {schema.type !== 'list' && schema.type !== 'matching' && (
             <Field label="Question Text">
@@ -1187,7 +1219,7 @@ function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, up
               field too gave the host two "what's correct" controls on
               screen, only one of which scoring ever reads — found live
               2026-09-06 walking through a real Mandela Effect slide. */}
-          {schema.type !== 'choice' && schema.type !== 'hues-cues' && schema.type !== 'movie-chain' && (
+          {schema.type !== 'choice' && schema.type !== 'drop' && schema.type !== 'hues-cues' && schema.type !== 'movie-chain' && (
             <Field
               label={schema.type === 'wager' ? 'Answer — the true number' : schema.type === 'pin' ? 'Place name' : 'Answer'}
               hint={schema.type === 'wager' ? 'Every guess is scored by how close it lands to this. Must be a number.' : schema.type === 'pin' ? 'Shown on the TV at the reveal, e.g. "Apple Valley, MN". The true spot is set on the map below.' : undefined}
@@ -2046,6 +2078,93 @@ function ChoiceBuilder({ options, correctIds, multiSelect, pointsForChoice, onCh
           className="w-16 border border-gray-200 rounded px-2 py-1.5 text-sm text-center text-gray-900 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
         />
       </div>
+    </div>
+  )
+}
+
+// The Drop builder: exactly 4 tiles (text, photo optional), a radio for the one
+// correct tile, up/down to set the order the wrong ones fall in on the TV, and
+// the point pool each team splits. Picking the correct tile writes `options`
+// and `correctId` together so a pick never points at an option that hasn't
+// been saved yet.
+function DropBuilder({ options, correctId, total, onChangeOptions, onBatchChange, onChangeTotal, onMediaUpload }) {
+  const usable = dropOptions({ options })
+  const correctUsable = usable.some(o => o.id === correctId)
+  const chip = dropChip(total)
+
+  function updateOption(i, patch) {
+    onChangeOptions(options.map((o, idx) => idx === i ? { ...o, ...patch } : o))
+  }
+  function move(i, dir) {
+    const j = i + dir
+    if (j < 0 || j >= options.length) return
+    const next = [...options]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    onChangeOptions(next)
+  }
+  // SlideEditor's wrapper hands back the bare URL string (ChoiceBuilder's
+  // `result?.url` read of that same string silently no-ops — not copied here).
+  async function uploadImage(i, file) {
+    if (!file) return
+    const result = await onMediaUpload(file)
+    const url = typeof result === 'string' ? result : result?.url
+    if (url) updateOption(i, { image: url })
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <label className="block text-xs font-medium text-gray-700 mb-1.5">The 4 tiles</label>
+      <p className="text-xs text-gray-400 -mt-2">
+        Teams split {total} points across these on their phones. They pick 1 to 5 points per tap (starting at {chip}) and can put everything on one tile. Points left on the correct tile are their score; the rest is lost.
+        On the TV each Next drops one wrong tile off, in a random order, never the correct one. The ↑↓ order is just how the tiles are laid out.
+      </p>
+      {!correctUsable && (
+        <p className="text-xs text-amber-600 -mt-1">
+          ⚠️ Pick the correct tile below — Lock Answers refuses without one.
+        </p>
+      )}
+      {options.map((opt, i) => (
+        <div key={opt.id} className="flex flex-col gap-2 pb-4 mb-1 border-b border-gray-100 last:border-0 last:pb-0">
+          <div className="flex gap-2 items-center">
+            <input
+              type="radio"
+              checked={correctId === opt.id}
+              onChange={() => onBatchChange({ options, correctId: opt.id })}
+              className="shrink-0"
+              aria-label={`Tile ${String.fromCharCode(65 + i)} is correct`}
+            />
+            <input
+              value={opt.label}
+              onChange={e => updateOption(i, { label: e.target.value })}
+              placeholder={`Tile ${String.fromCharCode(65 + i)}…`}
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
+            />
+            <button onClick={() => move(i, -1)} disabled={i === 0} className="text-xs text-gray-400 hover:text-gray-700 disabled:opacity-20 shrink-0" aria-label="Move up">↑</button>
+            <button onClick={() => move(i, 1)} disabled={i === options.length - 1} className="text-xs text-gray-400 hover:text-gray-700 disabled:opacity-20 shrink-0" aria-label="Move down">↓</button>
+          </div>
+          <div className="pl-7">
+            <MediaUpload
+              accept="image" label="Photo (optional)"
+              currentUrl={opt.image || null} currentType={opt.image ? 'image/jpeg' : null}
+              onUpload={file => uploadImage(i, file)}
+              onRemove={() => updateOption(i, { image: '' })}
+            />
+          </div>
+        </div>
+      ))}
+      <div className="flex items-center gap-2 mt-1 pt-3 border-t border-gray-100">
+        <label className="text-xs font-medium text-gray-700">Points each team places</label>
+        <input
+          type="number"
+          value={total}
+          onChange={e => onChangeTotal(Math.max(1, Math.round(Number(e.target.value)) || DEFAULT_DROP_TOTAL))}
+          min={1}
+          className="w-16 border border-gray-200 rounded px-2 py-1.5 text-sm text-center text-gray-900 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
+        />
+      </div>
+      <p className="text-xs text-gray-400 -mt-1">
+        Set this before the show. Changing it, or blanking a tile, after teams have placed points makes their saved splits invalid and they score 0.
+      </p>
     </div>
   )
 }

@@ -1,6 +1,10 @@
 import { MAP_W, MAP_H } from './usMapGeo.js'
 
-export const MAX_K = 8
+// How far a player can zoom in to place a pin. 8 was too shallow to pick a town
+// (2026-10-01); at 20 a 358px-wide phone map is ~7000px across, about 0.4 mi/px.
+export const MAX_K = 20
+// The TV reveal camera frames pins at most this close, however far players may zoom.
+const FIT_MAX_K = 8
 
 // NaN -> lo (never leaks NaN into a view); +/-Infinity clamps normally.
 const clampNum = (n, lo, hi) => (Number.isNaN(n) ? lo : Math.max(lo, Math.min(hi, n)))
@@ -31,7 +35,7 @@ export function screenToMap(v, px, py) {
 // Frame a set of map points with padding. Falls back to the whole map when the
 // points span most of it. `minSpan` stops two near-identical pins from asking
 // for absurd zoom.
-export function fitView(points, { padFrac = 0.35, minSpan = 90, maxK = MAX_K } = {}) {
+export function fitView(points, { padFrac = 0.35, minSpan = 90, maxK = FIT_MAX_K } = {}) {
   if (!points.length) return { k: 1, tx: 0, ty: 0 }
   const xs = points.map(p => p[0]); const ys = points.map(p => p[1])
   const minX = Math.min(...xs), maxX = Math.max(...xs)

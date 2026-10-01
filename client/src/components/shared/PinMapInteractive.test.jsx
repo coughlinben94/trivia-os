@@ -43,9 +43,10 @@ describe('PinMapInteractive hold-to-drop', () => {
     const { lat, lon } = onPin.mock.calls[0][0]
     expect(Number.isFinite(lat) && Number.isFinite(lon)).toBe(true)
   })
-  it('moving past the slop before 350ms cancels the drop (it becomes a pan)', () => {
+  it('zoomed in, moving past the slop before the hold cancels the drop (it becomes a pan)', () => {
     const onPin = vi.fn()
     const s = mount({ pin: null, onPin })
+    act(() => { host.querySelector('button[aria-label="Zoom in"]').click() })
     fire(s, 'pointerdown', 250, 150); fire(s, 'pointermove', 290, 150); act(() => { vi.advanceTimersByTime(600) }); fire(s, 'pointerup', 290, 150)
     expect(onPin).not.toHaveBeenCalled()
   })
@@ -84,20 +85,40 @@ describe('PinMapInteractive hold-to-drop', () => {
     fire(s, 'pointerup', 250, 150)
     expect(onPin).not.toHaveBeenCalled()
   })
-  it('the pin lands ~48px above the finger', () => {
+  it('the pin lands exactly under the finger, same point a click would pick', () => {
     const held = vi.fn(), clicked = vi.fn()
     let s = mount({ pin: null, onPin: held })
     fire(s, 'pointerdown', 250, 150); act(() => { vi.advanceTimersByTime(400) }); fire(s, 'pointerup', 250, 150)
     act(() => root.unmount()); root = createRoot(host)
     s = mount({ pin: null, onPin: clicked, dropMode: 'click' })
     fire(s, 'pointerdown', 250, 150); fire(s, 'pointerup', 250, 150)
-    expect(held.mock.calls[0][0].lat).toBeGreaterThan(clicked.mock.calls[0][0].lat)
-    // lift of 48px on a 500px-wide surface == a click 48px higher
-    const exp = vi.fn()
+    expect(held.mock.calls[0][0]).toEqual(clicked.mock.calls[0][0])
+  })
+  it('a dragged pin ends under the finger where it was released, not above it', () => {
+    const held = vi.fn(), clicked = vi.fn()
+    let s = mount({ pin: null, onPin: held })
+    fire(s, 'pointerdown', 250, 150); act(() => { vi.advanceTimersByTime(400) })
+    fire(s, 'pointermove', 300, 170); fire(s, 'pointerup', 300, 170)
     act(() => root.unmount()); root = createRoot(host)
-    s = mount({ pin: null, onPin: exp, dropMode: 'click' })
-    fire(s, 'pointerdown', 250, 102); fire(s, 'pointerup', 250, 102)
-    expect(held.mock.calls[0][0]).toEqual(exp.mock.calls[0][0])
+    s = mount({ pin: null, onPin: clicked, dropMode: 'click' })
+    fire(s, 'pointerdown', 300, 170); fire(s, 'pointerup', 300, 170)
+    expect(held.mock.calls[0][0]).toEqual(clicked.mock.calls[0][0])
+  })
+  it('thumb wobble up to 12px during the hold still drops the pin', () => {
+    const onPin = vi.fn()
+    const s = mount({ pin: null, onPin })
+    fire(s, 'pointerdown', 250, 150)
+    fire(s, 'pointermove', 255, 154); fire(s, 'pointermove', 259, 156); fire(s, 'pointermove', 258, 160)
+    act(() => { vi.advanceTimersByTime(400) }); fire(s, 'pointerup', 258, 160)
+    expect(onPin).toHaveBeenCalledTimes(1)
+  })
+  it('at default zoom there is nothing to pan, so a bigger drift starts the drop instead of killing it', () => {
+    const onPin = vi.fn()
+    const s = mount({ pin: null, onPin })
+    fire(s, 'pointerdown', 250, 150); fire(s, 'pointermove', 290, 150)
+    expect(s.querySelector('[data-pin-preview]')).not.toBeNull() // pin follows at once
+    fire(s, 'pointerup', 290, 150)
+    expect(onPin).toHaveBeenCalledTimes(1)
   })
   it('disabled flipping true mid-hold: pointerup does not commit', () => {
     const onPin = vi.fn()
@@ -110,9 +131,10 @@ describe('PinMapInteractive hold-to-drop', () => {
   it('an out-of-bounds hold-release calls onPin zero times and dims the preview', () => {
     const onPin = vi.fn()
     const s = mount({ pin: null, onPin })
-    fire(s, 'pointerdown', 2, 60); act(() => { vi.advanceTimersByTime(400) })
+    // top-left corner of the surface: open ocean, outside the US (the pin tip sits under the finger now)
+    fire(s, 'pointerdown', 2, 12); act(() => { vi.advanceTimersByTime(400) })
     expect(s.querySelector('[data-pin-preview]').getAttribute('opacity')).toBe('0.3')
-    fire(s, 'pointerup', 2, 60)
+    fire(s, 'pointerup', 2, 12)
     expect(onPin).not.toHaveBeenCalled()
   })
   it('an in-bounds hold preview is not dimmed', () => {

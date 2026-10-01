@@ -34,7 +34,7 @@ Every surface of Trivia OS carries the Baynes Apple Valley identity. This is not
 
 ### Logo Placement
 
-- `/display` — bottom-right watermark, 18% opacity, theme text color (not full-color). Present on every slide. Implemented in `BaynesWatermark.jsx`.
+- `/display` — no watermark (removed 2026-08-17; the unused `BaynesWatermark.jsx` was deleted 2026-10-01).
 - Round intro slides — centered above round title, 35% opacity, slightly more prominent
 - Host panel — full-color logo top-left nav bar
 - `/join` — top of registration screen, cream/white variant
@@ -314,7 +314,7 @@ Never let these into the codebase:
 - Motion must have `@media (prefers-reduced-motion: reduce)` alternative — always
 - Never gate content visibility on a class-triggered transition — content visible by default
 - Z-index — two layering domains, not one global scale (the old dropdown→tooltip 100–600 scale never described the real code):
-  - **Display** (`/display` render tree) layers locally in the **1–60** band: slide content and freeform overlays at 1–50, persistent overlays (QuestionCounter, BaynesWatermark, AnswerReveal, `OverlayLayer`) at 50, and `ScoreboardOverlay` caps the stack at **z-[60]**. A cross-cutting display banner (`NavDeniedBanner`) sits at 200.
+  - **Display** (`/display` render tree) layers locally in the **1–60** band: slide content and freeform overlays at 1–50, persistent overlays (QuestionCounter, AnswerReveal, `OverlayLayer`) at 50, and `ScoreboardOverlay` caps the stack at **z-[60]**. A cross-cutting display banner (`NavDeniedBanner`) sits at 200.
   - **Host UI** (build mode, toolbars, portal popovers) uses the higher band — roughly sticky(200) / toast(500) / tooltip·popover(600).
   - Rule: a new display overlay slots **under 60** unless it must cover the scoreboard. Never 999 or 9999.
 

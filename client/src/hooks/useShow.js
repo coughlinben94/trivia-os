@@ -894,6 +894,15 @@ export function useShow() {
     await updateShowRow(show.id, { scoreboard_visible: visible })
   }
 
+  // Host countdown timer (lib/showTimer.js): { timer } or null to clear. Lives in
+  // the special_event jsonb; /display shows it as a layer over any slide.
+  async function setShowTimer(timer) {
+    if (!show) return
+    const special_event = timer ? { timer } : null
+    setShow(s => ({ ...s, special_event }))
+    await updateShowRow(show.id, { special_event })
+  }
+
   async function setAnswerReveal(visible) {
     if (!show) return
     setShow(s => ({ ...s, showState: { ...s.showState, answerReveal: visible } }))
@@ -1006,6 +1015,7 @@ export function useShow() {
     jumpTo,
     setScoreboardVisible,
     setAnswerReveal,
+    setShowTimer,
     setAudioPlaying,
     setScoresRevealed,
     updateRoundScore,

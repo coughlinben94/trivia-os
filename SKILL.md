@@ -194,7 +194,7 @@ client/src/
       ShowLibrary.jsx     — show CRUD modal opened from HostHeader (list, load, duplicate,
                              delete with two-step confirm, export, import); new-show creation
                              happens on the separate pre-load ShowPicker screen, not here
-                             (`ShowManager.jsx` is dead — no import/render site anywhere)
+                             (the old `ShowManager.jsx` was deleted 2026-10-01 — it had no import/render site)
       HostHeader.jsx      — "Score" button → opens ScoreboardModal; "Preview", "Export",
                              "Go Live →" buttons
       ThemePickerModal.jsx — theme selection + live preview
@@ -247,7 +247,7 @@ client/src/
       ScoreboardRevealSlide.jsx, CustomSlide.jsx, MultiQuestionSlide.jsx
       PixelateSeriesSlide.jsx, PylRevealSlide.jsx, StateOfUnionSlide.jsx
       WinnerRevealSlide.jsx   — drum roll (pre-recorded MP3) → confetti (canvas) → winner pop-in
-      QuestionCounter.jsx, BaynesWatermark.jsx, WaveformBars.jsx
+      QuestionCounter.jsx, WaveformBars.jsx
   hooks/
     useShow.js            — ALL show state, Supabase Realtime, CRUD actions (master hook)
   themes/
@@ -422,6 +422,10 @@ actions.saveResults()               // aggregates team_scores → final_scores +
 **Two independent show-shape implementations.** `Display.jsx` maintains its own show state (spreads raw Supabase rows directly) separately from `useShow.js`'s `normalizeShow()` (used by Host/Build/LiveMode). They drift independently: a new DB column must be threaded through BOTH by hand — `normalizeShow()` does not auto-map new columns. (Example: `audio_playing` was once absent from `normalizeShow()`, so a host-laptop reload lost it; it is carried now — `lib/normalizeShow.js` — and merged live by `lib/showStateMerge.js`.)
 
 
+### Host timer (2026-10-01, branch `feat/host-timer`)
+
+Live Mode's `TimerControl` card writes `shows.special_event = { timer }` via `actions.setShowTimer` (no migration; the column existed, unused). `/display` draws it with `TimerOverlay.jsx` (mounted once in `Display.jsx`, top-left of the stage, z-[70]) over ANY slide; chime is synthesized (`lib/timerChime.js`), plays once per timer id. Math + clock-skew rules live in `lib/showTimer.js` (read its header). Threaded by hand through `normalizeShow`, `showStateMerge`, `previewSlide` (preview strips it). No hotkey, not on the iPad remote.
+
 ### Audio: "Next plays audio" (rewritten 2026-10-01, branch `fix/audio-fail-loud`)
 
 `shows.audio_playing` = `{ slideId, playing, part }` is the ONE play request for a question's clip. Read this before touching audio on `/display` or `/host`.
@@ -446,7 +450,7 @@ Project: **Baynes Trivia**, id `qwtbgusqfoypvehnungr`. **Do not confuse with `dr
 shows { id, title, date, theme_id, slides jsonb, rounds jsonb, powerups jsonb,
         current_slide_id, current_slide_index, is_live, scoreboard_visible,
         scores_revealed, ticker_messages jsonb, audio_playing jsonb,
-        special_event jsonb,
+        special_event jsonb,                            -- host timer: { timer } (lib/showTimer.js), null = none
         theme_overrides jsonb NOT NULL DEFAULT '{}',   -- per-show font/color, see Theme System
         answer_reveal boolean,                          -- Stream Deck A key overlay state
         player_count integer, final_scores jsonb,        -- written by saveResults()

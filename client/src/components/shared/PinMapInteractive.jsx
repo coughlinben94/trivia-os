@@ -7,9 +7,13 @@ import { mapToLonLat, MAP_W, MAP_H } from '../../lib/usMapGeo.js'
 import { zoomAbout, clampView, screenToMap, pinMarkerSize, MAX_K } from '../../lib/pinView.js'
 import { isValidPin } from '../../lib/pinScoring.js'
 
-const HOLD_MS = 350
-const SLOP_PX = 8
-const PIN_LIFT_PX = 48 // pin tip sits this far ABOVE the finger while dragging
+const HOLD_MS = 300
+// Thumbs wobble: a held finger easily drifts 10px. 8px used to cancel the hold,
+// so the pin silently never dropped. Measured 2026-10-01; 14px keeps pans honest.
+const SLOP_PX = 14
+// The pin tip sits exactly under the finger. It used to be lifted 48px "so the
+// finger doesn't hide it", but the saved pin took that offset too: ~20% of the map
+// height north of the touch. The pin's head already shows above the fingertip.
 
 const round6 = n => Math.round(n * 1e6) / 1e6
 
@@ -28,11 +32,11 @@ export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disab
     const w = ref.current?.getBoundingClientRect().width
     return w > 0 ? MAP_W / w : null
   }
-  function toViewport(e, liftPx = 0) {
+  function toViewport(e) {
     const f = factor()
     if (f == null) return null
     const r = ref.current.getBoundingClientRect()
-    return [(e.clientX - r.left) * f, (e.clientY - r.top - liftPx) * f]
+    return [(e.clientX - r.left) * f, (e.clientY - r.top) * f]
   }
   function resetGesture() {
     const s = g.current
@@ -40,8 +44,8 @@ export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disab
   }
   function cancelTimer() { clearTimeout(g.current.timer); g.current.timer = null }
 
-  function placeDrag(e, liftPx) {
-    const p = toViewport(e, liftPx)
+  function placeDrag(e) {
+    const p = toViewport(e)
     if (!p) return
     const [mx, my] = screenToMap(viewRef.current, p[0], p[1])
     dragRef.current = { mx, my } // before setDrag: a pointerup before the re-render must still commit
@@ -73,7 +77,7 @@ export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disab
         s.timer = setTimeout(() => {
           if (s.mode !== 'maybe') return
           s.mode = 'drop'
-          placeDrag(s.last, PIN_LIFT_PX)
+          placeDrag(s.last)
         }, HOLD_MS)
       }
     } else if (s.pointers.size === 2) {
@@ -93,14 +97,18 @@ export default function PinMapInteractive({ pin, onPin, dropMode = 'hold', disab
     s.last = { clientX: e.clientX, clientY: e.clientY }
     if (s.mode === 'maybe') {
       if (Math.hypot(e.clientX - s.start.x, e.clientY - s.start.y) <= SLOP_PX) return
-      cancelTimer(); s.mode = 'pan'
+      cancelTimer()
+      // Not zoomed in: there is nothing to pan (the view is clamped), so a moving
+      // finger can only mean "place it here". Start the drop now instead of
+      // swallowing the touch.
+      if (dropMode === 'hold' && viewRef.current.k <= 1) { s.mode = 'drop'; placeDrag(e) } else s.mode = 'pan'
     }
     if (s.mode === 'pan') {
       const f = factor()
       if (f == null) return
       setView(clampView({ k: s.pan.view.k, tx: s.pan.view.tx + (e.clientX - s.pan.x) * f, ty: s.pan.view.ty + (e.clientY - s.pan.y) * f }))
     } else if (s.mode === 'drop') {
-      placeDrag(e, PIN_LIFT_PX)
+      placeDrag(e)
     } else if (s.mode === 'pinch' && s.pointers.size >= 2) {
       const [a, b] = [...s.pointers.values()]
       const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1

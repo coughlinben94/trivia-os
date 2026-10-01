@@ -64,3 +64,17 @@ describe('mergeShowStateRow: audio_playing', () => {
     expect(SHOW_STATE_COLUMNS).toContain('audio_playing')
   })
 })
+
+describe('mergeShowStateRow: special_event (host timer)', () => {
+  const t = (sentAt) => ({ timer: { id: 'x', sentAt } })
+  it('keeps ours when the column is absent from the payload', () => {
+    const p = { ...prev, special_event: t(5) }
+    expect(mergeShowStateRow(p, { id: 's1', answer_reveal: true }).special_event).toEqual(t(5))
+  })
+  it('takes a newer timer, a cancel (null), and ignores an older echo', () => {
+    const p = { ...prev, special_event: t(5) }
+    expect(mergeShowStateRow(p, { id: 's1', special_event: t(9) }).special_event).toEqual(t(9))
+    expect(mergeShowStateRow(p, { id: 's1', special_event: null }).special_event).toBeNull()
+    expect(mergeShowStateRow(p, { id: 's1', special_event: t(2) }).special_event).toEqual(t(5))
+  })
+})

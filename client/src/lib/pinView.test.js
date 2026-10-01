@@ -97,3 +97,14 @@ describe('pinMarkerSize', () => {
     expect(pinMarkerSize(undefined)).toBe(pinMarkerSize(335))
   })
 })
+
+describe('zoom ceiling', () => {
+  it('players can zoom in to 20x, far past the old 8x', () => {
+    expect(MAX_K).toBe(20)
+    expect(zoomAbout({ k: 1, tx: 0, ty: 0 }, 100, 100, 1000).k).toBe(20)
+  })
+  it('TV framing of near-identical pins still stops at 8x (the player ceiling does not leak into the reveal camera)', () => {
+    const v = fitView([[400, 250], [401, 250]])
+    expect(v.k).toBeLessThanOrEqual(8)
+  })
+})
