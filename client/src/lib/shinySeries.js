@@ -321,6 +321,10 @@ export function buildShinyTitleSlide(fmt, groupId, roundId = null) {
       shinyFormatName: fmt.name,
       shinyFormatIcon: fmt.icon,
       ...(fmt.input_schema?.type ? { shinyInputType: fmt.input_schema.type } : {}),
+      // Choice is one schema for single- and multi-pick; the rules card needs
+      // to know which (shinyExplainers.js explainerCopy). Stamped only when set.
+      ...(fmt.input_schema?.type === 'choice' && fmt.input_schema.multiSelect !== undefined
+        ? { shinyMultiSelect: !!fmt.input_schema.multiSelect } : {}),
       ...(fmt.default_subtitle ? { introSubtitle: fmt.default_subtitle } : {}),
       // Two-beat title (announce card, then "how it works") for formats with
       // an explainer — see lib/shinyExplainers.js.

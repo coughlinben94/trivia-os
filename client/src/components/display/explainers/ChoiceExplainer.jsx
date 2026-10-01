@@ -3,15 +3,16 @@ import { DEFAULT_CHOICE_POINTS, scoreChoiceSubmission } from '../../../lib/choic
 import { EASE_OUT } from '../../../lib/easings.js'
 import { SHINY_GOLD } from '../../../lib/shinyGold.js'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
+import { choiceVariantKey } from '../../../lib/shinyExplainers.js'
 
 // One 'choice' schema type covers single-pick (Mandela Effect) and multi-pick
-// (Mixology). The title slide only stamps the type, so the card shows both
-// kinds side by side; the phone's caption and ○/☐ glyphs (ChoiceBoard.jsx)
-// tell teams which one they're on. Synthetic text options stand in for the
+// (Mixology). New titles stamp data.shinyMultiSelect, so the card shows only
+// the matching half; older titles without the stamp show both side by side. Synthetic text options stand in for the
 // real pictures/chips. Points are host-set per slide, so only score vs 0.
 const SAMPLES = [
   {
     key: 'one',
+    variant: 'single',
     heading: 'Pick one',
     glyph: '○',
     prompt: 'Which is spelled right?',
@@ -24,6 +25,7 @@ const SAMPLES = [
   },
   {
     key: 'all',
+    variant: 'multi',
     heading: 'Pick every one that fits',
     glyph: '☐',
     prompt: 'Which are planets?',
@@ -44,7 +46,9 @@ export const SAMPLE_CHOICE_RESULTS = SAMPLES.map(sample => ({
   })),
 }))
 
-export default function ChoiceExplainer() {
+export default function ChoiceExplainer({ data } = {}) {
+  const variant = choiceVariantKey(data)
+  const samples = variant ? SAMPLE_CHOICE_RESULTS.filter(sample => sample.variant === variant) : SAMPLE_CHOICE_RESULTS
   const reduce = useReducedMotion()
   const { theme } = useTheme()
   const text = theme.colors.text
@@ -58,18 +62,22 @@ export default function ChoiceExplainer() {
   return (
     <div
       role="img"
-      aria-label="Example: a pick-one question and a pick-every-one question. Only the exact right picks score; a wrong, missing or extra pick scores 0."
+      aria-label={variant === 'single'
+        ? 'Example: a pick-one question. The right pick scores; a wrong pick scores 0.'
+        : variant === 'multi'
+          ? 'Example: a pick-every-one question. Only the exact right picks score; a missing or extra pick scores 0.'
+          : 'Example: a pick-one question and a pick-every-one question. Only the exact right picks score; a wrong, missing or extra pick scores 0.'}
       style={{
-        width: 'min(100%, 1600px)', height: '100%', display: 'flex',
+        width: variant ? 'min(100%, 1000px)' : 'min(100%, 1600px)', display: 'flex',
         alignItems: 'center', justifyContent: 'center', gap: '4vmin',
       }}
     >
-      {SAMPLE_CHOICE_RESULTS.map((sample, col) => {
+      {samples.map((sample, col) => {
         const base = 0.15 + col * 0.9
         const labelOf = id => sample.options.find(o => o.id === id).label
         return (
           <div key={sample.key} style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.6vmin' }}>
-            <motion.p {...enter(base)} style={{ margin: 0, fontFamily: displayFont, fontSize: 'clamp(2rem, 4vmin, 4.2rem)', lineHeight: 1, color: SHINY_GOLD }}>
+            <motion.p {...enter(base)} style={{ margin: 0, fontFamily: displayFont, fontSize: 'clamp(2rem, 3.4vmin, 3.8rem)', lineHeight: 1, color: SHINY_GOLD }}>
               {sample.heading}
             </motion.p>
             <motion.p {...enter(base + 0.06)} style={{ margin: 0, fontSize: 'clamp(1.4rem, 2.8vmin, 2.9rem)', color: text }}>
@@ -103,7 +111,7 @@ export default function ChoiceExplainer() {
                     </span>
                     <span>
                       <span style={{ display: 'block' }}>{answer.ids.map(labelOf).join(', ')}</span>
-                      <span style={{ fontSize: '0.75em', color: `${text}cc` }}>{answer.note}</span>
+                      <span style={{ fontSize: '0.88em', color: `${text}e0` }}>{answer.note}</span>
                     </span>
                     <span style={{ fontFamily: displayFont, fontSize: '1.3em', lineHeight: 1, color: scored ? SHINY_GOLD : `${text}c8` }}>
                       {scored ? 'Scores' : '0'}

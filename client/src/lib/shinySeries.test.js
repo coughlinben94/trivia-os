@@ -415,6 +415,15 @@ describe('buildShinyTitleSlide / withShinyTitleSlide', () => {
     expect(data.currentPart).toBe(0)
   })
 
+  it('a choice format stamps shinyMultiSelect from its schema; absent field stays absent', () => {
+    const build = schema => buildShinyTitleSlide({ id: 'fmt_generated_x', name: 'X', icon: '*', input_schema: schema }, 'sgrp_abc').data
+    expect(build({ type: 'choice', multiSelect: true }).shinyMultiSelect).toBe(true)
+    expect(build({ type: 'choice', multiSelect: false }).shinyMultiSelect).toBe(false)
+    expect(build({ type: 'choice' })).not.toHaveProperty('shinyMultiSelect')
+    // Only choice titles carry it.
+    expect(build({ type: 'order', multiSelect: true })).not.toHaveProperty('shinyMultiSelect')
+  })
+
   it('a format without a card stamps shinyInputType but stays one beat', () => {
     const { data } = buildShinyTitleSlide({ id: 'fmt_generated_x', name: 'X', icon: '*', input_schema: { type: 'race' } }, 'sgrp_abc', 'round_1')
     expect(data.shinyInputType).toBe('race')

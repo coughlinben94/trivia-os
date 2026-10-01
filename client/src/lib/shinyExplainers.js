@@ -1,7 +1,7 @@
 import { BENDLE_STEP_POINTS } from './bendleScoring.js'
 import { HUES_CUES_SCORE_BANDS } from './huesCuesScoring.js'
 import { PIN_MIN_ROOM_FOR_FRACTION, PIN_POINTS, PIN_WINNER_FRACTION } from './pinScoring.js'
-import { WAGER_TIERS } from './wagerScoring.js'
+import { DEFAULT_TIER_ID, WAGER_TIERS, getWagerTier } from './wagerScoring.js'
 import { MOVIE_CHAIN_POINTS } from './movieChainScoring.js'
 
 // The title card becomes a two-beat slide: announce, then explain. Existing
@@ -12,7 +12,14 @@ export const EXPLAINER_BEAT_PARTS = [{}, {}]
 const notSoDifferentPhotos = ['harry', 'niall', 'louis', 'zayn']
   .map(name => `/explainers/not-so-different/${name}.jpg`)
 
-const wagerPercents = WAGER_TIERS.map(tier => `${Math.round(tier.threshold * 100)}%`).join(' / ')
+// Thresholds in words, not percentages: wagerTierBar rounds bars up and bumps
+// colliding tiers apart, so in a room of 10 or fewer Sun means beating every
+// other team. "At least" keeps every word a true lower bound; the phone shows
+// the exact head count. A threshold missing here falls back to its percent.
+const WAGER_THRESHOLD_WORDS = { 0.5: 'half', 0.75: 'three-quarters', 0.9: 'nearly all' }
+export const wagerThresholdWords = WAGER_TIERS
+  .map(tier => WAGER_THRESHOLD_WORDS[tier.threshold] ?? `${Math.round(tier.threshold * 100)}%`)
+  .join(' / ')
 const wagerPoints = WAGER_TIERS.map(tier => `+${tier.points}`).join(' / ')
 
 const pinPercent = Math.round(100 * PIN_WINNER_FRACTION.numerator / PIN_WINNER_FRACTION.denominator)
@@ -64,8 +71,8 @@ export const SHINY_EXPLAINERS = Object.freeze([
     rendererKey: 'wager',
     action: 'Pick a wager before you see the question, then enter a number on your phone and lock it in.',
     scoring: [
-      `Be closer than ${wagerPercents} of the other teams to win ${wagerPoints}.`,
-      'Miss your bar and score 0. Your phone shows how many teams you need to beat.',
+      `Beat at least ${wagerThresholdWords} of the other teams to win ${wagerPoints}.`,
+      `Ties don't count as beating. Miss your bar: 0. No wager = ${getWagerTier(DEFAULT_TIER_ID).label}.`,
     ],
     assets: [],
   }),
@@ -104,13 +111,15 @@ export const SHINY_EXPLAINERS = Object.freeze([
     action: 'On your phone, link the two movies through shared actors, then lock it in.',
     scoring: [
       `Hit the shortest chain or beat it: +${MOVIE_CHAIN_POINTS.shortest} · one extra movie: +${MOVIE_CHAIN_POINTS.oneLonger}.`,
-      'Count includes both end movies. Any wrong link scores 0.',
+      'Count includes both end movies. A wrong link or a repeated movie or actor scores 0.',
     ],
     assets: [],
   }),
   // One 'choice' schema covers single-pick (Mandela Effect) and multi-pick
-  // (Mixology); only the phone says which (ChoiceBoard caption + ○/☐), so
-  // the copy points there. Points are host-set (pointsForChoice): no number.
+  // (Mixology). New titles stamp data.shinyMultiSelect (buildShinyTitleSlide),
+  // and explainerCopy() picks the matching variant; older titles without the
+  // stamp fall back to the generic action/scoring below. Points are host-set
+  // (pointsForChoice): no number.
   Object.freeze({
     inputType: 'choice',
     mode: 'rules',
@@ -120,6 +129,19 @@ export const SHINY_EXPLAINERS = Object.freeze([
       'All or nothing: only the exact right picks score.',
       'One wrong, missing or extra pick scores 0.',
     ],
+    variants: Object.freeze({
+      single: Object.freeze({
+        action: 'Tap the one right answer on your phone, then lock it in.',
+        scoring: ['Pick the right one and you score.', 'A wrong pick scores 0.'],
+      }),
+      multi: Object.freeze({
+        action: 'Tap every answer that fits on your phone, then lock it in.',
+        scoring: [
+          'All or nothing: only the exact right picks score.',
+          'One wrong, missing or extra pick scores 0.',
+        ],
+      }),
+    }),
     assets: [],
   }),
   // Points per correct pair are host-set per slide (pointsPerMatch), so the
@@ -151,3 +173,14 @@ export function getShinyExplainer(selector, inputType) {
 // callers. Passing the schema type adds lookup for generated format IDs.
 export const hasExplainer = (formatId, inputType) => !!getShinyExplainer(formatId, inputType)
 export const explainerImageUrls = (formatId, inputType) => getShinyExplainer(formatId, inputType)?.assets ?? []
+
+// The action/scoring a card shows for this title. Only 'choice' has variants,
+// chosen by the stamped boolean data.shinyMultiSelect; anything else (or an
+// older title without the stamp) gets the definition's own copy.
+export function choiceVariantKey(data) {
+  return typeof data?.shinyMultiSelect === 'boolean' ? (data.shinyMultiSelect ? 'multi' : 'single') : null
+}
+export function explainerCopy(definition, data) {
+  const variant = definition?.variants?.[choiceVariantKey(data)]
+  return { action: variant?.action ?? definition?.action, scoring: variant?.scoring ?? definition?.scoring ?? [] }
+}

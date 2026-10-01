@@ -40,11 +40,11 @@ export default function OrderExplainer() {
       role="img"
       aria-label={`Example order question: ${PROMPT}. The exact order scores; one swap scores 0.`}
       style={{
-        width: 'min(100%, 1400px)', height: '100%', display: 'flex', flexDirection: 'column',
+        width: 'min(100%, 1400px)', display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center', gap: '2.4vmin',
       }}
     >
-      <motion.p {...enter(0.15)} style={{ margin: 0, fontFamily: displayFont, fontSize: 'clamp(2rem, 4.2vmin, 4.4rem)', lineHeight: 1, color: text }}>
+      <motion.p {...enter(0.15)} style={{ margin: 0, fontFamily: displayFont, fontSize: 'clamp(2rem, 3.4vmin, 3.8rem)', lineHeight: 1, color: text }}>
         {PROMPT}
       </motion.p>
 
@@ -54,7 +54,7 @@ export default function OrderExplainer() {
             position: 'relative', flex: '0 1 22%', aspectRatio: '3 / 2', maxHeight: '23vmin',
             display: 'grid', placeItems: 'center', borderRadius: 12,
             background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.22)',
-            fontFamily: displayFont, fontSize: 'clamp(2rem, 4.6vmin, 4.8rem)', color: text,
+            fontFamily: displayFont, fontSize: 'clamp(2rem, 3.8vmin, 4.2rem)', color: text,
           }}>
             {item.label}
             <span style={{
@@ -98,7 +98,7 @@ export default function OrderExplainer() {
                 <span style={{ display: 'block', fontFamily: displayFont, fontSize: '1.3em', lineHeight: 1, color: scored ? SHINY_GOLD : `${text}c8` }}>
                   {scored ? 'Scores' : '0'}
                 </span>
-                <span style={{ fontSize: '0.75em', color: `${text}cc`, whiteSpace: 'nowrap' }}>{answer.note}</span>
+                <span style={{ fontSize: '0.8em', color: `${text}e0`, whiteSpace: 'nowrap' }}>{answer.note}</span>
               </span>
             </motion.div>
           )

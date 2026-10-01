@@ -17,14 +17,14 @@ export default function NotSoDifferentExplainer({ definition }) {
   const reduce = useReducedMotion()
   const photos = definition?.assets ?? []
   const enter = (at, dist = 14) => ({
-    initial: reduce ? { opacity: 0 } : { opacity: 0, transform: `translateY(${dist}px) scale(0.94)` },
+    initial: reduce ? { opacity: 0 } : { opacity: 0, transform: `translateY(${dist}px) scale(0.96)` },
     animate: reduce ? { opacity: 1 } : { opacity: 1, transform: 'translateY(0px) scale(1)' },
     transition: { duration: reduce ? 0.3 : 0.5, delay: reduce ? 0 : at, ease: EASE_OUT },
   })
   return (
     <div style={{
-      position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', gap: '3vmin',
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', gap: '2.6vmin',
       fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`, color: SHINY_GOLD, textAlign: 'center',
     }}>
       <motion.p {...enter(0.1, 8)} style={{ margin: 0, fontSize: '7vmin', textShadow: `0 0 3vmin ${SHINY_GOLD_GLOW}` }}>
@@ -36,7 +36,7 @@ export default function NotSoDifferentExplainer({ definition }) {
             key={src}
             {...enter(TILE_AT[i])}
             style={{
-              position: 'relative', width: '19vmin', height: '19vmin', borderRadius: '2vmin', overflow: 'hidden',
+              position: 'relative', width: '23vmin', height: '23vmin', borderRadius: 14, overflow: 'hidden',
               border: `0.5vmin solid ${SHINY_GOLD}`, boxShadow: `0 0 4vmin ${SHINY_GOLD_GLOW}55`,
             }}
           >
@@ -51,7 +51,7 @@ export default function NotSoDifferentExplainer({ definition }) {
           </motion.div>
         ))}
       </div>
-      <motion.p {...enter(ASK_AT, 8)} style={{ margin: 0, fontSize: '5vmin', opacity: 0.85 }}>
+      <motion.p {...enter(ASK_AT, 8)} style={{ margin: 0, fontSize: '5vmin' }}>
         What connects them?
       </motion.p>
       <motion.p {...enter(ANSWER_AT, 8)} style={{ margin: 0, fontSize: '9vmin', textShadow: `0 0 4vmin ${SHINY_GOLD_GLOW}` }}>

@@ -1,4 +1,6 @@
 import { useEffect } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { EASE_OUT } from '../../../lib/easings.js'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { warmImages } from '../../../lib/warmImages.js'
 import { getShinyExplainer } from '../../../lib/shinyExplainers.js'
@@ -41,12 +43,21 @@ const EXPLAINER_RENDERERS = {
 // "already landed" repeat case for a slide that exists exactly once.
 //
 // data: { isShiny: true, shinyGroupId, seriesTheme, shinyFormatName,
-//         shinyFormatId, shinyFormatIcon, shinyInputType?, introSubtitle?,
-//         hostPhotoUrl?, parts?, currentPart? }
+//         shinyFormatId, shinyFormatIcon, shinyInputType?, shinyMultiSelect?,
+//         introSubtitle?, hostPhotoUrl?, parts?, currentPart? }
 // parts/currentPart exist only when the format has a rules card
 // (shinyExplainers.js): beat 0 = announce, beat 1 = explainer.
+// shinyMultiSelect is stamped only on choice titles (single- vs multi-pick).
 // — see buildShinyTitleSlide in lib/shinySeries.js for the one place that
 // stamps this shape.
+//
+// Beat change is a short opacity crossfade. The announce card stays mounted
+// under the explainer (faded out) and always sees currentPart 0, so its
+// replayKey never changes: stepping back from the card shows the landed title
+// instead of replaying the spin-land entrance. Renderers receive
+// { definition, data } (data = slide.data).
+const FADE = { duration: 0.22, ease: EASE_OUT }
+
 export default function ShinyTitleSlide({ slide, show }) {
   const { theme } = useTheme()
   const definition = getShinyExplainer(slide.data?.shinyFormatId, slide.data?.shinyInputType)
@@ -55,16 +66,42 @@ export default function ShinyTitleSlide({ slide, show }) {
     warmImages(definition.assets)
     if (definition.preloadMapData) preloadUsMapData()
   }, [definition])
+  // The intro keys its entrance on `${slide.id}:${currentPart}`; pinning
+  // currentPart to 0 keeps that key stable across beat changes.
+  const introSlide = slide.data?.currentPart ? { ...slide, data: { ...slide.data, currentPart: 0 } } : slide
   const Renderer = EXPLAINER_RENDERERS[definition?.rendererKey]
-  if ((slide.data?.currentPart ?? 0) >= 1 && definition && Renderer) {
-    const example = <Renderer definition={definition} />
-    return (
-      <div data-testid="shiny-explainer">
-        {definition.mode === 'rules'
-          ? <ShinyRulesCard definition={definition}>{example}</ShinyRulesCard>
-          : <ShinyExampleFrame>{example}</ShinyExampleFrame>}
-      </div>
-    )
-  }
-  return <ShinyIntroScreen slide={slide} theme={theme} show={show} />
+  const showExplainer = (slide.data?.currentPart ?? 0) >= 1 && !!definition && !!Renderer
+  // Plain intro (no card): render exactly as before.
+  if (!definition || !Renderer) return <ShinyIntroScreen slide={slide} theme={theme} show={show} />
+  const data = slide.data ?? {}
+  return (
+    <>
+      <motion.div
+        aria-hidden={showExplainer || undefined}
+        initial={false}
+        animate={{ opacity: showExplainer ? 0 : 1 }}
+        transition={FADE}
+        style={{ position: 'absolute', inset: 0, pointerEvents: showExplainer ? 'none' : undefined }}
+      >
+        <ShinyIntroScreen slide={introSlide} theme={theme} show={show} />
+      </motion.div>
+      <AnimatePresence initial={false}>
+        {showExplainer && (
+          <motion.div
+            key="explainer"
+            data-testid="shiny-explainer"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={FADE}
+            style={{ position: 'absolute', inset: 0 }}
+          >
+            {definition.mode === 'rules'
+              ? <ShinyRulesCard definition={definition} data={data}><Renderer definition={definition} data={data} /></ShinyRulesCard>
+              : <ShinyExampleFrame><Renderer definition={definition} data={data} /></ShinyExampleFrame>}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  )
 }

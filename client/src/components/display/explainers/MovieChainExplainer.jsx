@@ -57,12 +57,12 @@ export default function MovieChainExplainer() {
       role="img"
       aria-label={`Example: link ${MOVIES[START]} to ${MOVIES[END]}, shortest chain ${ANNOUNCED} movies. A ${ANNOUNCED}-movie chain scores ${SAMPLE_CHAINS[0].points}, a ${ANNOUNCED + 1}-movie chain scores ${SAMPLE_CHAINS[1].points}, a chain with a wrong link scores 0.`}
       style={{
-        width: 'min(100%, 1600px)', height: '100%', display: 'flex', flexDirection: 'column',
+        width: 'min(100%, 1600px)', display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center', gap: '2vmin',
       }}
     >
       <motion.div {...enter(0.15)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.6vmin' }}>
-        <p style={{ margin: 0, fontFamily: displayFont, fontSize: 'clamp(2rem, 4.4vmin, 4.6rem)', lineHeight: 1, color: text }}>
+        <p style={{ margin: 0, fontFamily: displayFont, fontSize: 'clamp(2rem, 3.4vmin, 3.8rem)', lineHeight: 1, color: text }}>
           {MOVIES[START]} <span aria-hidden="true" style={{ color: SHINY_GOLD }}>→</span> {MOVIES[END]}
         </p>
         <p style={{ margin: 0, fontSize: 'clamp(1.3rem, 2.6vmin, 2.7rem)', color: SHINY_GOLD, textShadow: `0 0 1.6vmin ${SHINY_GOLD_GLOW}55` }}>
@@ -79,7 +79,7 @@ export default function MovieChainExplainer() {
               padding: '1.3vmin 2.4vmin', borderRadius: 12, textAlign: 'left',
               background: scored ? `${SHINY_GOLD}24` : 'rgba(255,255,255,0.05)',
               outline: scored ? `2px solid ${SHINY_GOLD}aa` : 'none', outlineOffset: '-2px',
-              fontSize: 'clamp(1.25rem, 2.5vmin, 2.6rem)', color: text,
+              fontSize: 'clamp(1.35rem, 2.6vmin, 2.8rem)', color: text,
             }}>
               <span aria-hidden="true" style={{ fontFamily: displayFont, fontSize: '1.4em', lineHeight: 1, color: scored ? SHINY_GOLD : `${text}c8` }}>
                 {scored ? '✓' : '✗'}
@@ -91,7 +91,7 @@ export default function MovieChainExplainer() {
                   return (
                     <span key={id + index} style={{ display: 'contents' }}>
                       {index > 0 && (
-                        <span style={{ whiteSpace: 'nowrap', fontSize: '0.78em', color: broken ? text : SHINY_GOLD }}>
+                        <span style={{ whiteSpace: 'nowrap', fontSize: '0.85em', color: broken ? text : SHINY_GOLD }}>
                           <span aria-hidden="true">→ </span>
                           <span style={{ textDecoration: broken ? 'underline wavy' : 'none', textUnderlineOffset: '0.25em' }}>
                             {ACTORS[actor]}
@@ -108,7 +108,7 @@ export default function MovieChainExplainer() {
                 <span style={{ display: 'block', fontFamily: displayFont, fontSize: '1.3em', lineHeight: 1, color: scored ? SHINY_GOLD : `${text}c8`, fontVariantNumeric: 'tabular-nums' }}>
                   {scored ? `+${chain.points}` : '0'}
                 </span>
-                <span style={{ fontSize: '0.72em', color: `${text}cc`, whiteSpace: 'nowrap' }}>{noteFor(chain)}</span>
+                <span style={{ fontSize: '0.85em', color: `${text}e0`, whiteSpace: 'nowrap' }}>{noteFor(chain)}</span>
               </span>
             </motion.div>
           )

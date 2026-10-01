@@ -41,11 +41,11 @@ export default function HuesCuesExplainer() {
   const gridItems = []
   gridItems.push(<span key="corner" />)
   cells.columns.forEach(col => gridItems.push(
-    <span key={`col-${col}`} style={{ display: 'grid', placeItems: 'center', color: `${theme.colors.text}c8`, fontSize: 'clamp(0.9rem, 1.45vmin, 1.4rem)', fontVariantNumeric: 'tabular-nums' }}>{col}</span>
+    <span key={`col-${col}`} style={{ display: 'grid', placeItems: 'center', color: `${theme.colors.text}c8`, fontSize: 'clamp(1.1rem, 2.2vmin, 2.4rem)', fontVariantNumeric: 'tabular-nums' }}>{col}</span>
   ))
 
   cells.rows.forEach(row => {
-    gridItems.push(<span key={`row-${row}`} style={{ display: 'grid', placeItems: 'center', color: `${theme.colors.text}c8`, fontSize: 'clamp(0.9rem, 1.45vmin, 1.4rem)', fontVariantNumeric: 'tabular-nums' }}>{row}</span>)
+    gridItems.push(<span key={`row-${row}`} style={{ display: 'grid', placeItems: 'center', color: `${theme.colors.text}c8`, fontSize: 'clamp(1.1rem, 2.2vmin, 2.4rem)', fontVariantNumeric: 'tabular-nums', paddingRight: '0.6vmin' }}>{row}</span>)
     cells.columns.forEach(col => {
       const cell = cells.byCode.get(`${col}${row}`)
       const distance = chebyshevDistance(cell, TARGET)
@@ -56,19 +56,19 @@ export default function HuesCuesExplainer() {
         : distance === 1
           ? '2px solid rgba(255,255,255,0.96)'
           : distance === 2
-            ? '1px dashed rgba(255,255,255,0.82)'
+            ? '2px dashed rgba(255,255,255,0.9)'
             : '1px solid rgba(0,0,0,0.28)'
       gridItems.push(
         <div key={cell.code} title={cell.code} style={{
           position: 'relative', minWidth: 0, minHeight: 0, display: 'grid', placeItems: 'center',
           background: cell.hex, boxShadow: `inset 0 0 0 ${isTarget ? 3 : distance === 1 ? 2 : 1}px ${isTarget ? SHINY_GOLD : distance === 1 ? 'rgba(255,255,255,0.96)' : 'rgba(0,0,0,0.28)'}`,
-          outline: distance === 2 ? outline : 'none', outlineOffset: '-1px', zIndex: isTarget || isGuess ? 1 : 0,
+          outline: distance === 2 ? outline : 'none', outlineOffset: '-2px', zIndex: isTarget || isGuess ? 1 : 0,
         }}>
           {(isTarget || isGuess) && (
             <span style={{
-              display: 'grid', placeItems: 'center', width: '2.3vmin', height: '2.3vmin', minWidth: 24, minHeight: 24,
+              display: 'grid', placeItems: 'center', width: '3.6vmin', height: '3.6vmin', minWidth: 30, minHeight: 30,
               borderRadius: '50%', background: '#06100d', color: isTarget ? SHINY_GOLD : '#fff',
-              border: `1px solid ${isTarget ? SHINY_GOLD : '#fff'}`, fontSize: 'clamp(0.8rem, 1.25vmin, 1.2rem)', fontWeight: 800,
+              border: `2px solid ${isTarget ? SHINY_GOLD : '#fff'}`, fontSize: 'clamp(1.1rem, 2.2vmin, 2.4rem)', fontWeight: 800, lineHeight: 1,
             }}>
               {isTarget ? 'T' : 'G'}
             </span>
@@ -80,7 +80,7 @@ export default function HuesCuesExplainer() {
 
   return (
     <div style={{
-      width: 'min(100%, 1350px)', height: '100%', display: 'flex', alignItems: 'center',
+      width: 'min(100%, 1500px)', display: 'flex', alignItems: 'center',
       justifyContent: 'center', gap: '5vmin', color: theme.colors.text,
       fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
     }}>
@@ -91,7 +91,7 @@ export default function HuesCuesExplainer() {
         role="img"
         aria-label="Example crop of the color grid. H15 is the target; I16 is a diagonal neighboring guess."
         style={{
-          width: 'min(55vh, 49vw)', maxHeight: '56vh', aspectRatio: '1', flexShrink: 0,
+          width: 'min(60vh, 52vw)', maxHeight: '60vh', aspectRatio: '1', flexShrink: 0,
           display: 'grid', gridTemplateColumns: 'auto repeat(9, minmax(0, 1fr))',
           gridTemplateRows: 'auto repeat(9, minmax(0, 1fr))', gap: '0.25vmin',
         }}
@@ -103,19 +103,19 @@ export default function HuesCuesExplainer() {
         initial={reduce ? { opacity: 0 } : { opacity: 0, transform: 'translateY(14px)' }}
         animate={reduce ? { opacity: 1 } : { opacity: 1, transform: 'translateY(0px)' }}
         transition={{ duration: 0.45, delay: reduce ? 0 : 0.9, ease: EASE_OUT }}
-        style={{ maxWidth: '34%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1.4vmin', textAlign: 'left' }}
+        style={{ maxWidth: '38%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1.4vmin', textAlign: 'left' }}
       >
-        <span style={{ color: SHINY_GOLD, fontSize: 'clamp(1rem, 1.8vmin, 1.8rem)', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>Clue</span>
-        <span style={{ fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`, fontSize: 'clamp(2rem, 4.1vmin, 4.4rem)', lineHeight: 1.08, textWrap: 'balance' }}>
+        <span style={{ color: SHINY_GOLD, fontSize: 'clamp(1.3rem, 2.6vmin, 2.8rem)', fontWeight: 700 }}>Clue</span>
+        <span style={{ fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`, fontSize: 'clamp(2rem, 3.4vmin, 3.8rem)', lineHeight: 1.08, textWrap: 'balance' }}>
           Fresh-cut grass
         </span>
-        <span style={{ fontSize: 'clamp(1.1rem, 1.8vmin, 1.8rem)', color: `${theme.colors.text}cf` }}>
-          Guess <strong style={{ color: '#fff' }}>I16</strong> lands diagonally beside target <strong style={{ color: SHINY_GOLD }}>H15</strong>.
+        <span style={{ fontSize: 'clamp(1.3rem, 2.5vmin, 2.7rem)', lineHeight: 1.25, color: `${theme.colors.text}e0` }}>
+          Guess <strong style={{ color: theme.colors.text }}>I16</strong> lands diagonally beside target <strong style={{ color: SHINY_GOLD }}>H15</strong>.
         </span>
-        <span style={{ color: SHINY_GOLD, fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`, fontSize: 'clamp(1.7rem, 2.7vmin, 2.8rem)' }}>
+        <span style={{ color: SHINY_GOLD, fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`, fontSize: 'clamp(2rem, 3.4vmin, 3.8rem)' }}>
           +{SAMPLE_GUESS_POINTS} points
         </span>
-        <span style={{ color: `${theme.colors.text}a8`, fontSize: 'clamp(0.95rem, 1.45vmin, 1.45rem)', lineHeight: 1.3 }}>
+        <span style={{ color: `${theme.colors.text}d0`, fontSize: 'clamp(1.1rem, 2.2vmin, 2.4rem)', lineHeight: 1.3 }}>
           T = exact target · G = guess. Solid outlines are one square away; dashed outlines are two.
         </span>
       </motion.div>

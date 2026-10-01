@@ -39,7 +39,7 @@ export default function WagerExplainer() {
       role="img"
       aria-label={`Example wager room of five teams. Answer ${SAMPLE_ANSWER}. Team ${MISSED.teamName} guessed close but wagered ${getWagerTier(MISSED.tier).label} and scored 0.`}
       style={{
-        width: 'min(100%, 1500px)', height: '100%', display: 'flex', alignItems: 'center',
+        width: 'min(100%, 1600px)', display: 'flex', alignItems: 'center',
         justifyContent: 'center', gap: '5vmin', fontVariantNumeric: 'tabular-nums',
       }}
     >
@@ -53,9 +53,9 @@ export default function WagerExplainer() {
             border: `${1 + index}px solid ${TIER_TINT[tier.id]}cc`, background: `${TIER_TINT[tier.id]}1a`,
           }}>
             <span style={{ gridRow: 'span 2', fontSize: 'clamp(2.2rem, 4.6vmin, 4.6rem)', lineHeight: 1 }}>{tier.emoji}</span>
-            <span style={{ fontFamily: displayFont, fontSize: 'clamp(1.8rem, 3.5vmin, 3.6rem)', lineHeight: 1.05, color: text }}>{tier.label}</span>
-            <span style={{ gridRow: 'span 2', fontFamily: displayFont, fontSize: 'clamp(2.1rem, 4.4vmin, 4.4rem)', color: TIER_TINT[tier.id] }}>{tier.points}</span>
-            <span style={{ fontSize: 'clamp(1.15rem, 2.1vmin, 2.1rem)', color: `${text}d0` }}>{wagerOddsLine(tier.id, ROOM)}</span>
+            <span style={{ fontFamily: displayFont, fontSize: 'clamp(1.8rem, 3.2vmin, 3.5rem)', lineHeight: 1.05, color: text }}>{tier.label}</span>
+            <span style={{ gridRow: 'span 2', fontFamily: displayFont, fontSize: 'clamp(2.1rem, 3.8vmin, 4rem)', color: TIER_TINT[tier.id] }}>{tier.points}</span>
+            <span style={{ fontSize: 'clamp(1.3rem, 2.3vmin, 2.5rem)', color: `${text}e0` }}>{wagerOddsLine(tier.id, ROOM)}</span>
           </motion.div>
         ))}
       </div>
@@ -63,10 +63,11 @@ export default function WagerExplainer() {
       <div style={{ flex: 1, minWidth: 0, maxWidth: 860, display: 'flex', flexDirection: 'column', gap: '1.2vmin' }}>
         <motion.div {...enter(0.55)} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '1.5vmin' }}>
           <span style={{ fontSize: 'clamp(1.4rem, 2.6vmin, 2.6rem)', color: `${text}d0` }}>Answer</span>
-          <span style={{ fontFamily: displayFont, fontSize: 'clamp(3rem, 6.4vmin, 6.6rem)', lineHeight: 1, color: SHINY_GOLD }}>{SAMPLE_ANSWER}</span>
+          <span style={{ fontFamily: displayFont, fontSize: 'clamp(2.6rem, 5vmin, 5.4rem)', lineHeight: 1, color: SHINY_GOLD }}>{SAMPLE_ANSWER}</span>
         </motion.div>
         {SAMPLE_WAGER_RESULTS.map((result, index) => {
           const tier = getWagerTier(result.tier)
+          const missed = result.teamId === MISSED.teamId
           return (
             <motion.div key={result.teamId} {...enter(0.9 + index * 0.08, 10)} style={{
               display: 'grid', gridTemplateColumns: '3ch auto 1fr auto auto', alignItems: 'center', columnGap: '1.6vmin',
@@ -77,18 +78,18 @@ export default function WagerExplainer() {
             }}>
               <span style={{ fontFamily: displayFont, fontSize: '1.25em', color: text }}>{result.teamName}</span>
               <span style={{ fontSize: '1.15em', lineHeight: 1 }}>{tier.emoji}</span>
-              <span style={{ color: `${text}d0`, whiteSpace: 'nowrap' }}>{tier.label}</span>
+              <span style={{ color: missed ? text : `${text}e0`, whiteSpace: 'nowrap', textDecoration: missed ? 'underline wavy' : 'none', textUnderlineOffset: '0.25em' }}>{tier.label}</span>
               <span style={{ color: text }}>{result.guess}</span>
-              <span style={{
-                minWidth: '3.2ch', textAlign: 'right', fontFamily: displayFont, fontSize: '1.3em',
-                color: result.won ? SHINY_GOLD : `${text}b8`,
-              }}>
-                {result.won ? `+${result.points}` : '0'}
+              <span style={{ minWidth: '3.2ch', textAlign: 'right' }}>
+                <span style={{ display: 'block', fontFamily: displayFont, fontSize: '1.3em', lineHeight: 1, color: result.won ? SHINY_GOLD : `${text}d0` }}>
+                  {result.won ? `+${result.points}` : '0'}
+                </span>
+                {missed && <span style={{ fontSize: '0.82em', color: `${text}e0`, whiteSpace: 'nowrap' }}>needs {MISSED_BAR}</span>}
               </span>
             </motion.div>
           )
         })}
-        <motion.p {...enter(1.6, 8)} style={{ margin: '0.6vmin 0 0', fontSize: 'clamp(1.2rem, 2.3vmin, 2.4rem)', color: `${text}d9`, textWrap: 'balance' }}>
+        <motion.p {...enter(1.6, 8)} style={{ margin: '0.6vmin 0 0', fontSize: 'clamp(1.3rem, 2.4vmin, 2.6rem)', color: `${text}e6`, textWrap: 'balance' }}>
           {MISSED.teamName} beat {MISSED.beaten} of {ROOM - 1} but wagered {getWagerTier(MISSED.tier).label}, which needs {MISSED_BAR}.
         </motion.p>
       </div>
