@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import ShinyMovieChainQuestion from './ShinyMovieChainQuestion.jsx'
+import ShinyMovieChainQuestion, { lockedLabel } from './ShinyMovieChainQuestion.jsx'
 
 vi.mock('../../../lib/supabase.js', () => ({ supabase: { rpc: vi.fn() } }))
 
@@ -22,5 +22,11 @@ describe('Movie Chain TV', () => {
     expect(markup).toContain('Alex')
     expect(markup).toContain('15 points: 1 team')
     expect(markup).toContain('0 points: 1 team')
+  })
+
+  it('says "1 team", not "1 teams", on the TV', () => {
+    expect(lockedLabel(0)).toBe('0 teams locked in')
+    expect(lockedLabel(1)).toBe('1 team locked in')
+    expect(lockedLabel(7)).toBe('7 teams locked in')
   })
 })

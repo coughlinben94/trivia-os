@@ -4,6 +4,8 @@ import { EASE_OUT } from '../../../lib/easings.js'
 import ShinySignal from '../ShinySignal.jsx'
 import { supabase } from '../../../lib/supabase.js'
 
+export const lockedLabel = n => `${n} ${n === 1 ? 'team' : 'teams'} locked in`
+
 export default function ShinyMovieChainQuestion({ slide, theme }) {
   const { data } = slide
   const reduce = useReducedMotion()
@@ -36,7 +38,7 @@ export default function ShinyMovieChainQuestion({ slide, theme }) {
       <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere', textWrap: 'balance' }}>{data.movieChainEnd?.title ?? 'Ending movie'}</span>
     </div>}
     <p style={{ margin: 0, textAlign: 'center', fontSize: longChain ? '2rem' : 'clamp(1.5rem, 2.4vw, 3rem)', color: gold }}>Shortest chain: {data.movieChainCount} movies</p>
-    {!data.movieChainLocked && !data.movieChainRevealed && <p style={{ margin: 0, textAlign: 'center', fontSize: 'clamp(1.2rem, 1.7vw, 2rem)' }}>{submitted} teams locked in</p>}
+    {!data.movieChainLocked && !data.movieChainRevealed && <p style={{ margin: 0, textAlign: 'center', fontSize: 'clamp(1.2rem, 1.7vw, 2rem)' }}>{lockedLabel(submitted)}</p>}
     {data.movieChainLocked && !data.movieChainRevealed && <p style={{ margin: 0, textAlign: 'center', fontSize: 'clamp(1.5rem, 2vw, 2.5rem)' }}>Answers locked · final connection coming up</p>}
     {data.movieChainRevealed && <motion.div initial={reduce ? false : { opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE_OUT }} style={{ display: 'grid', gap: longChain ? '0.9rem' : '1.5rem' }}>
       {example ? <div style={{ border: `2px solid ${gold}`, borderRadius: 16, padding: longChain ? '0.8rem 1.2rem' : '1.2rem 1.6rem', textAlign: 'center', lineHeight: 1.3 }}>

@@ -185,8 +185,8 @@ export default function MovieChainBoard({ slide, team, theme, preview = false, o
       <p style={{ margin: '0.3rem 0 0' }}>{result.performerLabels?.at(-1) ?? result.performers?.at(-1) ?? 'Final performer'} {result.finalConnected ? 'is credited in' : 'is not credited in'} {end?.title}. {result.movieCount ?? movies.length} movies in your chain.</p>
       {result.corrected && <p style={{ margin: '0.3rem 0 0' }}>Host corrected this result.</p>}
     </div>
-      : data.movieChainRevealed ? <p style={{ margin: 0 }}>No scored chain recorded for your team.</p>
-        : savedChain ? <p style={{ margin: 0 }}>{locked ? 'Waiting for the host to reveal the final connection.' : committed ? 'Waiting for the host to reveal the final connection.' : 'Your previous chain remains submitted until you lock in this revision.'}</p>
-          : locked ? <p style={{ margin: 0 }}>Chains are locked. No chain was submitted.</p> : null}
+      : data.movieChainRevealed ? <p role="status" style={{ margin: 0 }}>No scored chain recorded for your team.</p>
+        : savedChain ? <p role="status" style={{ margin: 0 }}>{locked ? 'Waiting for the host to reveal the final connection.' : committed ? 'Waiting for the host to reveal the final connection.' : 'Your previous chain remains submitted until you lock in this revision.'}</p>
+          : locked ? <p role="status" style={{ margin: 0 }}>Chains are locked. No chain was submitted.</p> : null}
   </section>
 }
