@@ -30,6 +30,8 @@ import {
   TEAM_PICKER_HOLD_MS,
 } from '../lib/slideStepping.js'
 import { warmYoutubeAudio } from '../lib/youtubeWarmAudio.js'
+import { director } from '../audio/director.js'
+import { resolveSlideClip } from '../lib/slideClip.js'
 import { keepAwake } from '../lib/keepAwake.js'
 import { useRemoteLink, useRemoteLinkFlag } from '../hooks/useRemoteLink.js'
 import { DISPLAY_RELAY_URL } from '../lib/remoteProtocol.js'
@@ -1486,12 +1488,15 @@ export default function Display() {
       // warm itself at mount — its press comes well after, same as a shiny
       // audio question's. end matters: warm and claim must agree on the pool
       // key, and QuestionAudio claims with the trim out-point.
-      if (s?.type === 'question' && !s.data?.isShiny && s.data?.audioTrigger === 'advance') {
-        const q = resolveShinyPart(s.data)
-        if (q.youtubeId) warmYoutubeAudio(q.youtubeId, q.youtubeStart ?? 0, q.youtubeEnd ?? null)
-      }
+      const qc = resolveSlideClip(s)
+      if (qc?.trigger === 'advance') director.warm(qc.clip)
     }
   }, [isPreview, isDemo, show?.is_live, show?.slides, show?.current_slide_index, show?.current_slide_id])
+
+  // Any real click/key on the TV unlocks the shared audio context and replays a blocked
+  // clip (the "Click for sound" cue is just a visible version of this). Capture phase,
+  // never stops the event: click-to-step and the fullscreen ritual are untouched.
+  useEffect(() => director.installGestureUnlock(window), [])
 
   // Capture Chrome's install prompt — only fires when not already installed
   useEffect(() => {
