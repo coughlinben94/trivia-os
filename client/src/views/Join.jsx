@@ -22,7 +22,7 @@ import ShrinkToFit from '../components/join/ShrinkToFit.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import { PRESHOW_BEN_PHOTO } from '../components/shared/BenPhoto.jsx'
 import { EASE_OUT, EASE_PANEL, EASE_BAR } from '../lib/easings.js'
-import { TEAM_COLORS, TEAM_COLOR_NAMES, freeColors, pickFreeColor, normalizeTeamName } from '../lib/teamColors.js'
+import { TEAM_COLORS, TEAM_COLOR_NAMES, TEAM_EMOJIS, teamNameError, freeColors, pickFreeColor, normalizeTeamName } from '../lib/teamColors.js'
 
 // ─── localStorage ─────────────────────────────────────────────────────────────
 function getTeamKey(showId) { return `trivia-os:team:${showId}` }
@@ -51,7 +51,7 @@ function loadLastTeam() {
   } catch { return null }
 }
 function saveLastTeam(team) {
-  try { localStorage.setItem(LAST_TEAM_KEY, JSON.stringify({ name: team.name, color: team.color })) }
+  try { localStorage.setItem(LAST_TEAM_KEY, JSON.stringify({ name: team.name, color: team.color, emoji: team.emoji ?? null })) }
   catch { /* private browsing */ }
 }
 
@@ -250,6 +250,7 @@ function RegistrationScreen({ onRegister, show, theme }) {
   const [lastTeam]                = useState(loadLastTeam)
   const [name, setName]           = useState(lastTeam?.name ?? '')
   const [color, setColor]         = useState(() => pickFreeColor([], lastTeam?.color))
+  const [emoji, setEmoji]         = useState(() => (TEAM_EMOJIS.includes(lastTeam?.emoji) ? lastTeam.emoji : null))
   const [takenColors, setTakenColors] = useState([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError]         = useState(null)
@@ -283,11 +284,11 @@ function RegistrationScreen({ onRegister, show, theme }) {
   async function handleSubmit(e) {
     e.preventDefault()
     const trimmed = name.trim()
-    if (!trimmed) { setError('Enter your team name to join'); return }
-    if (trimmed.length > 30) { setError('Keep it under 30 characters'); return }
+    const nameError = teamNameError(trimmed)
+    if (nameError) { setError(nameError); return }
     setSubmitting(true)
     setError(null)
-    try { await onRegister(trimmed, color) }
+    try { await onRegister(trimmed, color, emoji) }
     catch (err) { setError(err.message); setSubmitting(false) }
   }
 
@@ -406,6 +407,34 @@ function RegistrationScreen({ onRegister, show, theme }) {
                   }}
                 >
                   {selected ? '✓' : ''}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Team emoji — optional; shows beside the team name on the TV. */}
+          <div role="radiogroup" aria-label="Team emoji" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 6 }}>
+            {TEAM_EMOJIS.map(em => {
+              const selected = em === emoji
+              return (
+                <button
+                  key={em}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  aria-label={em}
+                  onClick={() => setEmoji(selected ? null : em)}
+                  style={{
+                    width: 44, height: 44, borderRadius: 12, padding: 0, flexShrink: 0,
+                    fontSize: '1.5rem', lineHeight: 1,
+                    background: selected ? `${accent}55` : 'rgba(255,255,255,0.06)',
+                    border: 'none',
+                    boxShadow: selected ? `0 0 0 2px ${text}` : 'none',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation',
+                  }}
+                >
+                  {em}
                 </button>
               )
             })}
@@ -2394,7 +2423,7 @@ export default function Join() {
   }, [team?.id])
 
   // ── Register ──────────────────────────────────────────────────────────
-  async function handleRegister(name, preferredColor) {
+  async function handleRegister(name, preferredColor, emoji = null) {
     const actualShowId = show.id
 
     // RLS ties this team's row (and its phone_answers) to this browser's own
@@ -2424,12 +2453,12 @@ export default function Join() {
     if (ownerUid) {
       const { data: existingTeam } = await supabase
         .from('teams')
-        .select('id, name, color')
+        .select('id, name, color, emoji')
         .eq('show_id', actualShowId)
         .eq('owner_uid', ownerUid)
         .maybeSingle()
       if (existingTeam) {
-        const recoveredTeam = { id: existingTeam.id, name: existingTeam.name, color: existingTeam.color, showId: actualShowId }
+        const recoveredTeam = { id: existingTeam.id, name: existingTeam.name, color: existingTeam.color, emoji: existingTeam.emoji, showId: actualShowId }
         setTeam(recoveredTeam)
         saveStoredTeam(actualShowId, recoveredTeam)
         saveLastTeam(recoveredTeam)
@@ -2478,7 +2507,7 @@ export default function Join() {
     // harmless (no uniqueness constraint; it's a visual mark, not a key).
     const color  = pickFreeColor((allTeams ?? []).map(t => t.color), preferredColor)
     const teamId = `team_${nanoid(8)}`
-    const { error } = await supabase.from('teams').insert({ id: teamId, show_id: actualShowId, name, color, is_connected: true, powerup_used: false, owner_uid: ownerUid })
+    const { error } = await supabase.from('teams').insert({ id: teamId, show_id: actualShowId, name, color, emoji, is_connected: true, powerup_used: false, owner_uid: ownerUid })
     if (error) {
       // Recovery for a lost response (2026-08-26, phone-suite audit): the
       // insert above can commit server-side while its response is lost to a
@@ -2494,12 +2523,12 @@ export default function Join() {
       // actually succeeded.
       const { data: recovered } = await supabase
         .from('teams')
-        .select('id, name, color')
+        .select('id, name, color, emoji')
         .eq('show_id', actualShowId)
         .eq('owner_uid', ownerUid)
         .maybeSingle()
       if (recovered) {
-        const recoveredTeam = { id: recovered.id, name: recovered.name, color: recovered.color, showId: actualShowId }
+        const recoveredTeam = { id: recovered.id, name: recovered.name, color: recovered.color, emoji: recovered.emoji, showId: actualShowId }
         setTeam(recoveredTeam)
         saveStoredTeam(actualShowId, recoveredTeam)
         saveLastTeam(recoveredTeam)
@@ -2511,7 +2540,7 @@ export default function Join() {
       throw new Error(error.message)
     }
 
-    const newTeam = { id: teamId, name, color, showId: actualShowId }
+    const newTeam = { id: teamId, name, color, emoji, showId: actualShowId }
     setTeam(newTeam)
     saveStoredTeam(actualShowId, newTeam)
     saveLastTeam(newTeam)
