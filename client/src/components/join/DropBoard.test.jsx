@@ -62,19 +62,12 @@ describe('<DropBoard>', () => {
     expect(lockBtn().textContent).toContain('Lock In My Split')
   })
 
-  it('All in puts the whole pool on that tile and replaces any split', () => {
+  it('has no one-tap All in button — going all in takes deliberate taps', () => {
     render()
-    tap(addBtn(0)); tap(addBtn(1))
-    const allIn = i => container.querySelectorAll('button[aria-label^="All in"]')[i]
-    tap(allIn(2))
+    expect(container.querySelector('button[aria-label^="All in"]')).toBeNull()
+    expect(container.textContent).not.toContain('All in')
+    for (let i = 0; i < 5; i++) tap(addBtn(2)) // still possible: 5 taps of 5 on one tile
     expect(container.textContent).toContain('all placed')
-    expect(lockBtn().textContent).toContain('Lock In My Split')
-    // the 25 sits on tile C and nowhere else: C's number is 25, the rest 0
-    const nums = () => [...container.querySelectorAll('button[aria-label^="Add"] span')].map(n => n.textContent).filter(t => /^\d+$/.test(t))
-    expect(nums()).toEqual(['0', '0', '25', '0'])
-    // no minimum per tile: swinging back to a different tile works the same way
-    tap(allIn(0))
-    expect(nums()).toEqual(['25', '0', '0', '0'])
   })
 
   it('teams can change the points per tap, 1 to 5, default 5', () => {
