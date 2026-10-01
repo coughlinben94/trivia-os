@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { supabase } from '../../../lib/supabase.js'
+import { usePhoneSubmitCounts } from '../../../hooks/usePhoneSubmitCounts.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_PANEL, EASE_OUT } from '../../../lib/easings.js'
 import { seededShuffle } from '../../../lib/orderScoring.js'
@@ -33,43 +33,7 @@ export default function ShinyOrderQuestion({ slide, show, theme }) {
     ? correctOrder.map(id => items.find(i => i.id === id)).filter(Boolean)
     : items
 
-  const [submittedCount, setSubmittedCount] = useState(0)
-  const [teamCount, setTeamCount] = useState(0)
-
-  // Polled aggregate, not a postgres_changes subscription — /display is a
-  // fully anonymous browser (never goes through the host PIN gate) and
-  // phone_answers' SELECT policy only opens to the owning team or a
-  // host-verified session, so Realtime would never deliver a change event
-  // here (same reasoning as ShinyWagerQuestion's own counts). Unlike
-  // Wager, this doesn't need a bespoke RPC — phone_answers_count(slide_id)
-  // is already a generic SECURITY DEFINER count, provisioned back in
-  // 20260817171310_lock_down_phone_answers_select.sql for exactly this
-  // ("a submitted-count (ShinyMatchingQuestion.jsx)") but never actually
-  // wired up until now.
-  useEffect(() => {
-    // Stops on `locked`, not just `revealed` — the live count is only ever
-    // rendered pre-lock (the locked branch below swaps it for the held
-    // "Answers locked" badge), so polling past that point just burns a
-    // request every 2s for a number nothing displays (2026-08-25 review
-    // finding).
-    if (locked || revealed) return
-    let cancelled = false
-    async function load() {
-      const { data: count } = await supabase.rpc('phone_answers_count', { p_slide_id: slide.id })
-      if (!cancelled) setSubmittedCount(count ?? 0)
-    }
-    load()
-    const interval = setInterval(load, 2000)
-    return () => { cancelled = true; clearInterval(interval) }
-  }, [slide.id, locked, revealed])
-
-  useEffect(() => {
-    if (!show?.id || revealed) return
-    let cancelled = false
-    supabase.from('teams').select('id', { count: 'exact', head: true }).eq('show_id', show.id)
-      .then(({ count }) => { if (!cancelled) setTeamCount(count ?? 0) })
-    return () => { cancelled = true }
-  }, [show?.id, revealed])
+  const { submitted: submittedCount, teamCount } = usePhoneSubmitCounts(slide.id, show?.id, { pollStop: locked || revealed, teamsStop: revealed })
 
   return (
     <div className="w-full h-full relative overflow-hidden" style={{ background: theme.colors.shinyBg }}>
