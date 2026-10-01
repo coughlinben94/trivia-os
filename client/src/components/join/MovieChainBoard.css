@@ -24,6 +24,11 @@
   cursor: default;
 }
 
+.movie-chain-board button[data-committed="true"]:disabled {
+  opacity: 1; /* a saved chain is a confirmation, not an off switch */
+  background: color-mix(in srgb, var(--movie-chain-accent) 22%, transparent);
+}
+
 .movie-chain-board input {
   min-height: 48px;
   font-size: 16px; /* under 16px, iOS Safari zooms the page on focus */
