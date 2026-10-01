@@ -46,7 +46,7 @@ function jumpList(slides, rounds = []) {
 
 // scores: the Scores drawer's view (scoreCellWrite scoresView + `last`),
 // attached only while the iPad has the drawer open; null otherwise.
-export function buildSnapshot({ slides, index, showState, cue, busy = false, paused = false, rounds = [], jumpBusy = false, fix = null, scoreQueueDepth = 0, scores = null }) {
+export function buildSnapshot({ slides, index, showState, cue, busy = false, paused = false, rounds = [], jumpBusy = false, fix = null, scoreQueueDepth = 0, scores = null, timer = null }) {
   const slide = slides[index] ?? null
   return {
     type: 'state',
@@ -61,6 +61,8 @@ export function buildSnapshot({ slides, index, showState, cue, busy = false, pau
     },
     busy, paused, jumpBusy, fix, scoreQueueDepth, scores,
     slides: jumpList(slides, rounds),
+    // Only while a timer exists, so a show with none sends exactly what it always did.
+    ...(timer ? { timer } : {}),
   }
 }
 

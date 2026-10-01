@@ -9,6 +9,7 @@ import { pendingLockPhase, pendingReveal, unlockPatch } from '../client/src/lib/
 import { fixFor } from '../client/src/lib/remoteFix.js'
 import { buildSnapshot, hostReply, makeSnapshotSender } from '../client/src/lib/remoteSnapshot.js'
 import { CLOSE_REPLACED, scoreChangeText } from '../client/src/lib/remoteProtocol.js'
+import { applyTimerStep } from '../client/src/lib/showTimer.js'
 import { createScoreChain, createScoreRemote } from '../client/src/lib/scoreCellWrite.js'
 import { deriveRoundCols } from '../client/src/lib/scoreboardMath.js'
 
@@ -35,7 +36,7 @@ function memoryTable(rows) {
 }
 
 export function createStubHost({ url, origin, slides, rounds = [], retryMs = 50, teams = [] }) {
-  const show = { index: 0, showState: { answerReveal: false, scoreboardVisible: false, scoresRevealed: false } }
+  const show = { index: 0, timer: null, showState: { answerReveal: false, scoreboardVisible: false, scoresRevealed: false } }
   const stub = { status: 'connecting', paused: false, modalOpen: false, ran: [], remotes: 0, notices: [] }
   const db = memoryTable(teams)
   stub.db = db
@@ -55,7 +56,7 @@ export function createStubHost({ url, origin, slides, rounds = [], retryMs = 50,
   const busy = () => !!slide()?.data?.lockCountdownStartedAt || chain.depth() > 0
   const push = () => sender.offer(JSON.stringify(buildSnapshot({
     slides, index: show.index, showState: show.showState, cue: cue(), busy: busy(), paused: stub.paused, fix: fixFor(slide()), rounds,
-    scoreQueueDepth: chain.depth(), scores: scores.view(),
+    scoreQueueDepth: chain.depth(), scores: scores.view(), timer: show.timer,
   })))
 
   function run(cmd) {
@@ -69,6 +70,7 @@ export function createStubHost({ url, origin, slides, rounds = [], retryMs = 50,
       paused: stub.paused, remoteBusy: busy(), slideId: s?.id ?? null, gate: cue().gate, now: Date.now(),
       index: show.index, slideIds: slides.map(x => x.id), fix: fixFor(s),
       anyScoring: false, jumpBusy: false, scoreQueueDepth: chain.depth(), scoreCols: scoreCtx().cols,
+      timer: show.timer,
     })
     if (plan.refuse) return plan
     stub.ran.push(plan.run)
@@ -86,6 +88,7 @@ export function createStubHost({ url, origin, slides, rounds = [], retryMs = 50,
       const f = fixFor(s)
       s.data = f.mechanic === 'horse-race' ? { ...s.data, raceLocked: false } : { ...s.data, ...unlockPatch(f.mechanic, s.data) }
     }
+    if (plan.run.startsWith('timer-')) show.timer = applyTimerStep(plan, show.timer, Date.now())
     // 'rescore' is only recorded: the real one reads and writes Supabase.
     if (plan.run === 'set-answer-reveal') show.showState.answerReveal = plan.value
     if (plan.run === 'set-scoreboard-visible') show.showState.scoreboardVisible = plan.value

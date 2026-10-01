@@ -20,6 +20,7 @@ import {
   sortSlides,
 } from '../lib/slideStepping.js'
 import { idsToDeleteWith } from '../lib/shinySeries.js'
+import { duplicateShowRow } from '../lib/duplicateShowRow.js'
 
 const ACTIVE_SHOW_KEY = 'trivia-os:activeShowId'
 const SHOW_MEDIA_BUCKET = 'trivia-show-media'
@@ -314,22 +315,7 @@ export function useShow() {
     if (error || !original) throw new Error('Show not found')
     const newId = `show_${nanoid(8)}`
     const now = new Date().toISOString()
-    const { error: insertError } = await supabase.from('shows').insert({
-      ...original,
-      id: newId,
-      title: `${original.title} (copy)`,
-      is_live: false,
-      scoreboard_visible: false,
-      scores_revealed: false,
-      answer_reveal: false,
-      late_team_qr_visible: false,
-      final_scores: null,
-      player_count: null,
-      current_slide_id: null,
-      current_slide_index: 0,
-      created_at: now,
-      updated_at: now,
-    })
+    const { error: insertError } = await supabase.from('shows').insert(duplicateShowRow(original, { newId, now }))
     if (insertError) throw new Error(insertError.message)
     return {
       id: newId,

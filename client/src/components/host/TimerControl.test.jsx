@@ -85,7 +85,7 @@ describe('<TimerControl>', () => {
   it('a finished timer shows the finished label and a Clear button', async () => {
     render(startTimer(3000, Date.now()))
     await act(async () => { vi.advanceTimersByTime(3500) })
-    expect(container.textContent).toContain("Time's up")
+    expect(container.textContent).toContain('Time’s up!')
     act(() => button('Clear').click())
     expect(actions.setShowTimer).toHaveBeenLastCalledWith(null)
   })

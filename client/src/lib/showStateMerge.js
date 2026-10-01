@@ -19,10 +19,14 @@ export function mergeShowStateRow(prev, row, { keepNav = false } = {}) {
   const audio = !keepNav && row.audio_playing !== undefined ? { audio_playing: row.audio_playing } : {}
   // special_event (the host timer): a stale echo of an older timer write must not
   // undo a newer local one, so a row whose timer was sent EARLIER than ours loses.
-  // undefined (column absent) keeps ours; null IS a value (timer cancelled).
+  // That includes an older echo carrying NO timer (a Next press written just before
+  // the timer was started): only this host tab ever writes the timer, and it clears
+  // its own copy when it cancels, so a row without one never beats a live local one.
+  // undefined (column absent) keeps ours.
   const mine = prev.special_event?.timer?.sentAt
   const theirs = row.special_event?.timer?.sentAt
-  const timer = row.special_event !== undefined && !(mine > theirs) ? { special_event: row.special_event } : {}
+  const staleOrMissing = mine != null && (theirs == null || mine > theirs)
+  const timer = row.special_event !== undefined && !staleOrMissing ? { special_event: row.special_event } : {}
   return {
     ...prev,
     ...audio,

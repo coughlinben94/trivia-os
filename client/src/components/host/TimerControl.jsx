@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import {
-  parseMinutes, startTimer, pauseTimer, resumeTimer, addTime, timerView,
+  parseMinutes, startTimer, pauseTimer, resumeTimer, addTime, timerView, TIMES_UP,
 } from '../../lib/showTimer.js'
 
 // Live Mode's countdown timer card. Writes shows.special_event.timer through
@@ -56,7 +56,7 @@ export default function TimerControl({ show, actions }) {
             className={`text-2xl font-bold tabular-nums ${view.phase === 'urgent' ? 'text-red-600' : view.phase === 'done' ? 'text-red-600' : 'text-gray-900'}`}
             data-timer-readout
           >
-            {view.phase === 'done' ? "Time's up" : view.label}
+            {view.phase === 'done' ? TIMES_UP : view.label}
             {view.phase === 'paused' && <span className="text-xs font-semibold text-gray-400 ml-2">paused</span>}
           </span>
         )}
