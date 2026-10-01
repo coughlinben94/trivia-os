@@ -33,6 +33,7 @@
 // prediction anyone makes); a claim removes the entry from the pool, so a
 // long show never accumulates iframes.
 
+import * as Sentry from '@sentry/react'
 import { loadYoutubeIframeApi } from '../components/host/YoutubeClipEditor.jsx'
 
 const POOL_CAP = 2
@@ -49,6 +50,21 @@ const claimedKeys = new Set() // keys currently owned by a slide — never re-wa
 const CLAIM_READY_TIMEOUT_MS = 1500
 
 const keyOf = (videoId, start, end) => `${videoId}:${start ?? 0}:${end ?? ''}`
+
+// Fail loud (2026-10-01, audio pipeline spec): every stall or cold rebuild
+// leaves a Sentry trail tagged area:audio — the 2026-09-29 "Next did not
+// start sound" night left none. Once per distinct problem per clip per page
+// load, however many times a slide remounts; the console logs every time.
+const reported = new Set()
+function report(message, videoId, start, end, level) {
+  console.warn(`[youtube audio] ${message}`, { videoId, start, end })
+  const key = `${message}|${keyOf(videoId, start, end)}`
+  if (reported.has(key)) return
+  reported.add(key)
+  try {
+    Sentry.captureMessage(`youtube audio: ${message}`, { level, tags: { area: 'audio' }, extra: { videoId, start, end } })
+  } catch { /* never let telemetry break the show */ }
+}
 
 function createEntry(videoId, start, end) {
   const container = document.createElement('div')
@@ -86,6 +102,7 @@ function createEntry(videoId, start, end) {
     _armReadyTimeout() {
       this._readyTimer = setTimeout(() => {
         if (this.destroyed || this._player) return
+        report('claim timeout, rebuilding cold', videoId, start, end, 'warning')
         try { this._player?.destroy() } catch { /* never got that far */ }
         if (container.parentNode) container.parentNode.removeChild(container)
         buildPlayer(this, videoId, start, end, freshContainer())
@@ -169,7 +186,9 @@ function buildPlayer(entry, videoId, start, end, container) {
   }).catch(() => {
     // API load failed — the ready-timeout (armed only once claimed) is what
     // actually recovers this; an unclaimed warm attempt just stays stuck
-    // until evicted, which is fine, nothing is waiting on it.
+    // until evicted, which is fine, nothing is waiting on it. Only a claimed
+    // clip has a listener waiting, so only that one is worth a Sentry event.
+    if (entry.claimed && !entry.destroyed) report('iframe api failed to load', videoId, start, end, 'error')
   })
 }
 
