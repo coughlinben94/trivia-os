@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../lib/supabase.js'
+import { usePhoneAnswerSave } from '../../hooks/usePhoneAnswerSave.js'
 import { seededShuffle, buildMatchAnswer } from '../../lib/matchingScoring.js'
 import ShrinkToFit from './ShrinkToFit.jsx'
 
@@ -37,7 +38,11 @@ export default function MatchingBoard({ slide, team, theme, preview = false, onA
   // released from force-delivery with nothing actually in phone_answers.
   const [committedConnections, setCommittedConnections] = useState({})
   const [pendingSide, setPendingSide] = useState(null) // { side: 'left'|'right', itemId } — first tap of a pair, waiting for the second
-  const [saveFailed, setSaveFailed] = useState(false)
+  const { saveAnswer, saveFailed } = usePhoneAnswerSave({ preview, slide, team, board: 'MatchingBoard', noun: 'matching' })
+  const submit = useCallback(
+    (nextConnections) => (preview ? Promise.resolve(true) : saveAnswer(buildMatchAnswer(nextConnections))),
+    [preview, saveAnswer]
+  )
   const shouldReduceMotion = useReducedMotion()
   // Same quick 🔒 pop as WagerBoard's Lock In Guess — fires from the explicit
   // Lock Your Answers button below, not automatically (2026-08-18, Ben:
@@ -66,47 +71,6 @@ export default function MatchingBoard({ slide, team, theme, preview = false, onA
     setPendingSide(null)
   }, [preview, pairIdsKey])
 
-  // Chained rather than fired-and-forgotten so two rapid taps (match, then a
-  // quick untap) can't land out of order — same class of bug WagerBoard's
-  // saveChainRef guards against, applied here to phone_answers writes.
-  const saveChainRef = useRef(Promise.resolve())
-
-  const submit = useCallback((nextConnections) => {
-    if (preview) return Promise.resolve(true)
-    const answer = buildMatchAnswer(nextConnections)
-    const run = saveChainRef.current.then(async () => {
-      const upsert = supabase.from('phone_answers').upsert(
-        // submitted_at is NOT sent — a `phone_answers_set_submitted_at`
-        // trigger (2026-08-26) stamps it server-side with `now()` on every
-        // insert or update instead. A client-side stamp used to be required
-        // here (Postgres upsert only refreshes columns it's given, so the
-        // column would freeze at the FIRST save otherwise) but trusted the
-        // phone's own clock for the host's lock-cutoff check below — a real
-        // scoring-integrity gap on clock-drifted phones. The trigger keeps
-        // the same always-moves-on-resave behavior without that trust.
-        { show_id: slide.showId ?? team.showId, slide_id: slide.id, team_id: team.id, answer },
-        { onConflict: 'slide_id,team_id' }
-      )
-      // Raced against a timeout, not just awaited — a request that never
-      // settles would otherwise wedge every save queued behind it in the
-      // chain. The abandoned fetch may still resolve later; nothing awaits
-      // it by then, which is fine — we've already moved on.
-      let error
-      try {
-        ;({ error } = await Promise.race([
-          upsert,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('matching save timed out')), 8000)),
-        ]))
-      } catch (err) {
-        error = err
-      }
-      if (error) console.error('[MatchingBoard] answer save failed:', error)
-      setSaveFailed(!!error)
-      return !error
-    })
-    saveChainRef.current = run.catch(() => false)
-    return run
-  }, [preview, slide.id, slide.showId, team.id, team.showId])
 
   // Purely local — builds/edits the match on screen. Nothing saves to
   // phone_answers until the team taps Lock Your Answers below (2026-08-18,

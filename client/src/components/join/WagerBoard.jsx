@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../lib/supabase.js'
+import { usePhoneAnswerSave } from '../../hooks/usePhoneAnswerSave.js'
 import { WAGER_TIERS, wagerOddsLine, wagerTierReachable, parseWagerNumber } from '../../lib/wagerScoring.js'
 import ShrinkToFit from './ShrinkToFit.jsx'
 
@@ -59,7 +60,11 @@ export default function WagerBoard({ slide, team, theme, preview = false, onAnsw
   const [digits, setDigits] = useState('')
   const [committed, setCommitted] = useState(null)
   const [teamCount, setTeamCount] = useState(0)
-  const [saveFailed, setSaveFailed] = useState(false)
+  const { saveAnswer, saveFailed } = usePhoneAnswerSave({ preview, slide, team, board: 'WagerBoard', noun: 'wager' })
+  const save = useCallback(
+    (nextTier, nextGuess) => (preview ? Promise.resolve(true) : saveAnswer({ tier: nextTier, guess: parseWagerNumber(nextGuess) })),
+    [preview, saveAnswer]
+  )
   const [saving, setSaving] = useState(false)
   // Quick 🔒 pop on a successful lock-in — pure feedback, no state it reads
   // from (2026-08-18, Ben). Self-clears; nothing else depends on it.
@@ -67,49 +72,6 @@ export default function WagerBoard({ slide, team, theme, preview = false, onAnsw
   const lockPopTimerRef = useRef(null)
   useEffect(() => () => clearTimeout(lockPopTimerRef.current), [])
 
-  // Chained rather than fired-and-forgotten so two rapid taps (tier switch,
-  // or a guess edited faster than the network round-trip) can't land out of
-  // order — the same class of bug useShow.js's slidesSaveChainRef already
-  // guards against for slide saves, applied here to phone_answers writes.
-  const saveChainRef = useRef(Promise.resolve())
-
-  const save = useCallback((nextTier, nextGuess) => {
-    if (preview) return Promise.resolve(true)
-    const run = saveChainRef.current.then(async () => {
-      const upsert = supabase.from('phone_answers').upsert(
-        {
-          show_id: slide.showId ?? team.showId,
-          slide_id: slide.id,
-          team_id: team.id,
-          answer: { tier: nextTier, guess: parseWagerNumber(nextGuess) },
-          // submitted_at NOT sent — see MatchingBoard.jsx's identical upsert:
-          // a server-side trigger (2026-08-26) owns this column now instead
-          // of trusting the phone's own clock.
-        },
-        { onConflict: 'slide_id,team_id' }
-      )
-      // Raced against a timeout, not just awaited — a request that never
-      // settles (dead wifi, captive portal) would otherwise leave `saving`
-      // stuck true forever (button dead, team pinned by forceInteractive
-      // with no escape) AND wedge every save queued behind it in the chain.
-      // The abandoned fetch may still resolve later; nothing awaits it by
-      // then, which is fine — we've already moved on.
-      let error
-      try {
-        ;({ error } = await Promise.race([
-          upsert,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('wager save timed out')), 8000)),
-        ]))
-      } catch (err) {
-        error = err
-      }
-      if (error) console.error('[WagerBoard] wager save failed:', error)
-      setSaveFailed(!!error)
-      return !error
-    })
-    saveChainRef.current = run.catch(() => false)
-    return run
-  }, [preview, slide.id, slide.showId, team.id, team.showId])
 
   // Restore this team's own row so a phone that reloads mid-question keeps
   // both its wager and its guess.
