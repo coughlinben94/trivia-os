@@ -51,7 +51,7 @@ export function teamNameError(name) {
   const n = (name ?? '').trim()
   if (!n) return 'Enter your team name to join'
   if (n.length > 30) return 'Keep it under 30 characters'
-  if (!/^[\p{L}][\p{L}\p{M}' \-’]*$/u.test(n)) return 'Team names use letters only — pick an emoji below for personality'
+  if (!/^[\p{L}][\p{L}\p{M}' \-’]*$/u.test(n)) return 'Team names use letters only — pick an emoji for personality'
   return null
 }
 
