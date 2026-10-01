@@ -3,6 +3,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { analyzeAudioGain } from '../../../lib/audioNormalize.js'
+import { director } from '../../../audio/director.js'
 
 // Fixed hazard-broadcast palette — like StateOfUnionSlide's locked RWB, this
 // slide is an identity ("emergency bulletin"), not a themed moment, so it
@@ -74,8 +75,9 @@ async function loadGainDb(src) {
 
 // Fires `onAllBeepsEnded` off the LAST beep's real `onended` event, not a
 // guessed duration — so whatever plays next is never racing an estimate.
-async function playThreeBeeps(ctx, onAllBeepsEnded) {
+async function playThreeBeeps(ctx, onAllBeepsEnded, handles) {
   const [buffer, gainDb] = await Promise.all([loadBeepBuffer(ctx), loadGainDb(RULES_BEEP_SRC).catch(() => 0)])
+  if (handles.cancelled) return
   const gainNode = ctx.createGain()
   gainNode.gain.value = Math.pow(10, gainDb / 20)
   gainNode.connect(ctx.destination)
@@ -88,6 +90,7 @@ async function playThreeBeeps(ctx, onAllBeepsEnded) {
     src.start(startAt + i * RULES_BEEP_DURATION_S)
     return src
   })
+  handles.beeps = { sources, gainNode }
   sources[sources.length - 1].onended = onAllBeepsEnded
 }
 
@@ -96,62 +99,42 @@ async function playThreeBeeps(ctx, onAllBeepsEnded) {
 // estimated duration (2026-08-18, Ben: it was cutting away while the voice
 // was still audible). Driven entirely off real `ended` events.
 //
-// `handles` (owned by the calling effect) is how a mid-sequence unmount gets
-// cancelled: it holds the live AudioContext/PSA element so cleanup can
-// ctx.close()/psa.pause() them, and a `cancelled` flag every callback below
-// checks before touching React state or starting the next stage. Without
-// this, a host advancing off this slide mid-beep leaves the beeps AND the
-// 4s PSA clip playing in full over whatever slide comes next.
-function playAlertSequence(onCinematicDone, handles) {
+// On the audio director (audio/director.js): the beeps are scheduled on its ONE shared
+// AudioContext and the PSA is a director clip (its loudness boost is the director's gain node,
+// not a second AudioContext). A locked tab skips the sound and reveals at once (reported) rather
+// than strobing silent for the 12 s watchdog.
+//
+// `handles` (owned by the calling effect) is how a mid-sequence unmount gets cancelled via
+// stopAlertSequence(): without it a host advancing off this slide mid-beep leaves the beeps AND
+// the 4s PSA clip playing in full over whatever slide comes next.
+export async function playAlertSequence(onCinematicDone, handles, slideId) {
+  const finish = () => { if (!handles.cancelled) onCinematicDone() }
   try {
-    const AC = window.AudioContext || window.webkitAudioContext
-    const ctx = new AC()
-    handles.ctx = ctx
-    ctx.resume().catch(() => {}) // no-op if already running; recovers a cold-started suspended context
-    playThreeBeeps(ctx, () => {
+    const ctx = await director.audioContext({ label: 'rules alert', waitMs: 1500 })
+    if (handles.cancelled) return
+    if (!ctx) { finish(); return } // locked tab: reveal without the sound
+    await playThreeBeeps(ctx, () => {
       if (handles.cancelled) return
-      ctx.close().catch(() => {})
-      // gainDb resolved BEFORE the Audio element is created/played, not
-      // applied after — createMediaElementSource reroutes an element's
-      // entire output through the Web Audio graph, so building that graph
-      // mid-playback risks an audible glitch. The gain is cached after the
-      // first show, so this await is only real latency once.
+      // gainDb resolved BEFORE the clip starts (cached after the first show).
       loadGainDb(RULES_PSA_SRC).catch(() => 0).then(gainDb => {
         if (handles.cancelled) return
-        const psa = new Audio(RULES_PSA_SRC)
+        const psa = director.play({ kind: 'file', url: RULES_PSA_SRC, gainDb }, { slideId })
         handles.psa = psa
-        const finish = () => { if (!handles.cancelled) onCinematicDone() }
-        psa.addEventListener('ended', finish, { once: true })
-        psa.addEventListener('error', finish, { once: true })
-        if (gainDb > 0) {
-          // A boost needs a real gain node — .volume can't exceed 1.0/unity.
-          try {
-            const psaCtx = new AC()
-            handles.psaCtx = psaCtx
-            // Missing resume() (caught by Opus review) meant a context that
-            // starts suspended — the normal state with no prior user
-            // gesture on this document, exactly the /display-loaded-cold
-            // case — left createMediaElementSource's rerouted output
-            // silent: the element's `ended` event still fires on schedule,
-            // the slide still reveals on time, nothing errors, the PSA just
-            // never plays. The beep sequence above already resumes its own
-            // context (line ~110) — this one needs the same.
-            psaCtx.resume().catch(() => {})
-            const src = psaCtx.createMediaElementSource(psa)
-            const gainNode = psaCtx.createGain()
-            gainNode.gain.value = Math.pow(10, gainDb / 20)
-            src.connect(gainNode)
-            gainNode.connect(psaCtx.destination)
-          } catch { /* graph failed to build — falls through, plays at raw level */ }
-        } else {
-          psa.volume = Math.max(0, Math.min(1, Math.pow(10, gainDb / 20)))
-        }
-        psa.play().catch(finish)
-      })
-    }).catch(() => { if (!handles.cancelled) onCinematicDone() })
+        psa.onEnded(finish)
+        psa.onFailed(finish)
+        psa.onBlocked(() => setTimeout(() => { psa.release(); finish() }, 2000)) // refused: reveal anyway
+      }).catch(finish)
+    }, handles)
   } catch {
-    if (!handles.cancelled) onCinematicDone() // AudioContext unavailable — reveal content anyway
+    finish() // AudioContext unavailable — reveal content anyway
   }
+}
+
+// Cancel a running sequence: silence the beeps, cut the voice line, no reveal.
+export function stopAlertSequence(handles) {
+  handles.cancelled = true
+  try { handles.beeps?.sources.forEach(src => { try { src.stop() } catch { /* already ended */ } }) } catch { /* ignore */ }
+  handles.psa?.release()
 }
 
 export default function RulesSlide({ slide, isPreview }) {
@@ -175,7 +158,7 @@ export default function RulesSlide({ slide, isPreview }) {
     if (skipAlert || firedRef.current) return
     firedRef.current = true
 
-    const handles = { cancelled: false, ctx: null, psa: null }
+    const handles = { cancelled: false, beeps: null, psa: null }
     const reveal = () => { setAlerting(false); setContentReady(true) }
     // Watchdog: a suspended AudioContext (no prior user gesture) never
     // advances its clock, so scheduled sources never fire `onended`; a
@@ -185,14 +168,11 @@ export default function RulesSlide({ slide, isPreview }) {
     // "audio might never end" case.
     const watchdog = setTimeout(() => { if (!handles.cancelled) reveal() }, 12000)
 
-    playAlertSequence(() => { clearTimeout(watchdog); reveal() }, handles)
+    playAlertSequence(() => { clearTimeout(watchdog); reveal() }, handles, slide.id)
 
     return () => {
-      handles.cancelled = true
       clearTimeout(watchdog)
-      handles.ctx?.close().catch(() => {})
-      handles.psaCtx?.close().catch(() => {})
-      handles.psa?.pause()
+      stopAlertSequence(handles)
     }
   }, [skipAlert])
 
