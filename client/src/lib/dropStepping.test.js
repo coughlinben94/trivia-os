@@ -6,6 +6,7 @@ import {
 import { isDropShiny } from './shinySeries.js'
 import { nextPressGate } from './nextPressCue.js'
 import { lockRefusal } from './lockRefusal.js'
+import { dropSequence } from './dropScoring.js'
 
 const noTeams = async () => 0
 const options = ['a', 'b', 'c', 'd'].map(id => ({ id, label: id.toUpperCase() }))
@@ -111,10 +112,22 @@ describe('entry state', () => {
 })
 
 describe('Next cue', () => {
-  it('names the tile Next will drop', () => {
+  it('names the tile Next will drop, by letter and text', () => {
+    // tiles a b c d, b is correct, no seed: fall order a, c, d. One already fell, so c is next.
     const cue = nextPressGate({ slide: dropSlide({ dropStep: 1 }), nextSlide: after })
     expect(cue.gate).toBe('reveal-part')
-    expect(cue.label).toMatch(/drop/i)
+    expect(cue.label).toBe('Drop tile C · C')
+    expect(nextPressGate({ slide: dropSlide({ dropStep: 0 }), nextSlide: after }).label).toBe('Drop tile A · A')
+  })
+  it('follows the seeded random order, not the left-to-right order', () => {
+    const d = dropSlide({ dropStep: 0, dropSeed: 3 })
+    const first = dropSequence(d.data)[0]
+    const letter = String.fromCharCode(65 + ['a', 'b', 'c', 'd'].indexOf(first))
+    expect(nextPressGate({ slide: d, nextSlide: after }).label).toMatch(new RegExp(`^Drop tile ${letter} `))
+  })
+  it('falls back to just the letter when the tile has no text (photo tile)', () => {
+    const photo = dropSlide({ options: options.map(o => ({ ...o, label: '', image: 'x.png' })), dropStep: 0 })
+    expect(nextPressGate({ slide: photo, nextSlide: after }).label).toBe('Drop tile A')
   })
   it('asks for the lock first when unlocked', () => {
     expect(nextPressGate({ slide: dropSlide({ dropLocked: false }), nextSlide: after }).gate).toBe('lock')
