@@ -248,4 +248,11 @@ describe('<DropBoard>', () => {
     expect(container.textContent).not.toContain('+15')
     saved.row = null
   })
+
+  it('the per-tap row wraps instead of overflowing on a narrow phone', () => {
+    render()
+    const chip = container.querySelector('button[aria-label="5 points per tap"]')
+    expect(chip.parentElement.style.flexWrap).toBe('wrap')
+    expect(parseFloat(chip.style.minWidth)).toBeGreaterThanOrEqual(44) // still a full-size tap target
+  })
 })

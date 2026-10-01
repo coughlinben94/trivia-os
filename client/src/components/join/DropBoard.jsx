@@ -166,7 +166,7 @@ export default function DropBoard({ slide, team, theme, preview = false, onAnswe
         </div>
 
         {!locked && stepChoices.length > 1 && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
             <span style={{ color: `${text}b3`, fontSize: '0.8rem', fontFamily: 'DM Sans, sans-serif' }}>Per tap</span>
             {stepChoices.map(n => (
               <button
@@ -177,7 +177,7 @@ export default function DropBoard({ slide, team, theme, preview = false, onAnswe
                 {...press}
                 style={{
                   transition: PRESS_TRANSITION,
-                  minWidth: 48, height: 44, borderRadius: 999, padding: '0 0.8rem',
+                  minWidth: 44, height: 44, borderRadius: 999, padding: '0 0.7rem',
                   border: chip === n ? `2px solid ${highlight}` : `1px solid ${text}30`,
                   background: chip === n ? `${highlight}26` : 'transparent',
                   color: chip === n ? highlight : text, fontSize: '0.9rem', fontWeight: 700,
