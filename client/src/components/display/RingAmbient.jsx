@@ -592,6 +592,16 @@ function buildGapPane(host, i, spec) {
     const upper = typeof nb === 'boolean' ? !nb : coin
     el.style.top = px(dom.bandY(r, hh, upper, dom.rotatedBandH(prim, hw, hh)))
     host.appendChild(el)
+    // The last pane's right-hand object hangs past the end of the strip: while
+    // gliding 12 -> 0 it shows over the next copy's pane 0, but after the wrap's
+    // snap back to offset 0 nothing hangs into copy 0's pane 0, so it popped
+    // out (transition audit). Mirror it one period to the left.
+    const period = ENGINE.PANES * ENGINE.W
+    if (parseFloat(el.style.left) + hw > period) {
+      const twin = el.cloneNode(true)
+      twin.style.left = px(parseFloat(el.style.left) - period)
+      host.appendChild(twin)
+    }
   })
 }
 
@@ -803,6 +813,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   const paintedRef = useRef([])
   const paintedSpecRef = useRef([]) // the spec behind each paintedRef key (a gap's key is only a string)
   const skyInnerRef = useRef(null)
+  const skyZRef = useRef(0) // last stacking order handed to a sky set
   const skySetsRef = useRef(new Map()) // world -> { void, tints, weights }, built lazily per-pane mode
 
   // One choke point so turn()/jumpTo() can't drift on the animate flag —
@@ -830,15 +841,8 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     // empty slide is dim but never pure black (Ben: "this black screen is too
     // black").
     const spec = paintedSpecRef.current[station]
-    const lit = new Map() // world -> { k: brightness, z: stacking order }
-    // Gap pane: the leaving world's sky at full strength with the arriving
-    // world's laid over it at half, an even blend whichever set was built
-    // first (two equal layers would let DOM order pick the winner).
-    if (spec && spec.empty) {
-      lit.set(spec.bleeds[0].world, { k: 1, z: 0 })
-      lit.set(spec.bleeds[1].world, { k: GAP_SKY, z: 1 })
-    } else if (spec) lit.set(spec, { k: 1, z: 0 })
-    for (const world of lit.keys()) {
+    const litWorlds = spec && spec.empty ? [spec.bleeds[0].world, spec.bleeds[1].world] : spec ? [spec] : []
+    for (const world of litWorlds) {
       if (skySetsRef.current.has(world)) continue
       const [a, b, c, d] = world.sky
       const v = dom.el('void')
@@ -849,19 +853,35 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
       const tints = dom.makeSkyTints(skyRegionHues(world.stations))
       skyInner.appendChild(v)
       for (const t of Object.values(tints)) skyInner.appendChild(t)
-      skySetsRef.current.set(world, { void: v, tints, weights: skyRegionWeights(world.stations) })
+      skySetsRef.current.set(world, { void: v, tints, weights: skyRegionWeights(world.stations), on: false, z: 0 })
+    }
+    // Stacking order is fixed the moment a set is first lit (most recently lit
+    // = on top) and never changes while it shows. Re-ranking sets on every
+    // slide flipped the order under a still-opaque layer and snapped the sky
+    // by up to 12 levels (transition audit, show_b 15->16).
+    for (const [world, set] of skySetsRef.current) {
+      const on = litWorlds.includes(world)
+      if (on && !set.on) set.z = ++skyZRef.current
+      set.on = on
+    }
+    // Gap pane: the two skies blend evenly whichever is on top: the lower one
+    // at full strength, the upper at half.
+    const k = new Map(litWorlds.map(w => [w, 1]))
+    if (litWorlds.length === 2) {
+      const [lo, hi] = litWorlds.slice().sort((x, y) => skySetsRef.current.get(x).z - skySetsRef.current.get(y).z)
+      k.set(lo, 1); k.set(hi, GAP_SKY)
     }
     // A set built this tick starts at opacity 0; flush that style before the
     // loop below raises it, or the browser coalesces the two writes and the
     // new world's sky pops in at full strength instead of fading.
     void skyInner.offsetWidth
     for (const [world, set] of skySetsRef.current) {
-      const { k, z } = lit.get(world) ?? { k: 0, z: 0 }
+      const kk = k.get(world) ?? 0
       set.void.style.transitionDuration = animate ? SKY_TINT_IN_MS + 'ms' : '0ms'
-      set.void.style.opacity = String(k)
-      set.void.style.zIndex = String(z)
-      for (const t of Object.values(set.tints)) t.style.zIndex = String(z)
-      applySkyTints(set.tints, k ? set.weights.map(w => scaleWeights(w, k)) : [], station, animate)
+      set.void.style.opacity = String(kk)
+      set.void.style.zIndex = String(set.z)
+      for (const t of Object.values(set.tints)) t.style.zIndex = String(set.z)
+      applySkyTints(set.tints, kk ? set.weights.map(w => scaleWeights(w, kk)) : [], station, animate)
     }
   }
 
@@ -908,6 +928,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     for (const t of Object.values(skyTints)) skyInner.appendChild(t)
     skyTintsRef.current = skyTints
     skyInnerRef.current = skyInner
+    skyZRef.current = 0
     skySetsRef.current = new Map() // a StrictMode re-run starts from an emptied DOM; stale sets would never be re-appended
     // Per-pane mode: the base ramp is plain dark; each world's own sky is an
     // overlay lit by writeSkySets.
@@ -1372,13 +1393,26 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   //     under the new 68 cap, same bandY-style zero-headroom caveat this
   //     project has been burned by before — don't let a future change eat
   //     it back to zero without re-measuring.
-  function layoutScrim(station) {
+  //
+  // 2026-10-01 (transition audit, Ben: "the jump in color between slide 4 and
+  // 5"): the alpha used to be rewritten into the gradient on every turn, so
+  // the centre of the frame brightened or darkened in ONE frame at the click
+  // (0.56 -> 0.37 going 4 -> 5, the largest step on the ring). The gradient
+  // is now fixed at its maximum alpha and the per-station alpha is the
+  // element's opacity, which can transition. At rest the pixels are the same
+  // (alpha x opacity = the old alpha). `animate` is true only for a real
+  // glide; mount, jumps and reduced motion snap, so the verify gate still
+  // reads the final value.
+  const SCRIM_MAX = 0.68
+  function layoutScrim(station, animate = false) {
     const scrim = scrimElRef.current, arc = arcRef.current
     if (!scrim || !arc) return
-    const a = lerp(0.30, 0.68, loudnessOf(arc, station))
+    const a = +lerp(0.30, SCRIM_MAX, loudnessOf(arc, station)).toFixed(2)
     scrim.style.background = `radial-gradient(ellipse 70% 62% at 50% 50%,
-      rgba(2,2,10,${a.toFixed(2)}) 0%, rgba(2,2,10,${(a * 0.75).toFixed(2)}) 45%,
+      rgba(2,2,10,${SCRIM_MAX}) 0%, rgba(2,2,10,${(SCRIM_MAX * 0.75).toFixed(2)}) 45%,
       transparent 74%)`
+    scrim.style.transition = animate ? `opacity ${SKY_TINT_IN_MS}ms ${SKY_TINT_EASE}` : 'none'
+    scrim.style.opacity = (a / SCRIM_MAX).toFixed(4)
   }
 
   // Offsets wrap modulo the layer's cylinder, and because every cylinder is
@@ -1492,7 +1526,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     writeOffsets()
     stationRef.current = (stationRef.current + dir + ENGINE.PANES) % ENGINE.PANES
     if (debugLabelRef.current) debugLabelRef.current.textContent = `S${stationRef.current}`
-    layoutScrim(stationRef.current)
+    layoutScrim(stationRef.current, true)
     // Fired in the same tick the pan starts, but on a longer duration and a
     // milder curve, so the sky is still settling ~900ms after the pan lands.
     // Retargeting (a queued/rapid Stream-Deck turn landing mid-fade) is free

@@ -198,4 +198,44 @@ describe('EvolvingRingAmbient — every single-step advance glides on screen', (
     await show('show_b', 9) // multi-slide skip -> jumpTo(): instant
     expect(design.classList.contains('ring-star-settle')).toBe(false)
   }, 60_000)
+
+  it('the centre scrim fades between stations on a glide and snaps on a jump (transition audit: 4 -> 5 jump)', async () => {
+    await show('show_b', 1)
+    const scrim = container.querySelector('.ring-scrim')
+    expect(scrim.style.transition).toBe('none') // mount
+    await show('show_b', 2) // turn()
+    expect(scrim.style.transition).toMatch(/opacity/)
+    expect(parseFloat(scrim.style.opacity)).toBeGreaterThan(0)
+    expect(parseFloat(scrim.style.opacity)).toBeLessThanOrEqual(1)
+    await act(async () => { vi.advanceTimersByTime(SETTLE_MS) })
+    await show('show_b', 9) // jump
+    expect(scrim.style.transition).toBe('none')
+  }, 60_000)
+
+  it('a sky set keeps its stacking order while it shows, so the sky never snaps at the next slide', async () => {
+    await show('show_b', 2)
+    await show('show_b', 3) // gap: two skies lit
+    await act(async () => { vi.advanceTimersByTime(SETTLE_MS) })
+    const sets = () => [...container.querySelectorAll('.ring-void')].slice(1) // [0] is the plain base
+    const lit = sets().filter(v => parseFloat(v.style.opacity) > 0)
+    expect(lit).toHaveLength(2)
+    const [low, high] = lit.sort((a, b) => Number(a.style.zIndex) - Number(b.style.zIndex))
+    expect(low.style.opacity).toBe('1') // lower sky at full strength,
+    expect(high.style.opacity).toBe('0.5') // upper at half: an even blend
+    const before = new Map(sets().map(v => [v, v.style.zIndex]))
+    await show('show_b', 4) // next slide: only the arriving world stays lit
+    for (const v of sets()) expect(v.style.zIndex).toBe(before.get(v) ?? v.style.zIndex)
+    expect(high.style.opacity).toBe('1')
+    expect(low.style.opacity).toBe('0')
+  }, 60_000)
+
+  it('a gap on the last pane keeps its right-hand object across the 12 -> 0 wrap (mirrored one period left)', async () => {
+    let slide = null
+    for (let s = 13; s < 600 && slide == null; s++) if (s % PANES === PANES - 1 && isTransitionSlide('show_b', s)) slide = s
+    expect(slide).not.toBeNull()
+    await show('show_b', slide)
+    const els = paneEls(PANES - 1)
+    expect(els).toHaveLength(3) // left object, right object, and the right one's twin
+    expect(els.filter(n => parseFloat(n.style.left) < 0)).toHaveLength(1)
+  }, 60_000)
 })
