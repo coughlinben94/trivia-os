@@ -77,29 +77,39 @@ export default function AmbientAudit() {
   }, [evolvingMode, evolvingAutoPlay])
 
   if (evolvingMode) {
+    const controlStyle = {
+      padding: '10px 16px',
+      color: '#fff',
+      background: '#253047',
+      border: '1px solid rgba(255,255,255,0.45)',
+      borderRadius: 8,
+      fontWeight: 700,
+      cursor: 'pointer',
+      boxShadow: '0 2px 12px rgba(0,0,0,0.45)',
+    }
     return (
       <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
         <EvolvingRingAmbient showId={evolvingShowId} slideIndex={evolvingSlide} />
-        <div style={{ position: 'absolute', top: 24, left: 24, zIndex: 30, display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div style={{ position: 'absolute', top: 24, left: 24, zIndex: 30, display: 'flex', gap: 10, alignItems: 'center', padding: 8, borderRadius: 12, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(3,7,18,0.78)' }}>
           <button
             onClick={() => { setEvolvingAutoPlay(false); setEvolvingSlide(s => s - 1) }}
-            style={{ padding: '10px 20px' }}
+            style={controlStyle}
           >
             ◀ Prev (slide {evolvingSlide})
           </button>
           <button
             onClick={() => { setEvolvingAutoPlay(false); setEvolvingSlide(s => s + 1) }}
-            style={{ padding: '10px 20px' }}
+            style={controlStyle}
           >
             Next slide ▶
           </button>
           <button
             onClick={() => setEvolvingAutoPlay(p => !p)}
-            style={{ padding: '10px 20px', background: evolvingAutoPlay ? '#2a6' : undefined }}
+            style={{ ...controlStyle, background: evolvingAutoPlay ? '#166534' : controlStyle.background }}
           >
             {evolvingAutoPlay ? '⏸ Pause auto-play' : '▶ Auto-play (4s/slide)'}
           </button>
-          <span style={{ color: '#fff', fontFamily: 'monospace', fontSize: '0.85rem', opacity: 0.7 }}>
+          <span style={{ color: '#fff', fontFamily: 'monospace', fontSize: '0.85rem', opacity: 0.95 }}>
             showId={evolvingShowId} — try ?showId=x for a different walk
           </span>
         </div>

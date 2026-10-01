@@ -14,7 +14,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, forwardRef, useEffect, useImperativeHandle, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { DUO_PALETTES, DUO_GRAPH } from '../../lib/duoGraph.js'
-import { outgoingAndIncomingDuo, isTransitionSlide } from '../../lib/duoTransition.js'
+import { outgoingAndIncomingDuo } from '../../lib/duoTransition.js'
 import { drawStations } from '../../lib/ringDraw.js'
 import { RING_POOL } from '../../worlds/ringPool.js'
 import { midnightGalaxyRing } from '../../worlds/midnightGalaxy.ring.js'
@@ -43,10 +43,7 @@ vi.mock('./RingAmbient.jsx', () => ({
 
 const { default: EvolvingRingAmbient } = await import('./EvolvingRingAmbient.jsx')
 
-const onScreen = (showId, i) => {
-  const { outgoing, incoming } = outgoingAndIncomingDuo(showId, DUO_GRAPH, i)
-  return isTransitionSlide(showId, i) ? [outgoing, incoming] : [incoming]
-}
+const onScreen = (showId, i) => [outgoingAndIncomingDuo(showId, DUO_GRAPH, i).incoming]
 const alive = () => mounts.filter(m => m.alive)
 
 describe('EvolvingRingAmbient', () => {
@@ -61,7 +58,8 @@ describe('EvolvingRingAmbient', () => {
     // show_b: transition at 3 (neon_garden -> electric_bloom, pinned in
     // duoTransition.test.js), settles at 4, next transition at 6.
     const root = createRoot(document.createElement('div'))
-    const [a, b] = onScreen('show_b', 3)
+    const [a] = onScreen('show_b', 2)
+    const [b] = onScreen('show_b', 3)
 
     await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={2} />) })
     // Solo on a, with b pre-mounted (hidden) for the transition next slide.
@@ -72,15 +70,15 @@ describe('EvolvingRingAmbient', () => {
     expect(alive().map(m => m.id)).toEqual(before) // transition: nothing new, nothing lost
 
     await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={4} />) })
-    // Settle: b is the SAME instance it was as the incoming half; a stays
-    // mounted (Prev lands back on the transition); only the world for the
-    // NEXT transition (slide 6) is preloaded on the following step.
+    // b is the SAME instance it was on arrival; a is no longer a neighbor
+    // (slides 3-5 are all b), so it unmounts; the world for the NEXT change
+    // (slide 6) is preloaded on the following step.
     const bInst = mounts.find(m => m.duo === b)
     expect(bInst.alive).toBe(true)
     expect(mounts.filter(m => m.duo === b)).toHaveLength(1)
     expect(mounts.filter(m => m.duo === a)).toHaveLength(1)
     await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={5} />) })
-    const [, c] = onScreen('show_b', 6)
+    const [c] = onScreen('show_b', 6)
     expect(alive().map(m => m.duo).sort()).toEqual([b, c].sort())
 
     await act(async () => { root.unmount() })
@@ -136,21 +134,19 @@ describe('EvolvingRingAmbient', () => {
     await act(async () => { root.unmount() })
   })
 
-  it('applies a stable SVG wipe only on a transition slide and reveals immediately for reduced motion', async () => {
+  it('shows one world per slide: only the current duo is opaque, no mask, instant swap for reduced motion', async () => {
     const container = document.createElement('div')
     document.body.appendChild(container)
     window.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} })
     const root = createRoot(container)
 
     await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={2} />) })
-    expect([...container.querySelectorAll('div')].some(el => el.style.maskImage)).toBe(false)
-
     await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={3} />) })
-    const maskedLayer = [...container.querySelectorAll('div')].find(el => el.style.maskImage)
-    expect(maskedLayer).toBeTruthy()
-    expect(maskedLayer.style.maskImage).toMatch(/duo-wipe-/)
-    const maskPath = maskedLayer.querySelector('mask path')
-    expect(maskPath.getAttribute('d')).toBe('M -300 -300 H 1300 V 1300 H -300 Z')
+    const layers = [...container.firstChild.children]
+    expect(layers.filter(el => el.style.opacity === '1')).toHaveLength(1)
+    expect(layers.every(el => !el.style.maskImage)).toBe(true)
+    expect(container.querySelector('svg, mask')).toBeNull()
+    expect(layers.find(el => el.style.opacity === '1').style.transition).toMatch(/opacity 0ms/)
 
     await act(async () => { root.unmount() })
     document.body.removeChild(container)

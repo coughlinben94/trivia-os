@@ -37,7 +37,7 @@ function onScreenStation(stageEl) {
 
 function isVisible(el, container) {
   for (let n = el; n && n !== container; n = n.parentElement) {
-    if (n.style?.visibility === 'hidden') return false
+    if (n.style?.opacity === '0') return false
   }
   return true
 }
@@ -106,26 +106,26 @@ describe('EvolvingRingAmbient — every single-step advance glides on screen', (
     expect(await walk(showId, range(a, b))).toEqual([])
   }, 120_000)
 
-  it('at settle the incoming world carries over as the current one — same DOM node, debug handle follows it', async () => {
-    // show_b: transition at 3 (outgoing -> incoming), settles at 4.
+  it('one world per slide; the world carries over as the same DOM node, debug handle follows it', async () => {
+    // show_b: the world changes arriving at slide 3, and stays through 4.
     await show('show_b', 2)
     await act(async () => { vi.advanceTimersByTime(SETTLE_MS) })
     await show('show_b', 3)
-    const [under, over] = byPaintOrder(visibleStages(container))
-    expect(over.parentElement.style.maskImage).toMatch(/duo-wipe-/)
+    const visible = visibleStages(container)
+    expect(visible).toHaveLength(1) // never two worlds on one slide
+    const [over] = visible
+    expect(over.parentElement.style.opacity).toBe('1')
+    expect(container.querySelector('mask')).toBeNull() // no wipe machinery
+    // The outgoing world stays mounted, transparent, so a Prev back onto
+    // slide 2 can fade it back in.
+    const under = [...container.querySelectorAll('.ring-stage')].find(s => s !== over)
+    expect(isVisible(under, container)).toBe(false)
     await act(async () => { vi.advanceTimersByTime(SETTLE_MS) })
     await show('show_b', 4)
-    const after = visibleStages(container)
-    expect(after).toEqual([over])
-    // The outgoing world stays mounted, hidden, so a Prev back onto the
-    // transition slide can glide it back in.
-    expect(container.contains(under)).toBe(true)
-    expect(isVisible(under, container)).toBe(false)
-    expect(over.parentElement.style.maskImage).toBe('')
+    expect(visibleStages(container)).toEqual([over])
     expect(over.classList.contains('go')).toBe(true)
-    // window.__world belongs to the world now on screen, not the unmounted
-    // outgoing one or a hidden neighbor. Matched by backdrop color (the
-    // stage's background is its world's last sky stop).
+    // window.__world belongs to the world now on screen. Matched by backdrop
+    // color (the stage's background is its world's last sky stop).
     expect(window.__world.station).toBe(4)
     const probe = document.createElement('div')
     probe.style.background = window.__world.WORLD.sky.at(-1)
@@ -134,26 +134,18 @@ describe('EvolvingRingAmbient — every single-step advance glides on screen', (
 })
 
 describe('EvolvingRingAmbient — prefers-reduced-motion', () => {
-  it('shows the incoming world whole (no drifting mask) and clears it at settle', async () => {
+  it('swaps worlds with no fade', async () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true
     global.ResizeObserver = class { observe() {} disconnect() {} }
     window.matchMedia = (q) => ({ matches: q.includes('reduce'), addEventListener() {}, removeEventListener() {} })
-    const raf = vi.spyOn(window, 'requestAnimationFrame')
     const container = document.createElement('div')
     document.body.appendChild(container)
     const root = createRoot(container)
     await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={2} />) })
     await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={3} />) })
-    const [, over] = byPaintOrder(visibleStages(container))
-    expect(over.parentElement.style.maskImage).toMatch(/duo-wipe-/)
-    expect(over.parentElement.querySelector('mask path').getAttribute('d'))
-      .toBe('M -300 -300 H 1300 V 1300 H -300 Z')
-    expect(raf).not.toHaveBeenCalled()
-    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={4} />) })
-    expect(visibleStages(container)).toEqual([over])
-    expect(over.parentElement.style.maskImage).toBe('')
+    const [over] = visibleStages(container)
+    expect(over.parentElement.style.transition).toMatch(/opacity 0ms/)
     await act(async () => { root.unmount() })
     document.body.removeChild(container)
-    raf.mockRestore()
   }, 60_000)
 })
