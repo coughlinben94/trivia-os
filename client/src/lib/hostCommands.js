@@ -18,7 +18,7 @@
 // nothing to do (an end-state command that already matches).
 import { COMMAND_TTL_MS, TIMER_STEP_SECONDS, TIMER_MIN_SECONDS, TIMER_MAX_SECONDS, TIMER_LEGACY_MAX_MINUTES, TIMER_ADD_SECONDS } from './remoteProtocol.js'
 import { validScoreValue } from './scoreCellWrite.js'
-import { timerView } from './showTimer.js'
+import { timerView, validTitle } from './showTimer.js'
 
 // Commands whose meaning depends on which slide the sender was looking at.
 const SLIDE_BOUND = new Set(['next', 'prev', 'answer', 'jump', 'unlock', 'rescore'])
@@ -50,8 +50,11 @@ function planTimer(cmd, args, ctx) {
   if (cmd === 'timer.start') {
     const ms = timerMs(args)
     if (ms == null) return { refuse: 'bad-minutes' }
+    // Label: absent or null = none (old pages send nothing); anything outside the list refuses.
+    const title = args.title == null ? undefined : validTitle(args.title)
+    if (args.title != null && title === undefined) return { refuse: 'bad-title' }
     if (live && args.replace !== true) return { refuse: 'timer-running' }
-    return { run: 'timer-start', ms }
+    return { run: 'timer-start', ms, title }
   }
   if (!t) return cmd === 'timer.cancel' ? { run: 'noop' } : { refuse: 'no-timer' }
   if (typeof args.timerId !== 'string' || args.timerId !== t.id) return { refuse: 'timer-changed' }

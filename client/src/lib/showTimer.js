@@ -39,10 +39,17 @@ export function parseDuration(text) {
 }
 export const parseMinutes = parseDuration // old name, still imported by hostCommands and tests
 
+// Optional label shown above the clock on the TV. One shared list: the laptop card,
+// the iPad drawer and the planner all check against it. No label = no `title` key.
+export const TIMER_TITLES = ['Answers due', 'Break']
+export const DEFAULT_TIMER_TITLE = TIMER_TITLES[0]
+export const validTitle = t => (TIMER_TITLES.includes(t) ? t : undefined)
+
 const newId = now => `t${now.toString(36)}${Math.random().toString(36).slice(2, 6)}`
 
-export function startTimer(durationMs, now) {
-  return { id: newId(now), state: 'running', totalMs: durationMs, endsAt: now + durationMs, remainingMs: durationMs, sentAt: now }
+export function startTimer(durationMs, now, title) {
+  const t = validTitle(title)
+  return { id: newId(now), state: 'running', totalMs: durationMs, endsAt: now + durationMs, remainingMs: durationMs, sentAt: now, ...(t && { title: t }) }
 }
 
 export function remainingAt(t, now) {
@@ -64,7 +71,7 @@ export function resumeTimer(t, now) {
 // so the chime can play again).
 export function addTime(t, ms, now) {
   const left = remainingAt(t, now)
-  if (left <= 0) return startTimer(ms, now)
+  if (left <= 0) return startTimer(ms, now, t.title)
   const totalMs = Math.min(t.totalMs + ms, MAX_MS)
   return t.state === 'paused'
     ? { ...t, totalMs, remainingMs: t.remainingMs + ms, sentAt: now }
@@ -86,13 +93,14 @@ export function timerView(t, now, offset = 0) {
   const remainingMs = remainingAt(t, now - offset)
   // A hand-edited or damaged row (no endsAt, text, NaN) must read as no timer, not "Time's up" forever.
   if (!Number.isFinite(remainingMs)) return { phase: 'idle', remainingMs: 0, label: '', sinceEndMs: 0 }
-  if (t.state === 'paused') return { id: t.id, phase: 'paused', remainingMs, label: clockLabel(remainingMs), sinceEndMs: 0 }
+  const title = validTitle(t.title)
+  if (t.state === 'paused') return { id: t.id, title, phase: 'paused', remainingMs, label: clockLabel(remainingMs), sinceEndMs: 0 }
   if (remainingMs > 0) {
-    return { id: t.id, phase: remainingMs <= URGENT_MS ? 'urgent' : 'running', remainingMs, label: clockLabel(remainingMs), sinceEndMs: 0 }
+    return { id: t.id, title, phase: remainingMs <= URGENT_MS ? 'urgent' : 'running', remainingMs, label: clockLabel(remainingMs), sinceEndMs: 0 }
   }
   const sinceEndMs = -remainingMs
   if (sinceEndMs >= DONE_VISIBLE_MS) return { phase: 'idle', remainingMs: 0, label: '', sinceEndMs }
-  return { id: t.id, phase: 'done', remainingMs: 0, label: clockLabel(0), sinceEndMs }
+  return { id: t.id, title, phase: 'done', remainingMs: 0, label: clockLabel(0), sinceEndMs }
 }
 
 // Play the chime for this timer id only once, and not for a TV that loaded long after zero.
@@ -108,7 +116,7 @@ export function calibrateOffset(localNow, t) {
 // returns what to hand to actions.setShowTimer (null clears it).
 export function applyTimerStep(step, timer, now) {
   switch (step.run) {
-    case 'timer-start': return startTimer(step.ms, now)
+    case 'timer-start': return startTimer(step.ms, now, step.title)
     case 'timer-pause': return pauseTimer(timer, now)
     case 'timer-resume': return resumeTimer(timer, now)
     case 'timer-add': return addTime(timer, step.ms, now)

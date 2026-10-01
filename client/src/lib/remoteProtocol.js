@@ -89,6 +89,7 @@ export const REFUSAL_TEXT = {
   'timer-changed': 'The timer changed on the laptop. Look again',
   'no-timer': 'No timer is running',
   'bad-minutes': 'Pick a time in 30 second steps, 30 seconds to 3 hours',
+  'bad-title': 'Pick Answers due, Break, or no label',
   'bad-add': 'Add 30 seconds or 1 minute',
 }
 // One line for a score fix, shown on the laptop and written to the relay log.

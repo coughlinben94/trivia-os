@@ -131,7 +131,7 @@ describe('/remote timer drawer: idle', () => {
     click(d.querySelector('[data-k="preset-30"]'))
     expect(d.querySelector('[data-k="timer-start"]').textContent).toBe('Start 0:30')
     click(d.querySelector('[data-k="timer-start"]'))
-    expect(lastCmd().args).toEqual({ seconds: 30 })
+    expect(lastCmd().args).toEqual({ seconds: 30, title: 'Answers due' })
   })
   it('Adjust opens a stepper at 1:00 when nothing is chosen; plus and minus move 30 seconds', () => {
     setup()
@@ -155,7 +155,7 @@ describe('/remote timer drawer: idle', () => {
     expect(d.querySelector('[data-k="timer-start"]').textContent).toBe('Start 2:00')
     click(d.querySelector('[data-k="step-up"]'))
     click(d.querySelector('[data-k="timer-start"]'))
-    expect(lastCmd().args).toEqual({ seconds: 150 })
+    expect(lastCmd().args).toEqual({ seconds: 150, title: 'Answers due' })
   })
   it('the stepper starts from the chosen preset', () => {
     setup()
@@ -181,7 +181,7 @@ describe('/remote timer drawer: idle', () => {
     expect(d.querySelector('[data-k="step-value"]').textContent).toBe('3:00:00')
     expect(d.querySelector('[data-k="step-up"]').disabled).toBe(true)
     click(d.querySelector('[data-k="timer-start"]'))
-    expect(lastCmd().args).toEqual({ seconds: 10800 })
+    expect(lastCmd().args).toEqual({ seconds: 10800, title: 'Answers due' })
   })
   it('stepper buttons are at least 56px tall and have press feedback', () => {
     setup()

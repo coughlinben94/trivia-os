@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { timerView, TIMES_UP, clockLabel } from '../lib/showTimer.js'
+import { timerView, TIMES_UP, clockLabel, TIMER_TITLES, DEFAULT_TIMER_TITLE } from '../lib/showTimer.js'
 import { TIMER_PRESETS_SECONDS, TIMER_STEP_SECONDS, TIMER_MIN_SECONDS, TIMER_MAX_SECONDS } from '../lib/remoteProtocol.js'
 
 // The iPad's timer: a tile on the main screen that shows the clock, and a
@@ -89,6 +89,7 @@ const go = `bg-[color:var(--rl-next)] text-[color:var(--rl-nextink)] active:bg-[
 export function TimerPanel({ timer, offsetMs, block, send }) {
   const view = useTimerView(timer, offsetMs)
   const [seconds, setSeconds] = useState(null) // chosen duration in seconds, or null
+  const [title, setTitle] = useState(DEFAULT_TIMER_TITLE) // '' = none; kept across Starts
   const [adjust, setAdjust] = useState(false) // the +/- stepper is open
   const [cancelArmed, setCancelArmed] = useState(false)
   useEffect(() => {
@@ -122,15 +123,37 @@ export function TimerPanel({ timer, offsetMs, block, send }) {
               {done ? WORD.done : view.label}
             </span>
             {!done && (
-              <span className="flex items-center gap-2 text-2xl font-bold text-[color:var(--rl-text-75)]">
-                <PhaseMark phase={view.phase} />
-                {WORD[view.phase]}
+              <span className="flex flex-col gap-1 text-2xl font-bold text-[color:var(--rl-text-75)]">
+                {view.title && <span data-k="timer-title" className="text-xl font-semibold uppercase tracking-wide">{view.title}</span>}
+                <span className="flex items-center gap-2">
+                  <PhaseMark phase={view.phase} />
+                  {WORD[view.phase]}
+                </span>
               </span>
             )}
           </>
         ) : (
           <span className="text-2xl font-semibold text-[color:var(--rl-text-75)]">No timer on the TV</span>
         )}
+      </div>
+
+      <div>
+        <p className="text-[1rem] leading-6 font-semibold text-[color:var(--rl-text-75)] mb-2">Label on the TV</p>
+        <div className="grid grid-cols-3 gap-2">
+          {[...TIMER_TITLES, ''].map(t => (
+            <button
+              key={t || 'none'}
+              data-k={`title-${t ? t.toLowerCase().replace(' ', '-') : 'none'}`}
+              onClick={() => setTitle(t)}
+              aria-pressed={title === t}
+              className={`min-h-[72px] rounded-[var(--rl-r)] text-2xl font-bold ${press} ${focus} ${
+                title === t ? 'bg-[color:var(--rl-text)] text-[color:var(--rl-nextink)]' : raised
+              }`}
+            >
+              {t || 'None'}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div>
@@ -189,7 +212,7 @@ export function TimerPanel({ timer, offsetMs, block, send }) {
           </div>
           <div className="grid grid-cols-1 gap-3">
             <button data-k="timer-restart" disabled={!canStart}
-              onClick={() => { send('timer.start', { seconds, replace: true }); clearPick() }}
+              onClick={() => { send('timer.start', { seconds, replace: true, title: title || null }); clearPick() }}
               className={`${big} ${go}`}>
               {seconds != null ? `Replace with ${mss(seconds)}` : 'Replace timer'}
             </button>
@@ -205,7 +228,7 @@ export function TimerPanel({ timer, offsetMs, block, send }) {
       ) : (
         <div className={`grid gap-3 ${done ? 'grid-cols-3' : 'grid-cols-1'}`}>
           <button data-k="timer-start" disabled={!canStart}
-            onClick={() => { send('timer.start', { seconds }); clearPick() }}
+            onClick={() => { send('timer.start', { seconds, title: title || null }); clearPick() }}
             className={`${big} min-h-[96px] text-3xl ${done ? 'col-span-3' : ''} ${go}`}>
             {seconds != null ? `Start ${mss(seconds)}` : 'Pick a time'}
           </button>
