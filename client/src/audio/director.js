@@ -538,6 +538,29 @@ export function createDirector(overrides = {}) {
     return ensureContext()
   }
 
+  // For synth sounds (bell, chime, beeps): the shared context, but ONLY if it is running. A
+  // suspended context's clock is paused, so anything scheduled on it would ring late, at the
+  // next click. Waits up to waitMs for resume() (it can hang forever without a gesture); when
+  // the context will not run, reports once per label and resolves null so the caller skips.
+  async function audioContext({ waitMs = 400, label = 'synth' } = {}) {
+    const c = ensureContext()
+    if (c && c.state !== 'running') {
+      const resumed = safe(() => c.resume())
+      await Promise.race([
+        Promise.resolve(resumed).catch(() => {}),
+        new Promise(resolve => d.setTimer(resolve, waitMs)),
+      ])
+    }
+    if (c && c.state === 'running') return c
+    const key = `synth|${label}`
+    d.breadcrumb('audio blocked', { kind: 'synth', label, reason: c ? 'context-suspended' : 'no-audio-context' })
+    if (!reported.has(key)) {
+      reported.add(key)
+      d.event('warning', `audio: play blocked (${label})`, { reason: c ? 'context-suspended' : 'no-audio-context' })
+    }
+    return null
+  }
+
   function stopAll() {
     for (const h of [...handles.values()]) h.release()
     for (const [k, h] of [...parked]) { parked.delete(k); safe(() => h.destroy()) } // players parked by clips that already ended
@@ -565,7 +588,7 @@ export function createDirector(overrides = {}) {
 
   return {
     status, unlock, installGestureUnlock, subscribe, getSnapshot: () => snapshot,
-    warm, play, retryBlocked, getContext, stopAll,
+    warm, play, retryBlocked, getContext, audioContext, stopAll,
     _internals: { reset, handles }, // test seams only
   }
 }

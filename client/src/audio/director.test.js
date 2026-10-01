@@ -1153,4 +1153,64 @@ describe('review fixes (2026-10-01)', () => {
       expect(vi.getTimerCount()).toBe(0)
     })
   })
+
+  describe('audioContext() for synth sounds (plan 3)', () => {
+    it('returns the shared context at once when it is already running', async () => {
+      const f = runningFakes()
+      const d = createDirector(f.deps)
+      expect(await d.audioContext({ label: 'bell' })).toBe(f.ctx)
+      expect(f.ctx.resumeCalls).toBe(0)
+    })
+
+    it('resumes a suspended context and returns it when resume() works', async () => {
+      const f = makeFakes()
+      const d = createDirector(f.deps)
+      expect(await d.audioContext({ label: 'bell' })).toBe(f.ctx)
+      expect(f.ctx.resumeCalls).toBe(1)
+    })
+
+    it('a context that will not run (resume hangs) gives null after the wait, reported ONCE per label', async () => {
+      const f = makeFakes()
+      f.ctx.resumeMode = 'hang'
+      const d = createDirector(f.deps)
+      const p = d.audioContext({ label: 'bell', waitMs: 400 })
+      vi.advanceTimersByTime(400)
+      expect(await p).toBeNull()
+      expect(f.events).toHaveLength(1)
+      expect(f.events[0].message).toBe('audio: play blocked (bell)')
+      const p2 = d.audioContext({ label: 'bell', waitMs: 400 })
+      vi.advanceTimersByTime(400)
+      expect(await p2).toBeNull()
+      expect(f.events).toHaveLength(1)
+      const p3 = d.audioContext({ label: 'timer', waitMs: 400 })
+      vi.advanceTimersByTime(400)
+      await p3
+      expect(f.events).toHaveLength(2) // a different sound is its own report
+    })
+
+    it('a rejected resume() gives null, never throws', async () => {
+      const f = makeFakes()
+      f.ctx.resumeMode = 'reject'
+      const d = createDirector(f.deps)
+      expect(await d.audioContext({ label: 'bell' })).toBeNull()
+    })
+
+    it('no AudioContext in this browser gives null', async () => {
+      const f = makeFakes({ ctx: null })
+      f.deps.makeContext = vi.fn(() => null)
+      const d = createDirector(f.deps)
+      expect(await d.audioContext({ label: 'bell' })).toBeNull()
+    })
+
+    it('a context that starts running while we wait is returned (a click landed)', async () => {
+      const f = makeFakes()
+      f.ctx.resumeMode = 'hang'
+      const d = createDirector(f.deps)
+      const p = d.audioContext({ label: 'bell', waitMs: 1500 })
+      vi.advanceTimersByTime(300)
+      f.ctx._set('running')
+      vi.advanceTimersByTime(1200)
+      expect(await p).toBe(f.ctx)
+    })
+  })
 })
