@@ -165,6 +165,22 @@ describe('youtubeWarmAudio telemetry', () => {
     a.destroy(); b.destroy()
   })
 
+  // Review of c8a260b: destroy() removed only the ORIGINAL hidden container, so a
+  // claim that rebuilt cold left its fresh 1x1 iframe holder in <body> forever.
+  it('destroy() removes the rebuilt clip\'s hidden container too (no 1x1 leak)', async () => {
+    H.apiMode = 'hang'
+    // every hidden holder the module appends to <body> is a position:fixed 1x1 div
+    const holders = () => [...document.body.children].filter(el => el.style.position === 'fixed' && el.style.width === '1px').length
+    const entry = mod.claimYoutubeAudio('vidL', 0, 30)
+    await flush()
+    expect(holders()).toBe(1)
+    vi.advanceTimersByTime(1500) // claim timeout: rebuild cold into a fresh container
+    await flush()
+    expect(holders()).toBe(1) // old one removed, new one added
+    entry.destroy()
+    expect(holders()).toBe(0)
+  })
+
   it('never throws if Sentry itself throws', async () => {
     H.apiMode = 'reject'
     Sentry.captureMessage.mockImplementation(() => { throw new Error('sentry down') })

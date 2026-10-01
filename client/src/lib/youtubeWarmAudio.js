@@ -82,6 +82,7 @@ function createEntry(videoId, start, end) {
 
   const entry = {
     key: keyOf(videoId, start, end),
+    _container: container, // the CURRENT hidden holder — a cold rebuild swaps it, destroy() must remove whichever is live
     claimed: false,
     destroyed: false,
     _player: null, // set once onReady has fired — the only time it's safe to drive
@@ -113,7 +114,8 @@ function createEntry(videoId, start, end) {
         report('claim timeout, rebuilding cold', videoId, start, end, 'warning', { wasWarm: this.wasWarm })
         try { this._player?.destroy() } catch { /* never got that far */ }
         if (container.parentNode) container.parentNode.removeChild(container)
-        buildPlayer(this, videoId, start, end, freshContainer())
+        this._container = freshContainer()
+        buildPlayer(this, videoId, start, end, this._container)
         this._readyTimer = setTimeout(() => {
           if (this.destroyed || this._player) return
           report('still not ready after cold rebuild', videoId, start, end, 'error', { wasWarm: this.wasWarm })
@@ -130,7 +132,8 @@ function createEntry(videoId, start, end) {
       try { this._player?.destroy() } catch { /* already gone */ }
       this._player = null
       this._readyCbs = []
-      if (container.parentNode) container.parentNode.removeChild(container)
+      const live = this._container
+      if (live?.parentNode) live.parentNode.removeChild(live)
     },
   }
 
