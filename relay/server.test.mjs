@@ -9,6 +9,7 @@ import { createRelay, initSecret, devRefused, PROD_ORIGIN, DEV_ORIGIN } from './
 import { CLOSE_BAD_SECRET, CLOSE_RETRY, CLOSE_REPLACED, CLOSE_TOO_FAST } from '../client/src/lib/remoteProtocol.js'
 import { createLocal } from './local.mjs'
 import { fakeRunner } from './fake-runner.mjs'
+import { makeUntil } from './test-helpers.mjs'
 
 const SECRET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 const quiet = { log() {}, warn() {}, error() {} }
@@ -41,15 +42,7 @@ function open(port, origin = PROD_ORIGIN, pathname = '') {
     ws.once('error', reject)
   })
 }
-async function until(fn, ms = 1500) {
-  const t0 = Date.now()
-  while (Date.now() - t0 < ms) {
-    const v = fn()
-    if (v) return v
-    await new Promise(r => setTimeout(r, 10))
-  }
-  throw new Error('timed out')
-}
+const until = makeUntil(1500)
 const find = (ws, pred) => until(() => ws.inbox.find(pred))
 const openHost = () => open(ports.hostPort)
 async function pairedIpad(secret = SECRET) {
