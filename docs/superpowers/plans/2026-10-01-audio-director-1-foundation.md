@@ -413,7 +413,7 @@ git commit -m "feat(audio): resolveSlideClip — one answer to what clip a slide
   - `Handle`: `{key, slideId, clip, state, reason, onEnded(cb), stop(), retry()}` with `state` one of `'pending'|'playing'|'blocked'|'ended'|'stopped'|'preview'`.
   - `Deps`: `makeContext()`, `makeElement()`, `youtube:{warm,claim}`, `hasUserActivation()`, `setTimer(fn,ms)`, `clearTimer(id)`, `now()`, `breadcrumb(message,data)`, `event(level,message,extra)`.
 
-Because `play()` is large, this task creates the whole `director.js` file with `play` stubbed to throw `not implemented`; Tasks 4–6 add file playback, YouTube playback and blocked handling with their own tests. Within this task only status/unlock/subscribe/preview are tested.
+Because `play()` is large, this task creates the whole `director.js` file with `play` stubbed (it validates the clip and honors preview, then throws `not implemented`); Tasks 4–6 add file playback, YouTube playback and robustness with their own tests. Within this task only status/unlock/subscribe/preview are tested.
 
 - [ ] **Step 1: Create the test fakes (used by every director test)**
 
@@ -713,21 +713,13 @@ describe('preview mode', () => {
     d.warm({ kind: 'youtube', videoId: 'v' })
     expect(f.youtube.warm).not.toHaveBeenCalled()
   })
-
-  it('leaving preview makes play() live again', () => {
-    const f = makeFakes({ ctx: new FakeContext('running') })
-    const d = createDirector(f.deps)
-    d.setPreview(true)
-    d.setPreview(false)
-    expect(d.play({ kind: 'file', url: '/a.mp3' }, { slideId: 's1' }).state).not.toBe('preview')
-  })
 })
 ```
 
 - [ ] **Step 3: Run the tests, confirm they fail because the module is missing**
 
 Run: `npx vitest run client/src/audio/director.test.js`
-Expected: FAIL — `Cannot find module './director.js'`. (The `leaving preview` test needs `play`, which Task 3 stubs; it will fail with `not implemented` until Task 4 — that is expected and listed below.)
+Expected: FAIL — `Failed to resolve import "./director.js"`.
 
 - [ ] **Step 4: Write the director core**
 
@@ -857,7 +849,10 @@ export function createDirector(overrides = {}) {
     return { key: clipKey(slideId, clip), slideId, clip, state: 'preview', reason: null, onEnded() {}, stop() {}, retry() {} }
   }
 
-  function play(/* rawClip, { slideId } */) {
+  // Task 3 stub: validates and honors preview; real playback arrives in Task 4.
+  function play(rawClip, { slideId = null } = {}) {
+    const clip = normalizeClip(rawClip)
+    if (preview) return previewHandle(clip, slideId)
     throw new Error('director.play is implemented in Plan 1, Task 4')
   }
 
@@ -882,7 +877,7 @@ export const director = createDirector()
 - [ ] **Step 5: Run the tests, confirm status/unlock/subscribe/preview pass**
 
 Run: `npx vitest run client/src/audio/director.test.js`
-Expected: all pass EXCEPT `leaving preview makes play() live again` (needs `play`, Task 4). Report `Tests  17 passed | 1 failed (18)`.
+Expected: PASS — `Tests  15 passed (15)`.
 
 - [ ] **Step 6: Mutation check**
 
@@ -1082,6 +1077,14 @@ describe('director plays file clips', () => {
     expect(f.elements[0].volume).toBe(1) // 12 dB would be 3.98: capped at 1
     expect(f.elements[0].playCalls).toBe(1)
     expect(h.state).toBe('playing')
+  })
+
+  it('leaving preview makes play() live again', () => {
+    const f = makeFakes({ ctx: new FakeContext('running') })
+    const d = createDirector(f.deps)
+    d.setPreview(true)
+    d.setPreview(false)
+    expect(d.play({ kind: 'file', url: '/a.mp3' }, { slideId: 's1' }).state).not.toBe('preview')
   })
 
   it('a bad clip throws a clear error to the caller (it never reaches the TV)', () => {
