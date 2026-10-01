@@ -4,6 +4,7 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { EASE_OUT, EASE_DROP } from '../../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import ShinySignal from '../ShinySignal.jsx'
+import { director } from '../../../audio/director.js'
 import { fitToBox, QUESTION_BOX } from '../../../lib/autoFitText.js'
 import { keyframeStops, computeFractions, computeWinner, LANE_COLORS } from '../../../lib/raceMath.js'
 
@@ -79,6 +80,15 @@ function beatIndexAt(elapsedMs, n, legMs) {
   const lastLegStart = (n - 1) * legMs
   if (running >= lastLegStart) return n
   return Math.min(n - 1, Math.floor(running / legMs) + 1)
+}
+
+// CC0 assets (public/race/). Levels were element volumes 0.7 / 0.32 / 0.75; a clip's gainDb is
+// the same thing in dB.
+const volDb = v => 20 * Math.log10(v)
+const RACE_SOUNDS = {
+  bell: { kind: 'file', url: '/race/gate-bell.mp3', gainDb: volDb(0.7) },
+  loop: { kind: 'file', url: '/race/crowd-hoofbeats-loop.mp3', gainDb: volDb(0.32), loop: true },
+  horn: { kind: 'file', url: '/race/finish-horn.mp3', gainDb: volDb(0.75) },
 }
 
 export default function RaceSlide({ slide }) {
@@ -169,7 +179,11 @@ export default function RaceSlide({ slide }) {
   // stays CSS-only (Seek must keep working even if a clip fails to load).
   // Guarded to the real live transition only — a display that reconnects or
   // mounts mid/post-race stays silent, it doesn't replay the whole cue set.
-  const loopAudioRef = useRef(null)
+  // Through the audio director (one shared context, one unlock, one Sentry trail); each clip
+  // keeps the level it had as an element volume. A refused clip is the director's report,
+  // never the race's problem. Leaving the slide cuts every race sound.
+  const loopHandleRef = useRef(null)
+  const hornHandleRef = useRef(null)
   const prevRaceStartedAtRef = useRef(raceStartedAt)
   useEffect(() => {
     const prevStartedAt = prevRaceStartedAtRef.current
@@ -177,34 +191,27 @@ export default function RaceSlide({ slide }) {
     if (reduce || !raceStartedAt || raceStartedAt === prevStartedAt || startedFinished) return
     let bell, loop
     try {
-      bell = new Audio('/race/gate-bell.mp3')
-      bell.volume = 0.7
-      bell.play().catch(() => {})
-      loop = new Audio('/race/crowd-hoofbeats-loop.mp3')
-      loop.loop = true
-      loop.volume = 0.32
-      loop.play().catch(() => {})
-      loopAudioRef.current = loop
+      bell = director.play(RACE_SOUNDS.bell, { slideId: slide.id })
+      loop = director.play(RACE_SOUNDS.loop, { slideId: slide.id })
+      loopHandleRef.current = loop
     } catch (_) { /* a failed/blocked clip must never break the race */ }
     return () => {
-      loop?.pause?.()
-      if (loopAudioRef.current === loop) loopAudioRef.current = null
+      bell?.release()
+      loop?.release()
+      if (loopHandleRef.current === loop) loopHandleRef.current = null
     }
-  }, [raceStartedAt, reduce, startedFinished])
+  }, [raceStartedAt, reduce, startedFinished, slide.id])
 
   const prevFinishedRef = useRef(finished)
   useEffect(() => {
     const wasFinished = prevFinishedRef.current
     prevFinishedRef.current = finished
     if (reduce || !finished || wasFinished) return
-    loopAudioRef.current?.pause?.()
-    loopAudioRef.current = null
-    try {
-      const horn = new Audio('/race/finish-horn.mp3')
-      horn.volume = 0.75
-      horn.play().catch(() => {})
-    } catch (_) { /* a failed/blocked clip must never break the race */ }
-  }, [finished, reduce])
+    loopHandleRef.current?.release()
+    loopHandleRef.current = null
+    try { hornHandleRef.current = director.play(RACE_SOUNDS.horn, { slideId: slide.id }) } catch (_) { /* never break the race */ }
+  }, [finished, reduce, slide.id])
+  useEffect(() => () => { hornHandleRef.current?.release() }, [])
 
   const state = !raceStartedAt ? 'gate' : (finished ? 'finished' : 'running')
 
