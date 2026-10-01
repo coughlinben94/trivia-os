@@ -1,21 +1,13 @@
 // "Time's up" sound for the host timer, synthesized with Web Audio so there is no
 // file to ship or load: three bright two-tone dings, about 1.6s, loud enough for
-// a bar. One shared AudioContext; every function is safe to call and never throws
-// into the live TV.
-let ctx = null
+// a bar. On the audio director's shared AudioContext; every function is safe to call and
+// never throws into the live TV.
+import { director } from '../audio/director.js'
 
-function getCtx() {
-  if (ctx) return ctx
-  const AC = globalThis.AudioContext || globalThis.webkitAudioContext
-  if (!AC) return null
-  try { ctx = new AC() } catch { ctx = null }
-  return ctx
-}
-
-// Call from a real click/key so Chrome lets the context run later, when no
-// gesture is happening (the timer rings on its own).
+// Call from a real click/key so Chrome lets the shared context run later, when no gesture is
+// happening (the timer rings on its own).
 export function unlockTimerAudio() {
-  try { getCtx()?.resume?.() } catch { /* ignore */ }
+  try { director.unlock() } catch { /* ignore */ }
 }
 
 function ding(ac, at, freq) {
@@ -33,17 +25,13 @@ function ding(ac, at, freq) {
   }
 }
 
-// Resolves true if the chime was scheduled on a running context, false if the
-// browser kept the context suspended (autoplay block) or audio is unavailable.
+// Resolves true if the chime was scheduled on a running context, false if the browser kept
+// the context suspended (autoplay block, reported once by the director) or audio is
+// unavailable. The overlay shows its own "Click for sound" on false.
 export async function playTimerChime() {
   try {
-    const ac = getCtx()
+    const ac = await director.audioContext({ label: 'timer chime', waitMs: 400 })
     if (!ac) return false
-    if (ac.state !== 'running') {
-      // Without a gesture resume() can hang forever, so only wait a moment for it.
-      await Promise.race([ac.resume(), new Promise(r => setTimeout(r, 400))])
-    }
-    if (ac.state !== 'running') return false
     const t0 = ac.currentTime + 0.05
     for (let i = 0; i < 3; i++) {
       ding(ac, t0 + i * 0.55, 880)
