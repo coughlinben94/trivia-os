@@ -169,6 +169,7 @@ export function createDirector(overrides = {}) {
     let retryImpl = () => {}
     let onEndedImpl = () => {} // runs only on a NATURAL end (not on stop()), e.g. re-warm for an instant replay
     let onPlayingImpl = () => {} // runs each time sound actually starts (e.g. arm the YouTube end backstop)
+    let probeImpl = () => ({})
     let releaseImpl = () => {} // destroys what stop() only parks (a YouTube player)
     const endedCbs = []
     const failedCbs = []
@@ -190,6 +191,7 @@ export function createDirector(overrides = {}) {
       key, slideId, clip,
       get state() { return state },
       get reason() { return reason },
+      probe: () => safe(probeImpl) ?? {},
       onEnded(cb) { endedCbs.push(cb) },
       onFailed(cb) { failedCbs.push(cb) },
       onBlocked(cb) { blockedCbs.push(cb) },
@@ -249,6 +251,7 @@ export function createDirector(overrides = {}) {
 
     const ctl = {
       setStop(fn) { stopImpl = fn },
+      setProbe(fn) { probeImpl = fn },
       setRetry(fn) { retryImpl = fn },
       setOnEnded(fn) { onEndedImpl = fn },
       level: () => level,
@@ -363,6 +366,7 @@ export function createDirector(overrides = {}) {
     // No context (or the graph failed): fall back to the element's own volume, which cannot boost.
     const applyVolume = () => { el.volume = Math.max(0, Math.min(1, Math.min(1, gainLin) * ctl.level())) }
     if (!src) applyVolume()
+    ctl.setProbe(() => ({ el: { paused: el.paused, t: el.currentTime, ready: el.readyState, volume: el.volume } }))
     ctl.setGainImpl(db => {
       gainLin = dbToGain(db)
       if (staticGain) staticGain.gain.value = gainLin
@@ -497,6 +501,7 @@ export function createDirector(overrides = {}) {
       if (clip.onOut === 'end' || outTimer != null) return
       outTimer = d.setTimer(outTick, 250)
     }
+    ctl.setProbe(() => ({ yt: player ? { state: player.getPlayerState(), muted: player.isMuted(), volume: player.getVolume(), time: player.getCurrentTime() } : null }))
     ctl.setOnPlaying(() => { armBackstop(); startOutPoll() })
     ctl.setLevelImpl((x, ms) => {
       if (rampTimer != null) d.clearTimer(rampTimer)
@@ -532,6 +537,12 @@ export function createDirector(overrides = {}) {
       safe(() => h.destroy())
     })
     go()
+  }
+
+  // What every live clip is really doing (player state, muted, volume, time; element paused/time).
+  // For rehearsal in devtools (`__audioDirector.debug()`) and the real-browser tests.
+  function debug() {
+    return [...handles.values()].map(h => ({ key: h.key, slideId: h.slideId, kind: h.clip.kind, state: h.state, reason: h.reason, ...h.probe() }))
   }
 
   function getContext() {
@@ -589,9 +600,11 @@ export function createDirector(overrides = {}) {
 
   return {
     status, unlock, installGestureUnlock, subscribe, getSnapshot: () => snapshot,
-    warm, play, retryBlocked, getContext, audioContext, stopAll,
+    warm, play, retryBlocked, getContext, audioContext, stopAll, debug,
     _internals: { reset, handles }, // test seams only
   }
 }
 
 export const director = createDirector()
+// Devtools handle for rehearsal and the real-browser tests: `__audioDirector.debug()`.
+if (typeof window !== 'undefined') window.__audioDirector = director

@@ -77,8 +77,10 @@ export function fakeYoutube({ state = 1, muted = false } = {}) {
   const yt = { state, muted, neverReady: false, claims: [], time: 0, duration: 0 }
   yt.warm = vi.fn()
   yt.claim = vi.fn((videoId, start, end) => {
+    let vol = 100
     const player = {
-      setVolume: vi.fn(),
+      setVolume: vi.fn(v => { vol = v }),
+      getVolume: () => vol,
       unMute: vi.fn(),
       seekTo: vi.fn(),
       playVideo: vi.fn(),

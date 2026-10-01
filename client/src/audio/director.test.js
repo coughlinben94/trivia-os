@@ -1235,4 +1235,41 @@ describe('review fixes (2026-10-01)', () => {
     d.retryBlocked()
     expect(f.elements[0].playCalls).toBe(plays)
   })
+
+  describe('debug() for rehearsal and the real-browser tests', () => {
+    it('lists live clips with what the YouTube player and the <audio> element are really doing', async () => {
+      const yt = fakeYoutube({ state: 1 })
+      const f = runningFakes({ youtube: yt })
+      const d = createDirector(f.deps)
+      d.play({ kind: 'youtube', videoId: 'v', volume: 70 }, { slideId: 'a' })
+      d.play(fileClip, { slideId: 'b' })
+      await flush()
+      vi.advanceTimersByTime(2000) // the YouTube clip is confirmed by the 2s sound check
+      yt.time = 12
+      const rows = d.debug()
+      expect(rows).toHaveLength(2)
+      const y = rows.find(r => r.kind === 'youtube')
+      expect(y).toMatchObject({ slideId: 'a', state: 'playing', yt: { state: 1, muted: false, volume: 70, time: 12 } })
+      const u = rows.find(r => r.kind === 'file')
+      expect(u).toMatchObject({ slideId: 'b', state: 'playing', el: { paused: false } })
+    })
+
+    it('shows the blocked reason, and an empty list when nothing plays', () => {
+      const f = runningFakes({ youtube: fakeYoutube({ state: 1, muted: true }) })
+      const d = createDirector(f.deps)
+      expect(d.debug()).toEqual([])
+      d.play({ kind: 'youtube', videoId: 'v' }, { slideId: 'a' })
+      vi.advanceTimersByTime(2100)
+      expect(d.debug()[0]).toMatchObject({ state: 'blocked', reason: 'not-sounding', yt: { muted: true } })
+    })
+
+    it('never throws, even when the player does', () => {
+      const yt = fakeYoutube({ state: 1 })
+      const f = runningFakes({ youtube: yt })
+      const d = createDirector(f.deps)
+      d.play({ kind: 'youtube', videoId: 'v' }, { slideId: 'a' })
+      yt.claims[0].player.getPlayerState = () => { throw new Error('boom') }
+      expect(() => d.debug()).not.toThrow()
+    })
+  })
 })
