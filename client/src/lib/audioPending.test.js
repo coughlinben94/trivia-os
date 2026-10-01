@@ -108,6 +108,24 @@ describe('computeTvNextStep (what /display Next does on a raw shows row)', () =>
   })
 })
 
+// Bendle (a Tone.js stem mix, not mediaUrl-shaped) is reached by the TV's Next too
+// now. Its slide component keys on slideId + playing and ignores part, so the TV
+// writes the same mark /host does and Bendle's own start-once latch does the rest.
+describe('TV Next on a Bendle slide', () => {
+  const bendleRow = (audio_playing = null) => ({
+    id: 's', current_slide_index: 0, current_slide_id: 'b1', audio_playing,
+    slides: [{ id: 'b1', type: 'question', order: 0, data: { isShiny: true, shinyInputSchema: { type: 'bendle' }, bendleSongId: 'song1' } }, { id: 'z', type: 'title', order: 1, data: {} }],
+  })
+  it('plays instead of stepping, then steps once it has played', async () => {
+    const noTeams = async () => 0
+    const first = await computeTvNextStep(bendleRow(), noTeams)
+    expect(first).toEqual({ audio_playing: { slideId: 'b1', playing: true, part: 0 } })
+    const second = await computeTvNextStep(bendleRow({ slideId: 'b1', playing: true, part: 0 }), noTeams)
+    expect(second.current_slide_id).toBe('z')
+    expect(second.audio_playing).toBeNull() // leaving the slide clears the mark
+  })
+})
+
 // Review of ad52e56: the TV step path never cleared audio_playing, so after the
 // TV played Q5 and moved on, Left-Arrow back to Q5 autoplayed it on arrival
 // (the 2026-09-14 Round 2 Q8 bug by a new route). Host has always cleared it.
