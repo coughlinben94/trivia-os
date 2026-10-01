@@ -5,7 +5,7 @@ vi.mock('@sentry/react', () => ({ captureMessage: vi.fn(), addBreadcrumb: vi.fn(
 vi.mock('../lib/youtubeWarmAudio.js', () => ({ warmYoutubeAudio: vi.fn(), claimYoutubeAudio: vi.fn() }))
 
 import { createDirector } from './director.js'
-import { FakeContext, makeFakes } from './director.fakes.js'
+import { FakeContext, FakeElement, makeFakes } from './director.fakes.js'
 
 beforeEach(() => { vi.useFakeTimers() })
 afterEach(() => { vi.useRealTimers() })
@@ -17,7 +17,7 @@ describe('director status and unlock', () => {
     const f = makeFakes()
     const d = createDirector(f.deps)
     expect(d.status()).toBe('locked')
-    expect(d.getSnapshot()).toEqual({ status: 'locked', blocked: [] })
+    expect(d.getSnapshot()).toEqual({ status: 'locked', blocked: [], playing: [] })
   })
 
   it('is unlocked with no context when the page already has user activation', () => {
@@ -221,7 +221,7 @@ describe('director plays file clips', () => {
     expect(h.reason).toBe('not-allowed')
     expect(d.getSnapshot().blocked).toEqual([{ key: h.key, slideId: 's1', kind: 'file', part: 0, reason: 'not-allowed' }])
     expect(f.events).toHaveLength(1)
-    expect(f.events[0]).toMatchObject({ level: 'warning', message: 'audio: play blocked (file)' })
+    expect(f.events[0]).toMatchObject({ level: 'warning', message: 'audio: play blocked (upload)' })
     expect(f.events[0].extra).toMatchObject({ slideId: 's1', part: 0, reason: 'not-allowed' })
     // the same clip blocked again does not send a second Sentry event
     d.play(clip, { slideId: 's1' })
@@ -454,6 +454,7 @@ describe('director plays YouTube clips', () => {
     const h = d.play(clip, { slideId: 's1' })
     vi.advanceTimersByTime(2000)
     expect(h.state).toBe('blocked')
+    expect(h.reason).toBe('not-ready') // slow load, told apart from an autoplay-policy block
     expect(f.youtube.claims[0].player.playVideo).not.toHaveBeenCalled()
   })
 
@@ -618,5 +619,167 @@ describe('module hygiene', () => {
     for (const k of ['status', 'unlock', 'installGestureUnlock', 'subscribe', 'getSnapshot', 'setPreview', 'warm', 'play', 'retryBlocked']) {
       expect(typeof mod.director[k]).toBe('function')
     }
+  })
+})
+
+describe('review fixes (2026-10-01)', () => {
+  const runningFakes = opts => makeFakes({ ctx: new FakeContext('running'), ...opts })
+  const fileClip = { kind: 'file', url: '/a.mp3' }
+
+  it('replaying the same clip from an onEnded callback keeps the NEW handle live', () => {
+    const f = runningFakes()
+    const d = createDirector(f.deps)
+    let second = null
+    const first = d.play(fileClip, { slideId: 's' })
+    first.onEnded(() => { second = d.play(fileClip, { slideId: 's' }) })
+    f.elements[0].emit('ended')
+    expect(second).not.toBeNull()
+    expect(d._internals.handles.get(second.key)).toBe(second)
+    d.stopSlide('s')
+    expect(f.elements[1].paused).toBe(true) // the new copy really stops; no double playback
+  })
+
+  it('a blocked 4s YouTube clip is NOT ended by the backstop while it is silent', () => {
+    const f = runningFakes({ youtube: fakeYoutube({ state: 1, muted: true }) })
+    const d = createDirector(f.deps)
+    const h = d.play({ kind: 'youtube', videoId: 'v', start: 0, end: 4 }, { slideId: 's' })
+    vi.advanceTimersByTime(5000)
+    expect(h.state).toBe('blocked')
+    expect(d.getSnapshot().blocked).toHaveLength(1)
+  })
+
+  it('a blocked clip shorter than the sound check is still reported', () => {
+    const f = runningFakes({ youtube: fakeYoutube({ state: 1, muted: true }) })
+    const d = createDirector(f.deps)
+    d.play({ kind: 'youtube', videoId: 'v', start: 0, end: 1 }, { slideId: 's' })
+    vi.advanceTimersByTime(2100)
+    expect(f.events).toHaveLength(1)
+  })
+
+  it('an end at or before the start means no end (no instant backstop)', () => {
+    const f = runningFakes()
+    const d = createDirector(f.deps)
+    const h = d.play({ kind: 'youtube', videoId: 'v', start: 10, end: 5 }, { slideId: 's' })
+    vi.advanceTimersByTime(6000)
+    expect(h.state).toBe('playing')
+  })
+
+  it('the end backstop still ends a sounding clip, counted from when sound started', () => {
+    const f = runningFakes()
+    const d = createDirector(f.deps)
+    const h = d.play({ kind: 'youtube', videoId: 'v', start: 0, end: 4 }, { slideId: 's' })
+    vi.advanceTimersByTime(2000) // sounding at the check
+    expect(h.state).toBe('playing')
+    vi.advanceTimersByTime(4400)
+    expect(h.state).toBe('playing')
+    vi.advanceTimersByTime(300)
+    expect(h.state).toBe('ended')
+  })
+
+  it('a late play() rejection never moves a playing clip back to blocked', async () => {
+    const f = runningFakes()
+    let rejectPlay
+    f.deps.makeElement = vi.fn(() => {
+      const el = new FakeElement()
+      el.play = () => { el.paused = false; return new Promise((_, rej) => { rejectPlay = rej }) }
+      f.elements.push(el)
+      return el
+    })
+    const d = createDirector(f.deps)
+    const h = d.play(fileClip, { slideId: 's' })
+    vi.advanceTimersByTime(2000)
+    expect(h.state).toBe('playing')
+    rejectPlay(new DOMException('late', 'AbortError'))
+    await flush()
+    expect(h.state).toBe('playing')
+    expect(f.events).toHaveLength(0)
+  })
+
+  it('pause() and resume() park and restart a file clip, and the snapshot follows', async () => {
+    const f = runningFakes()
+    const d = createDirector(f.deps)
+    const h = d.play(fileClip, { slideId: 's' })
+    await flush()
+    expect(h.state).toBe('playing')
+    expect(d.getSnapshot().playing).toEqual([{ key: h.key, slideId: 's', part: 0, paused: false }])
+    h.pause()
+    expect(h.state).toBe('paused')
+    expect(f.elements[0].paused).toBe(true)
+    expect(d.getSnapshot().playing[0].paused).toBe(true)
+    h.resume()
+    expect(h.state).toBe('playing')
+    expect(f.elements[0].paused).toBe(false)
+    expect(d.getSnapshot().playing[0].paused).toBe(false)
+  })
+
+  it('pause() and resume() keep a YouTube player parked, not destroyed', () => {
+    const f = runningFakes()
+    const d = createDirector(f.deps)
+    const h = d.play({ kind: 'youtube', videoId: 'v' }, { slideId: 's' })
+    vi.advanceTimersByTime(2000)
+    h.pause()
+    expect(f.youtube.claims[0].player.pauseVideo).toHaveBeenCalled()
+    expect(f.youtube.claims[0].destroyed).toBe(false)
+    h.resume()
+    expect(f.youtube.claims[0].player.playVideo).toHaveBeenCalledTimes(2)
+    expect(h.state).toBe('playing')
+  })
+
+  it('pause() on a clip that is not playing does nothing', () => {
+    const f = makeFakes()
+    f.ctx.resumeMode = 'hang'
+    const d = createDirector(f.deps)
+    const h = d.play(fileClip, { slideId: 's' })
+    expect(() => h.pause()).not.toThrow()
+    expect(h.state).not.toBe('paused')
+  })
+
+  it('stopping removes the clip from the playing list', async () => {
+    const f = runningFakes()
+    const d = createDirector(f.deps)
+    const h = d.play(fileClip, { slideId: 's' })
+    await flush()
+    h.stop()
+    expect(d.getSnapshot().playing).toEqual([])
+  })
+
+  it('getContext() returns the one shared context', () => {
+    const f = runningFakes()
+    const d = createDirector(f.deps)
+    expect(d.getContext()).toBe(f.ctx)
+    d.play(fileClip, { slideId: 's' })
+    expect(f.deps.makeContext).toHaveBeenCalledTimes(1)
+  })
+
+  it('stopSlide() stops only that slide; stopAll() stops everything', async () => {
+    const f = runningFakes()
+    const d = createDirector(f.deps)
+    const a = d.play(fileClip, { slideId: 'a' })
+    const b = d.play(fileClip, { slideId: 'b' })
+    d.stopSlide('a')
+    expect(a.state).toBe('stopped')
+    expect(b.state).not.toBe('stopped')
+    d.stopAll()
+    expect(b.state).toBe('stopped')
+    expect(d._internals.handles.size).toBe(0)
+  })
+
+  it('a click replays a blocked clip; an Escape key does not count as a gesture', async () => {
+    const f = makeFakes()
+    f.ctx.resumeMode = 'hang'
+    f.deps.makeElement = vi.fn(() => { const el = new FakeElement(); el.playMode = 'reject'; f.elements.push(el); return el })
+    const d = createDirector(f.deps)
+    const target = new EventTarget()
+    d.installGestureUnlock(target)
+    const h = d.play(fileClip, { slideId: 's' })
+    await flush()
+    expect(h.state).toBe('blocked')
+    const el = f.elements[0]
+    const before = el.playCalls
+    const esc = new Event('keydown'); esc.key = 'Escape'
+    target.dispatchEvent(esc)
+    expect(el.playCalls).toBe(before)
+    target.dispatchEvent(new Event('pointerdown'))
+    expect(el.playCalls).toBeGreaterThan(before)
   })
 })

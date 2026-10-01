@@ -59,21 +59,24 @@ export function createDirector(overrides = {}) {
   const listeners = new Set()
   const handles = new Map() // clipKey -> live handle
   const reported = new Set() // clipKeys already sent to Sentry
-  let snapshot = { status: 'locked', blocked: [] }
+  let snapshot = { status: 'locked', blocked: [], playing: [] }
 
   function status() {
     if (ctx) return ctx.state === 'running' ? 'unlocked' : 'locked'
     return gestureSeen || d.hasUserActivation() ? 'unlocked' : 'locked'
   }
 
-  const sameBlocked = (a, b) => a.length === b.length && a.every((x, i) => x.key === b[i].key && x.reason === b[i].reason)
+  const sameList = (a, b) => a.length === b.length && a.every((x, i) => Object.keys(x).every(k => x[k] === b[i][k]))
 
   function emit() {
     const blocked = [...handles.values()]
       .filter(h => h.state === 'blocked')
       .map(h => ({ key: h.key, slideId: h.slideId, kind: h.clip.kind, part: h.clip.part, reason: h.reason }))
-    const next = { status: status(), blocked }
-    if (next.status === snapshot.status && sameBlocked(next.blocked, snapshot.blocked)) return
+    const playing = [...handles.values()]
+      .filter(h => h.state === 'playing' || h.state === 'paused')
+      .map(h => ({ key: h.key, slideId: h.slideId, part: h.clip.part, paused: h.state === 'paused' }))
+    const next = { status: status(), blocked, playing }
+    if (next.status === snapshot.status && sameList(next.blocked, snapshot.blocked) && sameList(next.playing, snapshot.playing)) return
     snapshot = next
     listeners.forEach(l => safe(l))
   }
@@ -101,7 +104,9 @@ export function createDirector(overrides = {}) {
   function installGestureUnlock(target = globalThis.window) {
     if (!target?.addEventListener) return () => {}
     const events = ['pointerdown', 'keydown', 'click']
-    const handler = () => unlock()
+    // A gesture unlocks AND replays whatever was blocked. Escape is the host leaving
+    // fullscreen, not a deliberate "play my sound" press.
+    const handler = e => { if (e?.type === 'keydown' && e.key === 'Escape') return; retryBlocked() }
     events.forEach(e => target.addEventListener(e, handler, true))
     return () => events.forEach(e => target.removeEventListener(e, handler, true))
   }
@@ -122,7 +127,7 @@ export function createDirector(overrides = {}) {
   }
 
   function previewHandle(clip, slideId) {
-    return { key: clipKey(slideId, clip), slideId, clip, state: 'preview', reason: null, onEnded() {}, stop() {}, retry() {} }
+    return { key: clipKey(slideId, clip), slideId, clip, state: 'preview', reason: null, onEnded() {}, stop() {}, retry() {}, pause() {}, resume() {} }
   }
 
   // One handle per playing clip. `ctl` is the private control surface the start
@@ -138,6 +143,9 @@ export function createDirector(overrides = {}) {
     let stopImpl = () => {}
     let retryImpl = () => {}
     let onEndedImpl = () => {} // runs only on a NATURAL end (not on stop()), e.g. re-warm for an instant replay
+    let onPlayingImpl = () => {} // runs each time sound actually starts (e.g. arm the YouTube end backstop)
+    let pauseImpl = () => {}
+    let resumeImpl = () => {}
     const endedCbs = []
     const done = () => state === 'stopped' || state === 'ended'
     const stopTimers = () => {
@@ -157,7 +165,20 @@ export function createDirector(overrides = {}) {
         state = 'stopped'
         stopTimers()
         safe(stopImpl)
-        handles.delete(key)
+        handles.delete(key) // stop() is a no-op once done, so this key is always still ours
+        emit()
+      },
+      // Park the clip (player stays warm) and bring it back. Only a sounding clip pauses.
+      pause() {
+        if (state !== 'playing') return
+        state = 'paused'
+        safe(pauseImpl)
+        emit()
+      },
+      resume() {
+        if (state !== 'paused') return
+        state = 'playing'
+        safe(resumeImpl)
         emit()
       },
       // From the "Click for sound" button (a real gesture): clear the block and try again.
@@ -176,7 +197,8 @@ export function createDirector(overrides = {}) {
       d.breadcrumb('audio blocked', { kind: clip.kind, slideId, part: clip.part, reason })
       if (reported.has(key)) return
       reported.add(key)
-      d.event('warning', `audio: play blocked (${clip.kind})`, { slideId, part: clip.part, reason })
+      // 'upload' (not 'file') so the issue keeps the name the old slide code gave it in Sentry.
+      d.event('warning', `audio: play blocked (${clip.kind === 'file' ? 'upload' : clip.kind})`, { slideId, part: clip.part, reason })
     }
 
     function startPoll() {
@@ -193,29 +215,34 @@ export function createDirector(overrides = {}) {
       setStop(fn) { stopImpl = fn },
       setRetry(fn) { retryImpl = fn },
       setOnEnded(fn) { onEndedImpl = fn },
+      setOnPlaying(fn) { onPlayingImpl = fn },
+      setPause(fn) { pauseImpl = fn },
+      setResume(fn) { resumeImpl = fn },
       // Start (or restart) the 2s "is it really sounding?" check. Call BEFORE anything
       // that can hang (resume(), play()).
-      arm(check) {
+      arm(check, whyNot = () => 'not-sounding') {
         checkFn = check
         stopTimers()
         watch = d.setTimer(() => {
           watch = null
           if (done()) return
           if (safe(checkFn)) ctl.playing()
-          else ctl.block('not-sounding')
+          else ctl.block(whyNot())
         }, SOUND_CHECK_MS)
       },
       playing() {
-        if (done() || state === 'playing') return
+        if (done() || state === 'playing' || state === 'paused') return
         const afterBlock = state === 'blocked'
         state = 'playing'
         reason = null
         stopTimers()
         d.breadcrumb('audio started', { kind: clip.kind, slideId, part: clip.part, ms: d.now() - t0, afterBlock })
+        safe(onPlayingImpl)
         emit()
       },
       block(why) {
-        if (done() || state === 'blocked') return
+        // A late rejection (say an AbortError) must not undo a clip that is already sounding.
+        if (done() || state === 'blocked' || state === 'playing' || state === 'paused') return
         state = 'blocked'
         reason = why
         if (watch != null) { d.clearTimer(watch); watch = null }
@@ -228,9 +255,11 @@ export function createDirector(overrides = {}) {
         state = 'ended'
         stopTimers()
         safe(stopImpl)
+        // Free the key BEFORE the callbacks: one of them may replay this very clip, and its
+        // new handle must not be deleted along with this one.
+        if (handles.get(key) === handle) handles.delete(key)
         safe(onEndedImpl)
         endedCbs.forEach(cb => safe(cb))
-        handles.delete(key)
         emit()
       },
     }
@@ -272,6 +301,8 @@ export function createDirector(overrides = {}) {
       )
     }
     ctl.setRetry(() => { unlock(); go() })
+    ctl.setPause(() => safe(() => el.pause()))
+    ctl.setResume(() => safe(() => el.play()?.catch?.(() => {})))
     ctl.setStop(() => {
       safe(() => el.pause())
       safe(() => src?.disconnect())
@@ -305,6 +336,15 @@ export function createDirector(overrides = {}) {
     let player = null
     let endTimer = null
     const check = () => !!player && youtubeIsSounding(player)
+    // Backstop for a clip with an end: the player's own `end` normally stops it and
+    // reports ENDED; if it never does, end the handle ourselves shortly after. Armed when
+    // sound STARTS (not at the request), so a slow or blocked start never eats the clip,
+    // and an end at/before the start means "no end".
+    const armBackstop = () => {
+      if (clip.end == null || clip.end <= clip.start) return
+      if (endTimer != null) d.clearTimer(endTimer)
+      endTimer = d.setTimer(() => ctl.ended(), (clip.end - clip.start) * 1000 + 500)
+    }
 
     h.onStateChange?.(s => {
       if (s === 0) ctl.ended() // YouTube's ENDED
@@ -312,7 +352,7 @@ export function createDirector(overrides = {}) {
     })
 
     const go = () => {
-      ctl.arm(check) // FIRST: the player may never become ready (API blocked) — that must still be reported
+      ctl.arm(check, () => (player ? 'not-sounding' : 'not-ready')) // FIRST: the player may never become ready — that must still be reported
       h.whenReady(p => {
         player = p
         safe(() => {
@@ -322,14 +362,16 @@ export function createDirector(overrides = {}) {
           p.playVideo()
         })
       })
-      // Backstop for a clip with an end: the player's own `end` normally stops it and
-      // reports ENDED; if it never does, end the handle ourselves shortly after.
-      if (clip.end != null) {
-        if (endTimer != null) d.clearTimer(endTimer)
-        endTimer = d.setTimer(() => ctl.ended(), Math.max(0, clip.end - clip.start) * 1000 + 500)
-      }
     }
 
+    ctl.setOnPlaying(armBackstop)
+    // Parked, not destroyed: resume is instant. The player's own ENDED covers the end.
+    ctl.setPause(() => {
+      if (endTimer != null) d.clearTimer(endTimer)
+      endTimer = null
+      safe(() => player?.pauseVideo())
+    })
+    ctl.setResume(() => safe(() => { player?.unMute(); player?.playVideo() }))
     ctl.setRetry(() => { unlock(); go() })
     ctl.setStop(() => {
       if (endTimer != null) d.clearTimer(endTimer)
@@ -341,16 +383,28 @@ export function createDirector(overrides = {}) {
     go()
   }
 
+  function getContext() {
+    return ensureContext()
+  }
+
+  function stopSlide(slideId) {
+    for (const h of [...handles.values()]) if (h.slideId === slideId) h.stop()
+  }
+
+  function stopAll() {
+    for (const h of [...handles.values()]) h.stop()
+  }
+
   function retryBlocked() {
     unlock()
     for (const h of [...handles.values()]) if (h.state === 'blocked') h.retry()
   }
 
-  snapshot = { status: status(), blocked: [] }
+  snapshot = { status: status(), blocked: [], playing: [] }
 
   return {
     status, unlock, installGestureUnlock, subscribe, getSnapshot: () => snapshot,
-    setPreview, warm, play, retryBlocked,
+    setPreview, warm, play, retryBlocked, getContext, stopSlide, stopAll,
     // internals shared with later tasks in this file
     _internals: { d, handles, reported, emit, ensureContext, previewHandle, isPreview: () => preview, dbToGain, mediaIsSounding, youtubeIsSounding },
   }

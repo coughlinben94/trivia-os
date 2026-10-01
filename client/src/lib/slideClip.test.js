@@ -20,6 +20,12 @@ describe('resolveSlideClip: what clip does this slide have', () => {
     })
   })
 
+  it('an odd audioTrigger value (not exactly "advance") waits for the click, like the TV does', () => {
+    for (const v of ['', 'auto', 'ADVANCE', null]) {
+      expect(resolveSlideClip(q({ mediaUrl: '/a.mp3', mediaType: 'audio/mpeg', audioTrigger: v })).trigger).toBe('click')
+    }
+  })
+
   it('plain question with audioTrigger advance: trigger advance', () => {
     expect(resolveSlideClip(q({ mediaUrl: '/a.mp3', mediaType: 'audio/mpeg', audioTrigger: 'advance' })).trigger).toBe('advance')
   })

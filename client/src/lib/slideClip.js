@@ -26,7 +26,7 @@ export function resolveSlideClip(slide) {
   if (data.isShiny) {
     // Shiny audio is always started by the Next press; other shiny formats have no clip here.
     if (!isAudioShiny(data)) return null
-  } else if ((data.audioTrigger ?? 'click') !== 'click') {
+  } else if (data.audioTrigger === 'advance') { // exactly 'advance', like the TV's autoplay
     trigger = 'advance'
   }
 
