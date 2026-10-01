@@ -126,14 +126,14 @@ export default function TimerOverlay({ show }) {
           >
             <motion.div {...pulse} style={{ transformOrigin: 'center' }}>
               {done ? (
-                <div style={{ fontFamily: `'${theme.fonts.display}', sans-serif`, fontSize: '8cqh', lineHeight: 1.05, color: theme.colors.highlight }}>
+                <div style={{ fontFamily: `'${theme.fonts.display}', sans-serif`, fontSize: '10cqh', lineHeight: 1.05, color: theme.colors.highlight }}>
                   Time&rsquo;s up!
                 </div>
               ) : (
                 <div
                   style={{
                     fontFamily: `'${theme.fonts.display}', sans-serif`,
-                    fontSize: long ? '8cqh' : '12cqh',
+                    fontSize: long ? '10cqh' : '15cqh',
                     lineHeight: 1,
                     fontVariantNumeric: 'tabular-nums',
                     color: urgent ? theme.colors.highlight : theme.colors.text,
