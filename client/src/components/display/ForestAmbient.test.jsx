@@ -94,8 +94,16 @@ describe('ForestAmbient', () => {
     expect(ref.current.station).toBe(5)
     expect(stageAttr()).toBe('5')
     expect(scene()).toBe('cut:5')
-    expect(clones()).toBe(1) // the superseded cut's clone is gone, no stacking
+    // gate 7: the superseded cut's clone is NOT dropped (that popped the picture in one frame): it stays,
+    // frozen, on top; the new snapshot (the in-between rest frame) is slipped beneath it
+    expect(clones()).toBe(2)
+    const rigKids = [...container.querySelector('.fs-rig').children].filter(e => e.hasAttribute('data-forest-clone'))
+    expect(rigKids).toHaveLength(2)
+    expect(rigKids[0].compareDocumentPosition(rigKids[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy() // new first (below), old after (above)
     expect(kf()).toBe('') // no walk restarted
+    await tick(300) // the superseded cut's own timer (started 200 ms before) would have fired by now
+    expect(scene()).toBe('cut:5') // ...and must not have: no early rest, no early clone removal
+    expect(clones()).toBe(2)
     await tick(WALK_MS * 2)
     expect(ref.current.station).toBe(5)
     expect(scene()).toBe('rest:5')
@@ -136,6 +144,34 @@ describe('ForestAmbient', () => {
     expect(scene()).toBe('rest:9')
     await act(async () => { ref.current.turn() }) // busy was cleared: walks at once
     expect(scene()).toBe('walk:9>10')
+  })
+
+  it('a cancelled walk freezes the frame, and the next rest render clears every frozen inline style', async () => {
+    const orig = window.getComputedStyle.bind(window)
+    const spy = vi.spyOn(window, 'getComputedStyle').mockImplementation((el, ...r) =>
+      (el?.classList?.contains('fs-stage') || el?.closest?.('.fs-stage'))
+        ? { transform: 'matrix(1, 0, 0, 1, 0, 7)', opacity: '0.5' } : orig(el, ...r))
+    try {
+      const { ref } = await mount()
+      await act(async () => { ref.current.turn() })
+      await tick(500)
+      await act(async () => { ref.current.turn() }) // cancel -> freeze -> cut
+      const cam = container.querySelector('.fs-cam')
+      expect(container.querySelector('[data-forest-clone]').style.transform).toContain('matrix') // the clone holds the frozen mid-walk frame
+      await tick(CUT_MS * 2)
+      expect(scene()).toBe('rest:2')
+      expect(cam.style.transform).toBe('') // reset by the rest render, not left frozen for good
+      expect(cam.style.opacity).toBe('')
+      expect([...cam.querySelectorAll('div'), cam].filter(e => e.style.transform.includes('matrix') || e.style.animation === 'none' || e.style.opacity === '0.5')).toHaveLength(0) // creeps, world, ground: all thawed
+    } finally { spy.mockRestore() }
+  })
+
+  it('unmount after the creep/idle timers are armed leaves no timers', async () => {
+    const { render } = await mount()
+    await tick(31) // creep restart fires and arms the 40 s idle-sway timer
+    expect(vi.getTimerCount()).toBeGreaterThan(0)
+    await act(async () => { root.render(null) })
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('stationOverride round trip 3 -> 10 -> RING_RETURN -> 3', async () => {

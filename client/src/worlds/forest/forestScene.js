@@ -197,10 +197,19 @@ export function createForestScene({ doc, root, forest, walk }) {
   const liveDivs = () => [cam, ...cam.querySelectorAll('div')]
   const clearClasses = () => { cam.className = 'fs-cam'; light.className = 'fs-light' }
 
+  // undo freezeInto on whatever a cancelled walk froze. The .creep layers keep their own transform/transition
+  // (setCreep owns those); everything else returns to its stylesheet values.
+  function thaw() {
+    for (const e of frozen) {
+      e.style.animation = ''; e.style.opacity = ''
+      if (!creeps.includes(e)) { e.style.transition = ''; e.style.transform = '' }
+    }
+    frozen = []
+  }
+
   // v3 render(): the rest frame of station s (also clears anything a cancelled walk froze in place)
   function render(s) {
-    for (const e of frozen) { e.style.animation = ''; e.style.transition = ''; e.style.transform = ''; e.style.opacity = '' }
-    frozen = []
+    thaw()
     clearClasses()
     build(s, false)
     for (const el of slCards) { el.classList.remove('fIn', 'fOut'); el.style.opacity = +el.dataset.st === s ? 1 : 0 }
@@ -212,32 +221,46 @@ export function createForestScene({ doc, root, forest, walk }) {
   // v3 jump(): instant rest frame, creep restarts 30 ms later
   function renderRest(s) {
     clearCreepT()
+    removeClones()
     setCreep(false); render(s)
     creepT = setTimeout(() => { creepT = null; setCreep(true) }, 30)
   }
 
+  function removeClones() { for (const c of clones) c.remove(); clones.clear() }
+
   // the outgoing view, frozen, on top; the target rest frame under it; the clone fades out (opacity only).
   // v3's reduced-motion advance() path, plus the freeze so a mid-walk frame holds still while it fades.
+  // A retarget during a cut (spec gate 7: every frame of every crossfade must be a composite of the
+  // frozen source and the destination): the superseded cut's clone is NOT removed. Its cancel freezes
+  // it at its current opacity; this crossfade slips its own snapshot (the in-between rest frame)
+  // BENEATH it, and every clone fades to 0 together, so the first frame equals the last old frame.
   function crossfade(to, onDone) {
     clearCreepT()
     const clone = cam.cloneNode(true)
     freezeInto(liveDivs(), [clone, ...clone.querySelectorAll('div')])
     clone.classList.add('rmx'); clone.style.transition = '' // .rmx carries the 400 ms opacity transition
     clone.setAttribute('data-forest-clone', '')
-    rig.appendChild(clone); clones.add(clone)
+    const oldest = clones.values().next().value
+    if (oldest) rig.insertBefore(clone, oldest); else rig.appendChild(clone)
+    clones.add(clone)
     setCreep(false)
     for (const el of creeps) { el.style.transition = 'none'; el.style.transform = 'scale(1)' } // a fresh rest frame, not a shrinking one
     render(to)
     stage.dataset.scene = `cut:${to}`
-    void clone.offsetWidth; clone.style.opacity = '0'
+    void clone.offsetWidth
+    for (const c of clones) { c.style.transition = ''; c.style.opacity = '0' }
     const t = cutT = setTimeout(() => {
       if (cutT === t) cutT = null
-      clone.remove(); clones.delete(clone)
+      removeClones()
       stage.dataset.scene = `rest:${to}`
       setCreep(true)
       onDone()
     }, FADE_MS)
-    return () => { clearTimeout(t); if (cutT === t) cutT = null; clone.remove(); clones.delete(clone) }
+    return () => {
+      clearTimeout(t); if (cutT === t) cutT = null
+      // hold every in-flight clone at its current opacity (a retarget stacks under them, a jump removes them)
+      for (const c of clones) { const o = win.getComputedStyle(c).opacity; c.style.transition = 'none'; if (o !== '') c.style.opacity = o }
+    }
   }
 
   // v3 advance() minus its station bookkeeping. Returns cancel.
@@ -245,8 +268,7 @@ export function createForestScene({ doc, root, forest, walk }) {
     if (rmOn() || to !== (from + 1) % NS) return crossfade(to, onDone)
     clearCreepT()
     walkId++
-    for (const e of frozen) { e.style.animation = ''; e.style.transition = ''; e.style.transform = ''; e.style.opacity = '' }
-    frozen = []
+    thaw()
     build(from, true)
     for (const el of slCards) { const s = +el.dataset.st; el.classList.remove('fIn', 'fOut'); el.style.opacity = ''; if (s === to) el.classList.add('fIn'); else if (s === from) el.classList.add('fOut'); else el.style.opacity = 0 }
     const ab = walkId % 2 ? 'A' : 'B'; cam.className = 'fs-cam bob' + ab; light.className = 'fs-light sway' + ab
@@ -261,7 +283,7 @@ export function createForestScene({ doc, root, forest, walk }) {
       if (walkT !== t) return
       clearTimeout(t); walkT = null
       // hold the frame where it is (a covered cut clones it next), then drop the walk classes and keyframes
-      const live = liveDivs(); freezeInto(live, live); frozen = live.filter(e => !world.contains(e) && !creeps.includes(e))
+      const live = liveDivs(); freezeInto(live, live); frozen = live.filter(e => e === world || !world.contains(e)) // the world's children are rebuilt, everything else is thawed
       clearClasses(); kfEl.textContent = ''
     }
   }
