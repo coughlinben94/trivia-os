@@ -113,3 +113,19 @@ describe('isRingVisible truth table over SLIDE_COMPONENTS', () => {
     for (const s of [null, undefined, {}, { type: 'nope' }]) expect(isRingVisible(s)).toBe(false)
   })
 })
+
+// Pins the two TV call sites by source text (critique of 3d-2: no test read Display.jsx, so a wrong
+// index/array/guard there would pass every other test). Display is too heavy to render here.
+describe('Display.jsx call sites', () => {
+  const display = readFileSync(new URL('../views/Display.jsx', import.meta.url), 'utf8')
+  it('uses the shared resolver exactly twice, with the reviewed arguments', () => {
+    expect(display.match(/resolveRingSlideIndex\(/g)).toHaveLength(2)
+    expect(display).toContain('resolveRingSlideIndex(sortedSlides, show.current_slide_index ?? 0)')
+    expect(display).toMatch(/show\.current_slide_index != null\s*\n?\s*\? resolveRingSlideIndex\(sortedForRing, show\.current_slide_index\)\s*\n?\s*: null/)
+  })
+  it('keeps no private copy of the formula or predicate', () => {
+    expect(display).not.toMatch(/ringVisibleStationIndex\(/)
+    expect(display).not.toMatch(/ringPeekIndex\(/)
+    expect(display).not.toMatch(/const isRingVisible/)
+  })
+})
