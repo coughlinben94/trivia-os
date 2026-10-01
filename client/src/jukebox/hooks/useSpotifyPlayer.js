@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import * as Sentry from '@sentry/react'
 import { getToken, refreshToken } from '../lib/spotify'
 import { computeFadeBudget } from '../lib/fade'
+import { effectiveVolume } from '../lib/jukeboxControls'
 
 // Diagnostic-only — no client bound (local dev, no VITE_SENTRY_DSN) makes
 // these silent no-ops, same as main.jsx's conditional Sentry.init.
@@ -149,6 +150,7 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
   const seekTimerRef = useRef(null)
   const stopWatchDisabledRef = useRef(false)
   const maxVolumeRef = useRef(0.8)
+  const trackGainRef = useRef(1)
   const onAdvanceRef = useRef(onAdvance)
   const onFadeStartRef = useRef(onFadeStart)
   // Suppresses the transient isPaused=true the SDK emits during auto-advance
@@ -159,6 +161,8 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
   // onto a freshly-built player the same way the effect's own init() does —
   // see `reconnect`'s own comment for why this exists.
   const bindListenersRef = useRef(null)
+
+  const eff = () => effectiveVolume(maxVolumeRef.current, trackGainRef.current)
 
   useEffect(() => { onAdvanceRef.current = onAdvance }, [onAdvance])
   useEffect(() => { onFadeStartRef.current = onFadeStart }, [onFadeStart])
@@ -323,7 +327,7 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
       const pos = state.position
       if (!state.paused) setPosition(pos)
 
-      const maxVol = maxVolumeRef.current
+      const maxVol = eff()
       // Trigger BEFORE stopMs now, not at it (flipped 2026-07-28) — the fade
       // spends its time INSIDE the trim window, landing at 0 exactly AT
       // stopMs, mirroring how the fade-IN already spends its time inside the
@@ -456,7 +460,7 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
   }, [])
 
   // ─── Play a track with custom start/stop ─────────────────────────
-  const playTrack = useCallback(async (uri, startMs = 0, stopMs = 0, preview = false) => {
+  const playTrack = useCallback(async (uri, startMs = 0, stopMs = 0, preview = false, gain = 1) => {
     if (deadRef.current) return false
     let player = playerRef.current
     if (!player) {
@@ -489,6 +493,7 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
     }
 
     genRef.current += 1
+    trackGainRef.current = gain
     const gen = genRef.current
     clearInterval(monitorRef.current)
 
@@ -676,8 +681,7 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
 
     if (genRef.current !== gen) return undefined
 
-    const maxVol = maxVolumeRef.current
-    await fadeVolume(0, maxVol, gen, fadeInMs)
+    await fadeVolume(0, eff(), gen, fadeInMs)
 
     if (genRef.current !== gen) return undefined
     // Last gate before this call would start driving live playback (a real
@@ -695,7 +699,7 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
     const gen = genRef.current
     transitioningRef.current = false  // manual stop always restores isPaused tracking
     clearInterval(monitorRef.current)
-    const maxVol = maxVolumeRef.current
+    const maxVol = eff()
     await fadeVolume(maxVol, 0, gen, STOP_FADE_MS)
     if (genRef.current !== gen) return
     await withTimeout(playerRef.current?.pause(), 2000)
@@ -744,12 +748,18 @@ export function useSpotifyPlayer({ onAdvance, onFadeStart } = {}) {
     maxVolumeRef.current = v
     setVolumeState(v)
     if (fadingRef.current) return
-    playerRef.current?.setVolume(v)
+    playerRef.current?.setVolume(eff())
+  }, [])
+
+  const setTrackGain = useCallback((g) => {
+    trackGainRef.current = g
+    if (fadingRef.current) return
+    playerRef.current?.setVolume(eff())
   }, [])
 
   return {
     isReady, isPaused, currentTrack, position, duration, error,
-    volume, setVolume,
+    volume, setVolume, setTrackGain,
     playTrack, fadeAndPause, pause, seek, reconnect,
   }
 }

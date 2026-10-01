@@ -69,6 +69,35 @@ export function resolveShinyPart(data, overridePart) {
   }
 }
 
+// The audio_playing mark a PART STEP writes so the new part plays on arrival, or
+// null when this series/part has no audio. On main this happened by accident —
+// every realtime update re-delivered audio_playing as a new object, so the TV's
+// effect re-fired on each part step — and nothing wrote it on purpose. That
+// accident is fixed (effects are keyed on values now), so the step writes the
+// mark itself and the show sounds exactly as before. `data` is the slide's data
+// AFTER the step (data.currentPart already the new part).
+export function audioMarkForPart(slideId, data) {
+  if (!data?.isShiny || !isAudioShiny(data)) return null
+  const part = resolveShinyPart(data)
+  const hasAudio = !!part.youtubeId || (!!part.mediaUrl && String(part.mediaType ?? '').startsWith('audio'))
+  if (!hasAudio) return null
+  const n = Array.isArray(data.parts) ? data.parts.length : 0
+  const idx = n === 0 ? 0 : Math.min(Math.max(data.currentPart ?? 0, 0), n - 1)
+  // `at` makes every part-step mark a NEW request: p0 audio / p1 silent / p2 audio, Prev
+  // back from p1 to p0 writes {part:0} again with identical values, and the TV's
+  // value-keyed play effect would otherwise see no change and stay silent (main
+  // replayed it). An echo of the SAME write carries the same `at`, so it still
+  // does not replay. Date.now() alone could collide inside one millisecond, so a
+  // counter rides in the low digits.
+  return { slideId, playing: true, part: idx, at: nextMarkNonce() }
+}
+
+let markSeq = 0
+function nextMarkNonce() {
+  markSeq = (markSeq + 1) % 1000
+  return Date.now() * 1000 + markSeq
+}
+
 export function isVisualShiny(data) {
   return data.shinyType === 'visual' || data.shinyInputSchema?.type === 'image'
 }
@@ -119,6 +148,10 @@ export function isHuesCuesShiny(data) {
 
 export function isPinShiny(data) {
   return data.shinyInputSchema?.type === 'pin'
+}
+
+export function isMovieChainShiny(data) {
+  return data?.shinyInputSchema?.type === 'movie-chain'
 }
 
 // THE one place "is this slide shown all at once" is decided — the TV

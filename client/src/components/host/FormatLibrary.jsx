@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 
-const INPUT_TYPES = ['image', 'audio', 'video', 'text', 'list', 'grid', 'matching', 'wager', 'venn', 'order', 'bendle', 'choice', 'drop', 'hues-cues', 'elimination', 'race', 'pin']
+const INPUT_TYPES = ['image', 'audio', 'video', 'text', 'list', 'grid', 'matching', 'wager', 'venn', 'order', 'bendle', 'choice', 'drop', 'hues-cues', 'elimination', 'race', 'pin', 'movie-chain']
 
 const EMPTY_FORMAT = {
   name: '',

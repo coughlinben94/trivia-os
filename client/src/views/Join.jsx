@@ -5,7 +5,7 @@ import { nanoid } from 'nanoid'
 import { supabase } from '../lib/supabase.js'
 import { deriveRoundCols, computeTotal, computePlaces, MEDALS } from '../lib/scoreboardMath.js'
 import { getTheme } from '../themes/index.js'
-import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentMediaShiny, isChoiceShiny, isDropShiny, isHuesCuesShiny, isPinShiny } from '../lib/shinySeries.js'
+import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentMediaShiny, isChoiceShiny, isDropShiny, isHuesCuesShiny, isPinShiny, isMovieChainShiny } from '../lib/shinySeries.js'
 import { getWagerTier } from '../lib/wagerScoring.js'
 import { PHONE_MECHANICS, sortSlides } from '../lib/slideStepping.js'
 import MatchingBoard from '../components/join/MatchingBoard.jsx'
@@ -15,6 +15,7 @@ import ChoiceBoard from '../components/join/ChoiceBoard.jsx'
 import DropBoard from '../components/join/DropBoard.jsx'
 import HuesCuesBoard from '../components/join/HuesCuesBoard.jsx'
 import PinBoard from '../components/join/PinBoard.jsx'
+import MovieChainBoard from '../components/join/MovieChainBoard.jsx'
 import { preloadUsMapData } from '../hooks/useUsMapData.js'
 import HorseRaceBoard from '../components/join/HorseRaceBoard.jsx'
 import ShrinkToFit from '../components/join/ShrinkToFit.jsx'
@@ -747,6 +748,9 @@ function SlideBody({ slide, show, theme, team, onInteractiveAnswered, overridePa
       }
       if (d.isShiny && isPinShiny(d)) {
         return <PinBoard slide={slide} team={team} theme={theme} onAnswered={onInteractiveAnswered} />
+      }
+      if (d.isShiny && isMovieChainShiny(d)) {
+        return <MovieChainBoard slide={slide} team={team} theme={theme} onAnswered={onInteractiveAnswered} />
       }
       // All-at-once media (2026-08-26 rebuild): the TV shows every asset
       // together, so a phone stepping one asset at a time through

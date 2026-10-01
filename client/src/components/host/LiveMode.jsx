@@ -2,7 +2,8 @@ import { useEffect, useCallback, useState, useRef, useReducer } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { getTheme, THEMES } from '../../themes/index.js'
-import { resolveShinyPart, isAudioShiny, isBendleShiny } from '../../lib/shinySeries.js'
+import { resolveShinyPart } from '../../lib/shinySeries.js'
+import { audioPlayPending as audioPlayPendingFor, audioPartOf } from '../../lib/audioPending.js'
 import ScorePanel from './ScorePanel.jsx'
 import FocusWarning from './FocusWarning.jsx'
 import LateTeamPopover from './LateTeamPopover.jsx'
@@ -17,6 +18,8 @@ import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TI
 import { scoreHuesCuesRound, computeHuesCuesScoreUpdates } from '../../lib/huesCuesScoring.js'
 import { computeHorseRaceScoreUpdates, DEFAULT_RACE_POINTS } from '../../lib/raceScoring.js'
 import { buildPinRound, isValidPin, pinMissingSpot, pinLockedStatus, PIN_SPOT_ERROR } from '../../lib/pinScoring.js'
+import { movieChainConfigError, resolveMovieChainAnswers, computeMovieChainScoreUpdates, eligibleMovieChainAnswers } from '../../lib/movieChainScoring.js'
+import { movieChainRequest } from '../../lib/movieChainApi.js'
 import PinRoomControl from './PinRoomControl.jsx'
 import { HUES_CUES_CODE_RE } from '../../lib/huesCuesGrid.js'
 import { lockRefusal, DROP_ANSWER_ERROR, HUES_CUES_ANSWER_ERROR, WAGER_ANSWER_ERROR, WAGER_TIERS_ERROR } from '../../lib/lockRefusal.js'
@@ -261,6 +264,9 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   const [huesCuesScoreError, setHuesCuesScoreError] = useState(null)
   const [pinBusy, setPinBusy] = useState(false)
   const [pinScoreError, setPinScoreError] = useState(null)
+  const [movieChainBusy, setMovieChainBusy] = useState(false)
+  const [movieChainError, setMovieChainError] = useState(null)
+  const movieChainRunRef = useRef(false)
   const [raceBusy, setRaceBusy] = useState(false)
   const [raceScoreError, setRaceScoreError] = useState(null)
   const [endShowConfirm, setEndShowConfirm] = useState(false)
@@ -287,7 +293,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // a real scoring round (three SELECTs + one upsert, normally 1-2s); past
   // that the host gets Next back and any real failure is already showing
   // its error on-screen via the Retry Scoring button.
-  const scoringBusy = matchingBusy || orderBusy || wagerBusy || choiceBusy || dropBusy || huesCuesBusy || pinBusy
+  const scoringBusy = matchingBusy || orderBusy || wagerBusy || choiceBusy || dropBusy || huesCuesBusy || pinBusy || movieChainBusy
   const scoringSinceRef = useRef(0)
   useEffect(() => { scoringSinceRef.current = scoringBusy ? Date.now() : 0 }, [scoringBusy])
   // iPad remote only (spec §6): horse-race scoring with its own 12s cap.
@@ -403,6 +409,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     setDropScoreError(null)
     setHuesCuesScoreError(null)
     setPinScoreError(null)
+    setMovieChainError(null)
     setRaceScoreError(null)
   }, [currentSlide?.id])
   // Which phone-scored mechanic (if any) this slide is — the ONE lookup the
@@ -434,6 +441,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         drop: [dropBusy, dropScoreError],
         huesCues: [huesCuesBusy, huesCuesScoreError],
         pin: [pinBusy, pinScoreError],
+        movieChain: [movieChainBusy, movieChainError],
       }[phoneMechanic] ?? [false, null])
   const remoteFix = fixFor(currentSlide, { busy: fixBusy, error: fixError })
 
@@ -1168,27 +1176,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // True when the next press should play the clip; runHostCommand then
   // bails instead of advancing.
   function audioPlayPending() {
-    if (!currentSlide || currentSlide.type !== 'question') return false
-    // Bendle's audio isn't mediaUrl-shaped (it's a Tone.js stem mix keyed
-    // by bendleSongId) — resolveShinyPart/hasAudio below don't apply to
-    // it, so it's handled as its own branch ahead of the generic checks.
-    if (isBendleShiny(currentSlide.data)) {
-      return show.audio_playing?.slideId !== currentSlide.id
-    }
-    if (currentSlide.data?.isShiny) {
-      // A shiny audio question (2026-09-01, P1 live, Round 2's "One Hit
-      // Unwonder": "hitting next skips to next question, doesnt play
-      // audio"). No introDone gate any more: the announce card is its own
-      // `shiny-title` slide, so a shiny content slide shows its content from
-      // its first frame and the first Next on it is the play press.
-      if (!isAudioShiny(currentSlide.data)) return false
-    } else if ((currentSlide.data?.audioTrigger ?? 'click') !== 'click') {
-      return false
-    }
-    const part = resolveShinyPart(currentSlide.data)
-    const hasAudio = !!part.youtubeId || (!!part.mediaUrl && String(part.mediaType ?? '').startsWith('audio'))
-    if (!hasAudio) return false
-    return show.audio_playing?.slideId !== currentSlide.id
+    return audioPlayPendingFor(currentSlide, show.audio_playing)
   }
 
   // The A press, for a phone-scored question that's locked but still holding
@@ -1203,9 +1191,102 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   //
   // Returns true when it handled the press, so the caller falls through to
   // the ordinary answer_reveal toggle on every other kind of slide.
+  async function handleLockMovieChain(slide) {
+    if (movieChainRunRef.current) return
+    const issue = movieChainConfigError(slide.data)
+    if (issue) { setMovieChainError(issue); return }
+    if (slide.data.movieChainLocked) return
+    movieChainRunRef.current = true
+    setMovieChainBusy(true); setMovieChainError(null)
+    try {
+      const lockedAt = new Date().toISOString()
+      actions.updateSlide(slide.id, { data: { ...slide.data, movieChainLocked: true, movieChainLockedAt: lockedAt } })
+      await actions.flushSlides()
+    } catch (error) {
+      console.error('Movie Chain lock failed:', error)
+      setMovieChainError('Could not lock chains. Check connection and retry.')
+    } finally { movieChainRunRef.current = false; setMovieChainBusy(false) }
+  }
+
+  async function handleRevealMovieChain(slide) {
+    if (movieChainRunRef.current || !slide.data.movieChainLocked) return
+    movieChainRunRef.current = true
+    setMovieChainBusy(true); setMovieChainError(null)
+    try {
+      const { data: teams, error: teamsError } = await supabase.from('teams').select('id, name').eq('show_id', show.id)
+      if (teamsError) throw teamsError
+      let results = slide.data.movieChainRevealed && Array.isArray(slide.data.movieChainResults)
+        ? slide.data.movieChainResults : null
+      if (!results) {
+        const { data: raw, error: answerError } = await supabase.from('phone_answers')
+          .select('team_id, answer, submitted_at').eq('slide_id', slide.id).eq('show_id', show.id)
+        if (answerError) throw answerError
+        const cutoff = slide.data.movieChainLockedAt
+        if (!cutoff) throw new Error('Movie Chain lock time missing')
+        const answers = eligibleMovieChainAnswers(raw, cutoff)
+        const scoredResults = await resolveMovieChainAnswers(answers, {
+          startId: slide.data.movieChainStart.id,
+          endId: slide.data.movieChainEnd.id,
+          announcedCount: slide.data.movieChainCount,
+        }, id => movieChainRequest('cast', { movieId: id }))
+        const teamNames = new Map(teams.map(team => [team.id, team.name]))
+        results = scoredResults.map(result => ({ ...result, teamName: teamNames.get(result.teamId) ?? 'Unknown team' }))
+      }
+      await scoreChainRef.current.run(async () => {
+        const { data: scoreboardTeams, error: sbError } = await withTimeout(signal => supabase.from('scoreboard_teams')
+          .select('id, show_id, name, scores, sort_order').eq('show_id', show.id).abortSignal(signal), SCORE_CALL_TIMEOUT_MS)
+        if (sbError) throw sbError
+        const updates = computeMovieChainScoreUpdates({ results, teams, scoreboardTeams, roundKey: roundKeyFor(show, slide), slideId: slide.id })
+        if (results.length > 0 && updates.length === 0) throw new Error('No team matched a scoreboard row')
+        // Publish verdict and reveal together. No phone or TV reads the results before A.
+        if (!slide.data.movieChainRevealed) {
+          actions.updateSlide(slide.id, { data: { ...slide.data, movieChainLocked: true, movieChainResults: results, movieChainRevealed: true } })
+          await actions.flushSlides()
+        }
+        if (updates.length > 0) {
+          const { error: writeError } = await withTimeout(signal => supabase.from('scoreboard_teams').upsert(updates).abortSignal(signal), SCORE_CALL_TIMEOUT_MS)
+          if (writeError) throw writeError
+        }
+      })
+      refreshScoresView()
+    } catch (error) {
+      console.error('Movie Chain reveal failed:', error)
+      setMovieChainError('Could not finish reveal or scoring. Check connection and use Retry below.')
+    } finally { movieChainRunRef.current = false; setMovieChainBusy(false) }
+  }
+
+  async function correctMovieChainTeam(slide, teamId, points) {
+    if (movieChainRunRef.current || !slide.data.movieChainRevealed) return
+    movieChainRunRef.current = true
+    setMovieChainBusy(true); setMovieChainError(null)
+    try {
+      const results = slide.data.movieChainResults.map(result => result.teamId === teamId
+        ? { ...result, points, valid: points > 0, finalConnected: points > 0, corrected: true, reason: points > 0 ? null : 'host-correction' }
+        : result)
+      const { data: teams, error: teamsError } = await supabase.from('teams').select('id, name').eq('show_id', show.id)
+      if (teamsError) throw teamsError
+      await scoreChainRef.current.run(async () => {
+        const { data: scoreboardTeams, error: sbError } = await withTimeout(signal => supabase.from('scoreboard_teams')
+          .select('id, show_id, name, scores, sort_order').eq('show_id', show.id).abortSignal(signal), SCORE_CALL_TIMEOUT_MS)
+        if (sbError) throw sbError
+        const updates = computeMovieChainScoreUpdates({ results, teams, scoreboardTeams, roundKey: roundKeyFor(show, slide), slideId: slide.id })
+        if (updates.length === 0) throw new Error('No scoreboard team matched correction')
+        const { error: writeError } = await withTimeout(signal => supabase.from('scoreboard_teams').upsert(updates).abortSignal(signal), SCORE_CALL_TIMEOUT_MS)
+        if (writeError) throw writeError
+      })
+      actions.updateSlide(slide.id, { data: { ...slide.data, movieChainResults: results } })
+      await actions.flushSlides()
+      refreshScoresView()
+    } catch (error) {
+      console.error('Movie Chain correction failed:', error)
+      setMovieChainError('Could not save correction. Check connection and retry.')
+    } finally { movieChainRunRef.current = false; setMovieChainBusy(false) }
+  }
+
   function revealCurrentSlide() {
     const mechanic = pendingReveal(currentSlide)
     if (!mechanic) return false
+    if (mechanic === 'movieChain') { handleRevealMovieChain(currentSlide); return true }
     actions.updateSlide(currentSlide.id, {
       data: { ...currentSlide.data, [REVEAL_FIELD[mechanic]]: true },
     })
@@ -1255,6 +1336,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       drop: () => handleLockAndScoreDrop(slide),
       huesCues: () => handleLockAndScoreHuesCues(slide),
       pin: () => handleLockAndScorePin(slide),
+      movieChain: () => slide.data.movieChainLocked ? handleRevealMovieChain(slide) : handleLockMovieChain(slide),
     }[mechanic] ?? null
   }
 
@@ -1277,6 +1359,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     drop: handleLockAndScoreDrop,
     huesCues: handleLockAndScoreHuesCues,
     pin: handleLockAndScorePin,
+    movieChain: handleLockMovieChain,
   }
 
   // Mirrors currentSlide into a ref for the same reason actionsRef exists —
@@ -1406,13 +1489,14 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       const ph = pendingLockPhase(currentSlide)
       if (ph === 'huesCues') setHuesCuesScoreError(plan.message)
       else if (ph === 'wager-guesses') setWagerError(plan.message)
+      else if (ph === 'movieChain') setMovieChainError(plan.message)
       else setPinScoreError(plan.message)
     }
     if (plan.refuse) return plan
     switch (plan.run) {
       case 'start-lock-countdown': startLockCountdown(plan.phase); break
       case 'play-audio':
-        guardNav(() => actions.setAudioPlaying({ slideId: currentSlide.id, playing: true }))
+        guardNav(() => actions.setAudioPlaying({ slideId: currentSlide.id, playing: true, part: audioPartOf(currentSlide.data) }))
         break
       case 'hide-answer-then-next':
         actions.setAnswerReveal(false)
@@ -1865,6 +1949,14 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                 label: pinBusy ? 'Scoring…' : d.pinLocked ? '🔁 Retry Scoring' : '🔒 Lock Pins & Score',
                 act: scoreActionFor('pin', currentSlide),
               },
+              movieChain: {
+                busy: movieChainBusy, error: movieChainError, zeroErr: null,
+                status: d.movieChainLocked
+                  ? 'Chains locked. Press A to check the final connection and reveal results.'
+                  : 'Movie Chain — teams are building connections on their phones.',
+                label: movieChainBusy ? 'Working…' : d.movieChainRevealed ? '🔁 Retry Scoring' : d.movieChainLocked ? 'Reveal & Score (A)' : '🔒 Lock Chains',
+                act: scoreActionFor('movieChain', currentSlide),
+              },
             }[phoneMechanic]
             // isLocked (any lockField true) is checked separately from the
             // reveal gate below — Unlock stays available even after reveal
@@ -1937,6 +2029,19 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                         </button>
                       ))}
                     </div>
+                  </div>
+                )}
+                {phoneMechanic === 'movieChain' && d.movieChainRevealed && Array.isArray(d.movieChainResults) && (
+                  <div className="mt-3 max-h-64 overflow-y-auto space-y-2">
+                    <p className="text-xs font-semibold text-gray-600">Team results · correct a disputed credit</p>
+                    {d.movieChainResults.map(result => <div key={result.teamId} className="flex items-center justify-between gap-2 text-xs text-gray-700">
+                      <span className="truncate">{result.teamName}: {result.movieCount ?? '—'} movies</span>
+                      <select aria-label={`Correct ${result.teamName} score`} value={result.points} disabled={movieChainBusy}
+                        onChange={event => correctMovieChainTeam(currentSlide, result.teamId, Number(event.target.value))}
+                        className="rounded-lg border border-gray-200 px-2 py-1 text-gray-900">
+                        <option value={0}>0</option><option value={10}>10</option><option value={15}>15</option>
+                      </select>
+                    </div>)}
                   </div>
                 )}
                 {isLocked && (

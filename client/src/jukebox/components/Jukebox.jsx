@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { searchTracks, logout } from '../lib/spotify'
 import { supabase } from '../lib/supabase'
-import { slimTrack, songNeedsSlim, hasTrim, uid, totalSongs } from '../lib/track'
+import { slimTrack, slimSavedSong, songGain, songNeedsSlim, hasTrim, uid, totalSongs } from '../lib/track'
 import { shuffleArray, resolveNext, resolveUpcoming, buildSessionOrder } from '../lib/shuffle'
 import { loadPlayed, savePlayed } from '../lib/playedStore'
 import { useSpotifyPlayer, reportJukebox } from '../hooks/useSpotifyPlayer'
@@ -9,7 +9,7 @@ import { prefetchPalette } from '../hooks/usePalette'
 import { hasOverrides, TUNING_EVENT } from '../lib/gradientTuning'
 import Player from './Player'
 import LiveScreen, { EXIT_TOTAL_MS } from './LiveScreen'
-import { togglePlay, exitToShow } from '../lib/jukeboxControls.js'
+import { togglePlay, exitToShow, libraryCoverUp } from '../lib/jukeboxControls.js'
 import TestScreen from './TestScreen'
 import SongDetailModal from './SongDetailModal'
 
@@ -640,7 +640,7 @@ export default function Jukebox({ onLogout, initialLib, onExitToShow, ringMode =
       for (const [id, set] of Object.entries(prev.items)) {
         items[id] = {
           ...set,
-          songs: (set.songs ?? []).map(s => ({ ...slimTrack(s), startMs: s.startMs, stopMs: s.stopMs, gradientOverride: s.gradientOverride, gradientOverride1: s.gradientOverride1 })),
+          songs: (set.songs ?? []).map(slimSavedSong),
         }
       }
       return { ...prev, items }
@@ -943,7 +943,7 @@ export default function Jukebox({ onLogout, initialLib, onExitToShow, ringMode =
 
   useEffect(() => {
     playTrackFn.current = (song) =>
-      player.playTrack(song.uri, song.startMs ?? 0, song.stopMs ?? song.duration_ms)
+      player.playTrack(song.uri, song.startMs ?? 0, song.stopMs ?? song.duration_ms, false, songGain(song))
       // returns the Promise<true|false> from playTrack so startShuffle can await it
   }, [player.playTrack])
 
@@ -1036,6 +1036,10 @@ export default function Jukebox({ onLogout, initialLib, onExitToShow, ringMode =
     setLibraryFor(setId, prev => prev.map(t => t.id === id ? { ...t, startMs, stopMs } : t))
   }, [setLibraryFor])
 
+  const updateGain = useCallback((id, gainDb, setId) => {
+    setLibraryFor(setId, prev => prev.map(t => t.id === id ? { ...t, gainDb } : t))
+  }, [setLibraryFor])
+
   // Manual gradient-color override (2026-08-03, thinktank round 3; extended
   // 2026-08-04 to color 1 too): a per-song hex the owner picked in
   // SongDetailModal to replace an auto-extracted gradient color. `slot` is
@@ -1065,7 +1069,7 @@ export default function Jukebox({ onLogout, initialLib, onExitToShow, ringMode =
         ...prev.items,
         [destSetId]: {
           ...prev.items[destSetId],
-          songs: [{ ...slimTrack(song), startMs: song.startMs, stopMs: song.stopMs, gradientOverride: song.gradientOverride, gradientOverride1: song.gradientOverride1 }, ...destSongs],
+          songs: [slimSavedSong(song), ...destSongs],
         },
       }
       if (mode === 'move') {
@@ -1690,7 +1694,7 @@ export default function Jukebox({ onLogout, initialLib, onExitToShow, ringMode =
           them. Nothing inside it: this is a should-be-invisible cover over a
           break that's about to start, not a loading screen worth designing.
           Only ever rendered on the initialLib (grading-break) path. */}
-      {libHandoffPending && !showLive && (
+      {libraryCoverUp({ ringMode, libHandoffPending, showLive }) && (
         <div className="fixed inset-0 bg-black z-50" />
       )}
 
