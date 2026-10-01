@@ -1,5 +1,5 @@
 import { applyPhoneScoreUpdates } from './scoreboardMath.js'
-import { hashSeed, mulberry32 } from './seededRandom.js'
+import { seededShuffleWith } from './seededRandom.js'
 
 // Host-set default for a fresh Order format/slide (shiny_formats.input_schema's
 // pointsForOrder, and SlideEditor/LiveMode's per-slide fallback) — one shared
@@ -47,24 +47,11 @@ export function scoreOrderSubmission(answer, correctOrder, points) {
 // tries so a pathological seed can't loop forever; the tiny leftover
 // giveaway risk beyond that is far better than never terminating.
 export function seededShuffle(items, seed, correctOrder) {
-  const rand = mulberry32(hashSeed(String(seed)))
-  function shuffleOnce() {
-    const arr = [...items]
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(rand() * (i + 1))
-      ;[arr[i], arr[j]] = [arr[j], arr[i]]
-    }
-    return arr
-  }
-  let arr = shuffleOnce()
   const hasCorrectOrder = Array.isArray(correctOrder) && correctOrder.length === items.length
-  if (items.length >= 3 && hasCorrectOrder) {
-    const matchesCorrectOrder = a => a.every((item, i) => item.id === correctOrder[i])
-    for (let tries = 0; tries < 50 && matchesCorrectOrder(arr); tries++) {
-      arr = shuffleOnce()
-    }
-  }
-  return arr
+  const isBad = items.length >= 3 && hasCorrectOrder
+    ? a => a.every((item, i) => item.id === correctOrder[i])
+    : null
+  return seededShuffleWith(items, seed, isBad)
 }
 
 // Pure fold-in: given phone_answers + live team registrations + the admin
