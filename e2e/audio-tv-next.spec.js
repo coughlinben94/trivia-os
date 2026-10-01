@@ -107,7 +107,7 @@ test('2 TV ArrowRight on the audio question PLAYS it and does NOT advance', asyn
   const r = await waitFor(x => x.audio_playing?.slideId === 'q1', 8000, 'audio_playing written')
   expect(r.current_slide_id).toBe('q1') // stayed put
   await expect.poll(async () => (await audioState(page)).paused, { timeout: 8000 }).toBe(false)
-  expect((await audioState(page)).t).toBeGreaterThan(0)
+  await expect.poll(async () => (await audioState(page)).t, { timeout: 5000 }).toBeGreaterThan(0) // the clock really advances
 })
 
 test('3 next TV ArrowRight advances AND clears the stale mark', async ({ page }) => {
@@ -204,4 +204,21 @@ test('9 multi-part series: ArrowLeft back to an earlier part does not autoplay i
   await waitFor(x => partNow(x) === 0, 8000, 'back to part 0')
   await page.waitForTimeout(1500)
   expect((await audioState(page)).paused).toBe(true)
+})
+
+// Review of ad52e56 (2026-10-01): every live UPDATE re-delivers audio_playing as a
+// fresh object, so an effect keyed on object identity re-ran on every show update
+// and a FINISHED clip restarted when the host pressed A (answer reveal).
+test('10 a finished clip is not replayed by an unrelated update (the host pressing A)', async ({ page }) => {
+  await reset('q1', null)
+  await openTv(page)
+  await expect(page.locator('audio')).toHaveCount(1, { timeout: 8000 })
+  await page.waitForTimeout(2500) // let the live-update subscription come up
+  await updateShowVerified(sb, ID, { audio_playing: { slideId: 'q1', playing: true, part: 0 } })
+  await expect.poll(async () => (await audioState(page)).ended, { timeout: 20000 }).toBe(true) // played through
+  await updateShowVerified(sb, ID, { answer_reveal: true }) // host presses A: a flag-only write
+  await page.waitForTimeout(3000)
+  const a = await audioState(page)
+  console.log('[e2e] after A press on a finished clip:', JSON.stringify(a))
+  expect(a.paused).toBe(true) // still finished, not restarted
 })

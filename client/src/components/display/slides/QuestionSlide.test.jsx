@@ -266,11 +266,147 @@ describe('<QuestionSlide> — audio on a plain question', () => {
       expect(mediaPlay).not.toHaveBeenCalled()
     })
 
+    // Every realtime UPDATE hands the TV a fresh audio_playing OBJECT (a flag-only
+    // write like the A answer reveal carries the whole small column), so an effect
+    // keyed on object identity re-ran on every show update and a finished clip
+    // restarted when the host revealed the answer. Keyed on the mark's VALUES now.
+    it('does NOT replay when an unrelated update re-delivers the same mark as a new object', () => {
+      const slide = slideWith({ mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg' })
+      render(slide, { show: { slides: [slide], audio_playing: { slideId: 'slide-1', playing: true } } })
+      expect(mediaPlay).toHaveBeenCalledTimes(1)
+      render(slide, { show: { slides: [slide], audio_playing: { slideId: 'slide-1', playing: true }, answer_reveal: true } })
+      render(slide, { show: { slides: [slide], audio_playing: { slideId: 'slide-1', playing: true }, scoreboard_visible: true } })
+      expect(mediaPlay).toHaveBeenCalledTimes(1)
+    })
+
+    it('still plays when the mark is cleared and then set again', () => {
+      const slide = slideWith({ mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg' })
+      render(slide, { show: { slides: [slide], audio_playing: { slideId: 'slide-1', playing: true } } })
+      render(slide, { show: { slides: [slide], audio_playing: null } })
+      render(slide, { show: { slides: [slide], audio_playing: { slideId: 'slide-1', playing: true } } })
+      expect(mediaPlay).toHaveBeenCalledTimes(2)
+    })
+
     it('ignores audio_playing in the host preview pane', () => {
       const slide = slideWith({ mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg' })
       render(slide, { show: { slides: [slide], audio_playing: { slideId: 'slide-1', playing: true } }, isPreview: true })
 
       expect(mediaPlay).not.toHaveBeenCalled()
+    })
+  })
+
+  // 2026-09-29 runner-up cause: Chrome blocks UNMUTED playback on a tab with no
+  // click/key since load, silently. A clip asked to play that makes no sound
+  // must say so ("Tap for sound" — a real user gesture, so it can recover) and
+  // report to Sentry, instead of leaving the room in dead air.
+  describe('a clip that never makes sound shows "Tap for sound"', () => {
+    const player = state => ({
+      setVolume: vi.fn(), unMute: vi.fn(), seekTo: vi.fn(), playVideo: vi.fn(), pauseVideo: vi.fn(),
+      getPlayerState: () => state, isMuted: () => false,
+    })
+    const cue = () => [...container.querySelectorAll('button')].find(b => b.textContent.includes('Tap for sound'))
+    const playingEl = function () { Object.defineProperty(this, 'paused', { value: false, configurable: true }); return Promise.resolve() }
+    const upload = () => slideWith({ mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg' })
+    const marked = slide => ({ show: { slides: [slide], audio_playing: { slideId: 'slide-1', playing: true } } })
+    const later = ms => act(async () => { await vi.advanceTimersByTimeAsync(ms) })
+
+    beforeEach(() => { vi.useFakeTimers(); mediaPlay.mockReset(); mediaPlay.mockImplementation(playingEl) })
+    afterEach(() => { vi.useRealTimers(); mediaPlay.mockReset(); mediaPlay.mockImplementation(() => Promise.resolve()) })
+
+    it('shows the cue when the browser rejects play() (autoplay policy)', async () => {
+      mediaPlay.mockImplementationOnce(() => Promise.reject(new DOMException('blocked', 'NotAllowedError')))
+      const slide = upload()
+      render(slide, marked(slide))
+      await later(0)
+      expect(cue()).toBeTruthy()
+    })
+
+    it('shows no cue when the clip really plays', async () => {
+      const slide = upload()
+      render(slide, marked(slide))
+      await later(3000)
+      expect(cue()).toBeFalsy()
+    })
+
+    it('shows the cue when a YouTube clip is not playing 2s after play was asked for', async () => {
+      yt.claim.mockReturnValue({ whenReady: cb => cb(player(2)), onStateChange: () => {}, destroy: () => {} })
+      const slide = slideWith({ mediaSlots: [{ type: 'youtube', videoId: 'abc', start: 0, end: 20 }] })
+      render(slide, marked(slide))
+      await later(1900)
+      expect(cue()).toBeFalsy()
+      await later(200)
+      expect(cue()).toBeTruthy()
+    })
+
+    it('shows no cue when the YouTube clip is playing (or just buffering)', async () => {
+      for (const state of [1, 3]) {
+        yt.claim.mockReturnValue({ whenReady: cb => cb(player(state)), onStateChange: () => {}, destroy: () => {} })
+        const slide = slideWith({ mediaSlots: [{ type: 'youtube', videoId: `v${state}`, start: 0, end: 20 }] })
+        render(slide, marked(slide))
+        await later(3000)
+        expect(cue()).toBeFalsy()
+      }
+    })
+
+    // Found in a real Chromium run (2026-10-01): with no user gesture, AudioContext
+    // .resume() does not reject, it just never settles — so play() hangs before it
+    // can throw, and a check that only starts after play() finishes never starts.
+    it('shows the cue when the audio context never resumes (resume() hangs, play() never reached)', async () => {
+      const Real = globalThis.AudioContext
+      globalThis.AudioContext = class {
+        state = 'suspended'
+        createGain() { return { gain: {}, connect() {} } }
+        createMediaElementSource() { return { connect() {} } }
+        resume() { return new Promise(() => {}) }
+        close() {}
+      }
+      try {
+        const slide = upload()
+        render(slide, marked(slide))
+        await later(1900)
+        expect(cue()).toBeFalsy()
+        await later(200)
+        expect(cue()).toBeTruthy()
+        expect(mediaPlay).not.toHaveBeenCalled()
+      } finally {
+        globalThis.AudioContext = Real
+      }
+    })
+
+    it('tapping the cue retries the play and clears the cue', async () => {
+      mediaPlay.mockImplementationOnce(() => Promise.reject(new DOMException('blocked', 'NotAllowedError')))
+      const slide = upload()
+      render(slide, marked(slide))
+      await later(0)
+      expect(mediaPlay).toHaveBeenCalledTimes(1)
+      await act(async () => { cue().click() })
+      expect(mediaPlay).toHaveBeenCalledTimes(2)
+      expect(cue()).toBeFalsy()
+    })
+
+    it('the cue is a no-step target (a tap on it must not advance the show)', async () => {
+      mediaPlay.mockImplementationOnce(() => Promise.reject(new DOMException('blocked', 'NotAllowedError')))
+      const slide = upload()
+      render(slide, marked(slide))
+      await later(0)
+      expect(cue().closest('[data-no-step]')).toBeTruthy()
+    })
+
+    it('never shows the cue in the host preview pane (the host is not the room)', async () => {
+      yt.claim.mockReturnValue({ whenReady: cb => cb(player(2)), onStateChange: () => {}, destroy: () => {} })
+      const slide = slideWith({ mediaSlots: [{ type: 'youtube', videoId: 'abc', start: 0, end: 20 }] })
+      render(slide, { show: { slides: [slide], audio_playing: null }, isPreview: true })
+      // an explicit PLAY press still works in preview; its clip not sounding must not raise the cue
+      await act(async () => { container.querySelector('[role="button"]').click() })
+      await later(3000)
+      expect(cue()).toBeFalsy()
+    })
+
+    it('shows no cue when nothing was asked to play', async () => {
+      const slide = upload()
+      render(slide, { show: { slides: [slide], audio_playing: null } })
+      await later(5000)
+      expect(cue()).toBeFalsy()
     })
   })
 })
@@ -389,6 +525,14 @@ describe('<QuestionSlide> — shiny audio question, remote play via show.audio_p
       expect(mediaPlay).toHaveBeenCalled()
     })
 
+    it('does NOT replay when an unrelated update re-delivers the same mark as a new object', () => {
+      const slide = series(0)
+      render(slide, { slides: [slide], audio_playing: { slideId: 'shiny-1', playing: true, part: 0 } })
+      expect(mediaPlay).toHaveBeenCalledTimes(1)
+      render(slide, { slides: [slide], audio_playing: { slideId: 'shiny-1', playing: true, part: 0 }, answer_reveal: true })
+      expect(mediaPlay).toHaveBeenCalledTimes(1)
+    })
+
     it('a new mark for the next part plays it without remounting', () => {
       const s0 = series(0)
       render(s0, { slides: [s0], audio_playing: { slideId: 'shiny-1', playing: true, part: 0 } })
@@ -398,6 +542,72 @@ describe('<QuestionSlide> — shiny audio question, remote play via show.audio_p
       expect(mediaPlay).toHaveBeenCalledTimes(1) // the part step alone must not replay
       render(s1, { slides: [s1], audio_playing: { slideId: 'shiny-1', playing: true, part: 1 } })
       expect(mediaPlay).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('a clip that never makes sound shows "Tap for sound"', () => {
+    const player = state => ({
+      setVolume: vi.fn(), unMute: vi.fn(), seekTo: vi.fn(), playVideo: vi.fn(), pauseVideo: vi.fn(),
+      getPlayerState: () => state, isMuted: () => false,
+    })
+    const cue = () => [...container.querySelectorAll('button')].find(b => b.textContent.includes('Tap for sound'))
+    const later = ms => act(async () => { await vi.advanceTimersByTimeAsync(ms) })
+    const marked = { slideId: 'shiny-1', playing: true }
+
+    beforeEach(() => { vi.useFakeTimers() })
+    afterEach(() => { vi.useRealTimers(); mediaPlay.mockReset(); mediaPlay.mockImplementation(() => Promise.resolve()) })
+
+    it('shows the cue when the browser rejects play() on an uploaded shiny clip', async () => {
+      mediaPlay.mockImplementationOnce(() => Promise.reject(new DOMException('blocked', 'NotAllowedError')))
+      const slide = shinySlide({ mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg' })
+      render(slide, { slides: [slide], audio_playing: marked })
+      await later(0)
+      expect(cue()).toBeTruthy()
+    })
+
+    it('shows the cue when a YouTube shiny clip is not playing 2s after play was asked for', async () => {
+      yt.claim.mockReturnValue({ whenReady: cb => cb(player(2)), onStateChange: () => {}, destroy: () => {} })
+      const slide = shinySlide({ mediaSlots: [{ type: 'youtube', videoId: 'kryV3E4QKGk', start: 0, end: 30, volume: 100 }] })
+      render(slide, { slides: [slide], audio_playing: marked })
+      await later(2100)
+      expect(cue()).toBeTruthy()
+    })
+
+    it('shows no cue when the YouTube clip is playing', async () => {
+      yt.claim.mockReturnValue({ whenReady: cb => cb(player(1)), onStateChange: () => {}, destroy: () => {} })
+      const slide = shinySlide({ mediaSlots: [{ type: 'youtube', videoId: 'kryV3E4QKGk', start: 0, end: 30, volume: 100 }] })
+      render(slide, { slides: [slide], audio_playing: marked })
+      await later(3000)
+      expect(cue()).toBeFalsy()
+    })
+
+    it('shows the cue when the audio context never resumes on an uploaded shiny clip', async () => {
+      const Real = globalThis.AudioContext
+      globalThis.AudioContext = class {
+        state = 'suspended'
+        createGain() { return { gain: {}, connect() {} } }
+        createMediaElementSource() { return { connect() {} } }
+        resume() { return new Promise(() => {}) }
+        close() {}
+      }
+      try {
+        const slide = shinySlide({ mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg' })
+        render(slide, { slides: [slide], audio_playing: marked })
+        await later(2100)
+        expect(cue()).toBeTruthy()
+      } finally {
+        globalThis.AudioContext = Real
+      }
+    })
+
+    it('tapping the cue on an uploaded shiny clip retries and clears it', async () => {
+      mediaPlay.mockImplementationOnce(() => Promise.reject(new DOMException('blocked', 'NotAllowedError')))
+      const slide = shinySlide({ mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg' })
+      render(slide, { slides: [slide], audio_playing: marked })
+      await later(0)
+      await act(async () => { cue().click() })
+      expect(mediaPlay).toHaveBeenCalledTimes(2)
+      expect(cue()).toBeFalsy()
     })
   })
 })
