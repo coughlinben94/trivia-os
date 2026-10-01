@@ -39,7 +39,7 @@ import { forwardRef, useEffect, useLayoutEffect, useImperativeHandle, useRef } f
 import { cylinderOf, authorPeriodOf, buildArc, loudnessOf, fillOf, rng, lerp, assertLayerPeriods } from '../../lib/ringEngine.js'
 import { ringNavAction } from '../../lib/ringStationIndex.js'
 import { EASE_SURGE } from '../../lib/easings.js'
-import { ringDom, px, ringCss, SKY_REGIONS, SKY_TINT_IN_MS, skyRegionWeights, skyRegionHues, accentCompanionHue, applySkyTints, applyTints } from '../../lib/ringPrimitives.js'
+import { ringDom, px, ringCss, SKY_REGIONS, SKY_TINT_IN_MS, SKY_TINT_EASE, skyRegionWeights, skyRegionHues, accentCompanionHue, applySkyTints, applyTints } from '../../lib/ringPrimitives.js'
 import { SLOTS } from '../../worlds/midnightGalaxy.slots.js'
 import { seedFrom } from '../../lib/paletteGenerator.js'
 
@@ -825,11 +825,16 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
       v.style.background = `radial-gradient(ellipse 138% 128% at 50% 48%, ${a} 0%, ${b} 46%, ${c} 78%, ${d} 100%)`
       v.style.opacity = '0'
       v.style.transitionProperty = 'opacity'
+      v.style.transitionTimingFunction = SKY_TINT_EASE // same curve as the region tints, not the browser default
       const tints = dom.makeSkyTints(skyRegionHues(world.stations))
       skyInner.appendChild(v)
       for (const t of Object.values(tints)) skyInner.appendChild(t)
       skySetsRef.current.set(world, { void: v, tints, weights: skyRegionWeights(world.stations) })
     }
+    // A set built this tick starts at opacity 0; flush that style before the
+    // loop below raises it, or the browser coalesces the two writes and the
+    // new world's sky pops in at full strength instead of fading.
+    void skyInner.offsetWidth
     for (const [world, set] of skySetsRef.current) {
       const k = lit.get(world) ?? 0
       set.void.style.transitionDuration = animate ? SKY_TINT_IN_MS + 'ms' : '0ms'
@@ -1091,7 +1096,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     // behind a glide in flight (stationRef only moves when a turn starts).
     const queued = queuedTurnsRef.current.reduce((a, d) => a + d, 0)
     applyPanes(slideIndex, ((stationRef.current + queued) % ENGINE.PANES + ENGINE.PANES) % ENGINE.PANES)
-    if (panePlanRef.current) writeSkyTints(stationRef.current, action !== 'jump')
+    if (panePlanRef.current) writeSkyTints(stationRef.current, action !== 'jump' && !isReduced())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slideIndex, forceSnap])
 
