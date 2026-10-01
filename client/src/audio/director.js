@@ -44,6 +44,13 @@ function browserDeps() {
   }
 }
 
+function isCrossOrigin(url) {
+  try {
+    const here = globalThis.location?.href
+    return new URL(url, here).origin !== new URL(here).origin
+  } catch { return false }
+}
+
 const safe = (fn, ...args) => {
   try { return fn(...args) } catch { return undefined }
 }
@@ -273,6 +280,10 @@ export function createDirector(overrides = {}) {
     const el = d.makeElement()
     el.preload = 'auto'
     el.loop = clip.loop
+    // A cross-origin file (Supabase storage) routed through Web Audio plays SILENT unless
+    // the element is CORS-enabled; storage sends access-control-allow-origin: *. Set it
+    // BEFORE src, and only when cross-origin (a same-origin file needs nothing).
+    if (isCrossOrigin(clip.url)) el.crossOrigin = 'anonymous'
     el.src = clip.url
     let src = null
     if (c) {

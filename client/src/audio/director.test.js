@@ -782,4 +782,13 @@ describe('review fixes (2026-10-01)', () => {
     target.dispatchEvent(new Event('pointerdown'))
     expect(el.playCalls).toBeGreaterThan(before)
   })
+
+  it('marks a cross-origin file CORS-enabled before src (else Web Audio plays silence); same-origin untouched', () => {
+    const f = runningFakes()
+    const d = createDirector(f.deps)
+    d.play({ kind: 'file', url: 'https://abc.supabase.co/storage/v1/object/public/a/b.mp3' }, { slideId: 'x' })
+    d.play({ kind: 'file', url: '/drum-roll.mp3' }, { slideId: 'y' })
+    expect(f.elements[0].crossOrigin).toBe('anonymous')
+    expect(f.elements[1].crossOrigin).toBeUndefined()
+  })
 })
