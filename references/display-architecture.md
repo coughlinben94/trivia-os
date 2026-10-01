@@ -30,7 +30,6 @@ Shows during `is_live=true` but before first slide advance.
 [AnimatePresence]     ← wraps SlideRenderer only
   [SlideRenderer]     ← current slide + transition animation
     [QuestionCounter] ← top-right (question slides only): "Q3 · R1"
-    [BaynesWatermark] ← bottom-right, 18% opacity, all slides
 ```
 
 ## ParticleBackground — The Most Important Rule
@@ -89,10 +88,6 @@ Old names `EASE_SNAP`/`EASE_QUINT`/`EASE_QUART`/`EASE_CUBIC`/`EASE_DRAWER` are r
 - Theme accent color at 70% opacity, uppercase, letter-spaced
 - Never animates
 
-## BaynesWatermark
-- Bottom-right, all slide types
-- 18% opacity, theme text color (not full-color logo)
-
 ## Audio (question slides with shinyType: 'audio')
 - WaveformBars.jsx renders animated bars
 - PLAY button — no autoplay
@@ -121,7 +116,7 @@ StageFrame is a centered, clipped box mounted in `DisplayInner` between Particle
 
 **What stays full-viewport (outside StageFrame):**
 - `ParticleBackground` — never re-mounts, always full-viewport behind the stage
-- `QuestionCounter`, `AnswerRevealOverlay`, `ScoreboardOverlay`, `BaynesWatermark` — viewport-level overlays (migrated to StageFrame in later commits)
+- `QuestionCounter`, `AnswerRevealOverlay`, `ScoreboardOverlay` — viewport-level overlays (migrated to StageFrame in later commits)
 - `PreShowScreen` ticker bar — intentionally bleeds to screen edges
 
 **Relationship to the ambient safe-area rule:**

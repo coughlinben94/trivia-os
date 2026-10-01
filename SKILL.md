@@ -194,7 +194,7 @@ client/src/
       ShowLibrary.jsx     — show CRUD modal opened from HostHeader (list, load, duplicate,
                              delete with two-step confirm, export, import); new-show creation
                              happens on the separate pre-load ShowPicker screen, not here
-                             (`ShowManager.jsx` is dead — no import/render site anywhere)
+                             (the old `ShowManager.jsx` was deleted 2026-10-01 — it had no import/render site)
       HostHeader.jsx      — "Score" button → opens ScoreboardModal; "Preview", "Export",
                              "Go Live →" buttons
       ThemePickerModal.jsx — theme selection + live preview
@@ -247,7 +247,7 @@ client/src/
       ScoreboardRevealSlide.jsx, CustomSlide.jsx, MultiQuestionSlide.jsx
       PixelateSeriesSlide.jsx, PylRevealSlide.jsx, StateOfUnionSlide.jsx
       WinnerRevealSlide.jsx   — drum roll (pre-recorded MP3) → confetti (canvas) → winner pop-in
-      QuestionCounter.jsx, BaynesWatermark.jsx, WaveformBars.jsx
+      QuestionCounter.jsx, WaveformBars.jsx
   hooks/
     useShow.js            — ALL show state, Supabase Realtime, CRUD actions (master hook)
   themes/

@@ -1,4 +1,4 @@
-import { normalizeRoundScore } from './scoreboardMath.js'
+import { applyPhoneScoreUpdates } from './scoreboardMath.js'
 
 // Host-set default for a horse-race pick (same shape as
 // DEFAULT_CHOICE_POINTS) — flat correct/incorrect, no partial credit for
@@ -16,22 +16,13 @@ export function scoreHorseRacePick(answer, correctAnswer, points) {
   return answer === correctAnswer ? (Number(points) || 0) : 0
 }
 
-// Pure fold-in, identical shape to computeChoiceScoreUpdates — see
-// choiceScoring.js for the full reasoning (case-insensitive name matching,
-// phoneBySlide additive merge, dedupe-by-id guard).
+// Pure fold-in, identical shape to computeChoiceScoreUpdates — the shared
+// applyPhoneScoreUpdates does the name matching, phoneBySlide merge and dedupe
+// (see scoreboardMath.js).
 export function computeHorseRaceScoreUpdates({ answers, teams, scoreboardTeams, roundKey, points, correctAnswer, slideId }) {
-  const teamIdToName = new Map((teams ?? []).map(t => [t.id, t.name.trim().toLowerCase()]))
-  const updates = []
-  for (const ans of answers ?? []) {
-    const teamName = teamIdToName.get(ans.team_id)
-    if (!teamName) continue
-    const sbTeam = (scoreboardTeams ?? []).find(t => t.name.trim().toLowerCase() === teamName)
-    if (!sbTeam) continue
-    const score = scoreHorseRacePick(ans.answer, correctAnswer, points)
-    const prevSplit = normalizeRoundScore(sbTeam.scores?.[roundKey])
-    const nextPhone = { ...prevSplit.phoneBySlide, [slideId]: score }
-    const nextScores = { ...sbTeam.scores, [roundKey]: { written: prevSplit.written, phone: nextPhone } }
-    updates.push({ id: sbTeam.id, show_id: sbTeam.show_id, name: sbTeam.name, scores: nextScores, sort_order: sbTeam.sort_order })
-  }
-  return [...new Map(updates.map(u => [u.id, u])).values()]
+  const results = (answers ?? []).map(ans => ({
+    teamId: ans.team_id,
+    points: scoreHorseRacePick(ans.answer, correctAnswer, points),
+  }))
+  return applyPhoneScoreUpdates({ results, teams, scoreboardTeams, roundKey, slideId })
 }
