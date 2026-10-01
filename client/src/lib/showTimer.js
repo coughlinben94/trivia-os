@@ -90,3 +90,15 @@ export function shouldChime(view, playedId) {
 export function calibrateOffset(localNow, t) {
   return typeof t?.sentAt === 'number' ? localNow - t.sentAt : 0
 }
+
+// Perform a planned timer step (hostCommands planTimer) on the stored timer;
+// returns what to hand to actions.setShowTimer (null clears it).
+export function applyTimerStep(step, timer, now) {
+  switch (step.run) {
+    case 'timer-start': return startTimer(step.ms, now)
+    case 'timer-pause': return pauseTimer(timer, now)
+    case 'timer-resume': return resumeTimer(timer, now)
+    case 'timer-add': return addTime(timer, step.ms, now)
+    default: return null // timer-cancel
+  }
+}

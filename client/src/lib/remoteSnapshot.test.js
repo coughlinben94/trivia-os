@@ -8,6 +8,16 @@ const slides = [
   { id: 'd', type: 'grading-break', data: {} },
 ]
 
+describe('buildSnapshot timer', () => {
+  const base = { slides, index: 0, showState: {}, cue: { label: null, gate: null } }
+  it('carries the timer only when there is one; no timer leaves the snapshot exactly as before', () => {
+    const t = { id: 't1', state: 'running', totalMs: 60000, endsAt: 61000, remainingMs: 60000, sentAt: 1000 }
+    expect(buildSnapshot({ ...base, timer: t }).timer).toEqual(t)
+    expect('timer' in buildSnapshot(base)).toBe(false)
+    expect('timer' in buildSnapshot({ ...base, timer: null })).toBe(false)
+  })
+})
+
 describe('buildSnapshot', () => {
   it('slide, cue/gate from one object, 2-slide Up Next, toggles, busy, paused', () => {
     const snap = buildSnapshot({ slides, index: 0, showState: { answerReveal: true }, cue: { label: 'Show question 1', gate: 'advance' }, busy: false, paused: true })

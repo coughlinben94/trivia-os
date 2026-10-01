@@ -1,0 +1,102 @@
+// iPad timer: protocol, planning and applying (feat/ipad-timer).
+import { describe, it, expect } from 'vitest'
+import { planHostCommand } from './hostCommands.js'
+import { applyTimerStep, startTimer, pauseTimer, resumeTimer, addTime, parseMinutes } from './showTimer.js'
+import { REFUSAL_TEXT, TIMER_PRESETS, TIMER_MIN_MINUTES, TIMER_MAX_MINUTES, parseRemoteMessage } from './remoteProtocol.js'
+
+const idle = {
+  modalOpen: false, pendingAdvance: false,
+  lockPhase: null, lockCountdownRunning: false, scoringBlocked: false,
+  audioPending: false, answerReveal: false,
+  scoringBusy: false, revealPending: false,
+  scoreboardVisible: false, scoresRevealed: false,
+}
+
+describe('timer commands (remote only)', () => {
+  const NOW = 1_000_000
+  const ctx = (extra = {}) => ({ now: NOW, paused: false, remoteBusy: false, slideId: 's1', timer: null, ...extra })
+  const run = (cmd, args, c) => planHostCommand({ cmd, via: 'remote', sentAt: NOW, args }, { ...idle, ...ctx(c) })
+  const running = { id: 't1', state: 'running', totalMs: 300000, endsAt: NOW + 120000, remainingMs: 300000, sentAt: NOW - 1000 }
+  const paused = { ...running, state: 'paused', remainingMs: 90000 }
+  const finished = { ...running, endsAt: NOW - 1000 }
+
+  it('keyboard and buttons never send timer commands', () => {
+    expect(planHostCommand({ cmd: 'timer.start', args: { minutes: 5 } }, { ...idle, ...ctx() })).toEqual({ refuse: 'unknown-command' })
+    expect(planHostCommand({ cmd: 'timer.start', via: 'button' }, { ...idle, ...ctx() })).toEqual({ refuse: 'unknown-command' })
+  })
+  it('start: whole minutes the laptop would accept become ms', () => {
+    expect(run('timer.start', { minutes: 5 })).toEqual({ run: 'timer-start', ms: 300000 })
+    expect(run('timer.start', { minutes: 1 })).toEqual({ run: 'timer-start', ms: 60000 })
+    expect(run('timer.start', { minutes: 180 })).toEqual({ run: 'timer-start', ms: 10_800_000 })
+  })
+  it('start refuses anything parseMinutes would reject, or that is not a whole number', () => {
+    for (const minutes of [0, -1, 181, 1e9, 1.5, 0.05, NaN, Infinity, '5', null, undefined, true, [5], 1e21]) {
+      expect(run('timer.start', { minutes }), String(minutes)).toEqual({ refuse: 'bad-minutes' })
+    }
+    expect(run('timer.start', {})).toEqual({ refuse: 'bad-minutes' })
+  })
+  it('a Start over a live timer needs explicit replace:true', () => {
+    expect(run('timer.start', { minutes: 5 }, { timer: running })).toEqual({ refuse: 'timer-running' })
+    expect(run('timer.start', { minutes: 5 }, { timer: paused })).toEqual({ refuse: 'timer-running' })
+    expect(run('timer.start', { minutes: 5, replace: 'yes' }, { timer: running })).toEqual({ refuse: 'timer-running' })
+    expect(run('timer.start', { minutes: 5, replace: true }, { timer: running })).toEqual({ run: 'timer-start', ms: 300000 })
+  })
+  it('a finished timer can be started over without replace (same as the laptop)', () => {
+    expect(run('timer.start', { minutes: 2 }, { timer: finished })).toEqual({ run: 'timer-start', ms: 120000 })
+  })
+  it('pause and resume are end-state and need the timer id the iPad saw', () => {
+    expect(run('timer.pause', { timerId: 't1' }, { timer: running })).toEqual({ run: 'timer-pause' })
+    expect(run('timer.pause', { timerId: 't1' }, { timer: paused })).toEqual({ run: 'noop' })
+    expect(run('timer.resume', { timerId: 't1' }, { timer: paused })).toEqual({ run: 'timer-resume' })
+    expect(run('timer.resume', { timerId: 't1' }, { timer: running })).toEqual({ run: 'noop' })
+    expect(run('timer.pause', { timerId: 'old' }, { timer: running })).toEqual({ refuse: 'timer-changed' })
+    expect(run('timer.pause', {}, { timer: running })).toEqual({ refuse: 'timer-changed' })
+    expect(run('timer.pause', { timerId: 't1' }, { timer: finished })).toEqual({ refuse: 'no-timer' })
+    expect(run('timer.resume', { timerId: 't1' }, { timer: finished })).toEqual({ refuse: 'no-timer' })
+  })
+  it('add one minute works on running, paused and finished; nothing to add to with no timer', () => {
+    for (const timer of [running, paused, finished]) expect(run('timer.add', { timerId: 't1' }, { timer })).toEqual({ run: 'timer-add', ms: 60000 })
+    expect(run('timer.add', { timerId: 't1' })).toEqual({ refuse: 'no-timer' })
+    expect(run('timer.add', { timerId: 'x' }, { timer: running })).toEqual({ refuse: 'timer-changed' })
+  })
+  it('cancel clears; with no timer it is already done', () => {
+    expect(run('timer.cancel', { timerId: 't1' }, { timer: running })).toEqual({ run: 'timer-cancel' })
+    expect(run('timer.cancel', { timerId: 't1' }, { timer: finished })).toEqual({ run: 'timer-cancel' })
+    expect(run('timer.cancel', { timerId: 't1' })).toEqual({ run: 'noop' })
+    expect(run('timer.cancel', { timerId: 'x' }, { timer: running })).toEqual({ refuse: 'timer-changed' })
+  })
+  it('the usual remote rails: late and paused refuse; busy and a laptop modal do not', () => {
+    expect(planHostCommand({ cmd: 'timer.start', via: 'remote', sentAt: NOW - 5000, args: { minutes: 5 } }, { ...idle, ...ctx() })).toEqual({ refuse: 'late' })
+    expect(planHostCommand({ cmd: 'timer.start', via: 'remote', args: { minutes: 5 } }, { ...idle, ...ctx() })).toEqual({ refuse: 'late' })
+    expect(run('timer.start', { minutes: 5 }, { paused: true })).toEqual({ refuse: 'paused' })
+    expect(run('timer.start', { minutes: 5 }, { remoteBusy: true, modalOpen: true })).toEqual({ run: 'timer-start', ms: 300000 })
+  })
+  it('other commands still refuse a modal and ignore ctx.timer', () => {
+    expect(planHostCommand({ cmd: 'answer', via: 'remote', sentAt: NOW, expectSlideId: 's1', args: { value: true } }, { ...idle, ...ctx({ modalOpen: true, timer: running }) })).toEqual({ refuse: 'modal-open' })
+  })
+})
+
+describe('applyTimerStep', () => {
+  it('maps each planned step onto the existing timer math', () => {
+    const t = startTimer(300000, 1000)
+    expect(applyTimerStep({ run: 'timer-start', ms: 120000 }, null, 5000)).toMatchObject({ state: 'running', totalMs: 120000, endsAt: 125000 })
+    expect(applyTimerStep({ run: 'timer-pause' }, t, 2000)).toEqual(pauseTimer(t, 2000))
+    const p = pauseTimer(t, 2000)
+    expect(applyTimerStep({ run: 'timer-resume' }, p, 3000)).toEqual(resumeTimer(p, 3000))
+    expect(applyTimerStep({ run: 'timer-add', ms: 60000 }, t, 2000)).toEqual(addTime(t, 60000, 2000))
+    expect(applyTimerStep({ run: 'timer-cancel' }, t, 2000)).toBeNull()
+  })
+})
+
+describe('timer protocol', () => {
+  it('refusal texts exist and carry no dash; presets obey the laptop rule; the relay parser passes timer commands', () => {
+    for (const r of ['timer-running', 'timer-changed', 'no-timer', 'bad-minutes']) {
+      expect(REFUSAL_TEXT[r], r).toBeTruthy()
+      expect(REFUSAL_TEXT[r]).not.toMatch(/[—–]/)
+    }
+    for (const m of [...TIMER_PRESETS, TIMER_MIN_MINUTES, TIMER_MAX_MINUTES]) expect(parseMinutes(String(m)), String(m)).not.toBeNull()
+    expect(parseMinutes(String(TIMER_MAX_MINUTES + 1))).toBeNull()
+    const raw = JSON.stringify({ type: 'cmd', id: 'a-1', cmd: 'timer.start', args: { minutes: 5, replace: true }, sentAt: 5 })
+    expect(parseRemoteMessage(raw)).toMatchObject({ cmd: 'timer.start', args: { minutes: 5, replace: true } })
+  })
+})

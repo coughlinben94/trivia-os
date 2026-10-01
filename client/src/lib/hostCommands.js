@@ -5,6 +5,7 @@
 //
 // cmd: { cmd: 'next'|'prev'|'answer'|'scoreboard'|'scores-reveal'|'jump'|'unlock'|'rescore'
 //        |'scores.get'|'score.set'|'scores.hide', via?, args?, expectSlideId?, sentAt? }
+// timer.start|pause|resume|add|cancel are remote-only too (the laptop has its own Timer card).
 // jump/unlock/rescore are remote-only (phase 2a): the keyboard and buttons
 // never send them, so for those they stay unknown-command.
 // via: 'button' reproduces the on-screen Next/Prev buttons, which never had the
@@ -17,6 +18,7 @@
 // nothing to do (an end-state command that already matches).
 import { COMMAND_TTL_MS } from './remoteProtocol.js'
 import { validScoreValue } from './scoreCellWrite.js'
+import { parseMinutes, timerView } from './showTimer.js'
 
 // Commands whose meaning depends on which slide the sender was looking at.
 const SLIDE_BOUND = new Set(['next', 'prev', 'answer', 'jump', 'unlock', 'rescore'])
@@ -25,7 +27,42 @@ const SLIDE_BOUND = new Set(['next', 'prev', 'answer', 'jump', 'unlock', 'rescor
 // Phase 3 adds the Scores drawer's scores.get / score.set (not slide-bound: a
 // dispute fix is about a team, not the slide on screen).
 const BUSY_GATED = new Set(['next', 'prev', 'jump', 'unlock', 'rescore', 'scores.get', 'score.set'])
-const REMOTE_ONLY = new Set(['jump', 'unlock', 'rescore', 'scores.get', 'score.set', 'scores.hide'])
+export const TIMER_COMMANDS = new Set(['timer.start', 'timer.pause', 'timer.resume', 'timer.add', 'timer.cancel'])
+const REMOTE_ONLY = new Set(['jump', 'unlock', 'rescore', 'scores.get', 'score.set', 'scores.hide', ...TIMER_COMMANDS])
+
+// The iPad sends whole minutes only, and only ones the laptop's own
+// parseMinutes accepts (so it can never start a timer the laptop box would refuse).
+const timerMs = m => (Number.isInteger(m) ? parseMinutes(String(m)) : null)
+
+// timer.* (show-level, not slide-bound or busy-gated, and a laptop modal does
+// not matter to a clock). ctx.timer is shows.special_event.timer. pause, resume,
+// add and cancel carry args.timerId, the timer the iPad was looking at: a timer
+// that was replaced since refuses as timer-changed instead of hitting the new one.
+function planTimer(cmd, args, ctx) {
+  const t = ctx.timer ?? null
+  const phase = timerView(t, ctx.now).phase
+  const live = phase === 'running' || phase === 'urgent' || phase === 'paused'
+  if (cmd === 'timer.start') {
+    const ms = timerMs(args.minutes)
+    if (ms == null) return { refuse: 'bad-minutes' }
+    if (live && args.replace !== true) return { refuse: 'timer-running' }
+    return { run: 'timer-start', ms }
+  }
+  if (!t) return cmd === 'timer.cancel' ? { run: 'noop' } : { refuse: 'no-timer' }
+  if (typeof args.timerId !== 'string' || args.timerId !== t.id) return { refuse: 'timer-changed' }
+  switch (cmd) {
+    case 'timer.pause':
+      if (phase === 'paused') return { run: 'noop' }
+      return live ? { run: 'timer-pause' } : { refuse: 'no-timer' }
+    case 'timer.resume':
+      if (phase === 'running' || phase === 'urgent') return { run: 'noop' }
+      return phase === 'paused' ? { run: 'timer-resume' } : { refuse: 'no-timer' }
+    case 'timer.add':
+      return phase === 'idle' ? { refuse: 'no-timer' } : { run: 'timer-add', ms: 60000 }
+    default: // timer.cancel
+      return { run: 'timer-cancel' }
+  }
+}
 
 // args.slideId wins over args.index: the iPad's list may be a snapshot old,
 // and an id still names the slide Ben tapped if slides moved since.
@@ -53,9 +90,10 @@ export function planHostCommand({ cmd, via, args = {}, expectSlideId = null, sen
     // would start a phantom countdown the handler's final write then wipes.
     if (BUSY_GATED.has(cmd) && ctx.remoteBusy) return { refuse: 'busy' }
   }
-  if (!button && ctx.modalOpen) return { refuse: 'modal-open' }
+  if (!button && ctx.modalOpen && !TIMER_COMMANDS.has(cmd)) return { refuse: 'modal-open' }
   if (remote && SLIDE_BOUND.has(cmd) && expectSlideId !== ctx.slideId) return { refuse: 'slide-changed' }
   if (!remote && REMOTE_ONLY.has(cmd)) return { refuse: 'unknown-command' }
+  if (TIMER_COMMANDS.has(cmd)) return planTimer(cmd, args, ctx)
   switch (cmd) {
     case 'next':
       if (ctx.pendingAdvance) return { refuse: 'pending-advance' }
