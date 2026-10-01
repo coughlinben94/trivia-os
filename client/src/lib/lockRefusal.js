@@ -1,8 +1,10 @@
 import { pendingLockPhase } from './slideStepping.js'
 import { parseWagerNumber } from './wagerScoring.js'
 import { HUES_CUES_CODE_RE } from './huesCuesGrid.js'
+import { dropOptions } from './dropScoring.js'
 
 export const HUES_CUES_ANSWER_ERROR = 'Set a correct square before locking — pick one on the grid'
+export const DROP_ANSWER_ERROR = 'Set the correct tile before locking — pick one in the slide editor'
 export const WAGER_ANSWER_ERROR = 'This slide’s Answer isn’t a number — fix it in the slide editor, then score'
 export const WAGER_TIERS_ERROR = 'Wagers were never locked — tap Lock Wagers first'
 
@@ -16,6 +18,7 @@ export function lockRefusal(slide) {
     case 'wager-guesses':
       if (parseWagerNumber(d.answer) == null) return WAGER_ANSWER_ERROR
       return d.wagerTiers == null ? WAGER_TIERS_ERROR : null
+    case 'drop': return dropOptions(d).some(o => o.id === d.correctId) ? null : DROP_ANSWER_ERROR
     default: return null
   }
 }

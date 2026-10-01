@@ -21,7 +21,8 @@
 // Callers own the write + their own local-state update; nothing here
 // touches the network or React.
 
-import { isMatchingShiny, isWagerShiny, isOrderShiny, isChoiceShiny, isHuesCuesShiny, isPinShiny, isConcurrentShiny, isConcurrentMediaShiny } from './shinySeries.js'
+import { isMatchingShiny, isWagerShiny, isOrderShiny, isChoiceShiny, isDropShiny, isHuesCuesShiny, isPinShiny, isConcurrentShiny, isConcurrentMediaShiny } from './shinySeries.js'
+import { dropStepCount } from './dropScoring.js'
 
 // Chunks `parts` into fixed-size reveal groups of `groupSize`, in authored
 // order — the single implementation both revealStepCount's Next/Prev step
@@ -379,6 +380,12 @@ export const PHONE_MECHANICS = {
   wager:    { guard: isWagerShiny,    lockFields: ['wagerTiersLocked', 'wagerGuessesLocked'], revealField: 'wagerRevealed' },
   order:    { guard: isOrderShiny,    lockFields: ['orderLocked'], revealField: 'orderRevealed' },
   choice:   { guard: isChoiceShiny,   lockFields: ['choiceLocked'], revealField: 'choiceRevealed' },
+  // The Drop: wrong tiles fall off one per Next after the lock (dropStep), so
+  // there is no A-press reveal (pendingReveal skips it) — dropRevealed just
+  // flips true on the last drop so the re-entry/unlock logic treats a finished
+  // drop like every other revealed mechanic. dropStep/dropResults are cleared
+  // on fresh entry and on Unlock (rescoring rebuilds the results).
+  drop:     { guard: isDropShiny,     lockFields: ['dropLocked'], revealField: 'dropRevealed', clearFields: ['dropStep', 'dropResults'] },
   huesCues: { guard: isHuesCuesShiny, lockFields: ['huesCuesLocked'], revealField: 'huesCuesRevealed' },
   pin:      { guard: isPinShiny,      lockFields: ['pinLocked'], revealField: 'pinRevealed', clearFields: ['pinRoomSize', 'pinResults'],
             // fresh entry only (withEntryState); Unlock keeps the host's override
@@ -445,6 +452,7 @@ export function pendingReveal(slide) {
   if (!data) return null
   for (const [key, m] of Object.entries(PHONE_MECHANICS)) {
     if (!m.guard(data)) continue
+    if (key === 'drop') return null // Next steps the reveal, not the A key
     const lastField = m.lockFields[m.lockFields.length - 1]
     return data[lastField] && !data[m.revealField] ? key : null
   }
@@ -536,6 +544,17 @@ export async function computeNextStep(show, fetchTeamCount) {
     }
   }
 
+  // The Drop: once locked, each Next drops the next wrong tile off the TV;
+  // the press after the last drop falls through to a normal advance.
+  if (data && isDropShiny(data) && data.dropLocked) {
+    const total = dropStepCount(data)
+    const step = data.dropStep ?? 0
+    if (step < total) {
+      const next = step + 1
+      return { slides: patchSlideData(slides, curSlide.id, { dropStep: next, dropRevealed: next >= total }), answer_reveal: false }
+    }
+  }
+
   // Step through this slide's parts before moving to the next slide.
   // groupSize (default 1) lets a slide reveal N parts per Next press
   // instead of one — currentPart then counts GROUPS, not raw parts (Ben,
@@ -595,6 +614,11 @@ export async function computePrevStep(show, fetchTeamCount) {
   const curSlide = sorted[cur]
   const data = curSlide?.data
   const parts = data?.parts
+
+  // The Drop: Prev puts the last-dropped tile back before leaving the slide.
+  if (data && isDropShiny(data) && data.dropLocked && (data.dropStep ?? 0) > 0) {
+    return { slides: patchSlideData(slides, curSlide.id, { dropStep: data.dropStep - 1, dropRevealed: false }), answer_reveal: false }
+  }
 
   // Step back through this slide's parts before leaving the slide. Generic
   // on purpose (matches the forward branch in computeNextStep) — not gated

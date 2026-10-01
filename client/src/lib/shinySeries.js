@@ -109,6 +109,10 @@ export function isChoiceShiny(data) {
   return data.shinyInputSchema?.type === 'choice'
 }
 
+export function isDropShiny(data) {
+  return data.shinyInputSchema?.type === 'drop'
+}
+
 export function isHuesCuesShiny(data) {
   return data.shinyInputSchema?.type === 'hues-cues'
 }
