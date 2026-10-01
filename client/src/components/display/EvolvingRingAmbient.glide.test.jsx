@@ -116,11 +116,15 @@ describe('EvolvingRingAmbient — every single-step advance glides on screen', (
     await show('show_b', 2)
     expect(container.querySelectorAll('.ring-stage')).toHaveLength(1)
     const [stage] = container.querySelectorAll('.ring-stage')
-    // pane 3 is the gap: only the two bleed layers, no objects.
+    // pane 3 is the gap: exactly two objects, one poking in from each side
+    // (an ordinary pane carries a headline, companion, specks, ...).
     const gap = paneEls(3)
     expect(gap).toHaveLength(2)
-    expect(gap.every(n => n.className.includes('scrim'))).toBe(true)
-    expect(paneEls(2).length).toBeGreaterThan(2) // an ordinary pane has real content
+    const x0 = 3 * 1920
+    const [fromLeft, fromRight] = gap.map(n => parseFloat(n.style.left))
+    expect(fromLeft).toBeLessThan(x0) // starts in the previous pane
+    expect(fromRight).toBeGreaterThan(x0) // starts inside this pane, runs past its right edge
+    expect(paneEls(2).length).toBeGreaterThan(2)
     await act(async () => { vi.advanceTimersByTime(SETTLE_MS) })
     await show('show_b', 3)
     expect(container.querySelectorAll('.ring-stage')).toHaveLength(1)
@@ -139,7 +143,7 @@ describe('EvolvingRingAmbient — every single-step advance glides on screen', (
     await show('show_b', 10)
     for (const copy of mid.children) {
       const els = [...copy.querySelectorAll('[data-pane="3"]')]
-      expect(els.length).toBeGreaterThan(2) // no longer the bleed-only gap
+      expect(els.length).toBeGreaterThan(2) // no longer the two-object gap
     }
   }, 60_000)
 })

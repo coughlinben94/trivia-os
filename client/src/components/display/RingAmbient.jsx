@@ -157,7 +157,7 @@ const dom = ringDom('ring-', ENGINE)
 // per-pane world switch, see repaintPanes in the component). Shapes and
 // positions draw from rng(i, ...) streams, never from hue, so a rebuild with
 // a different world's hues lands every object in the same place.
-function buildMidStation(engine, world, arc, host, regionHues, i) {
+function buildMidStation(engine, world, arc, host, regionHues, i, glowFeather = 24) {
   const st = world.stations[i]
   // Each property below draws from its OWN seeded stream, keyed by
   // station index + a distinct per-property constant — not one shared
@@ -273,7 +273,7 @@ function buildMidStation(engine, world, arc, host, regionHues, i) {
     const glowW = discSize * 1.35
     const glowEl2 = head.querySelector('[class*="d-glow"]')
     if (glowEl2) {
-      const FEATHER = 24
+      const FEATHER = glowFeather
       // 2026-08-24: drawPlanetDisc now sets its own mask on this same
       // element (the dark-side glow falloff — see its glowMask comment).
       // Assigning here used to OVERWRITE it, silently restoring the
@@ -538,36 +538,46 @@ function appendPane(host, i, build) {
   for (const n of [...tmp.childNodes]) { n.setAttribute('data-pane', i); host.appendChild(n) }
 }
 
-// The empty pane a world switch lands on: no objects, only the two worlds'
-// light bleeding in from each edge (spec: docs/superpowers/plans/
-// 2026-10-01-ring-per-station-world-switch.md). spec.bleeds = [{ side, color,
-// reach }] with reach a 0..1 fraction of the frame width; whatever the two
-// reaches leave uncovered stays plain dark, which is the visible "shift".
+// Planet glows are masked at their own station's boundary so they can't paint
+// onto the neighbouring slide; the default 24px feather is a hard straight
+// line while the camera glides across that boundary (Ben, 2026-10-01: "idk why
+// that line is there" — confirmed by stripping the mask, the line vanished).
+// In per-pane mode the neighbour is often the dark gap, so fade over a wide
+// band instead. Default (single-world) rendering is untouched.
+const PANE_GLOW_FEATHER = 240
+
+// The empty pane a world switch lands on: no objects of its own. The old
+// world pokes one of its own objects in from the left edge and the new world
+// one from the right, each showing `reach` (30-70%) of its width; the rest of
+// the pane stays plain dark, which is the visible "shift" (Ben, 2026-10-01:
+// "this empty slide should have bleed from the old world and bleed from the
+// new world"). Real objects, not haze: a soft colour field read as unnatural.
+// spec.bleeds = [{ side, world, station, reach }]. The object is a nebula /
+// star cluster / spiral galaxy in the neighbouring pane's own hue — never that
+// pane's own headline kind, or a planet pane would show two planets at once.
 function buildGapPane(host, i, spec) {
-  // Each bleed runs OVER_PX past the pane edge into its neighbour and ramps
-  // up from fully transparent, so no vertical seam shows at the pane boundary
-  // while the camera glides in or out (Ben, 2026-10-01: "the straight down
-  // lines going to and from that black slide aren't good"). Peak sits on the
-  // boundary; it fades to nothing again toward the middle of the pane.
-  const OVER_PX = 260
-  for (const b of spec.bleeds) {
-    const w = b.reach * ENGINE.W
-    const left = b.side === 'left'
-    const el = dom.el('scrim')
-    el.style.left = px(i * ENGINE.W + (left ? -OVER_PX : ENGINE.W - w))
-    el.style.top = '0'
-    el.style.width = px(w + OVER_PX)
-    el.style.height = px(ENGINE.H)
-    el.style.opacity = '0.4'
-    el.style.background = `linear-gradient(to ${left ? 'right' : 'left'}, transparent 0, ${b.color} ${OVER_PX}px, transparent 100%)`
-    const fade = 'linear-gradient(to bottom, transparent, #000 35%, #000 65%, transparent)'
-    el.style.maskImage = fade; el.style.webkitMaskImage = fade
+  const x0 = i * ENGINE.W
+  let upper = null
+  spec.bleeds.forEach((b, k) => {
+    const st = b.world.stations[b.station]
+    const arc = buildArc(ENGINE, b.world)
+    const r = rng(i * 7 + k, 0xB1EED)
+    const kinds = ['blob', 'dots', 'lens'].filter(kind => kind !== st.prim)
+    const prim = kinds[Math.floor(r() * kinds.length)]
+    const hw = lerp(576, 880, r())
+    const hh = hw * lerp(0.62, 0.88, r())
+    // Floor of 0.45: a quiet station's own alpha left the new world's side nearly invisible.
+    const alpha = Math.max(0.45, lerp(0.34, 0.55, loudnessOf(arc, b.station)))
+    const el = dom.makePrim(prim, hw, hh, st.hue, alpha, r, false, fillOf(ENGINE, arc, b.station))
+    el.style.left = px(b.side === 'left' ? x0 - hw * (1 - b.reach) : x0 + ENGINE.W - hw * b.reach)
+    upper = upper == null ? r() < 0.5 : !upper // diagonal pair, like the ring's own grammar
+    el.style.top = px(dom.bandY(r, hh, upper, dom.rotatedBandH(prim, hw, hh)))
     host.appendChild(el)
-  }
+  })
 }
 
 // ═══ BUILD ═══ dispatches per-layer content building.
-function buildLayerContent(engine, world, arc, host, L, showId) {
+function buildLayerContent(engine, world, arc, host, L, showId, glowFeather) {
   // 2026-09-02 palette-aware, synced with world-07-ring.html: region hues are
   // derived from the world's own station data, never read off SKY_REGIONS.
   const regionHues = skyRegionHues(world.stations)
@@ -716,7 +726,7 @@ function buildLayerContent(engine, world, arc, host, L, showId) {
     // if the floor itself should retire.
 
     for (let i = 0; i < engine.PANES; i++) {
-      appendPane(host, i, (stHost) => buildMidStation(engine, world, arc, stHost, regionHues, i))
+      appendPane(host, i, (stHost) => buildMidStation(engine, world, arc, stHost, regionHues, i, glowFeather))
     }
   }
 
@@ -844,7 +854,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
       // author one period, then repeat it m+1 times. The extra copy covers
       // the window that hangs past the cylinder just before it wraps.
       const proto = dom.el(''); proto.style.position = 'absolute'; proto.style.inset = '0'
-      buildLayerContent(ENGINE, worldData, arc, proto, L, showId)
+      buildLayerContent(ENGINE, worldData, arc, proto, L, showId, panePlanRef.current ? PANE_GLOW_FEATHER : undefined)
       for (let k = 0; k <= L.m; k++) {
         const copy = k === 0 ? proto : proto.cloneNode(true)
         copy.style.position = 'absolute'
@@ -1106,7 +1116,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     const plan = planFn(slide, station, onlyPane != null)
     plan.forEach((spec, pane) => {
       if (onlyPane != null && pane !== onlyPane) return
-      const key = spec.empty ? JSON.stringify(spec) : spec
+      const key = spec.empty ? spec.key : spec
       if (paintedRef.current[pane] === key) return
       paintedRef.current[pane] = key
       const arc = spec.empty ? null : buildArc(ENGINE, spec)
@@ -1114,7 +1124,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
         copy.querySelectorAll(`[data-pane="${pane}"]`).forEach(n => n.remove())
         appendPane(copy, pane, spec.empty
           ? (h) => buildGapPane(h, pane, spec)
-          : (h) => buildMidStation(ENGINE, spec, arc, h, skyRegionHues(spec.stations), pane))
+          : (h) => buildMidStation(ENGINE, spec, arc, h, skyRegionHues(spec.stations), pane, PANE_GLOW_FEATHER))
       }
     })
   }

@@ -60,13 +60,13 @@ export function isTransitionSlide(seed, ringVisibleIndex) {
   return stepIndexForSlide(seed, ringVisibleIndex) !== stepIndexForSlide(seed, ringVisibleIndex - 1)
 }
 
-// How far each world's light bleeds into the empty slide a world switch lands
-// on, as a fraction of the frame width (Ben, 2026-10-01: "bleed changes from
-// 30-70 for the old world and 30-70 for the new world, taking into
-// consideration that black area"). Each side is seeded in [0.30, 0.70]; if the
-// two together would leave less than MIN_BLACK uncovered they are scaled down
-// together, so a dark gap always separates the worlds. Same show + step ->
-// same numbers, no stored state.
+// How much of each world's object shows on the empty slide a world switch
+// lands on, as a fraction of that object's own width (Ben, 2026-10-01: "bleed
+// changes from 30-70 for the old world and 30-70 for the new world, taking
+// into consideration that black area"). Each side is seeded in [0.30, 0.70];
+// if the two together would leave less than MIN_BLACK uncovered they are
+// scaled down together, so a dark gap always separates the worlds. Same show +
+// step -> same numbers, no stored state.
 const MIN_BLACK = 0.10
 export function gapBleedFor(seed, stepIndex) {
   const r = rng(seedFrom(String(seed)) ^ (stepIndex | 0), GAP_SALT)

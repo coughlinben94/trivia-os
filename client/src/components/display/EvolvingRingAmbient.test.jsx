@@ -89,15 +89,16 @@ describe('EvolvingRingAmbient', () => {
       expect(plan[6].empty).toBe(true) // slide 6 = the next switch
     })
 
-    it('puts each gap bleed in its own world\'s color, left old / right new, with a dark gap between', () => {
+    it('pokes one object from each neighbouring pane into the gap — left old world, right new — with a dark gap between', () => {
       const gap = panePlanFor('show_b', arr, 3, 3)[3]
       const [l, r] = gap.bleeds
-      const hue = (d, p) => worldForDuo(d, arr).stations[p].hue
-      expect(l).toMatchObject({ side: 'left', color: `hsl(${hue(a, 2)} 65% 45%)` }) // pane 2's own objects
-      expect(r).toMatchObject({ side: 'right', color: `hsl(${hue(b, 4)} 65% 45%)` }) // pane 4's own objects
-      expect(l.reach).toBeGreaterThan(0.19)
-      expect(r.reach).toBeGreaterThan(0.19)
+      expect(l).toMatchObject({ side: 'left', station: 2 }) // pane 2's own object, old world
+      expect(duo(l.world)).toBe(a)
+      expect(r).toMatchObject({ side: 'right', station: 4 }) // pane 4's own object, new world
+      expect(duo(r.world)).toBe(b)
+      for (const x of [l, r]) { expect(x.reach).toBeGreaterThan(0.19); expect(x.reach).toBeLessThanOrEqual(0.7) }
       expect(l.reach + r.reach).toBeLessThanOrEqual(0.9 + 1e-9)
+      expect(typeof gap.key).toBe('string')
     })
 
     it('follows the ring\'s own station, not slide % 13 (a grading break leaves it one behind)', () => {

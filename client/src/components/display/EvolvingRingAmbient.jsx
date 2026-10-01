@@ -61,8 +61,8 @@ function SyncedRingAmbient({ worldData, showId, slideIndex, stationOverride, sho
 
 // ONE continuous ring (Ben, 2026-10-01): each pane is painted in the duo of
 // the slide that lands on it; the first slide of a new duo lands on an empty
-// pane carrying the old world's light from its left edge and the new world's
-// from its right, with dark between. No overlay, no wipe, no fade.
+// pane with one of the old world's objects poking in from its left edge and
+// one of the new world's from its right, with dark between. No overlay, no wipe, no fade.
 // Plan: docs/superpowers/plans/2026-10-01-ring-per-station-world-switch.md
 const PANES = 13
 
@@ -82,15 +82,12 @@ export function panePlanFor(showId, arrangement, slide, station, solidCenter = f
     if (t > 0 && isTransitionSlide(showId, t) && !(solidCenter && d === 0)) {
       const { outgoing, incoming } = outgoingAndIncomingDuo(showId, DUO_GRAPH, t)
       const { left, right } = gapBleedFor(showId, stepIndexForSlide(showId, t))
-      // Colour = the hue the neighbouring pane's own objects use, so the
-      // bleed matches what is actually next to it, not just the duo's first swatch.
-      const hueAt = (duoId, p) => worldForDuo(duoId, arrangement).stations[((p % PANES) + PANES) % PANES].hue
+      // Each side pokes in one of its neighbouring pane's own objects.
+      const side = (name, duoId, p, reach) => ({ side: name, world: worldForDuo(duoId, arrangement), station: ((p % PANES) + PANES) % PANES, reach })
       plan[pane] = {
         empty: true,
-        bleeds: [
-          { side: 'left', color: `hsl(${hueAt(outgoing, pane - 1)} 65% 45%)`, reach: left },
-          { side: 'right', color: `hsl(${hueAt(incoming, pane + 1)} 65% 45%)`, reach: right },
-        ],
+        key: `gap:${outgoing}:${incoming}:${left.toFixed(4)}:${right.toFixed(4)}`,
+        bleeds: [side('left', outgoing, pane - 1, left), side('right', incoming, pane + 1, right)],
       }
     } else {
       plan[pane] = worldForDuo(duoAt(showId, t), arrangement)
