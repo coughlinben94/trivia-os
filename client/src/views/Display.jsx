@@ -9,6 +9,7 @@ import { ringVisibleStationIndex, ringPeekIndex } from '../lib/ringStationIndex.
 import QuestionCounter from '../components/display/QuestionCounter.jsx'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
 import ScoreboardOverlay from '../components/display/ScoreboardOverlay.jsx'
+import TimerOverlay from '../components/display/TimerOverlay.jsx'
 import LockCountdownOverlay from '../components/display/LockCountdownOverlay.jsx'
 import JukeboxBreakOverlay from '../components/display/JukeboxBreakOverlay.jsx'
 import WarpTransition from '../components/display/WarpTransition.jsx'
@@ -1140,6 +1141,11 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
             A crash here should just make the overlay disappear, not the TV. */}
         <ErrorBoundary fallback={null}>
           <ScoreboardOverlay show={show} />
+        </ErrorBoundary>
+        {/* Host countdown timer (shows.special_event.timer): a corner layer over
+            any slide, z-[70] so it also sits above the scoreboard. Mounted once. */}
+        <ErrorBoundary fallback={null}>
+          <TimerOverlay show={show} />
         </ErrorBoundary>
         {/* "Next locks answers" — the 3-2-1-🔒 ceremony. Mounted unconditionally
             (startedAt falsy renders nothing) so it's always ready the instant

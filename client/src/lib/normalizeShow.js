@@ -18,6 +18,9 @@ export function normalizeShow(row) {
     // The TV can write this now (its Next plays an owed clip) and the host's gate and
     // stale-mark clear both read it, so a re-fetch (laptop reload) must not drop it.
     audio_playing: row.audio_playing ?? null,
+    // Host countdown timer lives at special_event.timer (lib/showTimer.js); the TV
+    // owns no copy of it that the host lacks, but a laptop reload must still see it.
+    special_event: row.special_event ?? null,
     showState: {
       currentSlideId: row.current_slide_id ?? null,
       currentSlideIndex: row.current_slide_index ?? 0,

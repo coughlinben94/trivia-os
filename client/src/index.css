@@ -212,3 +212,14 @@ textarea {
   @keyframes waveformBar  { 0%, 100% { transform: scaleY(0.5); } }
   @keyframes slideInRight { 0%, 100% { transform: translateX(0); opacity: 1; } }
 }
+
+/* Host timer on the TV (components/display/TimerOverlay.jsx). Pulses run as CSS
+   animations on transform / opacity so they stay smooth on the compositor even
+   while the TV tab is busy; framer's scale shorthand runs on the main thread. */
+@keyframes timerPulseUrgent { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+@keyframes timerPulseDone { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+.timer-pulse-urgent { animation: timerPulseUrgent 1s cubic-bezier(0.23, 1, 0.32, 1) infinite; }
+.timer-pulse-done { animation: timerPulseDone 0.9s cubic-bezier(0.23, 1, 0.32, 1) infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .timer-pulse-urgent, .timer-pulse-done { animation: none; }
+}
