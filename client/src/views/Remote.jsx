@@ -407,8 +407,9 @@ export default function Remote() {
           ))}
           {snap && snap.upNext.length === 0 && <p className="text-2xl font-bold text-[color:var(--rl-text-75)]">End of show</p>}
           {!snap && <p className="text-xl text-[color:var(--rl-text-75)]">Nothing yet</p>}
-          <TimerTile timer={snap?.timer ?? null} offsetMs={offsetRef.current} block={timerBlock} onOpen={() => setDrawer('timer')} />
           {/* Volume, Duck, Sounds: on the relay, so they work even without Live Mode */}
+          <div className="landscape:mt-auto portrait:ml-auto portrait:w-[22rem] flex flex-col gap-3 min-w-0 shrink-0">
+          <TimerTile timer={snap?.timer ?? null} offsetMs={offsetRef.current} block={timerBlock} onOpen={() => setDrawer('timer')} />
           <AudioBar
             local={local}
             block={localBlock}
@@ -417,6 +418,7 @@ export default function Remote() {
             onDuck={tap('duck', 300, () => send('duck', {}, !localBlock))}
             onSounds={() => setDrawer('sounds')}
           />
+          </div>
         </aside>
 
         {jb ? (
