@@ -109,6 +109,25 @@ describe('RingAmbient camera contract', () => {
     expect(ref.current.station).toBe(9)
   })
 
+  it('the PAN follows the station: jump and a settled turn land on identical surge transforms', async () => {
+    const { ref } = await mount()
+    const pan = () => [...container.querySelectorAll('.ring-surge')].map(e => e.style.transform).join('|')
+    const home = pan()
+    await act(async () => { ref.current.jumpTo(3) })
+    const at3 = pan()
+    expect(at3).not.toBe(home)
+    await act(async () => { ref.current.jumpTo(0) })
+    expect(pan()).toBe(home)
+    await act(async () => { ref.current.jumpTo(2); ref.current.turn() })
+    await tick(WALK_MS)
+    expect(ref.current.station).toBe(3)
+    expect(pan()).toBe(at3) // glide ends exactly where a snap to 3 lands
+    await act(async () => { ref.current.jumpTo(12); ref.current.turn() }) // forward wrap
+    await tick(WALK_MS)
+    expect(ref.current.station).toBe(0)
+    expect(pan()).toBe(home) // deferred modulo reset returns to the un-wrapped offsets
+  })
+
   it('jumpTo() normalizes out-of-range targets', async () => {
     const { ref } = await mount()
     await act(async () => { ref.current.jumpTo(15) })

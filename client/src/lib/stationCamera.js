@@ -42,9 +42,10 @@ export function createStationCamera({ panes, renderer, queuePolicy = 'drain', in
   }
 
   function stop() {
-    if (cancelWalk) cancelWalk()
+    const cancel = cancelWalk
     cancelWalk = null
-    token = null
+    token = null // cleared first: a throwing cancel must not leave a live token behind
+    if (cancel) cancel()
   }
 
   function turn(dir = 1) {
@@ -64,12 +65,13 @@ export function createStationCamera({ panes, renderer, queuePolicy = 'drain', in
 
   // Authoritative: cancels the running walk and the queue, snaps, clears busy.
   function jumpTo(target) {
-    stop()
-    busy = false
-    queue = []
-    const from = station
-    station = mod(Math.trunc(target))
-    renderer.snap(from, station)
+    try { stop() } finally { // a throwing cancel still lets the jump land (the error propagates after)
+      busy = false
+      queue = []
+      const from = station
+      station = mod(Math.trunc(target))
+      renderer.snap(from, station)
+    }
   }
 
   // Unmount: cancel anything in flight without moving.

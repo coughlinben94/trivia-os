@@ -76,6 +76,16 @@ describe('stationCamera drain policy (space)', () => {
     expect(cam.station).toBe(12)
     expect(log).toEqual(['snap 0>2', 'snap 2>12'])
   })
+  it('a throwing cancel still lets jumpTo snap and clears busy', () => {
+    const snaps = []
+    const renderer = { startWalk() { return () => { throw new Error('boom') } }, snap(f, t) { snaps.push(`${f}>${t}`) } }
+    const cam = createStationCamera({ panes: 13, renderer })
+    cam.turn()
+    expect(() => cam.jumpTo(4)).toThrow('boom')
+    expect(snaps).toEqual(['1>4'])
+    expect(cam.station).toBe(4); expect(cam.busy).toBe(false)
+    cam.turn(); expect(cam.station).toBe(5) // not wedged
+  })
   it('dispose cancels the walk without moving', () => {
     const { cam, tick, timers } = rig('drain')
     cam.turn(); cam.dispose()
