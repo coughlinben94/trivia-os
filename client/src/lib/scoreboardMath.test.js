@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeRoundScore, computeTotal, computePlaces, roundScoreTotal, mergeScoreEdit, roundLabel, deriveRoundCols, pickableTeams } from './scoreboardMath.js'
+import { normalizeRoundScore, computeTotal, computePlaces, roundScoreTotal, mergeScoreEdit, roundLabel, deriveRoundCols, pickableTeams, applyPhoneScoreUpdates } from './scoreboardMath.js'
 
 describe('computePlaces', () => {
   it('ranks distinct totals 1,2,3', () => {
@@ -175,5 +175,19 @@ describe('mergeScoreEdit', () => {
     const fresh = { r_1: { written: 1, phone: 0 } }
     const local = { r_1: { written: 9, phone: 0 } }
     expect(mergeScoreEdit(fresh, local, 'r_1')).toEqual({ r_1: { written: 9, phone: 0 } })
+  })
+})
+
+describe('applyPhoneScoreUpdates team matching', () => {
+  it('matches phone team to scoreboard team ignoring case and padding', () => {
+    const out = applyPhoneScoreUpdates({
+      results: [{ teamId: 't1', points: 3 }, { teamId: 't2', points: 1 }],
+      teams: [{ id: 't1', name: '  Quiz Khalifa ' }, { id: 't2', name: 'Nobody' }],
+      scoreboardTeams: [{ id: 's1', show_id: 'x', name: 'quiz KHALIFA', scores: {}, sort_order: 0 }],
+      roundKey: 'r1', slideId: 'q1',
+    })
+    expect(out).toHaveLength(1)
+    expect(out[0].id).toBe('s1')
+    expect(out[0].scores.r1.phone.q1).toBe(3)
   })
 })
