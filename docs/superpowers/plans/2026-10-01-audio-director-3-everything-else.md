@@ -8,6 +8,8 @@
 
 **Tech Stack:** React 18, vitest (+jsdom), Web Audio, YouTube IFrame API via `lib/youtubeWarmAudio.js`, Playwright (real Chromium, local vite on a private port).
 
+**Base:** Plans 1-2 plus the critic round (2026-10-01): files preload via `warm`, a buffering file is not "sounding", a dead clip FAILS (own Sentry event, no cue), an unheard end is reported, unused API deleted (pause/resume, stopSlide, setPreview, snapshot.playing). Main also gained the host timer chime (`lib/timerChime.js`, `TimerOverlay.jsx`), another synth on its own context: it joins Task 6 and `reportBlocked` in `lib/audioBlocked.js` is deleted with it.
+
 **Spec:** docs/superpowers/specs/2026-09-29-audio-pipeline-design.md. Inventory of the old paths: PreShowSlide, StateOfUnionSlide (YouTube walkouts), TeamPickerSlide (16-min file), RulesSlide (beeps + PSA), LastCallSlide (synth bell), WinnerRevealSlide (drum roll), RaceSlide (3 clips).
 
 ## Global Constraints
@@ -52,8 +54,9 @@ Files: `client/src/audio/director.js`, `director.test.js`, `director.fakes.js`.
 - [ ] `/drum-roll.mp3` through the director; `handle.onEnded` -> reveal; `handle.onBlocked` -> reveal after 2 s; keep the 8 s stall watchdog; release on unmount.
 - [ ] Tests for all three outcomes (ended, blocked, stalled); e2e with a refused play (reuse the cue spec's refusal simulation).
 
-### Task 6: LastCallSlide (synth bell) and RulesSlide (beeps + PSA)
-- [ ] Both use `director.getContext()` (no `new AudioContext`), schedule on it, and skip when it is null. Rules PSA becomes a file clip with `gainDb` from `loadGainDb`; `onEnded` drives the reveal; keep the 12 s watchdog.
+### Task 6: LastCallSlide (synth bell), host timer chime, RulesSlide (beeps + PSA)
+- [ ] `lib/timerChime.js` (host timer, built on main 2026-10-01) moves onto the shared context; `TimerOverlay` reports through the director's blocked path; then delete `reportBlocked` and its tests from `lib/audioBlocked.js`.
+- [ ] All three use `director.getContext()` (no `new AudioContext`), schedule on it, and skip when it is null. Rules PSA becomes a file clip with `gainDb` from `loadGainDb`; `onEnded` drives the reveal; keep the 12 s watchdog.
 - [ ] Beep scheduling stays on the audio clock (the 2026-08-18 "staggered" fix): the sources are scheduled on the shared context.
 - [ ] Tests keep the existing assertions (sequence order, reveal on real end, watchdog); add: no second AudioContext constructed.
 
@@ -69,6 +72,13 @@ Files: `client/src/audio/director.js`, `director.test.js`, `director.fakes.js`.
 ### Task 9: delete dead code, final gate
 - [ ] Delete per-slide `claimYoutubeAudio`/`warmYoutubeAudio` imports, `new Audio`, `new AudioContext`, manual volume loops. `grep` for each must return only `audio/director.js`, `lib/youtubeWarmAudio.js` and host editors.
 - [ ] Full suite (exit code), build, all audio e2e, SKILL.md "Audio" section rewritten (one director, how to add a sound), spec status updated, memory note.
+
+## Open from the critic (decide while building)
+- Warm part N+1 of a series while part N plays (every later part starts cold today; main did too).
+- Warmed-but-unplayed `<audio>` elements stay in the DOM (cap 4, oldest evicted); e2e helpers must prefer the sounding one.
+- YouTube load errors (101/150 embedding disabled, removed video): the pool has no `onError` hook, so they end as "not-sounding". Add an error callback in `youtubeWarmAudio.js` and route it to `ctl.fail`. Unverified in a real player.
+- Safari context state `interrupted` is read as sounding by `mediaIsSounding` (unverified).
+- First real-browser YouTube test: default autoplay policy, never-clicked tab, real clip, then one click; assert `getPlayerState()===1 && !isMuted()` within 2 s; repeat under 6x CPU throttle.
 
 ## Not covered
 Visible-iframe video slides, jukebox/Spotify, relay, host-side previews (YoutubeClipEditor, BendleOffsetScrubber, MediaUpload keep their own players). Needs a real TV: YouTube walkouts, Safari, a never-clicked tab, loudness by ear.

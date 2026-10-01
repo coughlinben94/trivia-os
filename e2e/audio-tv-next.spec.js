@@ -79,7 +79,9 @@ const reset = async (slideId, audio_playing = null) => {
   return updateShowVerified(sb, ID, { slides: fresh, current_slide_id: slideId, current_slide_index: i, audio_playing })
 }
 const audioState = page => page.evaluate(() => {
-  const a = document.querySelector('audio')
+  // Warmed-but-unplayed clips also sit in the DOM (preload): prefer the one that is sounding.
+  const all = [...document.querySelectorAll('audio')]
+  const a = all.find(x => !x.paused) ?? all[0]
   return a ? { exists: true, paused: a.paused, t: a.currentTime, ended: a.ended, src: a.getAttribute('src') } : { exists: false }
 })
 
