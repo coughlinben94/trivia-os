@@ -3,6 +3,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { makeHauntedWorld } from './hauntedOctober.world.js'
 import { makeForest } from './forest/forestGen.js'
 import { getTheme } from '../themes/index.js'
+import { contrastRatio } from '../lib/contrast.js'
+import { readFileSync } from 'node:fs'
 
 describe('makeHauntedWorld', () => {
   const w = makeHauntedWorld()
@@ -26,6 +28,42 @@ describe('makeHauntedWorld', () => {
   it('station keys are forestGen\'s landmark names in order (station 10 renamed harvest moon)', () => {
     const names = makeForest().names
     expect(w.stations.map(s => s.key)).toEqual(names.map((n, i) => (i === 10 ? 'harvest moon' : n)))
+  })
+})
+
+describe('phone skies (/join Tier 2 backdrop)', () => {
+  const w = makeHauntedWorld()
+  const skies = w.phone.skies
+  const scene = readFileSync(new URL('./forest/forestScene.js', import.meta.url), 'utf8')
+  const gen = readFileSync(new URL('./forest/forestGen.js', import.meta.url), 'utf8')
+
+  it('13 entries of {top, mid, horizon} valid hex', () => {
+    expect(skies).toHaveLength(13)
+    for (const s of skies) {
+      expect(Object.keys(s).sort()).toEqual(['horizon', 'mid', 'top'])
+      for (const c of Object.values(s)) expect(c).toMatch(/^#[0-9a-f]{6}$/i)
+    }
+  })
+
+  it('derived from the TV sky: base gradient + the three .sl sky cards, composited', () => {
+    // Source colors still exist where the derivation says they come from.
+    for (const src of ['#08090b 48px', '#16171a 468px', '#28292b 738px', 'data-st="0"', 'rgba(150,86,40,.32)', 'data-st="3"', "'#b4c6de', .21", 'data-st="10"']) {
+      expect(scene).toContain(src)
+    }
+    expect(gen).toContain('<stop offset="0" stop-color="#e88a3a" stop-opacity=".4"/>')
+    expect(gen).toContain('<stop offset=".35" stop-color="#c8662a" stop-opacity=".15"/>')
+    const base = { top: '#08090b', mid: '#16171a', horizon: '#28292b' }
+    for (const st of [1, 2, 4, 5, 6, 7, 8, 9, 11, 12]) expect(skies[st]).toEqual(base)
+    // Hand-computed composites (round(base*(1-a) + card*a) per channel).
+    expect(skies[0]).toEqual({ ...base, horizon: '#4b372a' })   // 40*.68+150*.32=75.2 ...
+    expect(skies[3]).toEqual({ top: '#181b1f', mid: '#373c43', horizon: '#2e3033' })
+    expect(skies[10]).toEqual({ top: '#623d1e', mid: '#31231c', horizon: '#28292b' })
+  })
+
+  it('cream theme text clears 7:1 on every station band (brightest pixel = lightest band)', () => {
+    const text = getTheme('haunted-october').colors.text
+    expect(text).toBe('#fff1dc')
+    for (const s of skies) for (const c of Object.values(s)) expect(contrastRatio(text, c)).toBeGreaterThanOrEqual(7)
   })
 })
 

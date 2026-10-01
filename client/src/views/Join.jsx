@@ -15,6 +15,7 @@ import ChoiceBoard from '../components/join/ChoiceBoard.jsx'
 import HuesCuesBoard from '../components/join/HuesCuesBoard.jsx'
 import HorseRaceBoard from '../components/join/HorseRaceBoard.jsx'
 import ShrinkToFit from '../components/join/ShrinkToFit.jsx'
+import { FOREST_THEME_IDS, phoneBackdropLoader } from '../components/join/phoneBackdropThemes.js'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import { PRESHOW_BEN_PHOTO } from '../components/shared/BenPhoto.jsx'
 import { EASE_OUT, EASE_PANEL, EASE_BAR } from '../lib/easings.js'
@@ -459,7 +460,7 @@ function RegistrationScreen({ onRegister, show, theme }) {
 }
 
 // ─── Waiting ──────────────────────────────────────────────────────────────────
-function WaitingScreen({ teamName, theme, onOpenScores }) {
+function WaitingScreen({ teamName, theme, onOpenScores, backdrop }) {
   const pref   = useReducedMotion()
   const bg        = theme?.colors?.bg       ?? '#050505'
   const bgDeep    = theme?.colors?.bgDeep   ?? '#020202'
@@ -469,7 +470,7 @@ function WaitingScreen({ teamName, theme, onOpenScores }) {
 
   return (
     <div style={{
-      minHeight: '100dvh', background: `linear-gradient(180deg, ${bg} 0%, ${bgDeep} 100%)`,
+      minHeight: '100dvh', background: backdrop ? 'transparent' : `linear-gradient(180deg, ${bg} 0%, ${bgDeep} 100%)`,
       display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
       padding: '2rem', fontFamily: 'DM Sans, sans-serif',
@@ -1329,7 +1330,7 @@ const REDUCED_SWIPE_VARIANTS = {
 }
 
 // ─── Live view ────────────────────────────────────────────────────────────────
-function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScores }) {
+function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScores, backdrop }) {
   const pref = useReducedMotion()
   // Seeded from the host's actual position, not a hardcoded 0 (2026-08-26,
   // phone-suite audit — MEDIUM): LiveView mounts fresh whenever `phase`
@@ -1645,7 +1646,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
         box, and the answer boards (ShrinkToFit.jsx) scale down to fit it
         rather than pushing the document taller. Other slide types that run
         long (the concurrent-media stack) still scroll inside .join-content. */}
-    <div style={{ height: '100dvh', overflow: 'hidden', background: `linear-gradient(180deg, ${bg} 0%, ${bgDeep} 100%)`, display: 'flex', flexDirection: 'column', fontFamily: 'DM Sans, sans-serif' }}>
+    <div style={{ height: '100dvh', overflow: 'hidden', background: backdrop ? 'transparent' : `linear-gradient(180deg, ${bg} 0%, ${bgDeep} 100%)`, display: 'flex', flexDirection: 'column', fontFamily: 'DM Sans, sans-serif' }}>
 
       {/* TOP BAR — safe-area padding (top for the notch, left/right for the
           same hardware once the phone is on its side) and the compact
@@ -1959,6 +1960,25 @@ export default function Join() {
   const [scoresDrawerLoading, setScoresDrawerLoading] = useState(false)
 
   const theme = useMemo(() => show?.theme_id ? getTheme(show.theme_id) : null, [show?.theme_id])
+  // Tier 2 phone backdrop (Phase 3d-3): forest themes only, loaded by dynamic
+  // import so other themes download nothing extra. Until it has loaded the
+  // screens keep their own gradient (backdrop prop false), so no transparent
+  // flash. Every other theme: no load, phoneBackdrop stays null, nothing
+  // below changes for them.
+  const isForestTheme = FOREST_THEME_IDS.includes(theme?.id)
+  const [loadedBackdrop, setLoadedBackdrop] = useState(null)
+  useEffect(() => {
+    if (!isForestTheme) return
+    let alive = true
+    const themeId = theme.id
+    phoneBackdropLoader.load().then(m => {
+      const world = m.phoneBackdropWorld(themeId)
+      if (alive && world) setLoadedBackdrop({ themeId, world, Backdrop: m.default, stationIndex: m.phoneStationIndex })
+    }).catch(err => console.warn('[Join] phone backdrop failed to load:', err?.message))
+    return () => { alive = false }
+  }, [isForestTheme, theme?.id])
+  const phoneBackdrop = isForestTheme && loadedBackdrop?.themeId === theme.id ? loadedBackdrop : null
+  const phoneWorld = phoneBackdrop?.world ?? null
 
   // Scoped PWA tags so "Add to Home Screen" launches /join full-screen,
   // no browser chrome. Mirrors Display.jsx's manifest injection — added on
@@ -2592,8 +2612,11 @@ export default function Join() {
         <ReconnectingBanner visible={disconnected} />
         <ScoresLockedPopup visible={scoresLocked} />
         {phase === 'register' && <RegistrationScreen onRegister={handleRegister} show={show} theme={theme} />}
+        {phoneWorld && (phase === 'waiting' || phase === 'live') && (
+          <phoneBackdrop.Backdrop world={phoneWorld} stationIndex={phoneBackdrop.stationIndex(show, phoneWorld.stations.length)} />
+        )}
         {phase === 'waiting'  && (
-          <WaitingScreen teamName={team?.name ?? ''} theme={theme} onOpenScores={openScoresDrawer} />
+          <WaitingScreen teamName={team?.name ?? ''} theme={theme} onOpenScores={openScoresDrawer} backdrop={!!phoneWorld} />
         )}
         {phase === 'live'     && (
           <LiveView
@@ -2603,6 +2626,7 @@ export default function Join() {
             onInvokePowerup={handleInvokePowerup}
             theme={theme}
             onOpenScores={openScoresDrawer}
+            backdrop={!!phoneWorld}
           />
         )}
 
