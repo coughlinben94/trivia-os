@@ -51,6 +51,7 @@ import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, u
 // prompt) until Ben opts in on this laptop.
 
 const WAGER_ZERO_ANSWERS_ERROR = 'No wager answers came back — check connection and retry before scoring'
+const UNMATCHED_ANSWERS_ERROR = 'No answers could be matched to the scoreboard — check team names match, then retry'
 
 // PYL "Pick animation" tiles — same visual language as BuildMode's CARD_STYLE
 // (soft gradient + colored border that brightens on hover) but keyed by
@@ -673,7 +674,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
           results: null,
           updates,
           unmatchedError: answers.length > 0 && updates.length === 0
-            ? 'No answers could be matched to the scoreboard — check team names match, then retry'
+            ? UNMATCHED_ANSWERS_ERROR
             : null,
         }
       },
@@ -700,7 +701,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
           results: null,
           updates,
           unmatchedError: answers.length > 0 && updates.length === 0
-            ? 'No answers could be matched to the scoreboard — check team names match, then retry'
+            ? UNMATCHED_ANSWERS_ERROR
             : null,
         }
       },
@@ -726,7 +727,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
           results: null,
           updates,
           unmatchedError: answers.length > 0 && updates.length === 0
-            ? 'No answers could be matched to the scoreboard — check team names match, then retry'
+            ? UNMATCHED_ANSWERS_ERROR
             : null,
         }
       },
@@ -811,7 +812,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
           results: null,
           updates,
           unmatchedError: answers.length > 0 && updates.length === 0
-            ? 'No answers could be matched to the scoreboard — check team names match, then retry'
+            ? UNMATCHED_ANSWERS_ERROR
             : null,
         }
       },
@@ -844,7 +845,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
           results,
           updates,
           unmatchedError: answers.length > 0 && updates.length === 0
-            ? 'No answers could be matched to the scoreboard — check team names match, then retry'
+            ? UNMATCHED_ANSWERS_ERROR
             : null,
         }
       },
