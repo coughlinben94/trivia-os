@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import * as Tone from 'tone'
+import { director } from '../../../audio/director.js'
 import * as Sentry from '@sentry/react'
 import ShinyBendleQuestion from './ShinyBendleQuestion.jsx'
 
@@ -47,6 +48,7 @@ vi.mock('../../../lib/supabase.js', () => ({
 const transport = vi.hoisted(() => ({ seconds: 0 }))
 vi.mock('tone', () => ({
   getTransport: () => transport,
+  setContext: vi.fn(),
   getContext: () => ({
     get state() { return H.ctxState },
     decodeAudioData: vi.fn(async ab => ({ duration: H.durations.get(ab) })),
@@ -182,6 +184,18 @@ describe('<ShinyBendleQuestion>', () => {
     await settle()
     expect(H.log[1].range).toBe(`bytes=${AUDIO_START}-${AUDIO_START + 31 * BPS}`)
     expect(players()[0].start).toHaveBeenCalledWith(0, 0)
+  })
+
+  it("runs Tone on the audio director's shared context, bound before any Tone node exists", async () => {
+    const shared = { state: 'running' }
+    const spy = vi.spyOn(director, 'getContext').mockReturnValue(shared)
+    try {
+      await render(slideFor(mkSong()))
+      await settle()
+      expect(Tone.setContext).toHaveBeenCalledWith(shared)
+      expect(Tone.setContext).toHaveBeenCalledTimes(1) // bound once, not per call
+      expect(Tone.setContext.mock.invocationCallOrder[0]).toBeLessThan(Tone.Player.mock.invocationCallOrder[0])
+    } finally { spy.mockRestore() }
   })
 
   describe('(a) plays exactly once, whichever comes first: ready or the host press', () => {
