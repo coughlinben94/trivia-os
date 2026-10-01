@@ -29,7 +29,12 @@ function browserDeps() {
       const Ctor = globalThis.AudioContext || globalThis.webkitAudioContext
       return Ctor ? new Ctor() : null
     },
-    makeElement: () => new Audio(),
+    makeElement: () => {
+      const el = new Audio()
+      // In the DOM (hidden) so devtools and the e2e specs can see the element; startFile removes it on stop.
+      try { el.style.display = 'none'; globalThis.document?.body?.appendChild(el) } catch { /* detached is fine */ }
+      return el
+    },
     youtube: { warm: warmYoutubeAudio, claim: claimYoutubeAudio },
     hasUserActivation: () => !!globalThis.navigator?.userActivation?.hasBeenActive,
     setTimer: (fn, ms) => setTimeout(fn, ms),
@@ -66,6 +71,7 @@ export function createDirector(overrides = {}) {
   const listeners = new Set()
   const handles = new Map() // clipKey -> live handle
   const reported = new Set() // clipKeys already sent to Sentry
+  const parked = new Map() // youtube pool key -> claimed player kept warm after stop/end (instant replay)
   let snapshot = { status: 'locked', blocked: [], playing: [] }
 
   function status() {
@@ -134,7 +140,7 @@ export function createDirector(overrides = {}) {
   }
 
   function previewHandle(clip, slideId) {
-    return { key: clipKey(slideId, clip), slideId, clip, state: 'preview', reason: null, onEnded() {}, stop() {}, retry() {}, pause() {}, resume() {} }
+    return { key: clipKey(slideId, clip), slideId, clip, state: 'preview', reason: null, onEnded() {}, stop() {}, release() {}, retry() {}, pause() {}, resume() {} }
   }
 
   // One handle per playing clip. `ctl` is the private control surface the start
@@ -153,6 +159,7 @@ export function createDirector(overrides = {}) {
     let onPlayingImpl = () => {} // runs each time sound actually starts (e.g. arm the YouTube end backstop)
     let pauseImpl = () => {}
     let resumeImpl = () => {}
+    let releaseImpl = () => {} // destroys what stop() only parks (a YouTube player)
     const endedCbs = []
     const done = () => state === 'stopped' || state === 'ended'
     const stopTimers = () => {
@@ -174,6 +181,11 @@ export function createDirector(overrides = {}) {
         safe(stopImpl)
         handles.delete(key) // stop() is a no-op once done, so this key is always still ours
         emit()
+      },
+      // Stop AND give the player back for good (leaving the slide). stop() alone parks it.
+      release() {
+        handle.stop()
+        safe(releaseImpl)
       },
       // Park the clip (player stays warm) and bring it back. Only a sounding clip pauses.
       pause() {
@@ -224,6 +236,7 @@ export function createDirector(overrides = {}) {
       setOnEnded(fn) { onEndedImpl = fn },
       setOnPlaying(fn) { onPlayingImpl = fn },
       setPause(fn) { pauseImpl = fn },
+      setRelease(fn) { releaseImpl = fn },
       setResume(fn) { resumeImpl = fn },
       // Start (or restart) the 2s "is it really sounding?" check. Call BEFORE anything
       // that can hang (resume(), play()).
@@ -318,6 +331,7 @@ export function createDirector(overrides = {}) {
       safe(() => el.pause())
       safe(() => src?.disconnect())
       safe(() => el.removeAttribute?.('src'))
+      safe(() => el.remove?.())
     })
     go()
   }
@@ -343,7 +357,12 @@ export function createDirector(overrides = {}) {
   // iframe pool) and drive it. warm() and claim() both receive end as null-or-number
   // so they agree on the pool key videoId:start:end.
   function startYoutube(clip, ctl) {
-    const h = d.youtube.claim(clip.videoId, clip.start, clip.end)
+    const ykey = `${clip.videoId}:${clip.start}:${clip.end}`
+    // Reuse the player a previous stop/end parked (instant replay), else claim the warm one.
+    const h = parked.get(ykey) ?? d.youtube.claim(clip.videoId, clip.start, clip.end)
+    parked.delete(ykey)
+    const owner = {}
+    h.__owner = owner // a stale handle's release() must not destroy a player a newer handle owns
     let player = null
     let endTimer = null
     const check = () => !!player && youtubeIsSounding(player)
@@ -384,13 +403,19 @@ export function createDirector(overrides = {}) {
     })
     ctl.setResume(() => safe(() => { player?.unMute(); player?.playVideo() }))
     ctl.setRetry(() => { unlock(); go() })
+    // Stop and natural end both PARK the player at the clip start (replay is instant and
+    // takes no pool slot); release() is what destroys it.
     ctl.setStop(() => {
       if (endTimer != null) d.clearTimer(endTimer)
       endTimer = null
+      safe(() => { player?.pauseVideo(); player?.seekTo(clip.start, true) })
+      if (h.__owner === owner) parked.set(ykey, h)
+    })
+    ctl.setRelease(() => {
+      if (h.__owner !== owner) return
+      parked.delete(ykey)
       safe(() => h.destroy())
     })
-    // After a NATURAL end, re-warm so the next play of this clip is instant (replay restarts from the start).
-    ctl.setOnEnded(() => safe(d.youtube.warm, clip.videoId, clip.start, clip.end))
     go()
   }
 
@@ -399,11 +424,12 @@ export function createDirector(overrides = {}) {
   }
 
   function stopSlide(slideId) {
-    for (const h of [...handles.values()]) if (h.slideId === slideId) h.stop()
+    for (const h of [...handles.values()]) if (h.slideId === slideId) h.release()
   }
 
   function stopAll() {
-    for (const h of [...handles.values()]) h.stop()
+    for (const h of [...handles.values()]) h.release()
+    for (const [k, h] of [...parked]) { parked.delete(k); safe(() => h.destroy()) } // players parked by clips that already ended
   }
 
   function retryBlocked() {

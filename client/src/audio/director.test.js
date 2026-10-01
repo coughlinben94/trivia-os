@@ -488,7 +488,7 @@ describe('director plays YouTube clips', () => {
     expect(f.ctx.resumeCalls).toBe(1)
   })
 
-  it('ENDED (state 0): onEnded fires, the claim is destroyed, and the clip is re-warmed for an instant replay', () => {
+  it('ENDED (state 0): onEnded fires and the player is PARKED (not destroyed) for an instant replay', () => {
     const f = makeFakes({ ctx: new FakeContext('running'), youtube: fakeYoutube({ state: 1 }) })
     const d = createDirector(f.deps)
     const h = d.play(clip, { slideId: 's1' })
@@ -497,8 +497,12 @@ describe('director plays YouTube clips', () => {
     f.youtube.claims[0].stateCb(0)
     expect(onEnded).toHaveBeenCalledTimes(1)
     expect(h.state).toBe('ended')
-    expect(f.youtube.claims[0].destroyed).toBe(true)
-    expect(f.youtube.warm).toHaveBeenCalledWith('vid1', 10, 40)
+    expect(f.youtube.claims[0].destroyed).toBe(false)
+    expect(f.youtube.claims[0].player.pauseVideo).toHaveBeenCalled()
+    expect(f.youtube.claims[0].player.seekTo).toHaveBeenLastCalledWith(10, true)
+    d.play(clip, { slideId: 's1' }) // replay reuses the parked player: no new claim, no cold build
+    expect(f.youtube.claims).toHaveLength(1)
+    expect(f.youtube.claims[0].player.playVideo).toHaveBeenCalledTimes(2)
   })
 
   it('backstop: a clip with an end is ended by a timer if YouTube never reports ENDED', () => {
@@ -512,15 +516,52 @@ describe('director plays YouTube clips', () => {
     expect(h.state).toBe('ended')
   })
 
-  it('stop() destroys the claim and cancels the backstop', () => {
+  it('stop() parks the player and cancels the backstop; replay reuses it', () => {
     const f = makeFakes({ ctx: new FakeContext('running'), youtube: fakeYoutube({ state: 1 }) })
     const d = createDirector(f.deps)
     const h = d.play(clip, { slideId: 's1' })
     h.stop()
-    expect(f.youtube.claims[0].destroyed).toBe(true)
+    expect(f.youtube.claims[0].destroyed).toBe(false)
     expect(vi.getTimerCount()).toBe(0) // the end backstop and the sound check are both gone
     vi.advanceTimersByTime(60000)
     expect(h.state).toBe('stopped')
+    d.play(clip, { slideId: 's1' })
+    expect(f.youtube.claims).toHaveLength(1)
+  })
+
+  it('release() destroys a playing or parked player; the next play builds fresh', () => {
+    const f = makeFakes({ ctx: new FakeContext('running'), youtube: fakeYoutube({ state: 1 }) })
+    const d = createDirector(f.deps)
+    const h = d.play(clip, { slideId: 's1' })
+    h.release()
+    expect(f.youtube.claims[0].destroyed).toBe(true)
+    const h2 = d.play(clip, { slideId: 's1' })
+    h2.stop()
+    h2.release() // parked, then released
+    expect(f.youtube.claims[1].destroyed).toBe(true)
+    expect(f.youtube.claims).toHaveLength(2)
+  })
+
+  it('a stale handle releasing never destroys the player a newer handle now owns', () => {
+    const f = makeFakes({ ctx: new FakeContext('running'), youtube: fakeYoutube({ state: 1 }) })
+    const d = createDirector(f.deps)
+    const h1 = d.play(clip, { slideId: 's1' })
+    h1.stop()
+    const h2 = d.play(clip, { slideId: 's1' }) // takes over the parked player
+    h1.release()
+    expect(f.youtube.claims[0].destroyed).toBe(false)
+    expect(h2.state).not.toBe('stopped')
+  })
+
+  it('stopSlide() and stopAll() release (destroy) YouTube players, not just stop them', () => {
+    const f = makeFakes({ ctx: new FakeContext('running'), youtube: fakeYoutube({ state: 1 }) })
+    const d = createDirector(f.deps)
+    d.play(clip, { slideId: 'a' })
+    d.stopSlide('a')
+    expect(f.youtube.claims[0].destroyed).toBe(true)
+    d.play(clip, { slideId: 'b' })
+    d.stopAll()
+    expect(f.youtube.claims[1].destroyed).toBe(true)
   })
 
   it('warm() forwards to the pool; a malformed clip to warm() is ignored, not thrown', () => {
@@ -616,7 +657,7 @@ describe('director never throws into the show', () => {
 describe('module hygiene', () => {
   it('the app singleton exists and has the public API', async () => {
     const mod = await import('./director.js')
-    for (const k of ['status', 'unlock', 'installGestureUnlock', 'subscribe', 'getSnapshot', 'setPreview', 'warm', 'play', 'retryBlocked']) {
+    for (const k of ['status', 'unlock', 'installGestureUnlock', 'subscribe', 'getSnapshot', 'setPreview', 'warm', 'play', 'retryBlocked', 'getContext', 'stopSlide', 'stopAll']) {
       expect(typeof mod.director[k]).toBe('function')
     }
   })
@@ -790,5 +831,23 @@ describe('review fixes (2026-10-01)', () => {
     d.play({ kind: 'file', url: '/drum-roll.mp3' }, { slideId: 'y' })
     expect(f.elements[0].crossOrigin).toBe('anonymous')
     expect(f.elements[1].crossOrigin).toBeUndefined()
+  })
+
+  it('stopAll() also destroys players parked by clips that already ended', () => {
+    const f = runningFakes({ youtube: fakeYoutube({ state: 1 }) })
+    const d = createDirector(f.deps)
+    const h = d.play({ kind: 'youtube', videoId: 'v' }, { slideId: 's' })
+    h.stop() // parked
+    d.stopAll()
+    expect(f.youtube.claims[0].destroyed).toBe(true)
+  })
+
+  it('removes a file clip\'s element when it stops', () => {
+    const f = runningFakes()
+    const d = createDirector(f.deps)
+    const h = d.play(fileClip, { slideId: 's' })
+    f.elements[0].remove = vi.fn()
+    h.stop()
+    expect(f.elements[0].remove).toHaveBeenCalled()
   })
 })
