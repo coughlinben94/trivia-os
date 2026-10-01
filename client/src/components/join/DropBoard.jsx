@@ -51,11 +51,13 @@ export default function DropBoard({ slide, team, theme, preview = false, onAnswe
   function tapAdd(id) {
     const amt = Math.min(chip, remaining)
     if (locked || amt <= 0) return
+    setSaveFailed(false)
     setAlloc(a => ({ ...a, [id]: (a[id] ?? 0) + amt }))
   }
   function tapSub(id) {
     const amt = Math.min(chip, alloc[id] ?? 0)
     if (locked || amt <= 0) return
+    setSaveFailed(false)
     setAlloc(a => ({ ...a, [id]: a[id] - amt }))
   }
 
@@ -94,6 +96,17 @@ export default function DropBoard({ slide, team, theme, preview = false, onAnswe
     })
   }
 
+  // Autosave: the moment every point is placed (after a short pause, in case they
+  // are still shuffling points), the split is saved as if they had tapped Lock In.
+  // A team that places all 25 and forgets the button must not score 0. A failed
+  // save is not retried in a loop: the next tap, or the button, retries it.
+  useEffect(() => {
+    if (preview || locked || !complete || !dirty || saving || saveFailed) return undefined
+    const t = setTimeout(lockIn, 600)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preview, locked, complete, dirty, saving, saveFailed, alloc])
+
   // Rehydrate a saved split after a reload / reconnect.
   useEffect(() => {
     if (preview) return
@@ -123,6 +136,8 @@ export default function DropBoard({ slide, team, theme, preview = false, onAnswe
     onAnswered?.(committed != null)
   }, [onAnswered, committed])
 
+  // After the reveal: what the team locked in on the correct tile. null = never locked a split.
+  const won = revealed && committed != null ? (committed[data.correctId] ?? 0) : null
   const ready = complete && dirty && !saving
   return (
     <ShrinkToFit disabled={preview}>
@@ -185,6 +200,7 @@ export default function DropBoard({ slide, team, theme, preview = false, onAnswe
               locked={locked}
               dropped={droppedIds.includes(opt.id)}
               winner={revealed && opt.id === data.correctId}
+              won={revealed && opt.id === data.correctId ? won : null}
               canAdd={!locked && remaining > 0}
               canSub={!locked && (alloc[opt.id] ?? 0) > 0}
               chip={chip}
@@ -220,7 +236,10 @@ export default function DropBoard({ slide, team, theme, preview = false, onAnswe
 
         <p style={{ color: `${text}b3`, fontSize: '0.85rem', textAlign: 'center', margin: 0 }}>
           {locked
-            ? (revealed ? 'That’s the drop!' : 'Answers locked — watch the screen')
+            ? (revealed
+              ? (committed == null ? 'No split was locked in — 0 points this round'
+                : won > 0 ? `You won +${won} points!` : '0 points this time')
+              : 'Answers locked — watch the screen')
             : !complete
               ? `Tap a tile to place ${chip} points. Tap − to take them back.`
               : dirty
@@ -255,7 +274,7 @@ const press = {
 }
 const PRESS_TRANSITION = 'transform 140ms cubic-bezier(0.23, 1, 0.32, 1)'
 
-function DropTile({ opt, letter, points, locked, dropped, winner, canAdd, canSub, chip, onAdd, onSub, textColor, highlight }) {
+function DropTile({ opt, letter, points, locked, dropped, winner, won, canAdd, canSub, chip, onAdd, onSub, textColor, highlight }) {
   const [imgFailed, setImgFailed] = useState(false)
   useEffect(() => { setImgFailed(false) }, [opt.image])
   const active = points > 0
@@ -307,6 +326,14 @@ function DropTile({ opt, letter, points, locked, dropped, winner, canAdd, canSub
         }}>
           {points}
         </span>
+        {won != null && (
+          <span style={{
+            fontSize: '1.05rem', fontWeight: 800, fontFamily: 'DM Sans, sans-serif',
+            color: won > 0 ? highlight : `${textColor}`, opacity: won > 0 ? 1 : 0.7,
+          }}>
+            {won > 0 ? `+${won} won` : 'no points here'}
+          </span>
+        )}
       </button>
       {!locked && (
         <button

@@ -6,9 +6,12 @@ import DropBoard from './DropBoard.jsx'
 
 // Non-preview mounts rehydrate a saved split with
 // from().select().eq().eq().maybeSingle(); `saved.row` is what that resolves.
-const saved = vi.hoisted(() => ({ row: null }))
+const saved = vi.hoisted(() => ({ row: null, upserts: [] }))
 vi.mock('../../lib/supabase.js', () => {
-  const chain = { select: () => chain, eq: () => chain, maybeSingle: () => Promise.resolve({ data: saved.row }) }
+  const chain = {
+    select: () => chain, eq: () => chain, maybeSingle: () => Promise.resolve({ data: saved.row }),
+    upsert: (...a) => { saved.upserts.push(a[0]); return Promise.resolve({ error: null }) },
+  }
   return { supabase: { from: () => chain } }
 })
 
@@ -19,6 +22,7 @@ const baseData = { text: 'Q?', options, correctId: 'b', shinyInputSchema: { type
 describe('<DropBoard>', () => {
   let container, root
   beforeEach(() => {
+    saved.upserts.length = 0
     globalThis.IS_REACT_ACT_ENVIRONMENT = true
     globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} }
     container = document.createElement('div')
@@ -125,7 +129,7 @@ describe('<DropBoard>', () => {
     const tileOf = i => addBtn(i).parentElement
     expect(tileOf(1).style.borderWidth).toBe('3px')
     expect(tileOf(0).style.borderWidth).toBe('1px')
-    expect(container.textContent).toContain('That’s the drop!')
+    expect(container.textContent).toContain('No split was locked in') // preview has no locked split
   })
 
   it('ignores a saved split that no longer fits the pool (host changed the total) instead of showing a negative counter', async () => {
@@ -173,5 +177,75 @@ describe('<DropBoard>', () => {
     expect(btn.style.transform).toBe('scale(0.97)')
     act(() => { btn.dispatchEvent(new MouseEvent('pointerup', { bubbles: true })) })
     expect(btn.style.transform).toBe('scale(1)')
+  })
+
+  // ---- non-preview (live phone) ----
+  const live = async (data = {}) => act(async () => {
+    root.render(<DropBoard theme={theme} team={{ id: 't', showId: 's' }} slide={{ id: 'sl', data: { ...baseData, ...data } }} />)
+  })
+
+  it('autosaves the split once every point is placed, so a forgotten Lock In does not score 0', async () => {
+    vi.useFakeTimers()
+    await live()
+    for (let i = 0; i < 4; i++) tap(addBtn(0))
+    await act(async () => { vi.advanceTimersByTime(3000) })
+    expect(saved.upserts).toHaveLength(0) // 20 of 25 placed: nothing saved yet
+    tap(addBtn(0)) // 25 of 25
+    await act(async () => { vi.advanceTimersByTime(300) })
+    expect(saved.upserts).toHaveLength(0) // short pause first, in case they are still moving points around
+    await act(async () => { vi.advanceTimersByTime(600) })
+    expect(saved.upserts).toHaveLength(1)
+    expect(saved.upserts[0].answer).toEqual({ a: 25, b: 0, c: 0, d: 0 })
+    expect(lockBtn().textContent).toContain('Split Locked')
+    vi.useRealTimers()
+  })
+
+  it('autosaves only the final split when the team moves points around', async () => {
+    vi.useFakeTimers()
+    await live()
+    for (let i = 0; i < 5; i++) tap(addBtn(0))
+    await act(async () => { vi.advanceTimersByTime(300) })
+    tap(subBtn(0)); tap(addBtn(1)) // change their mind inside the pause
+    await act(async () => { vi.advanceTimersByTime(2000) })
+    expect(saved.upserts).toHaveLength(1)
+    expect(saved.upserts[0].answer).toEqual({ a: 20, b: 5, c: 0, d: 0 })
+    vi.useRealTimers()
+  })
+
+  it('never autosaves in the editor preview, or once Ben has locked', async () => {
+    vi.useFakeTimers()
+    render()
+    for (let i = 0; i < 5; i++) tap(addBtn(0))
+    await act(async () => { vi.advanceTimersByTime(3000) })
+    expect(saved.upserts).toHaveLength(0)
+    act(() => root.unmount()); root = createRoot(container)
+    await live({ dropLocked: true })
+    await act(async () => { vi.advanceTimersByTime(3000) })
+    expect(saved.upserts).toHaveLength(0)
+    vi.useRealTimers()
+  })
+
+  it('after the reveal the phone tells the team what it won', async () => {
+    saved.row = { answer: { a: 10, b: 15, c: 0, d: 0 } }
+    await live({ dropLocked: true, dropStep: 3, dropRevealed: true })
+    expect(container.textContent).toContain('+15')
+    saved.row = null
+  })
+
+  it('a team that put nothing on the right tile sees 0, and a team with no split is told so', async () => {
+    saved.row = { answer: { a: 25, b: 0, c: 0, d: 0 } }
+    await live({ dropLocked: true, dropStep: 3, dropRevealed: true })
+    expect(container.textContent).toContain('0 points this time')
+    saved.row = null
+    act(() => root.unmount()); root = createRoot(container)
+    await live({ dropLocked: true, dropStep: 3, dropRevealed: true })
+    expect(container.textContent).toContain('No split was locked in')
+  })
+
+  it('the win is not shown before the reveal', async () => {
+    saved.row = { answer: { a: 10, b: 15, c: 0, d: 0 } }
+    await live({ dropLocked: true, dropStep: 1 })
+    expect(container.textContent).not.toContain('+15')
+    saved.row = null
   })
 })
