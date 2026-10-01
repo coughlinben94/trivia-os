@@ -72,7 +72,7 @@ Initial coverage:
 
 | Format | Action | Scoring summary | Example requirements |
 |---|---|---|---|
-| **Bendle** | Write down the song title as the host reveals each mix step; guesses are not submitted on phones. | Earlier correct answers earn more: 20, 15, then 10 points by step. | Show three successive mixes gaining one layer per step. Do not imply a fixed instrument order: the host can reorder the layers. Do not imply automatic scoring or phone entry. Keep this card visual-only; the real song audio starts during the question. |
+| **Bendle** | Write down the song title as the host reveals each mix step; guesses are not submitted on phones. | Earlier correct answers earn more: 30, 20, then 10 points by step. | Show three successive mixes gaining one layer per step. Do not imply a fixed instrument order: the host can reorder the layers. Do not imply automatic scoring or phone entry. Keep this card visual-only; the real song audio starts during the question. |
 | **Pin It** | Place one pin on the US map on your phone and lock it in. | The closest pins generally earn 10 points; rooms under five teams award the closest team, and a tie at the cutoff can add winners. | Use the real map surface and a clearly labeled sample location, then show example guesses and the correct spot. Highlight the qualifying nearest guesses. Do not show city labels as if teams can use them during play. |
 | **Hues, Cues, and Booze** | Choose a square on the color grid on your phone and lock it in. | Exact square: 30 points; one square away: 20; two squares away: 10. | Show a short color clue, a sample selected square, the target, and the scoring-distance zones. Include coordinates and outlines so the explanation does not rely on color alone. |
 
@@ -101,7 +101,7 @@ there is a concrete reason to explain them.
 ## Current gameplay facts the card must preserve
 
 - Bendle has three host-advanced question slides. Teams write answers down;
-  the host grades manually. Point values follow step position (20/15/10), while
+  the host grades manually. Point values follow step position (30/20/10), while
   the instrument order can vary. Vocals are added only when the answer is
   revealed.
 - Pin It awards 10 points to the closest scoring group: the closest 40%,

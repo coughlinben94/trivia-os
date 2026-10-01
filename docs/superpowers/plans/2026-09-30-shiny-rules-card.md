@@ -46,7 +46,7 @@
 - Modify: `client/src/lib/pinScoring.js` only if the scoring summary needs a named exported rule helper
 - Modify: `client/src/lib/shinyExplainers.js`
 
-- [ ] Export `BENDLE_STEP_POINTS = [20, 15, 10]` from `bendleScoring.js` and have `buildBendleTiers` read these values by step position.
+- [ ] Export `BENDLE_STEP_POINTS = [30, 20, 10]` from `bendleScoring.js` and have `buildBendleTiers` read these values by step position.
 - [ ] Export `HUES_CUES_SCORE_BANDS` with exact (30), distance-one (20), distance-two (10), and beyond-two (0) values; have `scoreHuesCuesRound` read these values.
 - [ ] Export `PIN_WINNER_FRACTION = { numerator: 2, denominator: 5 }` and `PIN_MIN_ROOM_FOR_FRACTION = 5`; have `scoringGroupSize` use those values. Keep `PIN_POINTS = 10` as the point source. The card derives the closest-room-fraction and small-room summary from these values; the rounded-mile tie explanation reflects the scoring algorithm.
 - [ ] Derive scoring copy from these exports/helpers in the registry, not from duplicated numeric literals. Keep Bendle text independent of the per-question stem order.
@@ -71,7 +71,7 @@
 - Create: `client/src/components/display/explainers/PinItExplainer.jsx`
 - Create: `client/src/components/display/explainers/HuesCuesExplainer.jsx`
 
-- [ ] Bendle shows three successive mix stages with one additional layer at each step and point values 20/15/10. Label stages by position rather than naming a fixed instrument order. Show “write it down” in the shared action text. Do not play audio or suggest phone submission/automatic scoring.
+- [ ] Bendle shows three successive mix stages with one additional layer at each step and point values 30/20/10. Label stages by position rather than naming a fixed instrument order. Show “write it down” in the shared action text. Do not play audio or suggest phone submission/automatic scoring.
 - [ ] Pin It reuses the actual lower-48 map surface with sample-only pins. Show a clear sample clue, target, and qualifying nearest group. Do not expose city labels on the team-facing map. Copy states that the closest 40%, rounded up, generally earn 10 points; under five teams, the closest team wins; ties at the rounded-mile cutoff can also score.
 - [ ] Hues, Cues, and Booze uses the generated Hues/Cues palette. A sample clue leads to a marked guess and target; outlines/coordinate labels show exact, one-square, and two-square scoring zones, including diagonal distance. Show 30/20/10 values.
 - [ ] Mark each illustration `Example`; use synthetic sample content, never real team guesses/results or the live question's answer.
