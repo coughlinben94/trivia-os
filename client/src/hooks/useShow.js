@@ -6,6 +6,8 @@ import { deriveRoundCols, computeTotal, roundScoreTotal } from '../lib/scoreboar
 import { renumberRoundQuestions } from '../lib/questionNumbering.js'
 import { createPendingCounter } from '../lib/pendingWrites.js'
 import { trackWrite } from '../lib/writeTracking.js'
+import { withAudioReset as withAudioResetFor } from '../lib/audioPending.js'
+import { normalizeShow } from '../lib/normalizeShow.js'
 import { mergeShowStateRow, SHOW_STATE_COLUMNS } from '../lib/showStateMerge.js'
 import { HOST_PHOTOS_BUCKET, listHostPhotos } from '../lib/hostPhotos.js'
 import { archiveShow } from '../lib/questionRows.js'
@@ -22,30 +24,6 @@ import { idsToDeleteWith } from '../lib/shinySeries.js'
 const ACTIVE_SHOW_KEY = 'trivia-os:activeShowId'
 const SHOW_MEDIA_BUCKET = 'trivia-show-media'
 const FONT_BUCKET = 'trivia-fonts'
-
-function normalizeShow(row) {
-  return {
-    id: row.id,
-    title: row.title,
-    date: row.date,
-    theme: row.theme_id ?? DEFAULT_THEME_ID,
-    themeOverrides: row.theme_overrides ?? {},
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    slides: row.slides ?? [],
-    rounds: row.rounds ?? [],
-    powerups: row.powerups ?? [],
-    tickerMessages: row.ticker_messages ?? [],
-    showState: {
-      currentSlideId: row.current_slide_id ?? null,
-      currentSlideIndex: row.current_slide_index ?? 0,
-      isLive: row.is_live ?? false,
-      scoreboardVisible: row.scoreboard_visible ?? false,
-      scoresRevealed: row.scores_revealed ?? false,
-      answerReveal: row.answer_reveal ?? false,
-    },
-  }
-}
 
 // Shared by exportShow/exportShowById — both download a show as a JSON file,
 // only the source object (raw local `show` vs. a freshly-fetched/normalized
@@ -741,9 +719,7 @@ export function useShow() {
   // slide change always leaves the flag either matching the new slide or
   // cleared — never stale.
   function withAudioReset(patch) {
-    if (!show?.audio_playing || patch.current_slide_id === undefined) return patch
-    if (patch.current_slide_id === show.audio_playing.slideId) return patch
-    return { ...patch, audio_playing: null }
+    return withAudioResetFor(patch, show?.audio_playing)
   }
 
   async function applyStepPatch(rawPatch) {
@@ -918,6 +894,15 @@ export function useShow() {
     await updateShowRow(show.id, { scoreboard_visible: visible })
   }
 
+  // Host countdown timer (lib/showTimer.js): { timer } or null to clear. Lives in
+  // the special_event jsonb; /display shows it as a layer over any slide.
+  async function setShowTimer(timer) {
+    if (!show) return
+    const special_event = timer ? { timer } : null
+    setShow(s => ({ ...s, special_event }))
+    await updateShowRow(show.id, { special_event })
+  }
+
   async function setAnswerReveal(visible) {
     if (!show) return
     setShow(s => ({ ...s, showState: { ...s.showState, answerReveal: visible } }))
@@ -1030,6 +1015,7 @@ export function useShow() {
     jumpTo,
     setScoreboardVisible,
     setAnswerReveal,
+    setShowTimer,
     setAudioPlaying,
     setScoresRevealed,
     updateRoundScore,

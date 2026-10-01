@@ -195,7 +195,7 @@ client/src/
       ShowLibrary.jsx     — show CRUD modal opened from HostHeader (list, load, duplicate,
                              delete with two-step confirm, export, import); new-show creation
                              happens on the separate pre-load ShowPicker screen, not here
-                             (`ShowManager.jsx` is dead — no import/render site anywhere)
+                             (the old `ShowManager.jsx` was deleted 2026-10-01 — it had no import/render site)
       HostHeader.jsx      — "Score" button → opens ScoreboardModal; "Preview", "Export",
                              "Go Live →" buttons
       ThemePickerModal.jsx — theme selection + live preview
@@ -211,6 +211,9 @@ client/src/
                                  client/src/components/display/slides/ShinyPinQuestion.jsx (TV),
                                  client/src/components/shared/PinMapInteractive.jsx (gesture) and
                                  client/src/components/shared/UsMap.jsx (map render)
+      Movie Chain files       — client/src/components/join/MovieChainBoard.jsx (phone),
+                                 client/src/components/display/slides/ShinyMovieChainQuestion.jsx (TV),
+                                 client/src/lib/movieChainScoring.js (rules), api/movie-chain.js (Wikidata)
     display/
       ParticleBackground.jsx  — 21 GPU-only ambient themes, three-way routing:
                                  8 keep a bespoke scene, 1 (midnight-galaxy)
@@ -245,7 +248,7 @@ client/src/
       ScoreboardRevealSlide.jsx, CustomSlide.jsx, MultiQuestionSlide.jsx
       PixelateSeriesSlide.jsx, PylRevealSlide.jsx, StateOfUnionSlide.jsx
       WinnerRevealSlide.jsx   — drum roll (pre-recorded MP3) → confetti (canvas) → winner pop-in
-      QuestionCounter.jsx, BaynesWatermark.jsx, WaveformBars.jsx
+      QuestionCounter.jsx, WaveformBars.jsx
   hooks/
     useShow.js            — ALL show state, Supabase Realtime, CRUD actions (master hook)
   themes/
@@ -417,7 +420,26 @@ actions.saveResults()               // aggregates team_scores → final_scores +
 
 **Realtime:** subscribes to `shows` table, `id=eq.${showId}` — all display/join surfaces auto-update. `scoreboard_teams` was added to the realtime publication in migration `20260816170000` (2026-08-16) — before that, the TV/phone scoreboard subscriptions on that table were silently falling back to polling instead of pushing, not erroring, so the gap went unnoticed for a while; any table meant to push live updates needs to actually be in the publication, not just have a working `.channel()` call. **RT-1 landmine (P0):** Supabase Realtime omits unchanged TOASTed columns from UPDATE payloads — and every real show's `slides` jsonb is TOASTed (>~2KB). So a lightweight write (e.g. `answer_reveal` or `scoreboard_visible` only) delivers a row with NO `slides` key. `setShow(payload.new)` full-replace then nulls `currentSlide` → **blank TV** (and blank phones). `/display` and `/join` MUST merge the payload onto prior state, preserving any key absent from it — never full-replace. The host side (`useShow.js`) already merges; that's why it was immune. This is invisible to code-reading — it lives in Supabase's replication behavior, not the code's logic — so any new Realtime-synced field needs the same merge discipline.
 
-**Two independent show-shape implementations.** `Display.jsx` maintains its own show state (spreads raw Supabase rows directly) separately from `useShow.js`'s `normalizeShow()` (used by Host/Build/LiveMode). They drift independently: a new DB column must be threaded through BOTH by hand — `normalizeShow()` does not auto-map new columns. (Example: `audio_playing` survives on Display's raw-spread object but is absent from `normalizeShow()`'s output, so nothing Host-side can read it.)
+**Two independent show-shape implementations.** `Display.jsx` maintains its own show state (spreads raw Supabase rows directly) separately from `useShow.js`'s `normalizeShow()` (used by Host/Build/LiveMode). They drift independently: a new DB column must be threaded through BOTH by hand — `normalizeShow()` does not auto-map new columns. (Example: `audio_playing` was once absent from `normalizeShow()`, so a host-laptop reload lost it; it is carried now — `lib/normalizeShow.js` — and merged live by `lib/showStateMerge.js`.)
+
+
+### Host timer (2026-10-01, branch `feat/host-timer`)
+
+Live Mode's `TimerControl` card writes `shows.special_event = { timer }` via `actions.setShowTimer` (no migration; the column existed, unused). `/display` draws it with `TimerOverlay.jsx` (mounted once in `Display.jsx`, top-left of the stage, z-[70]) over ANY slide; chime is synthesized (`lib/timerChime.js`), plays once per timer id. Math + clock-skew rules live in `lib/showTimer.js` (read its header). Threaded by hand through `normalizeShow`, `showStateMerge`, `previewSlide` (preview strips it). No hotkey, not on the iPad remote.
+
+### Audio: "Next plays audio" (rewritten 2026-10-01, branch `fix/audio-fail-loud`)
+
+`shows.audio_playing` = `{ slideId, playing, part }` is the ONE play request for a question's clip. Read this before touching audio on `/display` or `/host`.
+
+- **One gate, two windows.** `lib/audioPending.js` (`audioPlayPending`) decides whether the next Next press should PLAY a slide's clip instead of advancing. `/host` (LiveMode) and `/display` (`stepShow` -> `computeTvNextStep`) both use it. Before this, only `/host` had it: a Stream Deck Right-Arrow landing on the TV window stepped past an audio question silently. The gate is slide-id only: the first Next on an audio slide plays part 0.
+- **A part step plays the new part.** `slideStepping.partStepPatch` writes the mark for the new part (forward AND back) when that part has a clip. Presses for an N-part audio series: 1 (play part 0) + N-1 (step + play) + 1 (leave). `main` did this by accident (every realtime UPDATE re-delivered `audio_playing` as a NEW object and the play effects were keyed on the object, so every part step replayed) — that accident was also the bug where pressing A on a finished clip restarted it.
+- **Part-step marks carry a nonce `at`** (`shinySeries.audioMarkForPart`) so stepping back onto a part with the SAME slide+part values (audio / audio / silent, step to the silent part, step back) is still a new request; an echo of the same write has the same `at` and does not replay. `ShinyAudioQuestion` keys on `at` too.
+- **Play effects are keyed on the mark's VALUES** (`slideId`, `playing`, `part`), never the object, in `QuestionAudio` and `ShinyAudioQuestion`. Do not key an effect on `show.audio_playing` itself. A stale mark for another part must not autoplay on arrival (`ShinyAudioQuestion` checks `part`).
+- **The mark is cleared when the slide changes** — `withAudioReset` (pure, `lib/audioPending.js`), applied by `/host` (`useShow`) AND the TV's Next/Prev. It is NOT cleared on a part step. Rehearsal leftovers on arrival are not cleared (true before too).
+- **Host sees the TV's play:** `audio_playing` is in `normalizeShow` and `showStateMerge` (`SHOW_STATE_COLUMNS`).
+- **Fail loud.** `youtubeWarmAudio.js` reports stalls (`area:audio`); a clip asked to play that is not sounding 2s later shows a fixed-position "Click for sound" button (`display/AudioBlockedCue.jsx`, `lib/audioBlocked.js`; never in the host preview) and reports once per clip. The check starts at the REQUEST, because without a gesture `AudioContext.resume()` never settles and `play()` hangs before it can throw.
+- **Not wired:** video shinies have no Next-plays-audio; Bendle has no cue; a TV reload on an already-played question replays the clip (the mark persists).
+- **Proof:** `e2e/audio-tv-next.spec.js` and `e2e/audio-blocked-cue.spec.js` (real Chromium, throwaway show, local dev server; the cue spec SIMULATES Chrome's refusal). Spec/audit: `docs/superpowers/specs/2026-09-29-audio-pipeline-design.md`.
 
 ---
 
@@ -429,7 +451,7 @@ Project: **Baynes Trivia**, id `qwtbgusqfoypvehnungr`. **Do not confuse with `dr
 shows { id, title, date, theme_id, slides jsonb, rounds jsonb, powerups jsonb,
         current_slide_id, current_slide_index, is_live, scoreboard_visible,
         scores_revealed, ticker_messages jsonb, audio_playing jsonb,
-        special_event jsonb,
+        special_event jsonb,                            -- host timer: { timer } (lib/showTimer.js), null = none
         theme_overrides jsonb NOT NULL DEFAULT '{}',   -- per-show font/color, see Theme System
         answer_reveal boolean,                          -- Stream Deck A key overlay state
         player_count integer, final_scores jsonb,        -- written by saveResults()

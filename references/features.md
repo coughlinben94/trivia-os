@@ -292,6 +292,17 @@ Managed via `HostPhotoLibrary.jsx`. Host can upload photos to a reusable library
 
 ---
 
+## Movie Chain (shiny format, 2026-09-30)
+
+`shinyInputSchema.type === 'movie-chain'`: the host chooses starting and ending films from Wikidata and announces the shortest number of movies, counting both endpoints. Teams alternate credited performers and movies on `MovieChainBoard`. Middle films are typed into global search and checked immediately; the final performer is selected from the current film, with the ending film appended without checking that last edge until host reveal. Repeated film or performer IDs are disallowed. A valid chain at or below the announced count earns 15, one movie longer earns 10, and longer or invalid chains earn 0.
+
+- **Data:** `api/movie-chain.js` wraps Wikidata film entities and `P161` cast / `P725` voice performers. Film and performer QIDs are canonical. Wikidata credits can be incomplete; the host can correct a disputed per-team result after reveal.
+- **Lock and reveal:** `PHONE_MECHANICS.movieChain` handles one lock phase. The host records `movieChainLockedAt` and closes submissions. A checks all submitted edges at or before that cutoff, writes `movieChainResults` with `movieChainRevealed`, then folds points into the existing per-slide scoreboard bucket. A failed lookup leaves the reveal pending for retry. Unlock clears the cutoff and results.
+- **Surfaces:** phones restore their own answer after reload and only show their own verdict after reveal; the TV shows the endpoints and minimum before reveal, then one successful submitted chain and 15/10/0 totals. The host right rail has endpoint search, cast counts, shortest count, and a phone preview.
+- **Operational limits:** the final connection is hidden by the guided UI, but participants can research film credits elsewhere. A server-stamped `phone_answers.submitted_at` is compared with the host laptop's lock timestamp, so severe clock skew can affect the cutoff. Search and scoring require Wikidata availability. See `docs/superpowers/specs/2026-09-30-movie-chain-shiny-design.md`.
+
+---
+
 ## Persistence & Backup
 
 **Show persistence:**

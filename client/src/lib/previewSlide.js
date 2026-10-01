@@ -13,6 +13,7 @@ export function resolvePreviewShow(show, previewSlideId) {
   const withoutScoreboard = {
     ...show,
     scoreboard_visible: false,
+    special_event: null, // a live timer must not sit on the editor's preview either
     showState: show.showState ? { ...show.showState, scoreboardVisible: false } : show.showState,
   }
   if (!previewSlideId) return withoutScoreboard

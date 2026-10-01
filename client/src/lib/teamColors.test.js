@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { TEAM_COLORS, TEAM_COLOR_NAMES, normalizeTeamName, freeColors, pickFreeColor, colorsByName } from './teamColors.js'
+import { TEAM_COLORS, TEAM_COLOR_NAMES, TEAM_EMOJIS, teamNameError, emojisByName, normalizeTeamName, freeColors, pickFreeColor, colorsByName } from './teamColors.js'
 
 describe('TEAM_COLORS', () => {
   it('is the 10-color palette, every entry named', () => {
@@ -69,5 +69,27 @@ describe('colorsByName', () => {
   })
   it('tolerates null input', () => {
     expect(colorsByName(null).size).toBe(0)
+  })
+})
+
+describe('teamNameError / emojis', () => {
+  it('accepts letters, spaces, apostrophes, hyphens', () => {
+    for (const n of ['Quiz Whiz', "O'Brien Crew", 'Anne-Marie', 'Zoë Fans', 'Beer Pressure']) {
+      expect(teamNameError(n)).toBeNull()
+    }
+  })
+  it('rejects digits, symbols, emoji, empty, too long', () => {
+    for (const n of ['Team 7', 'Les!', '🔥 Fire', 'a_b', '', '   ', 'x'.repeat(31)]) {
+      expect(teamNameError(n)).not.toBeNull()
+    }
+  })
+  it('emojisByName keys by normalized name and skips blanks', () => {
+    const m = emojisByName([{ name: ' Foo ', emoji: '🦊' }, { name: 'Bar', emoji: null }])
+    expect(m.get('foo')).toBe('🦊')
+    expect(m.has('bar')).toBe(false)
+  })
+  it('every preset emoji fits the 16-char DB limit and is unique', () => {
+    expect(new Set(TEAM_EMOJIS).size).toBe(TEAM_EMOJIS.length)
+    for (const e of TEAM_EMOJIS) expect(e.length).toBeLessThanOrEqual(16)
   })
 })

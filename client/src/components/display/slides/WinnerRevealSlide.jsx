@@ -6,6 +6,7 @@ import { deriveRoundCols, computeTotal } from '../../../lib/scoreboardMath.js'
 import { fitToBox, REVEAL_BOX, PODIUM_BEAT_BOX, PODIUM_SLOT_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT, EASE_EXIT, EASE_DROP } from '../../../lib/easings.js'
 import { buildPodium, lowerBeats } from '../../../lib/podium.js'
+import { emojisByName, normalizeTeamName } from '../../../lib/teamColors.js'
 
 // Cinematic sequence:
 //   'drumroll' — 4.2s MP3 plays; vignette closes in, spotlight + kicker breathe (tension build)
@@ -280,6 +281,15 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
           .map(t => ({ id: t.id, name: t.name, total: (scores ?? []).filter(s => s.team_id === t.id).reduce((n, s) => n + (s.score ?? 0), 0) }))
           .sort((a, b) => b.total - a.total)
       }
+
+      // Team emoji rides in front of the name (ties still join with ' & ').
+      // Blank names stay blank so podium.js's blank-name rules still hold.
+      const { data: emojiRows } = await supabase.from('teams').select('name, emoji').eq('show_id', show.id)
+      const emojiOf = emojisByName(emojiRows ?? [])
+      ranked = ranked.map(t => {
+        const em = emojiOf.get(normalizeTeamName(t.name))
+        return em && String(t.name ?? '').trim() ? { ...t, name: `${em} ${t.name}` } : t
+      })
 
       if (cancelled) return
 

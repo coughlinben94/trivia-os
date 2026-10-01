@@ -1,0 +1,115 @@
+import { applyPhoneScoreUpdates } from './scoreboardMath.js'
+
+// The Drop: every team gets `total` points to split across the options on
+// their phone. Points left on the correct option are the team's score for the
+// question; points on any other option are lost. The submission must place
+// every point (the phone enforces it; scoring re-checks, since phone_answers
+// is client-written).
+export const DEFAULT_DROP_TOTAL = 25
+
+// One tap on the phone moves this many points. 5 when it divides the total
+// (a 30-point pool is exactly 6 taps), else 1 so any total stays reachable.
+export function dropChip(total) {
+  return total % 5 === 0 ? 5 : 1
+}
+
+// A usable option has text or a photo — same blank filter as ChoiceBoard.
+export function dropOptions(data) {
+  return (data?.options ?? []).filter(o => o.label?.trim() || o.image)
+}
+
+// answer is { [optionId]: wholeNumber }. Missing ids count as 0; unknown ids,
+// negatives, fractions, arrays and a wrong sum all invalidate it.
+export function isValidAlloc(alloc, optionIds, total) {
+  if (!alloc || typeof alloc !== 'object' || Array.isArray(alloc)) return false
+  let sum = 0
+  for (const [id, n] of Object.entries(alloc)) {
+    if (!optionIds.includes(id)) return false
+    if (!Number.isInteger(n) || n < 0) return false
+    sum += n
+  }
+  return sum === total
+}
+
+export function scoreDropSubmission(alloc, correctId, optionIds, total) {
+  if (!correctId || !optionIds.includes(correctId)) return 0
+  if (!isValidAlloc(alloc, optionIds, total)) return 0
+  return alloc[correctId] ?? 0
+}
+
+// Small seeded PRNG (mulberry32) so the same seed always shuffles the same
+// way on the TV, on phones and across Prev/Next — Math.random would not.
+function seededRandom(seed) {
+  let a = seed | 0
+  return () => {
+    a = (a + 0x6D2B79F5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+// The tiles that fall off the TV, in order. The correct tile is never in it.
+// With data.dropSeed (stamped at lock by LiveMode) the order is a seeded
+// shuffle, so the room can't read the answer off a left-to-right conveyor;
+// without one it is the authored order (nothing falls before a lock anyway).
+// With no correct tile set every tile is a candidate.
+export function dropSequence(data) {
+  const wrong = dropOptions(data).map(o => o.id).filter(id => id !== data?.correctId)
+  if (data?.dropSeed == null) return wrong
+  const rand = seededRandom(Number(data.dropSeed))
+  for (let i = wrong.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1))
+    ;[wrong[i], wrong[j]] = [wrong[j], wrong[i]]
+  }
+  return wrong
+}
+
+export function dropStepCount(data) {
+  return dropSequence(data).length
+}
+
+// Aggregate shown on the TV and nothing else: points the room put on each
+// tile, how many valid teams went all-in on the correct one. Never per-team.
+export function summarizeDrop(answers, optionIds, correctId, total) {
+  const totals = Object.fromEntries(optionIds.map(id => [id, 0]))
+  let allIn = 0
+  let teams = 0
+  for (const ans of answers ?? []) {
+    if (!isValidAlloc(ans.answer, optionIds, total)) continue
+    teams += 1
+    for (const id of optionIds) totals[id] += ans.answer[id] ?? 0
+    if (correctId && ans.answer[correctId] === total) allIn += 1
+  }
+  return { totals, allIn, teams }
+}
+
+// Scores every REGISTERED team (a team that never submitted is a real 0, not
+// a skip) and folds the result into the scoreboard — see
+// applyPhoneScoreUpdates for the name matching and phoneBySlide merge.
+export function computeDropScoreUpdates({ answers, teams, scoreboardTeams, roundKey, correctId, optionIds, total, slideId }) {
+  const byTeam = new Map((answers ?? []).map(a => [a.team_id, a.answer]))
+  const results = (teams ?? []).map(t => ({
+    teamId: t.id,
+    points: scoreDropSubmission(byTeam.get(t.id), correctId, optionIds, total),
+  }))
+  return applyPhoneScoreUpdates({ results, teams, scoreboardTeams, roundKey, slideId })
+}
+
+// Where each tile slides once others have fallen, in tile-pitches (one tile
+// width plus its gap) along the row: survivors close up into a centred row,
+// so a lone survivor ends up in the middle instead of stranded in its slot.
+// `dropped` is one flag per tile, in row order. A dropped tile gets 0 (it
+// falls, it does not slide). Pure so it can be tested without a layout engine.
+export function survivorShifts(dropped) {
+  const n = dropped.length
+  const alive = dropped.filter(d => !d).length
+  if (n === 0 || alive === 0) return dropped.map(() => 0)
+  let rank = 0
+  return dropped.map((d, i) => {
+    if (d) return 0
+    const shift = (rank - (alive - 1) / 2) - (i - (n - 1) / 2)
+    rank += 1
+    return shift
+  })
+}

@@ -63,3 +63,9 @@ describe('resolvePreviewShow', () => {
     expect(resolvePreviewShow(noShowState, null).showState).toBeUndefined()
   })
 })
+
+describe('resolvePreviewShow: timer', () => {
+  it('never carries a live timer into the preview', () => {
+    expect(resolvePreviewShow({ special_event: { timer: { id: 'a' } }, slides: [] }, null).special_event).toBeNull()
+  })
+})

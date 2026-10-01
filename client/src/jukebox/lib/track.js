@@ -57,6 +57,31 @@ export function hasTrim(track) {
   return track.startMs > 0 || (track.stopMs != null && track.stopMs < track.duration_ms - 1000)
 }
 
+export const GAIN_DB_MIN = -8
+export const GAIN_DB_MAX = 6
+
+export function songGain(song) {
+  const gainDb = song?.gainDb
+  const finiteGainDb = typeof gainDb === 'number' && Number.isFinite(gainDb) ? gainDb : 0
+  const clampedDb = Math.max(GAIN_DB_MIN, Math.min(GAIN_DB_MAX, finiteGainDb))
+  return 10 ** (clampedDb / 20)
+}
+
+// Fields that belong to a saved jukebox song beyond Spotify's slim payload.
+// Shared by persistence paths so new per-song settings cannot be dropped.
+export function slimSavedSong(song) {
+  return {
+    ...slimTrack(song),
+    startMs: song.startMs,
+    stopMs: song.stopMs,
+    gradientOverride: song.gradientOverride,
+    gradientOverride1: song.gradientOverride1,
+    gainDb: song.gainDb,
+    measuredLufs: song.measuredLufs,
+    measuredAt: song.measuredAt,
+  }
+}
+
 export function displayName(name) {
   if (!name) return name
   return stripTrailingDashTag(name.replace(PAREN_RE, '')).trim()

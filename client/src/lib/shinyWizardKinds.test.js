@@ -4,12 +4,17 @@ import { FIXED_SHAPE_KINDS, buildGridSlide, buildVennSlide, buildElimSlide, buil
 const baseFmt = { id: 'fmt_1', name: 'Test Format', icon: '✨' }
 
 describe('FIXED_SHAPE_KINDS registry', () => {
-  it('has exactly the eleven known fixed-shape kinds', () => {
-    expect(Object.keys(FIXED_SHAPE_KINDS).sort()).toEqual(['bendle', 'choice', 'elimination', 'grid', 'hues-cues', 'matching', 'order', 'pin', 'race', 'venn', 'wager'])
+  it('has exactly the fixed-shape kinds', () => {
+    expect(Object.keys(FIXED_SHAPE_KINDS).sort()).toEqual(['bendle', 'choice', 'drop', 'elimination', 'grid', 'hues-cues', 'matching', 'movie-chain', 'order', 'pin', 'race', 'venn', 'wager'])
+  })
+
+  it('makes Movie Chain a one-slide blank shell completed in the slide editor', () => {
+    expect(FIXED_SHAPE_KINDS['movie-chain']).toMatchObject({ hasOwnControls: false })
+    expect(FIXED_SHAPE_KINDS['movie-chain'].nextStepHint).toMatch(/slide editor/i)
   })
 
   it('matching/wager/order/choice have no own controls or builder — they fall through to the generic flat-asset path', () => {
-    for (const kind of ['matching', 'wager', 'order', 'choice']) {
+    for (const kind of ['matching', 'wager', 'order', 'choice', 'drop']) {
       expect(FIXED_SHAPE_KINDS[kind].hasOwnControls).toBe(false)
       expect(FIXED_SHAPE_KINDS[kind].buildSlideData).toBeUndefined()
     }

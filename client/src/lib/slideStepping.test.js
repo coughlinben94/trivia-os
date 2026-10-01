@@ -1001,3 +1001,65 @@ describe('two-beat shiny-title (explainer)', () => {
     expect(patch.current_slide_index).toBeUndefined()
   })
 })
+
+// 2026-10-01: on main, stepping a multi-part AUDIO series to its next part played
+// that part on arrival — by accident of the object-identity replay (every
+// realtime update re-delivered audio_playing as a new object). That accident is
+// gone, so the part step now writes the mark itself: same observable show,
+// deterministic. 5-part series presses stay: play, then one press per part.
+describe('multi-part audio series: a part step plays the new part', () => {
+  const part = n => ({ text: `p${n}`, mediaSlots: [{ type: 'audio/mpeg', url: `/p${n}.mp3` }] })
+  const audio = (cp, parts = [part(0), part(1), part(2)]) => slide('s1', 0, 'question', { isShiny: true, shinyType: 'audio', parts, currentPart: cp })
+  const stepArgs = (sl, i = 0) => ({ slides: [sl, slide('end', 1, 'title')], currentSlideIndex: i, currentSlideId: sl.id })
+
+  it('Next steps to the next part AND writes the mark for it', async () => {
+    const patch = await computeNextStep(stepArgs(audio(0)), noTeams)
+    expect(dataOf(patch, 's1').currentPart).toBe(1)
+    expect(patch.audio_playing).toEqual({ slideId: 's1', playing: true, part: 1, at: expect.any(Number) })
+  })
+
+  it('Prev steps back a part AND writes the mark for it', async () => {
+    const patch = await computePrevStep(stepArgs(audio(2)), noTeams)
+    expect(dataOf(patch, 's1').currentPart).toBe(1)
+    expect(patch.audio_playing).toEqual({ slideId: 's1', playing: true, part: 1, at: expect.any(Number) })
+  })
+
+  // Re-review of c754c7c: series p0 audio, p1 SILENT, p2 audio. Play p0 (mark {part:0}),
+  // Next to p1 (no mark), Prev back to p0 writes {part:0} AGAIN — identical values, so the
+  // TV's value-keyed play effect saw no change and p0 stayed silent (main replayed it).
+  // Every part-step mark carries a nonce so it is always a NEW request; an echo of the
+  // SAME write carries the same nonce, so it still does not replay.
+  it('two part-step marks with identical slide/part still differ (nonce), so going back replays', async () => {
+    const a = await computePrevStep(stepArgs(audio(1)), noTeams)
+    const b = await computePrevStep(stepArgs(audio(1)), noTeams)
+    expect(a.audio_playing.part).toBe(0)
+    expect(b.audio_playing.part).toBe(0)
+    expect(a.audio_playing.at).not.toBe(b.audio_playing.at)
+  })
+
+  it('a next part with no audio of its own writes no mark', async () => {
+    const mixed = audio(0, [part(0), { text: 'silent' }, part(2)])
+    const patch = await computeNextStep(stepArgs(mixed), noTeams)
+    expect(dataOf(patch, 's1').currentPart).toBe(1)
+    expect(patch.audio_playing).toBeUndefined()
+  })
+
+  it('a non-audio series (e.g. images) writes no mark', async () => {
+    const imgs = slide('s1', 0, 'question', { isShiny: true, shinyType: 'visual', parts: [{ mediaSlots: [{ type: 'image/png', url: '/a.png' }] }, { mediaSlots: [{ type: 'image/png', url: '/b.png' }] }], currentPart: 0 })
+    const patch = await computeNextStep(stepArgs(imgs), noTeams)
+    expect(dataOf(patch, 's1').currentPart).toBe(1)
+    expect(patch.audio_playing).toBeUndefined()
+  })
+
+  it('a YouTube audio part writes the mark too', async () => {
+    const yt = n => ({ text: `y${n}`, mediaSlots: [{ type: 'youtube', videoId: `v${n}`, start: 0, end: 20 }] })
+    const patch = await computeNextStep(stepArgs(audio(0, [yt(0), yt(1)])), noTeams)
+    expect(patch.audio_playing).toEqual({ slideId: 's1', playing: true, part: 1, at: expect.any(Number) })
+  })
+
+  it('leaving the last part is a normal slide step with no mark', async () => {
+    const patch = await computeNextStep(stepArgs(audio(2)), noTeams)
+    expect(patch.current_slide_id).toBe('end')
+    expect(patch.audio_playing).toBeUndefined()
+  })
+})

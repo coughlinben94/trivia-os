@@ -13,7 +13,7 @@ export default function TeamPreviewSlide({ slide, show }) {
     if (!show?.id) return
     supabase
       .from('teams')
-      .select('id, name, color')
+      .select('id, name, color, emoji')
       .eq('show_id', show.id)
       .order('registered_at', { ascending: true })
       .then(({ data }) => { if (data) setTeams(data) })
@@ -79,7 +79,8 @@ export default function TeamPreviewSlide({ slide, show }) {
               padding: '0.55rem 1.4rem',
               fontFamily: `'${theme.fonts.display}', sans-serif`,
               fontSize: 'clamp(1rem, 2vw, 1.6rem)',
-              color: theme.colors.text,
+              color: team.color || theme.colors.text,
+              textShadow: team.color ? '0 0 0.12em rgba(0,0,0,0.55), 0 0.04em 0.08em rgba(0,0,0,0.6)' : undefined,
               fontWeight: 600,
               whiteSpace: 'nowrap',
               display: 'flex', alignItems: 'center', gap: '0.5em',
@@ -94,6 +95,7 @@ export default function TeamPreviewSlide({ slide, show }) {
                 background: team.color, boxShadow: '0 0 0 0.08em rgba(0,0,0,0.45)',
               }} />
             )}
+            {team.emoji && <span aria-hidden>{team.emoji}</span>}
             {team.name}
           </motion.div>
         ))}

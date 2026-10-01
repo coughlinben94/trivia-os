@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { fmt, TimeField, SetMarkerButton } from './ScrubberControls'
 import { usePalette } from '../hooks/usePalette'
 import GradientColorPicker from './GradientColorPicker'
+import { songGain } from '../lib/track'
 
 const MIN_CLIP_MS = 1000
 
@@ -94,7 +95,7 @@ export default function SongDetailModal({ track, player, onUpdateTimes, onUpdate
     // starting immediately would bump the player generation and cut the
     // fade short (onStopLiveShuffle returns fadeAndPause's promise).
     if (isLiveShuffling) await onStopLiveShuffle?.()
-    playTrack(track.uri, startMs, stopMs, true)
+    playTrack(track.uri, startMs, stopMs, true, songGain(track))
   }
   // Route through onStopLiveShuffle (Jukebox.handleStop) when this song is
   // the live one — a bare player.pause() bypasses Jukebox's isPlaying/

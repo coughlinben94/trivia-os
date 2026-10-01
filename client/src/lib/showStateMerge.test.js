@@ -34,3 +34,47 @@ describe('mergeShowStateRow', () => {
     expect(mergeShowStateRow(null, { id: 's1' })).toBeNull()
   })
 })
+
+// Review of ad52e56 (2026-10-01): the host never read audio_playing from the
+// DB, so after the TV played a clip the host's Next wrote it again (eaten
+// press / replay) and its own clear ran off a stale copy.
+describe('mergeShowStateRow: audio_playing', () => {
+  it('carries audio_playing from the row onto the show (the TV can write it now)', () => {
+    const next = mergeShowStateRow(prev, { id: 's1', audio_playing: { slideId: 'c', playing: true } })
+    expect(next.audio_playing).toEqual({ slideId: 'c', playing: true })
+  })
+
+  it('a null in the row clears it', () => {
+    const had = { ...prev, audio_playing: { slideId: 'c', playing: true } }
+    expect(mergeShowStateRow(had, { id: 's1', audio_playing: null }).audio_playing).toBeNull()
+  })
+
+  it('keeps the existing value when the row omits the column', () => {
+    const had = { ...prev, audio_playing: { slideId: 'c', playing: true } }
+    expect(mergeShowStateRow(had, { id: 's1', answer_reveal: true }).audio_playing).toEqual({ slideId: 'c', playing: true })
+  })
+
+  it('keepNav leaves our own just-written audio_playing alone (an older echo must not clobber it)', () => {
+    const had = { ...prev, audio_playing: { slideId: 'c', playing: true } }
+    expect(mergeShowStateRow(had, { id: 's1', audio_playing: null }, { keepNav: true }).audio_playing).toEqual({ slideId: 'c', playing: true })
+  })
+
+  it('the catch-up refetch asks for the column', async () => {
+    const { SHOW_STATE_COLUMNS } = await import('./showStateMerge.js')
+    expect(SHOW_STATE_COLUMNS).toContain('audio_playing')
+  })
+})
+
+describe('mergeShowStateRow: special_event (host timer)', () => {
+  const t = (sentAt) => ({ timer: { id: 'x', sentAt } })
+  it('keeps ours when the column is absent from the payload', () => {
+    const p = { ...prev, special_event: t(5) }
+    expect(mergeShowStateRow(p, { id: 's1', answer_reveal: true }).special_event).toEqual(t(5))
+  })
+  it('takes a newer timer, a cancel (null), and ignores an older echo', () => {
+    const p = { ...prev, special_event: t(5) }
+    expect(mergeShowStateRow(p, { id: 's1', special_event: t(9) }).special_event).toEqual(t(9))
+    expect(mergeShowStateRow(p, { id: 's1', special_event: null }).special_event).toBeNull()
+    expect(mergeShowStateRow(p, { id: 's1', special_event: t(2) }).special_event).toEqual(t(5))
+  })
+})

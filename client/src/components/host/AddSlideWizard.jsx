@@ -647,7 +647,7 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   // Race has no typed answer either — it's filled in by the race engine.
   // Hues & Cues answer is a picked grid square, set in HuesCuesAnswerPicker
   // in the slide editor — a typed value here would be silently ignored.
-  const showAnswerField  = showSharedFields && shinyFmtType !== 'bendle' && shinyFmtType !== 'race' && shinyFmtType !== 'hues-cues' && shinyFmtType !== 'pin'
+  const showAnswerField  = showSharedFields && shinyFmtType !== 'bendle' && shinyFmtType !== 'race' && shinyFmtType !== 'hues-cues' && shinyFmtType !== 'pin' && shinyFmtType !== 'movie-chain' && shinyFmtType !== 'drop'
   // Never required up front, regardless of asset count — the answer can
   // always be set afterward on the slide editor's right rail (the generic
   // Answer field there covers every shiny type except choice/hues-cues,

@@ -8,6 +8,6 @@ export default defineConfig({
     environment: 'node',
     // relay/ (the laptop-local iPad remote relay) is plain Node + ws, tested
     // here too; its `ws` import resolves from relay/node_modules.
-    include: ['client/src/**/*.test.js', 'client/src/**/*.test.jsx', 'relay/**/*.test.mjs'],
+    include: ['client/src/**/*.test.js', 'client/src/**/*.test.jsx', 'relay/**/*.test.mjs', 'tools/levelmeter/*.test.mjs', 'scripts/*.test.mjs'],
   },
 })

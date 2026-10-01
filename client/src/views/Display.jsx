@@ -9,6 +9,7 @@ import { ringVisibleStationIndex, ringPeekIndex } from '../lib/ringStationIndex.
 import QuestionCounter from '../components/display/QuestionCounter.jsx'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
 import ScoreboardOverlay from '../components/display/ScoreboardOverlay.jsx'
+import TimerOverlay from '../components/display/TimerOverlay.jsx'
 import LockCountdownOverlay from '../components/display/LockCountdownOverlay.jsx'
 import JukeboxBreakOverlay from '../components/display/JukeboxBreakOverlay.jsx'
 import WarpTransition from '../components/display/WarpTransition.jsx'
@@ -21,9 +22,8 @@ import { preloadUsMapData } from '../hooks/useUsMapData.js'
 import { EASE_OUT } from '../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../lib/shinyGold.js'
 import { resolvePreviewShow } from '../lib/previewSlide.js'
+import { computeTvNextStep, computeTvPrevStep } from '../lib/audioPending.js'
 import {
-  computeNextStep,
-  computePrevStep,
   sortSlides,
   cursorAfterStep,
   teamPickerCursor,
@@ -674,9 +674,12 @@ async function stepShow(showRow, direction) {
     currentSlideIndex: showRow.current_slide_index,
     currentSlideId: showRow.current_slide_id,
   }
+  // computeTvNextStep plays an owed audio clip INSTEAD of stepping (the same
+  // "Next plays audio" gate /host has) — a Stream Deck Right-Arrow that lands
+  // on this window used to step past an audio question silently.
   const patch = direction > 0
-    ? await computeNextStep(args, fetchTeamCount)
-    : await computePrevStep(args, fetchTeamCount)
+    ? await computeTvNextStep(showRow, fetchTeamCount)
+    : await computeTvPrevStep(showRow, fetchTeamCount)
   if (!patch) return { advanced: false, denied: false, cursor: null }
   const { data, error } = await supabase
     .from('shows')
@@ -1138,6 +1141,11 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
             A crash here should just make the overlay disappear, not the TV. */}
         <ErrorBoundary fallback={null}>
           <ScoreboardOverlay show={show} />
+        </ErrorBoundary>
+        {/* Host countdown timer (shows.special_event.timer): a corner layer over
+            any slide, z-[70] so it also sits above the scoreboard. Mounted once. */}
+        <ErrorBoundary fallback={null}>
+          <TimerOverlay show={show} />
         </ErrorBoundary>
         {/* "Next locks answers" — the 3-2-1-🔒 ceremony. Mounted unconditionally
             (startedAt falsy renders nothing) so it's always ready the instant
