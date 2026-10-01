@@ -257,6 +257,12 @@ describe('resolveSlideClip: what clip does this slide have', () => {
     expect(resolveSlideClip(q({ isShiny: true, shinyType: 'visual', mediaSlots: [{ type: 'image/png', url: '/x.png' }] }))).toBeNull()
   })
 
+  it('a shiny that is NOT an audio shiny never has a clip, even with an audio file attached', () => {
+    // only audio shinies are started by the Next press; a list/visual shiny with a stray mp3 stays silent
+    expect(resolveSlideClip(q({ isShiny: true, shinyInputSchema: { type: 'list' }, mediaUrl: '/stray.mp3', mediaType: 'audio/mpeg' }))).toBeNull()
+    expect(resolveSlideClip(q({ isShiny: true, shinyType: 'visual', mediaSlots: [ytSlot()] }))).toBeNull()
+  })
+
   it('multi-part series: the clip is the CURRENT part, and part is its index', () => {
     const part = n => ({ text: `p${n}`, mediaSlots: [{ type: 'audio/mpeg', url: `/p${n}.mp3` }] })
     const slide = q({ isShiny: true, shinyType: 'audio', parts: [part(0), part(1), part(2)], currentPart: 1 })
@@ -291,6 +297,7 @@ describe('agreement with audioPlayPending', () => {
     'shiny audio upload': q({ isShiny: true, shinyType: 'audio', mediaUrl: '/a.mp3', mediaType: 'audio/mpeg' }),
     'shiny list': q({ isShiny: true, shinyInputSchema: { type: 'list' } }),
     'shiny visual': q({ isShiny: true, shinyType: 'visual', mediaSlots: [{ type: 'image/png', url: '/x.png' }] }),
+    'shiny list with a stray mp3': q({ isShiny: true, shinyInputSchema: { type: 'list' }, mediaUrl: '/stray.mp3', mediaType: 'audio/mpeg' }),
     'series part 0': q({ isShiny: true, shinyType: 'audio', parts: [part(0), part(1)], currentPart: 0 }),
     'series silent part': q({ isShiny: true, shinyType: 'audio', parts: [part(0), { text: 's' }], currentPart: 1 }),
     bendle: q({ isShiny: true, shinyInputSchema: { type: 'bendle' }, bendleSongId: 's' }),
