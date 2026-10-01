@@ -21,8 +21,8 @@ import { preloadUsMapData } from '../hooks/useUsMapData.js'
 import { EASE_OUT } from '../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../lib/shinyGold.js'
 import { resolvePreviewShow } from '../lib/previewSlide.js'
+import { computeTvNextStep } from '../lib/audioPending.js'
 import {
-  computeNextStep,
   computePrevStep,
   sortSlides,
   cursorAfterStep,
@@ -674,8 +674,11 @@ async function stepShow(showRow, direction) {
     currentSlideIndex: showRow.current_slide_index,
     currentSlideId: showRow.current_slide_id,
   }
+  // computeTvNextStep plays an owed audio clip INSTEAD of stepping (the same
+  // "Next plays audio" gate /host has) — a Stream Deck Right-Arrow that lands
+  // on this window used to step past an audio question silently.
   const patch = direction > 0
-    ? await computeNextStep(args, fetchTeamCount)
+    ? await computeTvNextStep(showRow, fetchTeamCount)
     : await computePrevStep(args, fetchTeamCount)
   if (!patch) return { advanced: false, denied: false, cursor: null }
   const { data, error } = await supabase
