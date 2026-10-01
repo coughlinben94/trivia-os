@@ -7,9 +7,10 @@ import ShinyWagerQuestion from './ShinyWagerQuestion.jsx'
 import ShinyOrderQuestion from './ShinyOrderQuestion.jsx'
 import ShinyBendleQuestion from './ShinyBendleQuestion.jsx'
 import ShinyChoiceQuestion from './ShinyChoiceQuestion.jsx'
+import ShinyDropQuestion from './ShinyDropQuestion.jsx'
 import ShinyHuesCuesQuestion from './ShinyHuesCuesQuestion.jsx'
 import ShinyPinQuestion from './ShinyPinQuestion.jsx'
-import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny, isVideoShiny, isMatchingShiny, isWagerShiny, isOrderShiny, isBendleShiny, isChoiceShiny, isHuesCuesShiny, isPinShiny, isConcurrentShiny, isConcurrentMediaShiny, partsToGridView } from '../../../lib/shinySeries.js'
+import { resolveShinyPart, isVisualShiny, isAudioShiny, isListShiny, isVideoShiny, isMatchingShiny, isWagerShiny, isOrderShiny, isBendleShiny, isChoiceShiny, isDropShiny, isHuesCuesShiny, isPinShiny, isConcurrentShiny, isConcurrentMediaShiny, partsToGridView } from '../../../lib/shinySeries.js'
 import { chunkParts } from '../../../lib/slideStepping.js'
 import { GridContent } from './GridSlide.jsx'
 import { fitToBox, QUESTION_BOX, QUOTE_BOX, useFitToBox, useFitListToBox, LIST_ITEM_FLOOR, LIST_ITEM_CEIL, VISUAL_CAPTION_FLOOR, VISUAL_CAPTION_CEIL } from '../../../lib/autoFitText.js'
@@ -1495,6 +1496,9 @@ function dispatchShinyContent({ slide, show, theme, transitionKey, isPreview }) 
   }
   if (isChoiceShiny(data)) {
     return <ShinyChoiceQuestion slide={slide} show={show} theme={theme} />
+  }
+  if (isDropShiny(data)) {
+    return <ShinyDropQuestion slide={slide} show={show} theme={theme} />
   }
   if (isHuesCuesShiny(data)) {
     return <ShinyHuesCuesQuestion slide={slide} show={show} theme={theme} />

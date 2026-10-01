@@ -5,13 +5,14 @@ import { nanoid } from 'nanoid'
 import { supabase } from '../lib/supabase.js'
 import { deriveRoundCols, computeTotal, computePlaces, MEDALS } from '../lib/scoreboardMath.js'
 import { getTheme } from '../themes/index.js'
-import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentMediaShiny, isChoiceShiny, isHuesCuesShiny, isPinShiny } from '../lib/shinySeries.js'
+import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentMediaShiny, isChoiceShiny, isDropShiny, isHuesCuesShiny, isPinShiny } from '../lib/shinySeries.js'
 import { getWagerTier } from '../lib/wagerScoring.js'
 import { PHONE_MECHANICS, sortSlides } from '../lib/slideStepping.js'
 import MatchingBoard from '../components/join/MatchingBoard.jsx'
 import WagerBoard from '../components/join/WagerBoard.jsx'
 import OrderBoard from '../components/join/OrderBoard.jsx'
 import ChoiceBoard from '../components/join/ChoiceBoard.jsx'
+import DropBoard from '../components/join/DropBoard.jsx'
 import HuesCuesBoard from '../components/join/HuesCuesBoard.jsx'
 import PinBoard from '../components/join/PinBoard.jsx'
 import { preloadUsMapData } from '../hooks/useUsMapData.js'
@@ -737,6 +738,9 @@ function SlideBody({ slide, show, theme, team, onInteractiveAnswered, overridePa
       }
       if (d.isShiny && isChoiceShiny(d)) {
         return <ChoiceBoard slide={slide} team={team} theme={theme} onAnswered={onInteractiveAnswered} />
+      }
+      if (d.isShiny && isDropShiny(d)) {
+        return <DropBoard slide={slide} team={team} theme={theme} onAnswered={onInteractiveAnswered} />
       }
       if (d.isShiny && isHuesCuesShiny(d)) {
         return <HuesCuesBoard slide={slide} team={team} theme={theme} onAnswered={onInteractiveAnswered} />

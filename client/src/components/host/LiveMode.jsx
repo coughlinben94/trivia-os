@@ -12,13 +12,14 @@ import { deriveRoundCols, computeTotal, pickableTeams } from '../../lib/scoreboa
 import { computeMatchingScoreUpdates } from '../../lib/matchingScoring.js'
 import { computeOrderScoreUpdates, DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { computeChoiceScoreUpdates, DEFAULT_CHOICE_POINTS } from '../../lib/choiceScoring.js'
+import { computeDropScoreUpdates, summarizeDrop, dropOptions, DEFAULT_DROP_TOTAL } from '../../lib/dropScoring.js'
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
 import { scoreHuesCuesRound, computeHuesCuesScoreUpdates } from '../../lib/huesCuesScoring.js'
 import { computeHorseRaceScoreUpdates, DEFAULT_RACE_POINTS } from '../../lib/raceScoring.js'
 import { buildPinRound, isValidPin, pinMissingSpot, pinLockedStatus, PIN_SPOT_ERROR } from '../../lib/pinScoring.js'
 import PinRoomControl from './PinRoomControl.jsx'
 import { HUES_CUES_CODE_RE } from '../../lib/huesCuesGrid.js'
-import { lockRefusal, HUES_CUES_ANSWER_ERROR, WAGER_ANSWER_ERROR, WAGER_TIERS_ERROR } from '../../lib/lockRefusal.js'
+import { lockRefusal, DROP_ANSWER_ERROR, HUES_CUES_ANSWER_ERROR, WAGER_ANSWER_ERROR, WAGER_TIERS_ERROR } from '../../lib/lockRefusal.js'
 import { nextPressGate } from '../../lib/nextPressCue.js'
 import { planHostCommand } from '../../lib/hostCommands.js'
 import { useRemoteLink } from '../../hooks/useRemoteLink.js'
@@ -254,6 +255,8 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   const [orderScoreError, setOrderScoreError] = useState(null)
   const [choiceBusy, setChoiceBusy] = useState(false)
   const [choiceScoreError, setChoiceScoreError] = useState(null)
+  const [dropBusy, setDropBusy] = useState(false)
+  const [dropScoreError, setDropScoreError] = useState(null)
   const [huesCuesBusy, setHuesCuesBusy] = useState(false)
   const [huesCuesScoreError, setHuesCuesScoreError] = useState(null)
   const [pinBusy, setPinBusy] = useState(false)
@@ -284,7 +287,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // a real scoring round (three SELECTs + one upsert, normally 1-2s); past
   // that the host gets Next back and any real failure is already showing
   // its error on-screen via the Retry Scoring button.
-  const scoringBusy = matchingBusy || orderBusy || wagerBusy || choiceBusy || huesCuesBusy || pinBusy
+  const scoringBusy = matchingBusy || orderBusy || wagerBusy || choiceBusy || dropBusy || huesCuesBusy || pinBusy
   const scoringSinceRef = useRef(0)
   useEffect(() => { scoringSinceRef.current = scoringBusy ? Date.now() : 0 }, [scoringBusy])
   // iPad remote only (spec §6): horse-race scoring with its own 12s cap.
@@ -397,6 +400,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     setMatchingScoreError(null)
     setOrderScoreError(null)
     setChoiceScoreError(null)
+    setDropScoreError(null)
     setHuesCuesScoreError(null)
     setPinScoreError(null)
     setRaceScoreError(null)
@@ -427,6 +431,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         order: [orderBusy, orderScoreError],
         wager: [wagerBusy, wagerError],
         choice: [choiceBusy, choiceScoreError],
+        drop: [dropBusy, dropScoreError],
         huesCues: [huesCuesBusy, huesCuesScoreError],
         pin: [pinBusy, pinScoreError],
       }[phoneMechanic] ?? [false, null])
@@ -716,6 +721,53 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         }
       },
       setBusy: setChoiceBusy, setError: setChoiceScoreError,
+    })
+  }
+
+  // The Drop: same shape as Choice (one lock field), but every registered team
+  // is scored (no answer = a real 0) and the room-wide aggregate the TV reveals
+  // at the end (points per tile, all-in count) is computed here, now, and
+  // stored — /display can't read phone_answers itself. Re-entering this on an
+  // already-locked slide (Retry Scoring, or the host fixing the correct tile)
+  // re-scores from scratch and rewinds the drops, since the reveal it showed
+  // is no longer the truth. Scores are keyed by slideId, so nothing doubles.
+  async function handleLockAndScoreDrop(slide) {
+    await lockAndScore({
+      slide,
+      lockField: 'dropLocked', lockedAtField: 'dropLockedAt',
+      lateLogLabel: 'drop lock',
+      preCheck: s => (dropOptions(s.data).some(o => o.id === s.data.correctId) ? null : DROP_ANSWER_ERROR),
+      buildResults: ({ answers, teams, scoreboardTeams, roundKey, slideId }) => {
+        const optionIds = dropOptions(slide.data).map(o => o.id)
+        const total = slide.data.dropTotal ?? DEFAULT_DROP_TOTAL
+        const correctId = slide.data.correctId
+        const updates = computeDropScoreUpdates({
+          answers, teams, scoreboardTeams, roundKey, correctId, optionIds, total, slideId,
+        })
+        return {
+          results: null,
+          updates,
+          extraData: {
+            dropResults: summarizeDrop(answers, optionIds, correctId, total),
+            dropStep: 0,
+            dropRevealed: false,
+          },
+          unmatchedError: (teams?.length ?? 0) > 0 && updates.length === 0
+            ? 'No teams could be matched to the scoreboard — check team names match, then retry'
+            : null,
+        }
+      },
+      setBusy: setDropBusy, setError: setDropScoreError,
+    })
+  }
+
+  // The host picked the wrong correct tile: set the right one, rewind the
+  // drops, and score everyone again against it.
+  function fixDropCorrect(id) {
+    if (!currentSlide || dropBusy || id === currentSlide.data.correctId) return
+    handleLockAndScoreDrop({
+      ...currentSlide,
+      data: { ...currentSlide.data, correctId: id, dropStep: 0, dropRevealed: false, dropResults: null },
     })
   }
 
@@ -1191,6 +1243,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         ? handleLockAndScoreWagers(slide)
         : handleLockWagers(slide)),
       choice: () => handleLockAndScoreChoice(slide),
+      drop: () => handleLockAndScoreDrop(slide),
       huesCues: () => handleLockAndScoreHuesCues(slide),
       pin: () => handleLockAndScorePin(slide),
     }[mechanic] ?? null
@@ -1212,6 +1265,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     'wager-guesses': handleLockAndScoreWagers,
     order: handleLockAndScoreOrder,
     choice: handleLockAndScoreChoice,
+    drop: handleLockAndScoreDrop,
     huesCues: handleLockAndScoreHuesCues,
     pin: handleLockAndScorePin,
   }
@@ -1778,6 +1832,14 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                 label: choiceBusy ? 'Scoring…' : d.choiceLocked ? '🔁 Retry Scoring' : '🔒 Lock Answers & Score',
                 act: scoreActionFor('choice', currentSlide),
               },
+              drop: {
+                busy: dropBusy, error: dropScoreError, zeroErr: null,
+                status: d.dropLocked
+                  ? 'Answers locked and scored — press Next to drop the first wrong tile.'
+                  : 'The Drop — teams are placing their points on their phones',
+                label: dropBusy ? 'Scoring…' : d.dropLocked ? '🔁 Retry Scoring' : '🔒 Lock Answers & Score',
+                act: scoreActionFor('drop', currentSlide),
+              },
               huesCues: {
                 busy: huesCuesBusy, error: huesCuesScoreError, zeroErr: null,
                 status: d.huesCuesLocked
@@ -1846,6 +1908,27 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
                       </button>
                     )}
                   </>
+                )}
+                {phoneMechanic === 'drop' && d.dropLocked && (
+                  <div className="mt-3">
+                    <p className="text-xs text-gray-400 mb-1.5">Wrong correct tile? Tap the right one — everyone is re-scored and the drops start over.</p>
+                    <div className="flex gap-1.5">
+                      {dropOptions(d).map((o, i) => (
+                        <button
+                          key={o.id}
+                          onClick={() => fixDropCorrect(o.id)}
+                          disabled={dropBusy}
+                          className={`flex-1 py-2 rounded-lg border text-xs font-semibold disabled:opacity-40 ${
+                            o.id === d.correctId
+                              ? 'border-[#1a6b4a] bg-green-50 text-[#1a6b4a]'
+                              : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                          }`}
+                        >
+                          {String.fromCharCode(65 + i)}{o.label ? ` · ${o.label.slice(0, 10)}` : ''}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
                 {isLocked && (
                   <button

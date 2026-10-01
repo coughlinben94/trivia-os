@@ -32,6 +32,7 @@ export const FIXED_SHAPE_KINDS = {
   wager:       { hasOwnControls: false, nextStepHint: 'Creates a blank slide — set up the wager afterward in the slide editor.' },
   order:       { hasOwnControls: false, nextStepHint: 'Creates a blank slide — set the items to order afterward in the slide editor.' },
   choice:      { hasOwnControls: false, nextStepHint: 'Creates a blank slide — set up the multiple-choice options afterward in the slide editor.' },
+  drop:        { hasOwnControls: false, nextStepHint: 'Creates a blank slide — set up the 4 tiles and the correct one afterward in the slide editor.' },
   'hues-cues': { hasOwnControls: false, nextStepHint: 'Creates a blank slide — set up the board afterward in the slide editor.' },
   pin:         { hasOwnControls: false, nextStepHint: 'Creates a blank slide — set the place and the true spot on the map afterward in the slide editor.' },
   grid:        { hasOwnControls: true, extraControls: gridExtraControls, buildSlideData: buildGridSlide, nextStepHint: null },
