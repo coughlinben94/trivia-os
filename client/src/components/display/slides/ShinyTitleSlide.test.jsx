@@ -13,6 +13,10 @@ vi.mock('../../../lib/hostPhotos.js', () => ({
   getUsedHostPhotoUrls: () => new Set(),
 }))
 
+// SlideRenderer (imported by the opaque-explainer test) reaches supabase.js,
+// which throws without VITE_SUPABASE_URL on a clean checkout.
+vi.mock('../../../lib/supabase.js', () => ({ supabase: {} }))
+
 const { warmImagesMock } = vi.hoisted(() => ({ warmImagesMock: vi.fn() }))
 vi.mock('../../../lib/warmImages.js', () => ({ warmImages: warmImagesMock }))
 
