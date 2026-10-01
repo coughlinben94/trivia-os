@@ -159,8 +159,10 @@ export default function DropBoard({ slide, team, theme, preview = false, onAnswe
                 onClick={() => setPickedStep(n)}
                 aria-pressed={chip === n}
                 aria-label={`${n} ${n === 1 ? 'point' : 'points'} per tap`}
+                {...press}
                 style={{
-                  minWidth: 48, height: 36, borderRadius: 999, padding: '0 0.8rem',
+                  transition: PRESS_TRANSITION,
+                  minWidth: 48, height: 44, borderRadius: 999, padding: '0 0.8rem',
                   border: chip === n ? `2px solid ${highlight}` : `1px solid ${text}30`,
                   background: chip === n ? `${highlight}26` : 'transparent',
                   color: chip === n ? highlight : text, fontSize: '0.9rem', fontWeight: 700,
@@ -243,6 +245,16 @@ function normalize(alloc, optionIds) {
   return out
 }
 
+// Instant press feedback on anything tappable (emil: buttons must feel heard).
+// Inline styles cannot do :active, so the same pointer pattern the Lock In button uses.
+const press = {
+  onPointerDown: e => { if (!e.currentTarget.disabled) e.currentTarget.style.transform = 'scale(0.97)' },
+  onPointerUp: e => { e.currentTarget.style.transform = 'scale(1)' },
+  onPointerLeave: e => { e.currentTarget.style.transform = 'scale(1)' },
+  onPointerCancel: e => { e.currentTarget.style.transform = 'scale(1)' },
+}
+const PRESS_TRANSITION = 'transform 140ms cubic-bezier(0.23, 1, 0.32, 1)'
+
 function DropTile({ opt, letter, points, locked, dropped, winner, canAdd, canSub, chip, onAdd, onSub, textColor, highlight }) {
   const [imgFailed, setImgFailed] = useState(false)
   useEffect(() => { setImgFailed(false) }, [opt.image])
@@ -266,8 +278,10 @@ function DropTile({ opt, letter, points, locked, dropped, winner, canAdd, canSub
         onClick={onAdd}
         disabled={!canAdd}
         aria-label={`Add ${chip} points to ${opt.label || `option ${letter}`}`}
+        {...press}
         style={{
-          width: '100%', minHeight: 132, padding: '0.7rem 0.6rem 2.6rem',
+          transition: PRESS_TRANSITION,
+          width: '100%', minHeight: 140, padding: '0.7rem 0.6rem 3.5rem',
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.35rem',
           background: 'transparent', border: 'none', color: textColor,
           cursor: canAdd ? 'pointer' : 'default',
@@ -288,7 +302,7 @@ function DropTile({ opt, letter, points, locked, dropped, winner, canAdd, canSub
         </span>
         <span style={{
           fontSize: '2rem', fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums',
-          color: active ? highlight : `${textColor}55`,
+          color: active ? highlight : textColor, opacity: active ? 1 : 0.6,
           fontFamily: 'DM Sans, sans-serif',
         }}>
           {points}
@@ -299,8 +313,10 @@ function DropTile({ opt, letter, points, locked, dropped, winner, canAdd, canSub
           onClick={onSub}
           disabled={!canSub}
           aria-label={`Remove ${chip} points from ${opt.label || `option ${letter}`}`}
+          {...press}
           style={{
-            position: 'absolute', left: 8, bottom: 8, width: 44, height: 36, borderRadius: 10,
+            transition: PRESS_TRANSITION,
+            position: 'absolute', left: 8, bottom: 8, width: 48, height: 44, borderRadius: 10,
             border: `1px solid ${textColor}30`, background: 'rgba(0,0,0,0.25)',
             color: canSub ? textColor : `${textColor}30`, fontSize: '1.3rem', fontWeight: 700, lineHeight: 1,
             cursor: canSub ? 'pointer' : 'default', WebkitTapHighlightColor: 'transparent',

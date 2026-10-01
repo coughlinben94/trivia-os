@@ -149,4 +149,29 @@ describe('<DropBoard>', () => {
     expect(lockBtn().textContent).toContain('Split Locked')
     saved.row = null
   })
+
+  it('every tap target is at least 44px tall (fat fingers, dim bar)', () => {
+    render()
+    const h = el => parseFloat(el.style.height || el.style.minHeight)
+    for (const el of container.querySelectorAll('button[aria-label^="Remove"]')) expect(h(el)).toBeGreaterThanOrEqual(44)
+    for (const el of container.querySelectorAll('button[aria-label$="per tap"]')) expect(h(el)).toBeGreaterThanOrEqual(44)
+    for (const el of container.querySelectorAll('button[aria-label^="Add"]')) expect(h(el)).toBeGreaterThanOrEqual(44)
+  })
+
+  it('a placed 0 stays readable (informative, not disabled) and a placed number is full strength', () => {
+    render()
+    const nums = () => [...container.querySelectorAll('button[aria-label^="Add"] span')].filter(n => /^\d+$/.test(n.textContent))
+    expect(Number(nums()[0].style.opacity)).toBeGreaterThanOrEqual(0.55)
+    tap(addBtn(0))
+    expect(Number(nums()[0].style.opacity)).toBe(1)
+  })
+
+  it('pressing a tile gives instant feedback and releases cleanly', () => {
+    render()
+    const btn = addBtn(0)
+    act(() => { btn.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true })) })
+    expect(btn.style.transform).toBe('scale(0.97)')
+    act(() => { btn.dispatchEvent(new MouseEvent('pointerup', { bubbles: true })) })
+    expect(btn.style.transform).toBe('scale(1)')
+  })
 })
