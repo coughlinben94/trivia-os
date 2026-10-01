@@ -116,7 +116,7 @@ StageFrame is a centered, clipped box mounted in `DisplayInner` between Particle
 
 **What stays full-viewport (outside StageFrame):**
 - `ParticleBackground` — never re-mounts, always full-viewport behind the stage
-- `QuestionCounter`, `AnswerRevealOverlay`, `ScoreboardOverlay`, `BaynesWatermark` — viewport-level overlays (migrated to StageFrame in later commits)
+- `QuestionCounter`, `AnswerRevealOverlay`, `ScoreboardOverlay` — viewport-level overlays (migrated to StageFrame in later commits)
 - `PreShowScreen` ticker bar — intentionally bleeds to screen edges
 
 **Relationship to the ambient safe-area rule:**
