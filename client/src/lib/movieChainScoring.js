@@ -68,16 +68,35 @@ export function eligibleMovieChainAnswers(rows, lockedAt) {
   return (rows ?? []).filter(row => row.submitted_at && Date.parse(row.submitted_at) <= cutoff)
 }
 
-export async function resolveMovieChainAnswers(rows, { startId, endId, announcedCount }, lookupCast) {
+const LOOKUP_CONCURRENCY = 4
+const LOOKUP_TRIES = 3
+
+async function lookupWithRetry(lookupCast, id, retryDelayMs) {
+  for (let attempt = 1; ; attempt++) {
+    try { return await lookupCast(id) }
+    catch (error) {
+      if (error.message === 'Movie not found' || attempt >= LOOKUP_TRIES) throw error
+      await new Promise(resolve => setTimeout(resolve, retryDelayMs * attempt))
+    }
+  }
+}
+
+export async function resolveMovieChainAnswers(rows, { startId, endId, announcedCount }, lookupCast, { retryDelayMs = 500 } = {}) {
   const config = { startId, endId, announcedCount }
   const ids = [...new Set((rows ?? []).flatMap(row => structureError(row.answer, config) ? [] : row.answer.movies))]
-  const details = new Map(await Promise.all(ids.map(async id => {
-    try { return [id, await lookupCast(id)] }
-    catch (error) {
-      if (error.message === 'Movie not found') return [id, null]
-      throw error
+  const details = new Map()
+  const queue = [...ids]
+  // Small worker pool: Wikidata rate-limits bursts, so never fan out all films at once.
+  await Promise.all(Array.from({ length: Math.min(LOOKUP_CONCURRENCY, queue.length) }, async () => {
+    while (queue.length) {
+      const id = queue.shift()
+      try { details.set(id, await lookupWithRetry(lookupCast, id, retryDelayMs)) }
+      catch (error) {
+        if (error.message !== 'Movie not found') throw error
+        details.set(id, null)
+      }
     }
-  })))
+  }))
   const castByMovie = new Map([...details].filter(([, value]) => value).map(([id, value]) => [id, new Set(value.performers.map(person => person.id))]))
   return (rows ?? []).map(row => {
     const unknown = !structureError(row.answer, config) && row.answer.movies.some(id => !details.get(id))

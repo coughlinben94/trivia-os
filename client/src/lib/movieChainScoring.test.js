@@ -39,8 +39,33 @@ describe('movie chain scoring', () => {
   })
   it('does not assign a verdict when the credits service is unavailable', async () => {
     await expect(resolveMovieChainAnswers([{ team_id: 'team-1', answer: chain }],
-      { startId: 'Q1', endId: 'Q4', announcedCount: 4 }, async () => { throw new Error('Wikidata unavailable') }))
+      { startId: 'Q1', endId: 'Q4', announcedCount: 4 }, async () => { throw new Error('Wikidata unavailable') }, { retryDelayMs: 0 }))
       .rejects.toThrow('Wikidata unavailable')
+  })
+  it('retries a failed cast lookup before giving up', async () => {
+    const calls = {}
+    const lookup = async id => {
+      calls[id] = (calls[id] ?? 0) + 1
+      if (id === 'Q2' && calls[id] < 3) throw new Error('Wikidata unavailable')
+      return { movie: { title: id }, performers: [...credits.get(id)].map(person => ({ id: person, name: person })) }
+    }
+    const results = await resolveMovieChainAnswers([{ team_id: 'team-1', answer: chain }],
+      { startId: 'Q1', endId: 'Q4', announcedCount: 4 }, lookup, { retryDelayMs: 0 })
+    expect(results[0].points).toBe(15)
+    expect(calls.Q2).toBe(3)
+  })
+  it('never runs more than 4 cast lookups at once', async () => {
+    let active = 0, peak = 0
+    const ids = Array.from({ length: 12 }, (_, i) => `Q${100 + i}`)
+    const lookup = async id => {
+      active++; peak = Math.max(peak, active)
+      await new Promise(r => setTimeout(r, 2))
+      active--
+      return { movie: { title: id }, performers: [] }
+    }
+    const rows = ids.map((id, i) => ({ team_id: `t${i}`, answer: { movies: ['Q1', id, 'Q4'], performers: ['Q11', 'Q14'] } }))
+    await resolveMovieChainAnswers(rows, { startId: 'Q1', endId: 'Q4', announcedCount: 4 }, lookup, { retryDelayMs: 0 })
+    expect(peak).toBeLessThanOrEqual(4)
   })
   it('blocks live play until distinct endpoint movies and a count are set', () => {
     expect(movieChainConfigError({})).toMatch(/starting movie/i)
