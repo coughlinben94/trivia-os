@@ -1,3 +1,4 @@
+import { director } from '../../../audio/director.js'
 import { useEffect, useRef } from 'react'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { useFitToBox } from '../../../lib/autoFitText.js'
@@ -12,38 +13,40 @@ export const LAST_CALL_DEFAULT_SUBTITLE = 'Get your drinks in before the next ro
 // ratios) with exponential decay, struck three times: ding-ding ... ding.
 // Only audible once the TV has had its setup click (Display.jsx's
 // onFirstInteraction); a cold tab just stays silent, the sign still shows.
-const PARTIALS = [[0.5, 0.35], [1, 1], [1.19, 0.45], [1.5, 0.3], [2, 0.5], [2.74, 0.22], [3.76, 0.12]]
-const STRIKES = [0, 0.32, 1.05]
+export const PARTIALS = [[0.5, 0.35], [1, 1], [1.19, 0.45], [1.5, 0.3], [2, 0.5], [2.74, 0.22], [3.76, 0.12]]
+export const STRIKES = [0, 0.32, 1.05]
 
-function ringBell() {
-  try {
-    const AC = window.AudioContext || window.webkitAudioContext
-    const ctx = new AC()
-    const master = ctx.createGain()
-    master.gain.value = 0.18
-    master.connect(ctx.destination)
-    const t0 = ctx.currentTime + 0.05
-    for (const at of STRIKES) {
-      for (const [ratio, amp] of PARTIALS) {
-        const osc = ctx.createOscillator()
-        const g = ctx.createGain()
-        osc.type = 'sine'
-        osc.frequency.value = 880 * ratio
-        const start = t0 + at
-        // Higher partials die faster, like a real bell.
-        const decay = 2.4 / Math.sqrt(ratio)
-        g.gain.setValueAtTime(0.0001, start)
-        g.gain.exponentialRampToValueAtTime(amp, start + 0.004)
-        g.gain.exponentialRampToValueAtTime(0.0001, start + decay)
-        osc.connect(g)
-        g.connect(master)
-        osc.start(start)
-        osc.stop(start + decay + 0.05)
+// On the director's ONE shared context. audioContext() resolves null on a locked tab (and
+// reports it), so a cold tab stays silent instead of ringing late at the next click, and the
+// shared context is never closed here.
+export function ringBell() {
+  director.audioContext({ label: 'last-call bell' }).then(ctx => {
+    if (!ctx) return
+    try {
+      const master = ctx.createGain()
+      master.gain.value = 0.18
+      master.connect(ctx.destination)
+      const t0 = ctx.currentTime + 0.05
+      for (const at of STRIKES) {
+        for (const [ratio, amp] of PARTIALS) {
+          const osc = ctx.createOscillator()
+          const g = ctx.createGain()
+          osc.type = 'sine'
+          osc.frequency.value = 880 * ratio
+          const start = t0 + at
+          // Higher partials die faster, like a real bell.
+          const decay = 2.4 / Math.sqrt(ratio)
+          g.gain.setValueAtTime(0.0001, start)
+          g.gain.exponentialRampToValueAtTime(amp, start + 0.004)
+          g.gain.exponentialRampToValueAtTime(0.0001, start + decay)
+          osc.connect(g)
+          g.connect(master)
+          osc.start(start)
+          osc.stop(start + decay + 0.05)
+        }
       }
-    }
-    ctx.resume().catch(() => {})
-    setTimeout(() => ctx.close().catch(() => {}), (STRIKES.at(-1) + 3.5) * 1000)
-  } catch {}
+    } catch {}
+  }).catch(() => {})
 }
 
 export default function LastCallSlide({ slide, isPreview }) {
