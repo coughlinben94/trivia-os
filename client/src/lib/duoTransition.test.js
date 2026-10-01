@@ -108,19 +108,17 @@ describe('gapBleedFor', () => {
     expect(gapBleedFor('show_gap', 9)).toEqual(later)
   })
 
-  it('keeps each side in 30-70% and always leaves a dark gap between them', () => {
+  it('stays inside the 30-70% band, with the arriving world on the stronger half', () => {
     const seen = new Set()
     for (let step = 0; step < 60; step++) {
       const { left, right } = gapBleedFor('show_gap', step)
       seen.add(left.toFixed(3))
-      // Scaling down to keep the black gap can pull a side under 0.30 only
-      // when both rolled high; it can never exceed 0.70 or go non-positive.
-      expect(left).toBeGreaterThan(0.19)
-      expect(left).toBeLessThanOrEqual(0.7)
-      expect(right).toBeGreaterThan(0.19)
-      expect(right).toBeLessThanOrEqual(0.7)
-      expect(left + right).toBeLessThanOrEqual(0.9 + 1e-9)
+      expect(left).toBeGreaterThanOrEqual(0.30)
+      expect(left).toBeLessThanOrEqual(0.60)
+      expect(right).toBeGreaterThanOrEqual(0.45)
+      expect(right).toBeLessThanOrEqual(0.70)
     }
     expect(seen.size).toBeGreaterThan(10) // really varies
   })
+})
 })

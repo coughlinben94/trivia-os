@@ -545,6 +545,8 @@ function appendPane(host, i, build) {
 // In per-pane mode the neighbour is often the dark gap, so fade over a wide
 // band instead. Default (single-world) rendering is untouched.
 const PANE_GLOW_FEATHER = 240
+const GAP_SKY = 0.45 // each neighbour world's share of the sky on the empty slide
+const scaleWeights = (w, k) => Object.fromEntries(Object.entries(w).map(([key, v]) => [key, v * k]))
 
 // The empty pane a world switch lands on: no objects of its own. The old
 // world pokes one of its own objects in from the left edge and the new world
@@ -564,11 +566,13 @@ function buildGapPane(host, i, spec) {
     const r = rng(i * 7 + k, 0xB1EED)
     const kinds = ['blob', 'dots', 'lens'].filter(kind => kind !== st.prim)
     const prim = kinds[Math.floor(r() * kinds.length)]
-    const hw = lerp(576, 880, r())
+    // The arriving (right) world is drawn 1.2x larger so the switch reads.
+    const hw = lerp(576, 880, r()) * (b.side === 'right' ? 1.2 : 1)
     const hh = hw * lerp(0.62, 0.88, r())
-    // Floor of 0.45: a quiet station's own alpha left the new world's side nearly invisible.
-    const alpha = Math.max(0.45, lerp(0.34, 0.55, loudnessOf(arc, b.station)))
-    const el = dom.makePrim(prim, hw, hh, st.hue, alpha, r, false, fillOf(ENGINE, arc, b.station))
+    // Full fill + a 0.6 alpha floor: a quiet station's own values left the new
+    // world's side nearly invisible on the real preview (Ben, 2026-10-01).
+    const alpha = Math.max(0.6, lerp(0.34, 0.55, loudnessOf(arc, b.station)))
+    const el = dom.makePrim(prim, hw, hh, st.hue, alpha, r, false, ENGINE.ARC.fillMax)
     el.style.left = px(b.side === 'left' ? x0 - hw * (1 - b.reach) : x0 + ENGINE.W - hw * b.reach)
     upper = upper == null ? r() < 0.5 : !upper // diagonal pair, like the ring's own grammar
     el.style.top = px(dom.bandY(r, hh, upper, dom.rotatedBandH(prim, hw, hh)))
@@ -782,6 +786,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   const panePlanRef = useRef(panePlan)
   panePlanRef.current = panePlan
   const paintedRef = useRef([])
+  const paintedSpecRef = useRef([]) // the spec behind each paintedRef key (a gap's key is only a string)
   const skyInnerRef = useRef(null)
   const skySetsRef = useRef(new Map()) // world -> { void, tints, weights }, built lazily per-pane mode
 
@@ -805,24 +810,31 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   function writeSkySets(station, animate) {
     const skyInner = skyInnerRef.current
     if (!skyInner) return
-    const painted = paintedRef.current[station]
-    const live = painted && typeof painted === 'object' ? painted : null
-    if (live && !skySetsRef.current.has(live)) {
-      const [a, b, c, d] = live.sky
+    // world -> how brightly its sky shows. A world pane lights its own at full
+    // strength; the gap pane lights BOTH neighbours' skies at 0.45 so the
+    // empty slide is dim but never pure black (Ben: "this black screen is too
+    // black").
+    const spec = paintedSpecRef.current[station]
+    const lit = new Map()
+    if (spec && spec.empty) for (const b of spec.bleeds) lit.set(b.world, GAP_SKY)
+    else if (spec) lit.set(spec, 1)
+    for (const world of lit.keys()) {
+      if (skySetsRef.current.has(world)) continue
+      const [a, b, c, d] = world.sky
       const v = dom.el('void')
       v.style.background = `radial-gradient(ellipse 138% 128% at 50% 48%, ${a} 0%, ${b} 46%, ${c} 78%, ${d} 100%)`
       v.style.opacity = '0'
       v.style.transitionProperty = 'opacity'
-      const tints = dom.makeSkyTints(skyRegionHues(live.stations))
+      const tints = dom.makeSkyTints(skyRegionHues(world.stations))
       skyInner.appendChild(v)
       for (const t of Object.values(tints)) skyInner.appendChild(t)
-      skySetsRef.current.set(live, { void: v, tints, weights: skyRegionWeights(live.stations) })
+      skySetsRef.current.set(world, { void: v, tints, weights: skyRegionWeights(world.stations) })
     }
     for (const [world, set] of skySetsRef.current) {
-      const on = world === live
+      const k = lit.get(world) ?? 0
       set.void.style.transitionDuration = animate ? SKY_TINT_IN_MS + 'ms' : '0ms'
-      set.void.style.opacity = on ? '1' : '0'
-      applySkyTints(set.tints, on ? set.weights : [], station, animate)
+      set.void.style.opacity = String(k)
+      applySkyTints(set.tints, k ? set.weights.map(w => scaleWeights(w, k)) : [], station, animate)
     }
   }
 
@@ -963,6 +975,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     // live show) stays byte-identical to before this fix.
     if (stationRef.current !== 0) dom.clampSafeBoxStarPeaks(design)
     paintedRef.current = Array.from({ length: ENGINE.PANES }, () => worldData)
+    paintedSpecRef.current = paintedRef.current.slice()
     applyPanes(lastSlideIndexRef.current, stationRef.current)
     writeSkyTints(stationRef.current, false) // panes are painted now; light the right world's sky
     shootLoop()
@@ -1162,6 +1175,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
       const key = spec.empty ? spec.key : spec
       if (paintedRef.current[pane] === key) return
       paintedRef.current[pane] = key
+      paintedSpecRef.current[pane] = spec
       const arc = spec.empty ? null : buildArc(ENGINE, spec)
       for (const copy of mid.children) {
         copy.querySelectorAll(`[data-pane="${pane}"]`).forEach(n => n.remove())

@@ -96,8 +96,7 @@ describe('EvolvingRingAmbient', () => {
       expect(duo(l.world)).toBe(a)
       expect(r).toMatchObject({ side: 'right', station: 4 }) // pane 4's own object, new world
       expect(duo(r.world)).toBe(b)
-      for (const x of [l, r]) { expect(x.reach).toBeGreaterThan(0.19); expect(x.reach).toBeLessThanOrEqual(0.7) }
-      expect(l.reach + r.reach).toBeLessThanOrEqual(0.9 + 1e-9)
+      for (const x of [l, r]) { expect(x.reach).toBeGreaterThanOrEqual(0.3); expect(x.reach).toBeLessThanOrEqual(0.7) }
       expect(typeof gap.key).toBe('string')
     })
 

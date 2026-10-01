@@ -62,16 +62,13 @@ export function isTransitionSlide(seed, ringVisibleIndex) {
 
 // How much of each world's object shows on the empty slide a world switch
 // lands on, as a fraction of that object's own width (Ben, 2026-10-01: "bleed
-// changes from 30-70 for the old world and 30-70 for the new world, taking
-// into consideration that black area"). Each side is seeded in [0.30, 0.70];
-// if the two together would leave less than MIN_BLACK uncovered they are
-// scaled down together, so a dark gap always separates the worlds. Same show +
-// step -> same numbers, no stored state.
-const MIN_BLACK = 0.10
+// changes from 30-70 for the old world and 30-70 for the new world"). Both
+// sides stay inside his 30-70% band, but the arriving world gets the upper
+// half of it: at 30-45% the new side was too faint to tell a new world was
+// coming ("i cant tell here that we're moving into a new world"). Even at the
+// maxima the two objects cover ~1300px of 1920, so a dark gap always remains.
+// Same show + step -> same numbers, no stored state.
 export function gapBleedFor(seed, stepIndex) {
   const r = rng(seedFrom(String(seed)) ^ (stepIndex | 0), GAP_SALT)
-  let left = 0.30 + r() * 0.40, right = 0.30 + r() * 0.40
-  const over = left + right - (1 - MIN_BLACK)
-  if (over > 0) { const k = (1 - MIN_BLACK) / (left + right); left *= k; right *= k }
-  return { left, right }
+  return { left: 0.30 + r() * 0.30, right: 0.45 + r() * 0.25 }
 }
