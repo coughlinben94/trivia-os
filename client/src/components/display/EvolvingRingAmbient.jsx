@@ -20,6 +20,7 @@ import { recolorWorld } from '../../lib/ringRecolor.js'
 import { midnightGalaxyRing } from '../../worlds/midnightGalaxy.ring.js'
 import { DUO_PALETTES, DUO_GRAPH } from '../../lib/duoGraph.js'
 import { outgoingAndIncomingDuo, isTransitionSlide, stepIndexForSlide, gapBleedFor } from '../../lib/duoTransition.js'
+import { seedFrom } from '../../lib/paletteGenerator.js'
 import { getTheme } from '../../themes/index.js'
 
 // Same module-scope memo pattern as ringWorldFor.js's own worldCache — a
@@ -82,12 +83,28 @@ export function panePlanFor(showId, arrangement, slide, station, solidCenter = f
     if (t > 0 && isTransitionSlide(showId, t) && !(solidCenter && d === 0)) {
       const { outgoing, incoming } = outgoingAndIncomingDuo(showId, DUO_GRAPH, t)
       const { left, right } = gapBleedFor(showId, stepIndexForSlide(showId, t))
-      // Each side pokes in one of its neighbouring pane's own objects.
-      const side = (name, duoId, p, reach) => ({ side: name, world: worldForDuo(duoId, arrangement), station: ((p % PANES) + PANES) % PANES, reach })
+      // The old world's side takes its neighbouring pane's own colour. The new
+      // world's side takes the incoming station whose hue is FARTHEST from it:
+      // the neighbour's own colour often matched the old world (two blue duos
+      // read as no change), and the point of this object is to say "different
+      // world", not to preview the next pane.
+      const outW = worldForDuo(outgoing, arrangement), inW = worldForDuo(incoming, arrangement)
+      const wrap = (p) => ((p % PANES) + PANES) % PANES
+      const leftStation = wrap(pane - 1)
+      const leftHue = outW.stations[leftStation].hue
+      const hueGap = (x, y) => { const d = Math.abs((((x - y) % 360) + 360) % 360); return Math.min(d, 360 - d) }
+      let rightStation = wrap(pane + 1), far = -1
+      inW.stations.forEach((st, i) => { const d = hueGap(st.hue, leftHue); if (d > far) { far = d; rightStation = i } })
+      const step = stepIndexForSlide(showId, t)
       plan[pane] = {
         empty: true,
-        key: `gap:${outgoing}:${incoming}:${left.toFixed(4)}:${right.toFixed(4)}`,
-        bleeds: [side('left', outgoing, pane - 1, left), side('right', incoming, pane + 1, right)],
+        // Layout varies by show and by change, not just by pane number.
+        seed: (seedFrom(String(showId)) ^ Math.imul(step + 1, 0x9E3779B1)) >>> 0,
+        key: `gap:${showId}:${step}:${outgoing}:${incoming}:${left.toFixed(4)}:${right.toFixed(4)}`,
+        bleeds: [
+          { side: 'left', world: outW, station: leftStation, neighbor: leftStation, reach: left },
+          { side: 'right', world: inW, station: rightStation, neighbor: wrap(pane + 1), reach: right },
+        ],
       }
     } else {
       plan[pane] = worldForDuo(duoAt(showId, t), arrangement)

@@ -89,15 +89,31 @@ describe('EvolvingRingAmbient', () => {
       expect(plan[6].empty).toBe(true) // slide 6 = the next switch
     })
 
-    it('pokes one object from each neighbouring pane into the gap — left old world, right new — with a dark gap between', () => {
+    it('pokes an old-world object in from the left and a clearly different new-world object from the right', () => {
       const gap = panePlanFor('show_b', arr, 3, 3)[3]
       const [l, r] = gap.bleeds
-      expect(l).toMatchObject({ side: 'left', station: 2 }) // pane 2's own object, old world
+      expect(l).toMatchObject({ side: 'left', station: 2, neighbor: 2 }) // pane 2's own object, old world
       expect(duo(l.world)).toBe(a)
-      expect(r).toMatchObject({ side: 'right', station: 4 }) // pane 4's own object, new world
+      expect(r).toMatchObject({ side: 'right', neighbor: 4 }) // sits clear of pane 4's own headline
       expect(duo(r.world)).toBe(b)
+      // The arriving colour is the incoming station farthest in hue from the leaving one.
+      const gapOf = (x, y) => { const d = Math.abs((((x - y) % 360) + 360) % 360); return Math.min(d, 360 - d) }
+      const leftHue = l.world.stations[l.station].hue
+      const best = Math.max(...r.world.stations.map(st => gapOf(st.hue, leftHue)))
+      expect(gapOf(r.world.stations[r.station].hue, leftHue)).toBe(best)
       for (const x of [l, r]) { expect(x.reach).toBeGreaterThanOrEqual(0.3); expect(x.reach).toBeLessThanOrEqual(0.7) }
       expect(typeof gap.key).toBe('string')
+    })
+
+    it('varies the gap layout by show and by change, not only by pane', () => {
+      const seeds = new Set()
+      for (const show of ['show_b', 'show_d', 'show_e']) {
+        for (const slide of [3, 6, 9]) {
+          const g = panePlanFor(show, arr, slide, slide)[slide % 13]
+          if (g.empty) seeds.add(g.seed)
+        }
+      }
+      expect(seeds.size).toBeGreaterThan(4)
     })
 
     it('follows the ring\'s own station, not slide % 13 (a grading break leaves it one behind)', () => {

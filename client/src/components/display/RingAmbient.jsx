@@ -554,7 +554,7 @@ function appendPane(host, i, build) {
 // In per-pane mode the neighbour is often the dark gap, so fade over a wide
 // band instead. Default (single-world) rendering is untouched.
 const PANE_GLOW_FEATHER = 240
-const GAP_SKY = 0.45 // each neighbour world's share of the sky on the empty slide
+const GAP_SKY = 0.5 // the arriving world's sky laid over the leaving one's on the empty slide
 const scaleWeights = (w, k) => Object.fromEntries(Object.entries(w).map(([key, v]) => [key, v * k]))
 
 // The empty pane a world switch lands on: no objects of its own. The old
@@ -568,22 +568,28 @@ const scaleWeights = (w, k) => Object.fromEntries(Object.entries(w).map(([key, v
 // pane's own headline kind, or a planet pane would show two planets at once.
 function buildGapPane(host, i, spec) {
   const x0 = i * ENGINE.W
-  let upper = null
   spec.bleeds.forEach((b, k) => {
     const st = b.world.stations[b.station]
     const arc = buildArc(ENGINE, b.world)
-    const r = rng(i * 7 + k, 0xB1EED)
+    // Seeded by show + change (spec.seed), so the layout varies between shows
+    // and between changes within one night, not only by pane number.
+    const r = rng(((spec.seed ?? 0) + k * 7919) >>> 0, 0xB1EED)
     const kinds = ['blob', 'dots', 'lens'].filter(kind => kind !== st.prim)
     const prim = kinds[Math.floor(r() * kinds.length)]
     // The arriving (right) world is drawn 1.2x larger so the switch reads.
     const hw = lerp(576, 880, r()) * (b.side === 'right' ? 1.2 : 1)
     const hh = hw * lerp(0.62, 0.88, r())
-    // Full fill + a 0.6 alpha floor: a quiet station's own values left the new
-    // world's side nearly invisible on the real preview (Ben, 2026-10-01).
-    const alpha = Math.max(0.6, lerp(0.34, 0.55, loudnessOf(arc, b.station)))
+    // Full fill + an alpha floor (0.75 for the arriving world, 0.6 for the
+    // leaving one): a quiet station's own values left the new side nearly
+    // invisible on the real preview (Ben, 2026-10-01).
+    const alpha = Math.max(b.side === 'right' ? 0.75 : 0.6, lerp(0.34, 0.55, loudnessOf(arc, b.station)))
     const el = dom.makePrim(prim, hw, hh, st.hue, alpha, r, false, ENGINE.ARC.fillMax)
     el.style.left = px(b.side === 'left' ? x0 - hw * (1 - b.reach) : x0 + ENGINE.W - hw * b.reach)
-    upper = upper == null ? r() < 0.5 : !upper // diagonal pair, like the ring's own grammar
+    // Vertical band opposite the neighbouring pane's own headline, so this
+    // object never lands on top of it (critique: "a planet with a ghost twin").
+    const coin = r() < 0.5
+    const nb = SLOTS[b.neighbor]?.bandUpper
+    const upper = typeof nb === 'boolean' ? !nb : coin
     el.style.top = px(dom.bandY(r, hh, upper, dom.rotatedBandH(prim, hw, hh)))
     host.appendChild(el)
   })
@@ -824,9 +830,14 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     // empty slide is dim but never pure black (Ben: "this black screen is too
     // black").
     const spec = paintedSpecRef.current[station]
-    const lit = new Map()
-    if (spec && spec.empty) for (const b of spec.bleeds) lit.set(b.world, GAP_SKY)
-    else if (spec) lit.set(spec, 1)
+    const lit = new Map() // world -> { k: brightness, z: stacking order }
+    // Gap pane: the leaving world's sky at full strength with the arriving
+    // world's laid over it at half, an even blend whichever set was built
+    // first (two equal layers would let DOM order pick the winner).
+    if (spec && spec.empty) {
+      lit.set(spec.bleeds[0].world, { k: 1, z: 0 })
+      lit.set(spec.bleeds[1].world, { k: GAP_SKY, z: 1 })
+    } else if (spec) lit.set(spec, { k: 1, z: 0 })
     for (const world of lit.keys()) {
       if (skySetsRef.current.has(world)) continue
       const [a, b, c, d] = world.sky
@@ -845,9 +856,11 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     // new world's sky pops in at full strength instead of fading.
     void skyInner.offsetWidth
     for (const [world, set] of skySetsRef.current) {
-      const k = lit.get(world) ?? 0
+      const { k, z } = lit.get(world) ?? { k: 0, z: 0 }
       set.void.style.transitionDuration = animate ? SKY_TINT_IN_MS + 'ms' : '0ms'
       set.void.style.opacity = String(k)
+      set.void.style.zIndex = String(z)
+      for (const t of Object.values(set.tints)) t.style.zIndex = String(z)
       applySkyTints(set.tints, k ? set.weights.map(w => scaleWeights(w, k)) : [], station, animate)
     }
   }
