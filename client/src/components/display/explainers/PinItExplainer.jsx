@@ -10,11 +10,11 @@ import { SHINY_GOLD } from '../../../lib/shinyGold.js'
 const HOME = { k: 1, tx: 0, ty: 0 }
 const SAMPLE_TARGET = { lat: 42.3314, lon: -83.0458 }
 const SAMPLE_GUESSES = [
-  { teamId: 'sample-a', teamName: 'Guess A', pin: { lat: 42.34, lon: -83.04 } },
-  { teamId: 'sample-b', teamName: 'Guess B', pin: { lat: 42.36, lon: -83.04 } },
-  { teamId: 'sample-c', teamName: 'Guess C', pin: { lat: 42.39, lon: -83.07 } },
-  { teamId: 'sample-d', teamName: 'Guess D', pin: { lat: 42.52, lon: -83.2 } },
-  { teamId: 'sample-e', teamName: 'Guess E', pin: { lat: 41.91, lon: -83.25 } },
+  { teamId: 'sample-a', teamName: 'Guess A', pin: { lat: 41.5, lon: -81.69 } },
+  { teamId: 'sample-b', teamName: 'Guess B', pin: { lat: 41.88, lon: -87.63 } },
+  { teamId: 'sample-c', teamName: 'Guess C', pin: { lat: 36.16, lon: -86.78 } },
+  { teamId: 'sample-d', teamName: 'Guess D', pin: { lat: 33.75, lon: -84.39 } },
+  { teamId: 'sample-e', teamName: 'Guess E', pin: { lat: 32.78, lon: -96.8 } },
 ]
 const SAMPLE_RESULTS = scorePinRound({ entries: SAMPLE_GUESSES, correct: SAMPLE_TARGET, roomSize: SAMPLE_GUESSES.length })
 const SAMPLE_SCORERS = SAMPLE_RESULTS.filter(result => result.points > 0)
