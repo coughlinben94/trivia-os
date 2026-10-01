@@ -145,10 +145,12 @@ describe('TV step clears a stale audio mark when it leaves the slide', () => {
   })
 })
 
-// Multi-part audio series (2026-10-01): a series keeps ONE slide.id across its
-// parts, so a slide-id-only mark meant Next played part 0 and parts 1..N needed
-// a click on the TV (audit finding; confirmed in code). The mark now carries
-// the part it played, and a part step leaves the slide "owing" its next clip.
+// Multi-part audio series. The gate stays slide-id only (as on main): the FIRST
+// Next on the slide plays part 0; after that every part step writes its own mark
+// (see slideStepping: a part step plays the new part on arrival, exactly what
+// main did by accident), so a series takes play + one press per part, never an
+// extra silent step. The mark still names its part so a STALE mark for another
+// part cannot autoplay on arrival (QuestionSlide).
 describe('multi-part audio series', () => {
   const part = n => ({ text: `p${n}`, mediaSlots: [{ type: 'audio/mpeg', url: `/p${n}.mp3` }] })
   const series = (currentPart = 0, parts = [part(0), part(1), part(2)]) => ({
@@ -163,42 +165,29 @@ describe('multi-part audio series', () => {
     expect(audioPartOf(series(-3).data)).toBe(0)
   })
 
-  it('a played part 0 does not cover part 1: Next owes the next clip', () => {
-    const mark0 = { slideId: 's1', playing: true, part: 0 }
-    expect(audioPlayPending(series(0), mark0)).toBe(false)
-    expect(audioPlayPending(series(1), mark0)).toBe(true)
-    expect(audioPlayPending(series(1), { slideId: 's1', playing: true, part: 1 })).toBe(false)
+  it('once the slide has played, Next steps (a played mark for ANY part means not pending)', () => {
+    for (const part of [0, 1, 2, undefined]) {
+      expect(audioPlayPending(series(1), { slideId: 's1', playing: true, part })).toBe(false)
+    }
+    expect(audioPlayPending(series(0), null)).toBe(true)
   })
 
-  it('a mark without a part (older writers) means part 0', () => {
-    expect(audioPlayPending(series(0), { slideId: 's1', playing: true })).toBe(false)
-    expect(audioPlayPending(series(1), { slideId: 's1', playing: true })).toBe(true)
-  })
-
-  it('stepping back to an earlier part owes its clip again', () => {
-    expect(audioPlayPending(series(0), { slideId: 's1', playing: true, part: 1 })).toBe(true)
-  })
-
-  it('a part with no audio of its own is not pending', () => {
-    const mixed = series(1, [part(0), { text: 'silent' }, part(2)])
-    expect(audioPlayPending(mixed, { slideId: 's1', playing: true, part: 0 })).toBe(false)
-  })
-
-  it('TV Next: play p0, step to p1 (mark kept), play p1, step to p2', async () => {
+  it('TV Next: play p0, then each Next steps AND plays the next part, then leaves', async () => {
     const mk = (cp, ap) => ({
       id: 'sh', current_slide_index: 0, current_slide_id: 's1', audio_playing: ap,
       slides: [{ ...series(cp), order: 0 }, { id: 'end', type: 'title', order: 1, data: {} }],
     })
     const noTeams = async () => 0
     let p = await computeTvNextStep(mk(0, null), noTeams)
-    expect(p).toEqual({ audio_playing: { slideId: 's1', playing: true, part: 0 } })
+    expect(p).toEqual({ audio_playing: { slideId: 's1', playing: true, part: 0 } }) // press 1: play part 0
     p = await computeTvNextStep(mk(0, { slideId: 's1', playing: true, part: 0 }), noTeams)
-    expect(p.slides.find(s => s.id === 's1').data.currentPart).toBe(1)
-    expect(p.audio_playing).toBeUndefined() // a part step keeps the mark; the slide did not change
-    p = await computeTvNextStep(mk(1, { slideId: 's1', playing: true, part: 0 }), noTeams)
-    expect(p).toEqual({ audio_playing: { slideId: 's1', playing: true, part: 1 } })
+    expect(p.slides.find(s => s.id === 's1').data.currentPart).toBe(1) // press 2: step + play part 1
+    expect(p.audio_playing).toEqual({ slideId: 's1', playing: true, part: 1 })
     p = await computeTvNextStep(mk(1, { slideId: 's1', playing: true, part: 1 }), noTeams)
-    expect(p.slides.find(s => s.id === 's1').data.currentPart).toBe(2)
+    expect(p.slides.find(s => s.id === 's1').data.currentPart).toBe(2) // press 3: step + play part 2
+    expect(p.audio_playing).toEqual({ slideId: 's1', playing: true, part: 2 })
+    p = await computeTvNextStep(mk(2, { slideId: 's1', playing: true, part: 2 }), noTeams)
+    expect(p.current_slide_id).toBe('end') // press 4: leaves
   })
 })
 

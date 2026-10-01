@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { authedClient, updateShowVerified } from './authed-client.js'
 
-// Real-browser proof for the "Tap for sound" cue (2026-10-01, fix/audio-fail-loud).
+// Real-browser proof for the "Click for sound" cue (2026-10-01, fix/audio-fail-loud).
 // The 2026-09-29 runner-up cause: Chrome blocks UNMUTED playback on a /display
 // tab that has had no click or key since it loaded (a reloaded TV), silently.
 //
@@ -36,7 +36,7 @@ const audioState = page => page.evaluate(() => {
   const a = document.querySelector('audio')
   return a ? { paused: a.paused, t: a.currentTime } : null
 })
-const cue = page => page.locator('button', { hasText: 'Tap for sound' })
+const cue = page => page.locator('button', { hasText: 'Click for sound' })
 
 test.beforeAll(async () => {
   sb = authedClient()
@@ -72,16 +72,18 @@ const refuseUntilClick = mode => {
 }
 
 for (const mode of ['reject', 'hang']) {
-  test(`blocked remote play (${mode === 'reject' ? 'play() rejects' : 'resume() hangs'}) shows "Tap for sound"; tapping it plays and clears the cue`, async ({ page }) => {
+  test(`blocked remote play (${mode === 'reject' ? 'play() rejects' : 'resume() hangs'}) shows "Click for sound"; tapping it plays and clears the cue`, async ({ page }) => {
     await page.addInitScript(refuseUntilClick, mode)
     await page.goto(`/display?show=${ID}`, { waitUntil: 'networkidle' }) // deliberately NO click on the TV
     await expect(page.locator('audio')).toHaveCount(1, { timeout: 8000 })
     expect(await cue(page).count()).toBe(0)
 
     // The host's Next press, as the database sees it. The TV's live-update
-    // subscription takes a moment to come up (longer on a loaded machine), and a
-    // new mark restarts the 2s check, so re-send the mark every 3.2s until the TV
-    // has acted on it, rather than guessing one delay.
+    // subscription takes a moment to come up (longer on a loaded machine). The TV
+    // only acts on the first mark it RECEIVES (its play effect is keyed on the
+    // mark's values, so a repeat of the same mark is a no-op), so re-send every
+    // 3.2s until the cue shows: a write that landed before the subscription is
+    // retried, and one that landed after is harmless.
     await expect.poll(async () => {
       await updateShowVerified(sb, ID, { audio_playing: { slideId: 'q1', playing: true, part: 0, n: Date.now() } })
       await page.waitForTimeout(3200)

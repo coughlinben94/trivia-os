@@ -297,14 +297,14 @@ describe('<QuestionSlide> — audio on a plain question', () => {
 
   // 2026-09-29 runner-up cause: Chrome blocks UNMUTED playback on a tab with no
   // click/key since load, silently. A clip asked to play that makes no sound
-  // must say so ("Tap for sound" — a real user gesture, so it can recover) and
+  // must say so ("Click for sound" — a real user gesture, so it can recover) and
   // report to Sentry, instead of leaving the room in dead air.
-  describe('a clip that never makes sound shows "Tap for sound"', () => {
+  describe('a clip that never makes sound shows "Click for sound"', () => {
     const player = state => ({
       setVolume: vi.fn(), unMute: vi.fn(), seekTo: vi.fn(), playVideo: vi.fn(), pauseVideo: vi.fn(),
       getPlayerState: () => state, isMuted: () => false,
     })
-    const cue = () => [...container.querySelectorAll('button')].find(b => b.textContent.includes('Tap for sound'))
+    const cue = () => [...container.querySelectorAll('button')].find(b => b.textContent.includes('Click for sound'))
     const playingEl = function () { Object.defineProperty(this, 'paused', { value: false, configurable: true }); return Promise.resolve() }
     const upload = () => slideWith({ mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg' })
     const marked = slide => ({ show: { slides: [slide], audio_playing: { slideId: 'slide-1', playing: true } } })
@@ -400,6 +400,43 @@ describe('<QuestionSlide> — audio on a plain question', () => {
       await act(async () => { container.querySelector('[role="button"]').click() })
       await later(3000)
       expect(cue()).toBeFalsy()
+    })
+
+    // Review of the audio branch (2026-10-01): the cue was only ever cleared when
+    // `playing` went false or on a tap, so a SLOW start (player still cued at 2s,
+    // then really playing) left "Click for sound" over a clip that was sounding.
+    it('clears the cue by itself once the clip is really sounding (a slow start, not a block)', async () => {
+      let state = 5
+      const p = { setVolume: vi.fn(), unMute: vi.fn(), seekTo: vi.fn(), playVideo: vi.fn(), pauseVideo: vi.fn(), getPlayerState: () => state, isMuted: () => false }
+      yt.claim.mockReturnValue({ whenReady: cb => cb(p), onStateChange: () => {}, destroy: () => {} })
+      const slide = slideWith({ mediaSlots: [{ type: 'youtube', videoId: 'slow', start: 0, end: 30 }] })
+      render(slide, marked(slide))
+      await later(2100)
+      expect(cue()).toBeTruthy()
+      state = 1 // it finally starts
+      await later(1100)
+      expect(cue()).toBeFalsy()
+    })
+
+    it('a YouTube retry that is still silent raises the cue again (not a silent second failure)', async () => {
+      const p = { setVolume: vi.fn(), unMute: vi.fn(), seekTo: vi.fn(), playVideo: vi.fn(), pauseVideo: vi.fn(), getPlayerState: () => 2, isMuted: () => false }
+      yt.claim.mockReturnValue({ whenReady: cb => cb(p), onStateChange: () => {}, destroy: () => {} })
+      const slide = slideWith({ mediaSlots: [{ type: 'youtube', videoId: 'stuck', start: 0, end: 30 }] })
+      render(slide, marked(slide))
+      await later(2100)
+      expect(cue()).toBeTruthy()
+      await act(async () => { cue().click() })
+      expect(cue()).toBeFalsy() // cleared on the tap...
+      await later(2100)
+      expect(cue()).toBeTruthy() // ...and back, because it is STILL not sounding
+    })
+
+    it('the cue is fixed-positioned so it cannot push the question text around', async () => {
+      mediaPlay.mockImplementationOnce(() => Promise.reject(new DOMException('blocked', 'NotAllowedError')))
+      const slide = upload()
+      render(slide, marked(slide))
+      await later(0)
+      expect(cue().style.position).toBe('fixed')
     })
 
     it('shows no cue when nothing was asked to play', async () => {
@@ -545,12 +582,12 @@ describe('<QuestionSlide> — shiny audio question, remote play via show.audio_p
     })
   })
 
-  describe('a clip that never makes sound shows "Tap for sound"', () => {
+  describe('a clip that never makes sound shows "Click for sound"', () => {
     const player = state => ({
       setVolume: vi.fn(), unMute: vi.fn(), seekTo: vi.fn(), playVideo: vi.fn(), pauseVideo: vi.fn(),
       getPlayerState: () => state, isMuted: () => false,
     })
-    const cue = () => [...container.querySelectorAll('button')].find(b => b.textContent.includes('Tap for sound'))
+    const cue = () => [...container.querySelectorAll('button')].find(b => b.textContent.includes('Click for sound'))
     const later = ms => act(async () => { await vi.advanceTimersByTimeAsync(ms) })
     const marked = { slideId: 'shiny-1', playing: true }
 
@@ -597,6 +634,29 @@ describe('<QuestionSlide> — shiny audio question, remote play via show.audio_p
         expect(cue()).toBeTruthy()
       } finally {
         globalThis.AudioContext = Real
+      }
+    })
+
+    it('a part step cancels the old part\'s 2s check (no false cue for a clip nobody asked to play)', async () => {
+      const part = n => ({ text: `p${n}`, mediaSlots: [{ type: 'audio/mpeg', url: `https://example.test/p${n}.mp3` }] })
+      const mk = cp => shinySlide({ parts: [part(0), part(1)], currentPart: cp })
+      mediaPlay.mockImplementation(function () { Object.defineProperty(this, 'paused', { value: false, configurable: true }); return Promise.resolve() })
+      const realPause = HTMLMediaElement.prototype.pause
+      // the real element reads paused after pause(); the component pauses on a part change
+      HTMLMediaElement.prototype.pause = function () { Object.defineProperty(this, 'paused', { value: true, configurable: true }) }
+      try {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        const s0 = mk(0)
+        render(s0, { slides: [s0], audio_playing: { slideId: 'shiny-1', playing: true, part: 0 } })
+        await later(500)
+        const s1 = mk(1) // stepped to part 1 with the mark still naming part 0: nothing is asked to play
+        render(s1, { slides: [s1], audio_playing: { slideId: 'shiny-1', playing: true, part: 0 } })
+        await later(3000)
+        expect(cue()).toBeFalsy()
+        expect(warn.mock.calls.filter(c => String(c[0]).includes('play blocked'))).toHaveLength(0) // and no false Sentry report
+        warn.mockRestore()
+      } finally {
+        HTMLMediaElement.prototype.pause = realPause
       }
     })
 

@@ -38,6 +38,7 @@ const slides = [
       parts: [0, 1, 2].map(n => ({ text: `part ${n}`, answer: `a${n}`, mediaSlots: [{ type: 'audio/mpeg', url: '/drum-roll.mp3' }] })),
     },
   },
+  { id: 'z9', type: 'title', order: 4, data: { title: 'e2e after the series' } },
 ]
 
 async function row() {
@@ -159,51 +160,46 @@ test('7 a play started from the host side is not replayed by a TV Next (advances
   await waitFor(x => x.current_slide_id === 'q2', 8000, 'advance')
 })
 
-test('8 multi-part series: Next plays part 0, steps to part 1, PLAYS part 1, steps to part 2, plays it, then stays on the last one', async ({ page }) => {
+// Multi-part audio series. On main, stepping to the next part played it on arrival
+// (by accident: every realtime update re-delivered audio_playing as a new object).
+// That accident is fixed, so the part step now writes the mark itself — same sound,
+// same press count: play, then ONE press per part (step + play), then leave.
+test('8 multi-part series: Next plays part 0, then each Next steps AND plays the next part, then leaves', async ({ page }) => {
   await reset('m1')
   await openTv(page)
   await expect(page.locator('audio')).toHaveCount(1, { timeout: 8000 })
 
-  await page.keyboard.press('ArrowRight') // plays part 0
+  await page.keyboard.press('ArrowRight') // press 1: plays part 0
   let r = await waitFor(x => x.audio_playing?.slideId === 'm1' && (x.audio_playing.part ?? 0) === 0, 8000, 'play part 0')
   expect(partNow(r)).toBe(0)
   await expect.poll(async () => (await audioState(page)).paused, { timeout: 8000 }).toBe(false)
 
   await page.waitForTimeout(500)
-  await page.keyboard.press('ArrowRight') // steps to part 1, mark kept, audio stops
-  r = await waitFor(x => partNow(x) === 1, 8000, 'step to part 1')
+  await page.keyboard.press('ArrowRight') // press 2: steps to part 1 AND plays it, no silent step
+  r = await waitFor(x => partNow(x) === 1 && x.audio_playing?.part === 1, 8000, 'step to part 1 + its mark')
   expect(r.current_slide_id).toBe('m1')
-  expect(r.audio_playing).toMatchObject({ slideId: 'm1', part: 0 })
-  await expect.poll(async () => (await audioState(page)).paused, { timeout: 5000 }).toBe(true)
-
-  await page.waitForTimeout(500)
-  await page.keyboard.press('ArrowRight') // THE FIX: plays part 1, no click on the TV
-  r = await waitFor(x => x.audio_playing?.part === 1, 8000, 'play part 1')
-  expect(partNow(r)).toBe(1)
   await expect.poll(async () => (await audioState(page)).paused, { timeout: 8000 }).toBe(false)
 
   await page.waitForTimeout(500)
-  await page.keyboard.press('ArrowRight') // step to part 2
-  await waitFor(x => partNow(x) === 2, 8000, 'step to part 2')
-  await page.waitForTimeout(500)
-  await page.keyboard.press('ArrowRight') // play part 2
-  await waitFor(x => x.audio_playing?.part === 2, 8000, 'play part 2')
+  await page.keyboard.press('ArrowRight') // press 3: steps to part 2 AND plays it
+  r = await waitFor(x => partNow(x) === 2 && x.audio_playing?.part === 2, 8000, 'step to part 2 + its mark')
   await expect.poll(async () => (await audioState(page)).paused, { timeout: 8000 }).toBe(false)
+
   await page.waitForTimeout(500)
-  await page.keyboard.press('ArrowRight') // last part played: leaves the slide (nothing after it -> stays)
-  r = await row()
-  console.log('[e2e] after the last part played, Next ->', JSON.stringify({ slide: r.current_slide_id, part: partNow(r), mark: r.audio_playing }))
+  await page.keyboard.press('ArrowRight') // press 4: last part done, leaves the slide
+  r = await waitFor(x => x.current_slide_id === 'z9', 8000, 'leave the series')
+  expect(r.audio_playing).toBeNull() // and the stale mark is cleared on the way out
 })
 
-test('9 multi-part series: ArrowLeft back to an earlier part does not autoplay it', async ({ page }) => {
+test('9 multi-part series: ArrowLeft back to an earlier part plays it (as before this branch)', async ({ page }) => {
   await reset('m1', { slideId: 'm1', playing: true, part: 1 })
   await updateShowVerified(sb, ID, { slides: slides.map(s => s.id === 'm1' ? { ...s, data: { ...s.data, currentPart: 1 } } : s) })
   await openTv(page)
   await expect(page.locator('audio')).toHaveCount(1, { timeout: 8000 })
   await page.keyboard.press('ArrowLeft')
-  await waitFor(x => partNow(x) === 0, 8000, 'back to part 0')
-  await page.waitForTimeout(1500)
-  expect((await audioState(page)).paused).toBe(true)
+  const r = await waitFor(x => partNow(x) === 0 && x.audio_playing?.part === 0, 8000, 'back to part 0 + its mark')
+  expect(r.current_slide_id).toBe('m1')
+  await expect.poll(async () => (await audioState(page)).paused, { timeout: 8000 }).toBe(false)
 })
 
 // Review of ad52e56 (2026-10-01): every live UPDATE re-delivers audio_playing as a

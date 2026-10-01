@@ -37,9 +37,10 @@ export function audioPlayPending(slide, audioPlaying) {
   const part = resolveShinyPart(data)
   const hasAudio = !!part.youtubeId || (!!part.mediaUrl && String(part.mediaType ?? '').startsWith('audio'))
   if (!hasAudio) return false
-  // Owes the clip unless THIS part already played. A mark with no part (older
-  // writers) means part 0.
-  return audioPlaying?.slideId !== slide.id || (audioPlaying.part ?? 0) !== audioPartOf(data)
+  // Slide-id only, as on main: the first Next on the slide plays part 0. After that
+  // every PART STEP writes its own mark (slideStepping.partStepPatch), so a series
+  // takes play + one press per part — never a silent extra step.
+  return audioPlaying?.slideId !== slide.id
 }
 
 // What /display's own Next should do on a raw `shows` row: when the current

@@ -111,7 +111,7 @@ function QuestionAudio({ part, gainDb, theme, isPreview, autoPlay, show, slideId
         player.seekTo(youtubeStart ?? 0, true)
         player.playVideo()
         // Asked to play: 2s later, is it really making sound?
-        stopWatch = watchPlayStart(() => youtubeIsSounding(player), () => markBlocked('youtube'))
+        stopWatch = watchPlayStart(() => youtubeIsSounding(player), () => markBlocked('youtube', () => youtubeIsSounding(player)))
       })
       return () => { cancelled = true; stopWatch() }
     }
@@ -139,7 +139,7 @@ function QuestionAudio({ part, gainDb, theme, isPreview, autoPlay, show, slideId
     // settles, so play() can hang forever before it ever throws (seen in a real
     // Chromium run, 2026-10-01); a check that waited for play() would never run.
     watchRef.current?.()
-    watchRef.current = watchPlayStart(() => mediaIsSounding(audioRef.current, audioCtxRef.current), () => markBlocked('upload'))
+    watchRef.current = watchPlayStart(() => mediaIsSounding(audioRef.current, audioCtxRef.current), () => markBlocked('upload', () => mediaIsSounding(audioRef.current, audioCtxRef.current)))
     if (!audioCtxRef.current && audioRef.current) {
       const ctx = new AudioContext()
       const gainNode = ctx.createGain()
@@ -164,9 +164,13 @@ function QuestionAudio({ part, gainDb, theme, isPreview, autoPlay, show, slideId
         player.unMute()
         player.seekTo(youtubeStart ?? 0, true)
         player.playVideo()
+        // setPlaying(true) above may be a no-op (already true), so no play effect
+        // re-runs: arm the 2s check here or a second silent attempt raises nothing.
+        watchRef.current?.()
+        watchRef.current = watchPlayStart(() => youtubeIsSounding(player), () => markBlocked('youtube', () => youtubeIsSounding(player)))
       })
     } else {
-      play().catch(() => markBlocked('upload'))
+      play().catch(() => markBlocked('upload', () => mediaIsSounding(audioRef.current, audioCtxRef.current)))
     }
   }
 
@@ -176,7 +180,7 @@ function QuestionAudio({ part, gainDb, theme, isPreview, autoPlay, show, slideId
   // purpose — see the replay note on the component.
   useEffect(() => {
     if (!autoPlay || isPreview || isYoutube || !mediaUrl) return
-    play().catch(() => markBlocked('upload'))
+    play().catch(() => markBlocked('upload', () => mediaIsSounding(audioRef.current, audioCtxRef.current)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -194,7 +198,7 @@ function QuestionAudio({ part, gainDb, theme, isPreview, autoPlay, show, slideId
     if (autoPlay || isPreview) return
     if (apSlideId !== slideId || !apPlaying) return
     if (isYoutube) setPlaying(true)
-    else play().catch(() => markBlocked('upload'))
+    else play().catch(() => markBlocked('upload', () => mediaIsSounding(audioRef.current, audioCtxRef.current)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apSlideId, apPlaying, slideId, isYoutube, autoPlay, isPreview])
 
@@ -803,7 +807,7 @@ function ShinyAudioQuestion({ slide, show, theme, isPreview }) {
         player.seekTo(part.youtubeStart ?? 0, true)
         player.playVideo()
         // Asked to play: 2s later, is it really making sound?
-        stopWatch = watchPlayStart(() => youtubeIsSounding(player), () => markBlocked('youtube'))
+        stopWatch = watchPlayStart(() => youtubeIsSounding(player), () => markBlocked('youtube', () => youtubeIsSounding(player)))
       })
       return () => { cancelled = true; stopWatch() }
     }
@@ -823,7 +827,12 @@ function ShinyAudioQuestion({ slide, show, theme, isPreview }) {
   // an imperative DOM call and has to stay in an effect.
   useEffect(() => {
     audioRef.current?.pause()
-  }, [partKey])
+    // The old part's 2s check and cue belong to the old part: left running they
+    // see this paused element and raise a false cue + Sentry report for a clip
+    // nobody asked to play.
+    watchRef.current?.()
+    clearBlocked()
+  }, [partKey, clearBlocked])
 
   // A YouTube-sourced clip has no <audio onEnded> equivalent — a plain
   // embed gives us no ended event — so we time the auto-stop ourselves
@@ -853,7 +862,7 @@ function ShinyAudioQuestion({ slide, show, theme, isPreview }) {
     // Check starts at the request, not after play() finishes: with no user
     // gesture AudioContext.resume() never settles, so play() can hang forever.
     watchRef.current?.()
-    watchRef.current = watchPlayStart(() => mediaIsSounding(audioRef.current, audioCtxRef.current), () => markBlocked('upload'))
+    watchRef.current = watchPlayStart(() => mediaIsSounding(audioRef.current, audioCtxRef.current), () => markBlocked('upload', () => mediaIsSounding(audioRef.current, audioCtxRef.current)))
     const ctx = ensureAudioGraph()
     if (ctx?.state === 'suspended') await ctx.resume()
     await audioRef.current.play()
@@ -870,9 +879,12 @@ function ShinyAudioQuestion({ slide, show, theme, isPreview }) {
         player.unMute()
         player.seekTo(part.youtubeStart ?? 0, true)
         player.playVideo()
+        // same as QuestionAudio: setPlaying(true) may be a no-op, so arm the check here
+        watchRef.current?.()
+        watchRef.current = watchPlayStart(() => youtubeIsSounding(player), () => markBlocked('youtube', () => youtubeIsSounding(player)))
       })
     } else {
-      playWithGain().catch(() => markBlocked('upload'))
+      playWithGain().catch(() => markBlocked('upload', () => mediaIsSounding(audioRef.current, audioCtxRef.current)))
     }
   }
 
@@ -898,7 +910,7 @@ function ShinyAudioQuestion({ slide, show, theme, isPreview }) {
     // alone never replays; only a fresh mark does.
     if (apPart !== audioPartOf(data)) return
     if (isYoutubeSource) setPlaying(true)
-    else if (audioRef.current) playWithGain().catch(() => markBlocked('upload'))
+    else if (audioRef.current) playWithGain().catch(() => markBlocked('upload', () => mediaIsSounding(audioRef.current, audioCtxRef.current)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apSlideId, apPlaying, apPart, slide.id, isYoutubeSource, isPreview])
 

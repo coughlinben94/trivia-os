@@ -69,6 +69,23 @@ export function resolveShinyPart(data, overridePart) {
   }
 }
 
+// The audio_playing mark a PART STEP writes so the new part plays on arrival, or
+// null when this series/part has no audio. On main this happened by accident —
+// every realtime update re-delivered audio_playing as a new object, so the TV's
+// effect re-fired on each part step — and nothing wrote it on purpose. That
+// accident is fixed (effects are keyed on values now), so the step writes the
+// mark itself and the show sounds exactly as before. `data` is the slide's data
+// AFTER the step (data.currentPart already the new part).
+export function audioMarkForPart(slideId, data) {
+  if (!data?.isShiny || !isAudioShiny(data)) return null
+  const part = resolveShinyPart(data)
+  const hasAudio = !!part.youtubeId || (!!part.mediaUrl && String(part.mediaType ?? '').startsWith('audio'))
+  if (!hasAudio) return null
+  const n = Array.isArray(data.parts) ? data.parts.length : 0
+  const idx = n === 0 ? 0 : Math.min(Math.max(data.currentPart ?? 0, 0), n - 1)
+  return { slideId, playing: true, part: idx }
+}
+
 export function isVisualShiny(data) {
   return data.shinyType === 'visual' || data.shinyInputSchema?.type === 'image'
 }
