@@ -1,3 +1,4 @@
+import { director } from '../../../audio/director.js'
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
@@ -29,22 +30,31 @@ const pts = n => `${n} point${n === 1 ? '' : 's'}`
 
 // ─── Drum roll (MP3) ──────────────────────────────────────────────────────
 
-function playDrumRoll(onReveal, reduced) {
+// Through the audio director. The roll ends the build-up: `ended` reveals, and a roll that is
+// refused, dead or stalled must STILL reveal (a hard fallback, or three TVs sit on "And the
+// winner is…" forever with no host override). The roll runs ~4.2s; 8000ms gives it room plus
+// buffer. Revealed-by-fallback releases the clip so a late click can't bring the roll back
+// over the reveal.
+export function playDrumRoll(onReveal, reduced, slideId) {
   if (reduced) { setTimeout(onReveal, 1200); return null }
+  let handle = null
+  let settled = false
+  const stallTimer = setTimeout(() => reveal(true), 8000)
+  function reveal(release) {
+    if (settled) return
+    settled = true
+    clearTimeout(stallTimer)
+    if (release) handle?.release()
+    onReveal()
+  }
   try {
-    const audio = new Audio('/drum-roll.mp3')
-    // Hard fallback: a network stall or codec issue can fire neither `ended`
-    // nor `error` (fires `stalled`/`suspend` instead), leaving three TVs on
-    // "And the winner is…" forever with no host override. The MP3 runs ~4.2s
-    // (see the cinematic-sequence comment above); 8000ms gives it room plus
-    // buffer. Cleared by onended/onerror so the normal path never double-fires.
-    const stallTimer = setTimeout(onReveal, 8000)
-    audio.onended = () => { clearTimeout(stallTimer); onReveal() }
-    audio.onerror = () => { clearTimeout(stallTimer); setTimeout(onReveal, 2000) }
-    audio.play().catch(() => { clearTimeout(stallTimer); setTimeout(onReveal, 2000) })
-    return audio
+    handle = director.play({ kind: 'file', url: '/drum-roll.mp3' }, { slideId })
+    handle.onEnded(() => reveal(false))
+    handle.onBlocked(() => setTimeout(() => reveal(true), 2000))
+    handle.onFailed(() => setTimeout(() => reveal(true), 2000))
+    return handle
   } catch (_) {
-    setTimeout(onReveal, 2000)
+    setTimeout(() => reveal(true), 2000)
     return null
   }
 }
@@ -220,7 +230,7 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
   // ['third' → 'gap' →] ['second' → 'gap' →] 'drumroll' → 'hold' → 'reveal'
   const [phase,  setPhase]  = useState('drumroll')
   const [celebrate, setCelebrate] = useState(false)  // fireworks launch AFTER the impact lands
-  const audioCtxRef = useRef(null)
+  const audioCtxRef = useRef(null) // the drum-roll handle
   const holdTimerRef = useRef(null)
   const beatTimerRef = useRef(null)
 
@@ -311,7 +321,7 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
         const step = steps.shift()
         if (!step) {
           setPhase('drumroll')
-          audioCtxRef.current = playDrumRoll(goReveal, reduce)
+          audioCtxRef.current = playDrumRoll(goReveal, reduce, slide.id)
           return
         }
         setPhase(step[0])
@@ -322,7 +332,7 @@ export default function WinnerRevealSlide({ slide, show, isPreview = false }) {
     load()
     return () => {
       cancelled = true
-      audioCtxRef.current?.pause?.()
+      audioCtxRef.current?.release?.()
       audioCtxRef.current = null
       clearTimeout(holdTimerRef.current)
       clearTimeout(beatTimerRef.current)
