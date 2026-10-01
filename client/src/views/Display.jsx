@@ -5,7 +5,7 @@ import QRCode from 'qrcode'
 import { supabase } from '../lib/supabase.js'
 import { ThemeProvider, useTheme } from '../components/shared/ThemeProvider.jsx'
 import SlideRenderer, { SHINY_EXIT_DURATION_S } from '../components/display/SlideRenderer.jsx'
-import { ringVisibleStationIndex, ringPeekIndex } from '../lib/ringStationIndex.js'
+import { resolveRingSlideIndex } from '../lib/ringStationResolver.js'
 import QuestionCounter from '../components/display/QuestionCounter.jsx'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
 import ScoreboardOverlay from '../components/display/ScoreboardOverlay.jsx'
@@ -301,41 +301,6 @@ function DisplayPinPrompt({ onVerified, onDismiss }) {
 // applies while it's showing. slideIndex drives RingAmbient's own
 // forward-glide-vs-snap decision (see RingAmbient's slideIndex effect) —
 // it's the numeric show.current_slide_index, not a slide id.
-// Deliberately NOT skipsLockedBackground(s) — that function also answers
-// "is THIS render of the slide painting its own opaque lock", which for a
-// shiny question/grid/venn is DATA-dependent (data.introDone): true during
-// the intro/closing beat (ambient, ring shows through — see SlideRenderer's
-// isShinyIntroBeat), false during content (opaque backdrop, ring hidden).
-// ringVisibleStationIndex sums isVisible(slide) INCLUSIVE of the current
-// index every render, so reusing that same data-dependent check here meant
-// the running total could change TWICE for one physical slide — once on
-// entry (content's introDone flips true, uncounting it) and, since
-// 2026-08-24's closing beat, AGAIN on exit (outroShown flips introDone back
-// to false, re-counting it) — a second, spurious turn() on a slide the show
-// never actually left. Ben: "coming out of not so different... there was a
-// ring move. shouldnt be diff from the original intro." Station-visibility
-// has to be a stable, TYPE-only fact for the whole lifetime of a slide — but
-// that means COUNTING it once (like any other question), not excluding it
-// entirely. 2026-08-24's fix over-corrected into the latter: shiny questions
-// stopped moving the ring AT ALL (not even the one entry turn every other
-// slide gets), which is a live-show regression flagged 2026-08-25 (Ben, live,
-// on this exact Q2 -> "We're not so different, you and I" transition: "ring
-// world change... is non existent"). Fixed by counting shiny questions the
-// same as plain ones — the type-only-ness (no introDone in the formula) is
-// what actually prevents the jitter; excluding shiny outright was never
-// required for that, it just also happened to remove the ring move Ben
-// wanted to keep.
-// 'shiny-title' (2026-09-01): the standalone announce card paints no lock
-// (skipsLockedBackground), so the ring is visibly on screen behind it for
-// the slide's whole life — a stable type-only fact, exactly what this
-// formula wants. Counting it means the ring takes one entry turn on the
-// title card, same as it does on round-intro.
-const isRingVisible = s =>
-  s?.type === 'team-preview' || s?.type === 'grading-break' ||
-  s?.type === 'question' ||
-  s?.type === 'pre-show' || s?.type === 'round-intro' || s?.type === 'swing-round-intro' ||
-  s?.type === 'shiny-title' || s?.type === 'bonus'
-
 function PersistentRing({ slideIndex, stationOverride, showStationDebug, forceSnap }) {
   const { theme, showId } = useTheme()
   // ParticleBackground's own root is `absolute inset-0` — it needs a sized,
@@ -975,7 +940,7 @@ function DisplayInner({ show, direction, isPreview = false, onBreakAdvance, onRi
         <ParticleBackground
           theme={theme}
           showId={showId}
-          slideIndex={ringVisibleStationIndex(sortedSlides, ringPeekIndex(sortedSlides, show.current_slide_index ?? 0), isRingVisible)}
+          slideIndex={resolveRingSlideIndex(sortedSlides, show.current_slide_index ?? 0)}
           stationOverride={ringStationOverride({ breakActive, warp, world: RING_WORLDS[theme.id] })}
           showStationDebug={isPreview}
           forceSnap={sortedSlides[show.current_slide_index ?? 0]?.type === 'team-picker' || shinyWarp != null}
@@ -1896,7 +1861,7 @@ export default function Display() {
       <ThemeProvider showThemeId={show.theme} overrides={show.themeOverrides} showId={show.id}>
         <PersistentRing
           slideIndex={sortedForRing && show.current_slide_index != null
-            ? ringVisibleStationIndex(sortedForRing, ringPeekIndex(sortedForRing, show.current_slide_index), isRingVisible)
+            ? resolveRingSlideIndex(sortedForRing, show.current_slide_index)
             : null}
           // team-picker's own peek-triggered station change (ringPeekIndex
           // above) always happens while its own black canvas is covering the
