@@ -43,6 +43,7 @@ import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, skyRegionHues, acc
 import { SLOTS as SPACE_SLOTS } from '../../worlds/midnightGalaxy.slots.js'
 import { seedFrom } from '../../lib/paletteGenerator.js'
 import { RING_RETURN } from '../../lib/ringStationOverride.js'
+import { createStationCamera } from '../../lib/stationCamera.js'
 
 // ENGINE — engine-fixed, identical for every world; never a prop (a world
 // never sets any of this, same as the reference build's own ENGINE const).
@@ -710,7 +711,7 @@ const isReduced = () =>
 // Sentinel value for the `stationOverride` prop: "go back to the station you
 // were on before the last numeric override sent you away." A sentinel rather
 // than a second prop or a ref threaded through ParticleBackground — the
-// station being returned to is this component's own private state (stationRef),
+// station being returned to is this component's own private state (the station camera),
 // so the caller never has to learn a number it couldn't act on anyway.
 // Defined in lib/ringStationOverride.js (the pure resolver that emits it).
 export { RING_RETURN }
@@ -733,11 +734,13 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   const scrimElRef = useRef(null)
   const arcRef = useRef(null)
   const offsetRef = useRef({})
-  const stationRef = useRef(0)
+  // Station, busy lock, turn queue and walk completion live in the renderer-neutral
+  // controller (lib/stationCamera.js, Halloween forest spec §2.1); makeSpaceRenderer() below
+  // keeps the pan/wrap/sky-tint writes. Created once on first render: the renderer only closes
+  // over refs and module constants (the same stability turn/jumpTo already relied on).
+  const camRef = useRef(null)
+  if (!camRef.current) camRef.current = createStationCamera({ panes: ENGINE.PANES, renderer: makeSpaceRenderer() })
   const debugLabelRef = useRef(null)
-  const busyRef = useRef(false)
-  const queuedTurnsRef = useRef([]) // queued turn() directions (+1/-1), drained one per unlock()
-  const turnTimerRef = useRef(null)
   const shootLaneRef = useRef(null)
   const shootTimerRef = useRef(null)
   const skyTintsRef = useRef(null)
@@ -823,15 +826,15 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
         surge.appendChild(copy)
       }
       surgeEls[L.id] = surge
-      // Seed from stationRef.current, not unconditionally 0. Normally this
+      // Seed from the camera station, not unconditionally 0. Normally this
       // is 0 (a fresh mount starts at rest) — but a wrapper that calls
       // jumpTo(slideIndex) in a useLayoutEffect (which runs before THIS
-      // plain useEffect) already advances stationRef.current before any
+      // plain useEffect) already advances the camera station before any
       // surge element exists, so jumpTo's own offset math has nothing to
       // write into yet and is silently lost. Matches jumpTo's own formula
-      // exactly: starting at 0 and adding L.surge, mod cyl, stationRef.current
-      // times equals (stationRef.current * L.surge) % cyl in one step.
-      offsetRef.current[L.id] = (stationRef.current * L.surge) % cyl
+      // exactly: starting at 0 and adding L.surge, mod cyl, the station
+      // times equals (station * L.surge) % cyl in one step.
+      offsetRef.current[L.id] = (camRef.current.station * L.surge) % cyl
     }
     surgeElsRef.current = surgeEls
     arcRef.current = arc
@@ -868,8 +871,8 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     scrim.style.height = px(ENGINE.H)
     design.appendChild(scrim)
     scrimElRef.current = scrim
-    layoutScrim(stationRef.current)
-    writeSkyTints(stationRef.current, false) // initial state snaps, same as the scrim's
+    layoutScrim(camRef.current.station)
+    writeSkyTints(camRef.current.station, false) // initial state snaps, same as the scrim's
 
     stage.style.setProperty('--surge-ms', ENGINE.SURGE_MS + 'ms')
     worldData.sky.forEach((c, i) => stage.style.setProperty('--sky-' + (i + 1), c))
@@ -882,9 +885,9 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     // Same re-clamp jumpTo already does "at rest, new station" (item 3) —
     // needed here too now that a mount can start already-advanced past
     // station 0 (see the offsetRef seed above). Guarded so the ordinary
-    // mount-at-rest path (stationRef.current === 0, true for every existing
+    // mount-at-rest path (camRef.current.station === 0, true for every existing
     // live show) stays byte-identical to before this fix.
-    if (stationRef.current !== 0) dom.clampSafeBoxStarPeaks(design)
+    if (camRef.current.station !== 0) dom.clampSafeBoxStarPeaks(design)
     if (shoots) shootLoop()
 
     // React 18 StrictMode double-invokes this effect in dev; clear what we
@@ -895,7 +898,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
       // turn()'s in-flight unlock timer (~SURGE_MS+60) would otherwise fire
       // post-unmount and call unlock() on null refs, throwing inside
       // dom.clampSafeBoxStarPeaks(designElRef.current).
-      clearTimeout(turnTimerRef.current)
+      camRef.current.dispose()
       design.replaceChildren()
     }
   }, [])
@@ -928,7 +931,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
       ENGINE, WORLD: worldData, ARC: arcRef.current,
       cylinderOf: (L) => cylinderOf(ENGINE, L),
       authorPeriodOf: (L) => authorPeriodOf(ENGINE, L),
-      get station() { return stationRef.current },
+      get station() { return camRef.current.station },
       get offset() { return offsetRef.current },
       jumpTo, turn,
     }
@@ -978,7 +981,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   // land on slideIndex % PANES before first paint, not sit on station 0.
   // null makes ringNavAction answer 'jump' on the first real index; at
   // slideIndex 0 that jump is a no-op. The jump runs before the build effect
-  // below, which seeds its offsets from stationRef for exactly this case.
+  // below, which seeds its offsets from the camera station for exactly this case.
   const lastSlideIndexRef = useRef(null)
   useLayoutEffect(() => {
     // == null: also catches an explicit null from a future call site, not just undefined
@@ -1020,7 +1023,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   // uses.
   //
   // Contract for the jukebox-side layer (jukebox-ring-fusion branch): by the
-  // time that overlay paints, stationRef is the world's musicStation (10), the eclipse is
+  // time that overlay paints, the camera station is the world's musicStation (10), the eclipse is
   // the station in frame, and the corona sky tint is at full weight (snapped,
   // not transitioning — jumpTo passes animate:false, see applySkyTints).
   //
@@ -1028,7 +1031,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   // "like the grading break itself has an Sx station tied to it. then after
   // the slide is there for 10 seconds, it 'warps' to the jukebox, then when
   // done, warps back to round 2 slide Sx." A numeric override records the
-  // station it is leaving (Sx — read straight off stationRef, so it is always
+  // station it is leaving (Sx — read straight off the camera station, so it is always
   // whatever the slide's own turn() organically landed on, never a guess or a
   // slide-index derivation that could drift), then jumps. RING_RETURN jumps
   // back to it. Display.jsx plays WarpTransition over both, so neither snap is
@@ -1057,7 +1060,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
       returnStationRef.current = null
       return
     }
-    returnStationRef.current = stationRef.current
+    returnStationRef.current = camRef.current.station
     jumpTo(stationOverride)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stationOverride])
@@ -1263,22 +1266,24 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   // silently. See concepts/ART-DIRECTION-SPEC.md §8. unlock() is the single
   // choke point both busy-clearing sites below call through, so a queued
   // turn drains exactly once busy actually frees up.
-  function unlock() {
-    busyRef.current = false
-    dom.clampSafeBoxStarPeaks(designElRef.current) // item 3: re-clamp at rest, new station
-    if (queuedTurnsRef.current.length > 0) {
-      turn(queuedTurnsRef.current.shift())
-    }
-  }
-
+  // turn()/jumpTo() delegate to the controller; the space-ring specifics (pan offsets, the
+  // wrap pre-snap/deferred reset, sky tints, reduced-motion branch) are the renderer below.
+  // Completion is the renderer's: its SURGE_MS+60 timer calls done() after re-clamping the
+  // star peaks at rest (the old unlock()), and the controller drops any stale done().
+  //
   // dir: +1 (default — every pre-2026-08-24 caller, including ring-verify's
   // window.__world.turn()) glides one station forward; -1 glides one station
   // back (Prev between adjacent ring-visible slides — see the slideIndex
   // effect above). Still strictly single-station: multi-station moves stay
   // jumpTo()'s job.
-  function turn(dir = 1) {
-    if (busyRef.current) { queuedTurnsRef.current.push(dir); return }
-    busyRef.current = true
+  function turn(dir = 1) { camRef.current.turn(dir) }
+  function jumpTo(target) { camRef.current.jumpTo(target) }
+
+  function makeSpaceRenderer() {
+    return { startWalk: spaceStartWalk, snap: spaceSnap }
+  }
+
+  function spaceStartWalk(from, to, dir, done) {
     const stage = stageElRef.current
     const offset = offsetRef.current
     const willWrap = dir > 0 && ENGINE.LAYERS.some(L => L.id !== 'sky' &&
@@ -1300,22 +1305,22 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
       })
       stage.classList.remove('go')
       writeOffsets()
-      // unlock() may drain a queued turn and re-add 'go' in this same
+      // done() may drain a queued turn and re-add 'go' in this same
       // tick; without a forced reflow between the remove and that re-add,
       // the browser coalesces both writes into one paint and the wrap
       // animates as a visible rewind instead of snapping.
       void stage.offsetWidth
-      stationRef.current = (stationRef.current + dir + ENGINE.PANES) % ENGINE.PANES
-      if (debugLabelRef.current) debugLabelRef.current.textContent = `S${stationRef.current}`
-      layoutScrim(stationRef.current)
+      if (debugLabelRef.current) debugLabelRef.current.textContent = `S${to}`
+      layoutScrim(to)
       // Still animated on the wrap branch: the wrap snaps the PAN (a rewind
       // across a whole cylinder would read as one), but the sky is decoupled
       // from the pan by design — the ember region fading out across the
       // 11 -> 0 boundary is a real transition, not part of the jump the wrap
       // exists to hide.
-      writeSkyTints(stationRef.current, !isReduced())
-      unlock()
-      return
+      writeSkyTints(to, !isReduced())
+      dom.clampSafeBoxStarPeaks(designElRef.current) // item 3: re-clamp at rest, new station
+      done()
+      return undefined
     }
 
     if (willUnwrap) {
@@ -1338,21 +1343,20 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     stage.classList.add('go')
     ENGINE.LAYERS.forEach(L => { if (L.id !== 'sky') offset[L.id] += dir * L.surge })
     writeOffsets()
-    stationRef.current = (stationRef.current + dir + ENGINE.PANES) % ENGINE.PANES
-    if (debugLabelRef.current) debugLabelRef.current.textContent = `S${stationRef.current}`
-    layoutScrim(stationRef.current)
+    if (debugLabelRef.current) debugLabelRef.current.textContent = `S${to}`
+    layoutScrim(to)
     // Fired in the same tick the pan starts, but on a longer duration and a
     // milder curve, so the sky is still settling ~900ms after the pan lands.
     // Retargeting (a queued/rapid Stream-Deck turn landing mid-fade) is free
     // — it's a CSS transition, so it re-aims from wherever it currently is
     // rather than stacking a second animation.
-    writeSkyTints(stationRef.current, true)
-    turnTimerRef.current = setTimeout(() => {
+    writeSkyTints(to, true)
+    const timer = setTimeout(() => {
       stage.classList.remove('go')
       if (willWrap) {
         // Invisible reset: the transition is over and 'go' was removed in
         // this same tick, so this transform write snaps rather than
-        // animates. Forced reflow before unlock() — a drained queued turn
+        // animates. Forced reflow before done() — a drained queued turn
         // may re-add 'go' in the same tick (same coalescing hazard as the
         // reduced-motion branch above). busy stayed locked for the whole
         // glide, so a queued turn can never stack its surge on top of an
@@ -1361,28 +1365,21 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
         writeOffsets()
         void stage.offsetWidth
       }
-      unlock()
+      dom.clampSafeBoxStarPeaks(designElRef.current) // item 3: re-clamp at rest, new station
+      done()
     }, ENGINE.SURGE_MS + 60)
+    return () => clearTimeout(timer)
   }
 
-  function jumpTo(target) {
-    // Authoritative resync: cancels any turn() this jump is interrupting
-    // (and drops anything queued behind it), so a jump made mid-transition
-    // can't be overshot by that turn still landing afterward.
-    clearTimeout(turnTimerRef.current)
-    busyRef.current = false
-    queuedTurnsRef.current = []
-    // stationRef only ever holds 0..PANES-1 — normalize first, or an
-    // out-of-range/non-integer target (a raw slide index from a future
-    // caller, an off-by-one, a stray float) never equals stationRef.current
-    // and this loop spins forever.
-    target = ((Math.trunc(target) % ENGINE.PANES) + ENGINE.PANES) % ENGINE.PANES
+  // Instant move for jumpTo(): the controller has already cancelled any walk and dropped the queue.
+  function spaceSnap(from, to) {
     const offset = offsetRef.current
-    while (stationRef.current !== target) {
+    // Walk whole surges forward from -> to (the station only ever holds 0..PANES-1; the controller
+    // normalizes the target, so this cannot spin on an out-of-range value).
+    for (let st = from; st !== to; st = (st + 1) % ENGINE.PANES) {
       ENGINE.LAYERS.forEach(L => { if (L.id !== 'sky') offset[L.id] = (offset[L.id] + L.surge) % cylinderOf(ENGINE, L) })
-      stationRef.current = (stationRef.current + 1) % ENGINE.PANES
     }
-    if (debugLabelRef.current) debugLabelRef.current.textContent = `S${stationRef.current}`
+    if (debugLabelRef.current) debugLabelRef.current.textContent = `S${to}`
     // A jump that interrupts a wrap glide before its deferred modulo reset
     // can arrive here with offset === cylinder (legit mid-wrap state). Left
     // un-modded, the NEXT turn() would misread it as another wrap. No-op in
@@ -1390,8 +1387,8 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     ENGINE.LAYERS.forEach(L => { if (L.id !== 'sky') offset[L.id] %= cylinderOf(ENGINE, L) })
     stageElRef.current.classList.remove('go')
     writeOffsets()
-    layoutScrim(stationRef.current)
-    writeSkyTints(stationRef.current, false) // snap — see applySkyTints on why a jump must not leave a transition in flight
+    layoutScrim(to)
+    writeSkyTints(to, false) // snap — see applySkyTints on why a jump must not leave a transition in flight
     dom.clampSafeBoxStarPeaks(designElRef.current) // item 3: re-clamp at rest, new station
   }
 
@@ -1401,7 +1398,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   useImperativeHandle(ref, () => ({
     turn,
     jumpTo,
-    get station() { return stationRef.current },
+    get station() { return camRef.current.station },
   }), [])
 
   return (
@@ -1430,7 +1427,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
       />
       {/* Debug station readout (2026-08-17, Ben: "a faux # somewhere so I
           know it's a transition from s0-s1") — plain DOM text, updated
-          imperatively at the same 3 sites stationRef.current itself is
+          imperatively at the same 3 sites the station itself is
           written (turn()'s reduced/normal branches, jumpTo()), never React
           state — same "never a prop, never a re-render" rule as everything
           else on this component.
