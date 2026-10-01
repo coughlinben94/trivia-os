@@ -121,4 +121,3 @@ describe('gapBleedFor', () => {
     expect(seen.size).toBeGreaterThan(10) // really varies
   })
 })
-})
