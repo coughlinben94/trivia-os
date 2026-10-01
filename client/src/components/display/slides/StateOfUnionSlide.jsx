@@ -4,7 +4,9 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 import { fitToBox, TITLE_CARD_BOX } from '../../../lib/autoFitText.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import DEFAULT_PHOTO from '../../../assets/state-of-union-photo.png'
-import { claimYoutubeAudio } from '../../../lib/youtubeWarmAudio.js'
+import { useClipPlayback } from '../../../audio/useClipPlayback.js'
+import { walkoutClip } from '../../../lib/walkoutAudio.js'
+import AudioBlockedCue from '../AudioBlockedCue.jsx'
 import { regionTransformCSS, regionFontSizeCSS } from '../../../lib/regionTransform.js'
 
 // Fixed RWB palette — deliberately NOT theme.colors, anywhere in this
@@ -134,80 +136,31 @@ export default function StateOfUnionSlide({ slide, isPreview }) {
     [messageText, theme.fonts.display, fontsReady]
   )
 
-  // Walkout song — a {videoId, start, end} clip, same shape/editor as
-  // Pre-Show's. UNLIKE Pre-Show (plays once, fades, auto-advances — that
-  // slide's whole job is to end when the song ends), this one loops: no
-  // fade, no advance, just seeks back to start whenever it hits end and
-  // keeps going for as long as the host stays on this slide (2026-08-17,
-  // Ben: "loop the chorus... over the state of the union slide").
+  // Walkout song — a {videoId, start, end} clip, same shape/editor as Pre-Show's. UNLIKE Pre-Show
+  // (plays once, fades), this one LOOPS: no fade, no advance, it seeks back to start whenever it
+  // hits end and keeps going for as long as the host stays on this slide (2026-08-17, Ben:
+  // "loop the chorus... over the state of the union slide"). It plays at 75% of its trimmed volume
+  // (2026-08-17: under a host monologue, not the only thing happening; walkoutSong.volume is a
+  // loudness correction composed on top). Leaving the slide cuts it at once (Ben: "once i go to
+  // the next slide the audio should just stop"). On the audio director, which also warms the
+  // player while the PREVIOUS slide is up (Display.jsx), retries on any click, and shows the
+  // shared "Click for sound" cue. Never in the slide editor's preview pane.
   const walkoutSong = slide?.data?.walkoutSong
-  const ytPlayerRef = useRef(null)
-  const ytWatchIntervalRef = useRef(null)
-
+  const clip = useMemo(
+    () => walkoutClip(walkoutSong, 'loop', 0.75),
+    [walkoutSong?.videoId, walkoutSong?.start, walkoutSong?.end, walkoutSong?.volume], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  const playback = useClipPlayback(clip, { slideId: slide.id, isPreview })
+  const { play } = playback
   useEffect(() => {
-    // Never in the slide editor's preview pane — see PreShowSlide's identical guard.
-    if (!walkoutSong?.videoId || isPreview) return
-    let cancelled = false
-
-    // Claims the player Display.jsx pre-warmed while the PREVIOUS slide was
-    // up (muted, buffered at the trim in-point, parked paused — see
-    // youtubeWarmAudio.js), so entering this slide is unmute+play instead of
-    // API-load/build/buffer/seek. Falls back to building fresh (the old
-    // latency, never worse) if nothing was warmed — e.g. the host jumped
-    // here from further away than one slide.
-    const handle = claimYoutubeAudio(walkoutSong.videoId, walkoutSong.start ?? 0)
-    handle.whenReady(player => {
-      if (cancelled) return
-      ytPlayerRef.current = player
-      // 75%, not full volume (2026-08-17, Ben) — this plays under a
-      // host monologue, not as the only thing happening. walkoutSong.volume
-      // (2026-08-19) is a loudness-matching correction on TOP of that
-      // baseline, not a replacement for it — it composes multiplicatively
-      // so an unset/100 value leaves the deliberate 75% duck untouched.
-      player.setVolume(Math.round(75 * ((walkoutSong.volume ?? 100) / 100)))
-      player.unMute()
-      player.seekTo(walkoutSong.start ?? 0, true)
-      player.playVideo()
-      clearInterval(ytWatchIntervalRef.current)
-      ytWatchIntervalRef.current = setInterval(() => {
-        const player = ytPlayerRef.current
-        if (!player) return
-        // Same cold-tab autoplay block as PreShowSlide's walkout song —
-        // playVideo() above can fail silently with no error. Retry every
-        // tick so the loop self-heals the instant the tab gets any
-        // interaction, instead of relying on the host tapping the TV first.
-        // 2 (PAUSED) added with the warm-player rework: a warmed player is
-        // parked paused, and a blocked unmuted play lands it back there —
-        // safe to retry from, nothing on this slide ever pauses on purpose.
-        const state = player.getPlayerState?.()
-        if (state === -1 || state === 5 || state === 2) player.playVideo()
-        const t = player.getCurrentTime?.() ?? 0
-        // Same duration-not-loaded-yet guard as PreShowSlide — an
-        // untrimmed clip (end: null) must not compute clipEnd=0 on
-        // the first tick and loop-restart every 250ms.
-        const duration = player.getDuration?.() ?? 0
-        const clipEnd = walkoutSong.end ?? (duration > 0 ? duration : Infinity)
-        if (clipEnd !== Infinity && t >= clipEnd) {
-          player.seekTo(walkoutSong.start ?? 0, true)
-        }
-      }, 250)
-    })
-
-    return () => {
-      // Hard stop on leaving this slide (2026-08-17, Ben: "once i go to the
-      // next slide the audio should just stop") — handle.destroy() pauses
-      // before destroying, so the audio cuts the instant the host advances
-      // rather than trailing for however long teardown takes.
-      cancelled = true
-      clearInterval(ytWatchIntervalRef.current)
-      handle.destroy()
-      ytPlayerRef.current = null
-    }
-  }, [walkoutSong?.videoId, walkoutSong?.start, walkoutSong?.end]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!clip || isPreview) return
+    play()
+  }, [clip, isPreview, play])
 
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center px-24 overflow-hidden"
       style={{ background: RWB_BLUE_DEEP }}>
+      <AudioBlockedCue show={playback.blocked && !isPreview} onRetry={playback.retry} theme={theme} />
 
       {/* Walkout song iframe lives in a body-level container owned by
           youtubeWarmAudio.js now — see PreShowSlide's matching note. */}

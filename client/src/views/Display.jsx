@@ -30,7 +30,7 @@ import {
   ownsAutoRoll,
   TEAM_PICKER_HOLD_MS,
 } from '../lib/slideStepping.js'
-import { warmYoutubeAudio } from '../lib/youtubeWarmAudio.js'
+import { walkoutClip } from '../lib/walkoutAudio.js'
 import { director } from '../audio/director.js'
 import { resolveSlideClip } from '../lib/slideClip.js'
 import { keepAwake } from '../lib/keepAwake.js'
@@ -1486,8 +1486,7 @@ export default function Display() {
       ? [sorted[cur]] // gate is up — the next press reveals (and may invoke) this slide
       : [sorted[cur], sorted[cur + 1]]
     for (const s of targets) {
-      const clip = s?.data?.walkoutSong
-      if (clip?.videoId) warmYoutubeAudio(clip.videoId, clip.start ?? 0)
+      director.warm(walkoutClip(s?.data?.walkoutSong)) // same pool key as the slide's play: videoId:start:
       // Plain-question audio set to 'advance' (SlideEditor's "▶️ On Advance")
       // starts the instant the slide goes live, so like state-of-union's loop
       // it can only be warmed from the slide BEFORE. 'click' mode is left to
