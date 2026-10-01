@@ -80,7 +80,7 @@
 const W=1920, H=1080, VX=960, VY=540;        // vanishing point = dead centre: open space has no horizon
 const F=1371, E=0;                            // focal length px; the camera sits on the flight axis
 const D=8, NS=3, L=NS*D, REST=9;              // metres per station, 3 stations, loop length, landmark rest distance
-const ZFAR=36, ZMIN=0.9, ZDRAW=2.4, STOPS=24;
+const ZFAR=36, ZMIN=2.6, ZDRAW=2.4, STOPS=24;   // nothing is drawn closer than ZMIN: whatever comes within 4 m has faded out by 2.6 m
 const DUR=4000, AUTO_MS=7000, CREEP_MS=40000;
 const SAFE={x0:384,y0:302,x1:1536,y1:777};
 const NAMES=['ringed planet','pulsar','comet'];
@@ -147,7 +147,7 @@ function rimEdges(pts,lx,ly){
 function bboxOf(pts,pad){let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;for(const p of pts){if(p[0]<x0)x0=p[0];if(p[0]>x1)x1=p[0];if(p[1]<y0)y0=p[1];if(p[1]>y1)y1=p[1]}return[x0-pad,y0-pad,x1+pad,y1+pad]}
 
 // ---------- item factories. Each returns {X,h,Z,body,light,bb}; (X,h) = across, up (metres); local svg: u right, d down ----------
-let uid=0;
+let uid=0, uidItem=0;
 function asteroid(Z,X,h,size,seed,beacon){
   const r=rngFor(seed,7), pts=asteroidPoly(r,size), id='as'+(uid++);
   const vl=Math.hypot(X,h)||1, lx=-X/vl, ly=h/vl;                // unit vector toward the vanishing point, in (u,d)
@@ -175,7 +175,7 @@ function mote(Z,X,h,r){
 // ringed planet (hand-built: dark body, lit limb, tilted ring split front/back)
 function ringedPlanet(Z,X,h){
   const R=1.65, id='pl'+(uid++);
-  const back=`<defs><linearGradient id="${id}r" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${KEY}" stop-opacity="0"/><stop offset=".3" stop-color="${KEY}" stop-opacity="${fm(.55*GAIN)}"/><stop offset=".7" stop-color="${FILL}" stop-opacity="${fm(.5*Math.min(1,GAIN*1.4))}"/><stop offset="1" stop-color="${FILL}" stop-opacity="0"/></linearGradient>
+  const back=`<defs><linearGradient id="${id}r" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${KEY}" stop-opacity="0"/><stop offset=".3" stop-color="${KEY}" stop-opacity="${fm(.36*GAIN)}"/><stop offset=".7" stop-color="${FILL}" stop-opacity="${fm(.32*Math.min(1,GAIN*1.4))}"/><stop offset="1" stop-color="${FILL}" stop-opacity="0"/></linearGradient>
   <radialGradient id="${id}" cx=".3" cy=".62" r=".95"><stop offset="0" stop-color="#3a3044"/><stop offset=".35" stop-color="#17121e"/><stop offset=".75" stop-color="#07060a"/><stop offset="1" stop-color="#030207"/></radialGradient></defs>
   <g transform="rotate(-16)"><ellipse cx="0" cy="0" rx="${fm(R*2.5)}" ry="${fm(R*.62)}" fill="none" stroke="url(#${id}r)" stroke-width="${fm(R*.16)}" opacity=".7"/></g>
   <circle cx="0" cy="0" r="${R}" fill="url(#${id})"/>
@@ -230,14 +230,14 @@ const ITEMS=(function(){
 // ---------- legibility: lights come on as you arrive, and dim while crossing the text box ----------
 const lightOp=(Z0,zr,z)=>clamp((REST+5.5-z)/4.5)*1;     // landmarks and beacons glow only when close
 function boxDim(X,h,z){
-  const p=P(X,h,z), padX=260, padY=200;
-  const inX=p[0]>SAFE.x0-padX&&p[0]<SAFE.x1+padX, inY=p[1]>SAFE.y0-padY&&p[1]<SAFE.y1+padY;
-  return (inX&&inY)?.45:1;
+  const p=P(X,h,z);
+  const dx=Math.max(SAFE.x0-p[0],0,p[0]-SAFE.x1), dy=Math.max(SAFE.y0-p[1],0,p[1]-SAFE.y1);
+  return lerp(.45,1,clamp(Math.hypot(dx,dy)/320));                // eases back up over 320 px outside the box
 }
-function fadeOf(z,solid){ // depth haze, and a soft fade as something passes the camera
+function fadeOf(z,solid){ // depth haze, a fade-in at the far limit (no pop-in), and a soft fade as something passes the camera
   const haze=1-(solid?.3:.62)*fogAmt(z);                          // solid things (rocks) stay solid; only glows and dust thin out
-  const near=clamp((z-ZMIN)/.8);
-  return haze*near;
+  const near=clamp((z-ZMIN)/1.4), far=clamp((ZFAR-z)/D);
+  return haze*near*far;
 }
 
 // ---------- mounting ----------
@@ -247,15 +247,18 @@ function zrel(it,c){return ((it.Z-c*D)%L+L)%L}
 
 function mountEl(it,z0,animate,kind){
   const z1=animate?z0-D:z0;
-  const zd=animate?clamp(Math.min(z0,z1),ZDRAW,z0):z0;
-  const s=F/zd;
+  let zd=animate?clamp(Math.min(z0,z1),ZDRAW,z0):z0;
   const [bx0,by0,bx1,by1]=it.bb;
+  // never rasterise a layer bigger than ~1600 px a side: huge layers are what makes a walk stutter
+  const CAP=1600, big=Math.max(bx1-bx0,by1-by0);
+  if(animate&&big*F/zd>CAP)zd=Math.min(z0,big*F/CAP);
+  const s=F/zd;
   const [ax,ay]=P(it.X,it.h,zd);
   const left=ax+bx0*s, top=ay+by0*s, wpx=(bx1-bx0)*s, hpx=(by1-by0)*s;
   if(wpx<1||hpx<1)return null;
-  const el=document.createElement('div'); el.className='it';
+  const el=document.createElement('div'); el.className='it'; el.dataset.k=(it.id??(it.id=++uidItem))+':'+kind+':'+Math.round(z0*100);
   const rotAt=z=>it.rock?(it.rot0+it.rate*z):0;
-  el.style.cssText=`left:${fm(left)}px;top:${fm(top)}px;width:${fm(wpx)}px;height:${fm(hpx)}px;transform-origin:${fm(VX-left)}px ${fm(VY-top)}px`;
+  el.style.cssText=`left:${fm(left)}px;top:${fm(top)}px;width:${fm(wpx)}px;height:${fm(hpx)}px;transform-origin:${fm(VX-left)}px ${fm(VY-top)}px`+(animate?';will-change:transform,opacity':'');
   el.innerHTML=`<svg width="${fm(wpx)}" height="${fm(hpx)}" viewBox="${fm(bx0)} ${fm(by0)} ${fm(bx1-bx0)} ${fm(by1-by0)}" style="transform-origin:50% 50%;transform:rotate(${fm(rotAt(z0))}deg)">${kind==='light'?it.light:it.body}</svg>`;
   const isLight=kind==='light';
   const opAt=z=>{
@@ -266,11 +269,17 @@ function mountEl(it,z0,animate,kind){
   };
   if(!animate){ el.style.opacity=fm(opAt(z0)); return el; }
   const kfs=[], rk=[];
+  // anti-strobe: anything whose edge would cross the frame faster than ~30 px per frame fades out before it whips past
+  // (Haunted does the same). Speed comes from how far the item's outer edge moves between neighbouring stops.
+  const ER=Math.hypot(it.X,it.h)+Math.max(bx1-bx0,by1-by0)/2;
+  const speedFade=t=>{const zA=z0-D*EASE(Math.max(0,t-.01)),zB=z0-D*EASE(Math.min(1,t+.01));
+    const sp=Math.abs(ER*F/Math.max(zB,.3)-ER*F/Math.max(zA,.3))/(.02*DUR/1000*60);return clamp(1-(sp-30)/50)};
   for(let i=0;i<=STOPS;i++){
     const t=i/STOPS, z=z0-D*EASE(t), k=zd/Math.max(z,ZMIN*.5);
-    kfs.push({offset:t,transform:`scale(${k.toFixed(5)})`,opacity:fm(opAt(Math.max(z,ZMIN*.5)))});
+    kfs.push({offset:t,transform:`scale(${k.toFixed(5)})`,opacity:fm(opAt(Math.max(z,ZMIN*.5))*speedFade(t))});
     if(it.rock)rk.push({offset:t,transform:`rotate(${fm(rotAt(z))}deg)`});
   }
+  el.style.transform=`scale(${(zd/z0).toFixed(5)})`;
   el.__anim=()=>{ if(it.rock)el.firstChild.animate(rk,{duration:DUR,easing:'linear',fill:'forwards'}); return el.animate(kfs,{duration:DUR,easing:'linear',fill:'forwards'}); };
   el.style.opacity=fm(opAt(z0));
   return el;
@@ -320,19 +329,31 @@ function paintShell(){
 
 // ---------- walking ----------
 function clearTimers(){timers.forEach(clearTimeout);timers=[]}
+function creepScale(){const m=new DOMMatrixReadOnly(getComputedStyle($('creepW')).transform);return m.a||1}
 function setCreep(on){
   const c=$('creepW');
-  if(!on){c.style.transition='none';c.style.transform='scale(1)';$('rig').classList.remove('idle');void c.offsetWidth;return}
+  c.style.transition='none';c.style.transform='scale(1)';$('rig').classList.remove('idle');void c.offsetWidth;   // flush so the push-in below really transitions
+  if(!on)return;
   c.style.transition=`transform ${CREEP_MS}ms ease-out`;c.style.transform='scale(1.06)';
   timers.push(setTimeout(()=>$('rig').classList.add('idle'),CREEP_MS));
+}
+// leave a rest without a jump: hand the push-in and the idle sway back to neutral over the walk / a short ease
+function settleCamera(ms){
+  const c=$('creepW'), s0=creepScale(), rig=$('rig');
+  const m=new DOMMatrixReadOnly(getComputedStyle(rig).transform), from=getComputedStyle(rig).transform;
+  c.style.transition='none';c.style.transform='scale(1)';void c.offsetWidth;
+  if(Math.abs(s0-1)>.0005)c.animate([{transform:`scale(${s0})`},{transform:'scale(1)'}],{duration:ms,easing:'ease-in-out'});
+  rig.classList.remove('idle');
+  if(from&&from!=='none')rig.animate([{transform:from},{transform:'none'}],{duration:500,easing:'ease-out'});
 }
 function render(){build(station,false);ui()}
 function advance(){
   if(walking)return;
   const rm=stage.classList.contains('rm')||matchMedia('(prefers-reduced-motion: reduce)').matches;
-  clearTimers(); setCreep(false);
-  if(rm){ station=(station+1)%NS; render(); const w=$('creepW'); w.animate([{opacity:0},{opacity:1}],{duration:400,easing:'ease-in-out'}); timers.push(setTimeout(()=>setCreep(true),30)); return }
+  clearTimers();
+  if(rm){ setCreep(false); station=(station+1)%NS; render(); const w=$('creepW'); w.animate([{opacity:0},{opacity:1}],{duration:400,easing:'ease-in-out'}); timers.push(setTimeout(()=>setCreep(true),30)); return }
   walking=true;
+  settleCamera(DUR);
   build(station,true);
   // the craft banks and drifts through each leg of the flight
   $('cam').animate([{transform:'translate(0,0) rotate(0deg)'},{transform:'translate(7px,-4px) rotate(1.1deg)',offset:.35},{transform:'translate(-5px,3px) rotate(-.7deg)',offset:.75},{transform:'translate(0,0) rotate(0deg)'}],{duration:DUR,easing:'ease-in-out'});
