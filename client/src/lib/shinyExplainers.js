@@ -2,6 +2,7 @@ import { BENDLE_STEP_POINTS } from './bendleScoring.js'
 import { HUES_CUES_SCORE_BANDS } from './huesCuesScoring.js'
 import { PIN_MIN_ROOM_FOR_FRACTION, PIN_POINTS, PIN_WINNER_FRACTION } from './pinScoring.js'
 import { WAGER_TIERS } from './wagerScoring.js'
+import { MOVIE_CHAIN_POINTS } from './movieChainScoring.js'
 
 // The title card becomes a two-beat slide: announce, then explain. Existing
 // title slides stay unchanged; buildShinyTitleSlide stamps these parts only
@@ -78,6 +79,59 @@ export const SHINY_EXPLAINERS = Object.freeze([
     scoring: [
       'All or nothing: every item in the right spot scores.',
       'One out of place scores 0.',
+    ],
+    assets: [],
+  }),
+  // The Drop's pool is host-set per slide (data.dropTotal, default
+  // DEFAULT_DROP_TOTAL), so the card states the rule, never a number.
+  Object.freeze({
+    inputType: 'drop',
+    mode: 'rules',
+    rendererKey: 'drop',
+    action: 'Split your points across the tiles on your phone, then lock it in.',
+    scoring: [
+      'You keep the points on the right tile. Points on the other tiles are lost.',
+      'Every point must be placed. No split locked in scores 0.',
+    ],
+    assets: [],
+  }),
+  // Tiers are fixed in the scorer; the announced movie count is host-set
+  // per slide, so the card never states a count.
+  Object.freeze({
+    inputType: 'movie-chain',
+    mode: 'rules',
+    rendererKey: 'movieChain',
+    action: 'On your phone, link the two movies through shared actors, then lock it in.',
+    scoring: [
+      `Hit the shortest chain or beat it: +${MOVIE_CHAIN_POINTS.shortest} · one extra movie: +${MOVIE_CHAIN_POINTS.oneLonger}.`,
+      'Count includes both end movies. Any wrong link scores 0.',
+    ],
+    assets: [],
+  }),
+  // One 'choice' schema covers single-pick (Mandela Effect) and multi-pick
+  // (Mixology); only the phone says which (ChoiceBoard caption + ○/☐), so
+  // the copy points there. Points are host-set (pointsForChoice): no number.
+  Object.freeze({
+    inputType: 'choice',
+    mode: 'rules',
+    rendererKey: 'choice',
+    action: 'Tap your answer on your phone and lock it in; your phone says to pick one or every one that fits.',
+    scoring: [
+      'All or nothing: only the exact right picks score.',
+      'One wrong, missing or extra pick scores 0.',
+    ],
+    assets: [],
+  }),
+  // Points per correct pair are host-set per slide (pointsPerMatch), so the
+  // card states the per-pair rule, never a number.
+  Object.freeze({
+    inputType: 'matching',
+    mode: 'rules',
+    rendererKey: 'matching',
+    action: 'Pair every item on your phone, one from each side, then lock it in.',
+    scoring: [
+      'Each correct pair scores points.',
+      'Wrong pairs score 0. The others still count.',
     ],
     assets: [],
   }),

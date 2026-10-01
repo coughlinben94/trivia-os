@@ -12,6 +12,10 @@ import PinItExplainer from '../explainers/PinItExplainer.jsx'
 import HuesCuesExplainer from '../explainers/HuesCuesExplainer.jsx'
 import WagerExplainer from '../explainers/WagerExplainer.jsx'
 import OrderExplainer from '../explainers/OrderExplainer.jsx'
+import DropExplainer from '../explainers/DropExplainer.jsx'
+import MovieChainExplainer from '../explainers/MovieChainExplainer.jsx'
+import ChoiceExplainer from '../explainers/ChoiceExplainer.jsx'
+import MatchingExplainer from '../explainers/MatchingExplainer.jsx'
 
 // Renderer keys are defined by the shared format registry; this map has no
 // format IDs, so eligibility remains in one place.
@@ -22,6 +26,10 @@ const EXPLAINER_RENDERERS = {
   huesCues: HuesCuesExplainer,
   wager: WagerExplainer,
   order: OrderExplainer,
+  drop: DropExplainer,
+  movieChain: MovieChainExplainer,
+  choice: ChoiceExplainer,
+  matching: MatchingExplainer,
 }
 
 // The standalone title card that opens every shiny series (type

@@ -30,7 +30,7 @@ describe('explainerImageUrls', () => {
 })
 
 describe('rules-card entries by input_schema.type', () => {
-  const ruleTypes = ['bendle', 'pin', 'hues-cues', 'wager', 'order']
+  const ruleTypes = ['bendle', 'pin', 'hues-cues', 'wager', 'order', 'drop', 'movie-chain', 'choice', 'matching']
   it.each(ruleTypes)('%s resolves to exactly one rules definition', type => {
     const matches = SHINY_EXPLAINERS.filter(d => d.inputType === type)
     expect(matches).toHaveLength(1)
@@ -43,7 +43,7 @@ describe('rules-card entries by input_schema.type', () => {
     expect(matches[0].scoring.length).toBeLessThanOrEqual(2)
   })
   it('formats without a card stay out', () => {
-    for (const type of ['choice', 'matching', 'race', 'venn', 'grid', 'image', 'audio', 'video', 'text', 'list', 'elimination']) {
+    for (const type of ['race', 'venn', 'grid', 'image', 'audio', 'video', 'text', 'list', 'elimination']) {
       expect(getShinyExplainer('fmt_generated_x', type)).toBeNull()
     }
   })
