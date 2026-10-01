@@ -13,6 +13,8 @@ import { authedClient, updateShowVerified } from './authed-client.js'
 //   A) play() rejects with NotAllowedError            (the textbook block)
 //   B) AudioContext.resume() never settles, so play() is never even reached
 //      (what a real Chromium run showed: resume() hangs, no error, silence)
+// The audio element now belongs to the audio director and exists only once a play was
+// asked for (it is in the DOM, hidden), so waits are on the slide text, not on <audio>.
 // It does NOT prove Chrome's own policy decision; the unit tests cover the logic
 // and the first real show/rehearsal is the final proof.
 //
@@ -53,10 +55,12 @@ test.afterAll(async () => {
   if (error || !data?.length) console.error(`[e2e] CLEANUP FAILED for ${ID} — delete this row by hand`, error ?? '0 rows')
 })
 
-// Refuse until the page sees a real click, exactly as the autoplay policy does.
+// Refuse until the page sees a real gesture, exactly as the autoplay policy does.
 const refuseUntilClick = mode => {
   window.__gesture = false
-  window.addEventListener('click', () => { window.__gesture = true }, true) // capture: runs before the app's handler
+  // Chrome grants user activation on pointerdown / keydown (not on the later click), and the
+  // audio director retries on pointerdown, so the simulation must flip at the same moment.
+  for (const type of ['pointerdown', 'keydown']) window.addEventListener(type, () => { window.__gesture = true }, true) // capture: before the app's handler
   if (mode === 'reject') {
     const orig = HTMLMediaElement.prototype.play
     HTMLMediaElement.prototype.play = function () {
@@ -73,9 +77,10 @@ const refuseUntilClick = mode => {
 
 for (const mode of ['reject', 'hang']) {
   test(`blocked remote play (${mode === 'reject' ? 'play() rejects' : 'resume() hangs'}) shows "Click for sound"; tapping it plays and clears the cue`, async ({ page }) => {
+    await updateShowVerified(sb, ID, { audio_playing: null }) // a mark left by the previous test would play on load
     await page.addInitScript(refuseUntilClick, mode)
     await page.goto(`/display?show=${ID}`, { waitUntil: 'networkidle' }) // deliberately NO click on the TV
-    await expect(page.locator('audio')).toHaveCount(1, { timeout: 8000 })
+    await expect(page.getByText('e2e audio question')).toBeVisible({ timeout: 8000 })
     expect(await cue(page).count()).toBe(0)
 
     // The host's Next press, as the database sees it. The TV's live-update
@@ -90,9 +95,16 @@ for (const mode of ['reject', 'hang']) {
       return await cue(page).count()
     }, { timeout: 40000, intervals: [0] }).toBeGreaterThan(0)
     await expect(cue(page)).toBeVisible()
-    expect((await audioState(page)).paused).toBe(true) // nothing played
+    // 'reject': nothing played. ('hang' only fakes the context's state; the real element may
+    // run, and the check still reports silence because the context is "suspended".)
+    if (mode === 'reject') expect((await audioState(page)).paused).toBe(true)
 
-    await cue(page).click() // a real user gesture
+    // A real user gesture at the cue's position. The audio director retries on pointerdown (a
+    // real activation), which clears the cue before mouseup, so Playwright's locator.click()
+    // (which wants the element to survive the click) would wait forever for a cue that is
+    // already gone. The raw mouse press is what a person does.
+    const box = await cue(page).boundingBox()
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
     await expect.poll(async () => (await audioState(page))?.paused, { timeout: 8000 }).toBe(false)
     await expect(cue(page)).toHaveCount(0, { timeout: 5000 })
   })
@@ -101,7 +113,7 @@ for (const mode of ['reject', 'hang']) {
 test('a play that works shows no cue', async ({ page }) => {
   await updateShowVerified(sb, ID, { audio_playing: null })
   await page.goto(`/display?show=${ID}`, { waitUntil: 'networkidle' })
-  await expect(page.locator('audio')).toHaveCount(1, { timeout: 8000 })
+  await expect(page.getByText('e2e audio question')).toBeVisible({ timeout: 8000 })
   await page.locator('body').click({ position: { x: 5, y: 5 } }) // the real setup ritual: one click on the TV
   await expect.poll(async () => {
     await updateShowVerified(sb, ID, { audio_playing: { slideId: 'q1', playing: true, part: 0, n: Date.now() } })

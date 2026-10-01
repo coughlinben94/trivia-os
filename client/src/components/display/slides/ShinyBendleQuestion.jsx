@@ -146,7 +146,6 @@ function bindToneToDirector() {
 }
 
 function getClip(song, url, fromSec, toSec) {
-  bindToneToDirector()
   if (clipsSongId !== song.id) { clips.clear(); clipsSongId = song.id }
   const key = `${url}|${fromSec}|${toSec}`
   if (!clips.has(key)) {
