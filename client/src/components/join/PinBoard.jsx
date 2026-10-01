@@ -1,6 +1,7 @@
 // client/src/components/join/PinBoard.jsx
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../../lib/supabase.js'
+import { usePhoneAnswerSave } from '../../hooks/usePhoneAnswerSave.js'
 import PinMapInteractive from '../shared/PinMapInteractive.jsx'
 import { isValidPin } from '../../lib/pinScoring.js'
 
@@ -15,34 +16,14 @@ export default function PinBoard({ slide, team, theme, preview = false, onAnswer
   const [pin, setPin] = useState(null)
   const [committed, setCommitted] = useState(null)
   const [saving, setSaving] = useState(false)
-  const [saveFailed, setSaveFailed] = useState(false)
-  const saveChainRef = useRef(Promise.resolve())
+  const { saveAnswer, saveFailed } = usePhoneAnswerSave({ preview, slide, team, board: 'PinBoard', noun: 'pin' })
+  const save = useCallback(
+    (next) => (preview ? Promise.resolve(true) : saveAnswer({ lat: next.lat, lon: next.lon })),
+    [preview, saveAnswer]
+  )
   const touchedRef = useRef(false)
-
   const same = (a, b) => !!a && !!b && a.lat === b.lat && a.lon === b.lon
   const dirty = !!pin && !same(pin, committed)
-
-  const save = useCallback((next) => {
-    if (preview) return Promise.resolve(true)
-    const run = saveChainRef.current.then(async () => {
-      const upsert = supabase.from('phone_answers').upsert(
-        { show_id: slide.showId ?? team.showId, slide_id: slide.id, team_id: team.id, answer: { lat: next.lat, lon: next.lon } },
-        { onConflict: 'slide_id,team_id' }
-      )
-      let error
-      try {
-        ;({ error } = await Promise.race([
-          upsert,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('pin save timed out')), 8000)),
-        ]))
-      } catch (err) { error = err }
-      if (error) console.error('[PinBoard] pin save failed:', error)
-      setSaveFailed(!!error)
-      return !error
-    })
-    saveChainRef.current = run.catch(() => false)
-    return run
-  }, [preview, slide.id, slide.showId, team.id, team.showId])
 
   // Restore this team's own pin after a reload (bar wifi). Never overrides a pin already dropped.
   useEffect(() => {
