@@ -56,6 +56,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
 import { createClient } from '@supabase/supabase-js'
+import { parseEnvFile, assertTriviaProject, TRIVIA_PROJECT } from './_env.mjs'
 import { fetchAllPages } from '../client/src/lib/fetchAllPages.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -90,16 +91,6 @@ const TABLES = [
 // single select would silently truncate the most valuable table here.
 const PAGE = 1000
 
-function parseEnvFile(path) {
-  try {
-    return Object.fromEntries(
-      readFileSync(path, 'utf8').split('\n')
-        .filter(l => l.trim() && !l.trim().startsWith('#') && l.includes('='))
-        .map(l => { const i = l.indexOf('='); let v = l.slice(i + 1).trim(); if (/^(".*"|'.*')$/.test(v)) v = v.slice(1, -1); return [l.slice(0, i).trim(), v] })
-    )
-  } catch { return {} }
-}
-
 const env = { ...parseEnvFile(join(__dirname, '..', '.env.local')), ...process.env }
 const url = env.VITE_SUPABASE_URL
 const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY
@@ -110,14 +101,7 @@ if (!url || !key) {
   process.exit(1)
 }
 
-// Guard against the mistake that already cost a production 404: this is
-// the Baynes Trivia project, never Baynes Business Suite.
-const EXPECTED_PROJECT = 'qwtbgusqfoypvehnungr'
-if (!url.includes(EXPECTED_PROJECT)) {
-  console.error(`Refusing to run: VITE_SUPABASE_URL is not the Baynes Trivia project (${EXPECTED_PROJECT}).`)
-  console.error(`  got: ${url}`)
-  process.exit(1)
-}
+try { assertTriviaProject(url) } catch (e) { console.error(e.message); process.exit(1) }
 
 const stamp = new Date().toISOString().slice(0, 10)
 const baseDir = outFlag !== -1
@@ -211,7 +195,7 @@ async function main() {
 
   writeFileSync(join(outDir, 'manifest.json'), JSON.stringify({
     takenAt: new Date().toISOString(),
-    project: EXPECTED_PROJECT,
+    project: TRIVIA_PROJECT,
     auth: how,
     tables: results,
   }, null, 2))

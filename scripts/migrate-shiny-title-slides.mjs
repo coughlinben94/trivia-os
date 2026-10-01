@@ -27,10 +27,10 @@
 // The transform itself is client/src/lib/shinyTitleMigration.js (unit
 // tested); this file is only the Supabase plumbing around it.
 
-import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createClient } from '@supabase/supabase-js'
+import { parseEnvFile, assertTriviaProject } from './_env.mjs'
 import { migrateShinyTitleSlides } from '../client/src/lib/shinyTitleMigration.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -43,19 +43,11 @@ if (!showId) {
   process.exit(1)
 }
 
-function parseEnvFile(path) {
-  try {
-    return Object.fromEntries(
-      readFileSync(path, 'utf8').split('\n')
-        .filter(l => l.trim() && !l.trim().startsWith('#') && l.includes('='))
-        .map(l => { const i = l.indexOf('='); let v = l.slice(i + 1).trim(); if (/^(".*"|'.*')$/.test(v)) v = v.slice(1, -1); return [l.slice(0, i).trim(), v] })
-    )
-  } catch { return {} }
-}
 const env = { ...parseEnvFile(join(__dirname, '..', '.env.local')), ...process.env }
 const url = env.VITE_SUPABASE_URL
 const key = env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_ANON_KEY
 if (!url || !key) { console.error('Missing VITE_SUPABASE_URL / key — see header comment.'); process.exit(1) }
+try { assertTriviaProject(url) } catch (e) { console.error(e.message); process.exit(1) }
 if (write && !env.SUPABASE_SERVICE_ROLE_KEY) {
   console.error('--write needs SUPABASE_SERVICE_ROLE_KEY (shows writes are RLS-gated on host_verified; the anon key cannot apply this).')
   process.exit(1)

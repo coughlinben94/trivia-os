@@ -34,6 +34,37 @@ export function pickFreeColor(taken = [], preferred) {
   return TEAM_COLORS[start]
 }
 
+// Team emoji — an optional personality mark picked on /join, stored in
+// teams.emoji, shown beside the name on the TV. A fixed set (no free typing)
+// so nothing rude or broken lands on the bar's screen.
+export const TEAM_EMOJIS = [
+  '🦊','🐻','🐯','🦁','🐸','🐙','🦄','🐲','🦉','🐧',
+  '🦈','🐝','🐺','🦖','🐢','🦅','🦋','🐼','🦆','🐌',
+  '🍎','🍕','🌮','🍔','🍩','🍺','☕','🍿','🧀','🥨',
+  '🔥','⚡','🌈','⭐','🌙','☀️','❄️','🌊','🌵','🍀',
+  '🚀','🎸','🎲','🧠','👑','💎','🎯','🏆','🛸','🎃',
+]
+
+// Team names are letters only (plus spaces, apostrophes, hyphens) — the emoji
+// is where the personality goes. Returns an error message, or null if fine.
+export function teamNameError(name) {
+  const n = (name ?? '').trim()
+  if (!n) return 'Enter your team name to join'
+  if (n.length > 30) return 'Keep it under 30 characters'
+  if (!/^[\p{L}][\p{L}\p{M}' \-’]*$/u.test(n)) return 'Team names use letters only — pick an emoji for personality'
+  return null
+}
+
+// teams rows -> Map(normalized name -> emoji).
+export function emojisByName(rows) {
+  const map = new Map()
+  for (const r of rows ?? []) {
+    const key = normalizeTeamName(r?.name)
+    if (key && r.emoji) map.set(key, r.emoji)
+  }
+  return map
+}
+
 // teams rows -> Map(normalized name -> color). Used where a surface only
 // knows the team by name (scoreboard_teams has no color column).
 export function colorsByName(rows) {
