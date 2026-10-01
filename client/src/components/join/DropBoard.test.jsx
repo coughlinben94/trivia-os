@@ -77,6 +77,38 @@ describe('<DropBoard>', () => {
     expect(nums()).toEqual(['25', '0', '0', '0'])
   })
 
+  it('teams can change the points per tap, 1 to 5, default 5', () => {
+    render()
+    const per = n => container.querySelector(`button[aria-label="${n} ${n === 1 ? 'point' : 'points'} per tap"]`)
+    for (const n of [1, 2, 3, 4, 5]) expect(per(n)).not.toBeNull()
+    expect(per(6)).toBeNull()
+    expect(per(5).getAttribute('aria-pressed')).toBe('true')
+    expect(per(3).getAttribute('aria-pressed')).toBe('false')
+    tap(per(3))
+    expect(per(3).getAttribute('aria-pressed')).toBe('true')
+    tap(addBtn(0)); tap(addBtn(0))
+    expect(lockBtn().textContent).toContain('Place 19 more')
+    tap(subBtn(0)) // − takes a full step too
+    expect(lockBtn().textContent).toContain('Place 22 more')
+  })
+
+  it('the last tap places only what is left, whatever the step', () => {
+    render({ dropTotal: 7 })
+    tap(container.querySelector('button[aria-label="5 points per tap"]'))
+    tap(addBtn(0))
+    expect(lockBtn().textContent).toContain('Place 2 more')
+    tap(addBtn(1)) // a 5-tap with 2 left places 2
+    expect(container.textContent).toContain('all placed')
+    expect(lockBtn().disabled).toBe(false)
+  })
+
+  it('offers only steps that fit inside the pool', () => {
+    render({ dropTotal: 3 })
+    for (const n of [1, 2, 3]) expect(container.querySelector(`button[aria-label="${n} ${n === 1 ? 'point' : 'points'} per tap"]`)).not.toBeNull()
+    expect(container.querySelector('button[aria-label="4 points per tap"]')).toBeNull()
+    expect(container.querySelector('button[aria-label="5 points per tap"]')).toBeNull()
+  })
+
   it('uses 1-point taps when the pool is not a multiple of 5', () => {
     render({ dropTotal: 12 })
     tap(addBtn(0))

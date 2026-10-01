@@ -2101,7 +2101,7 @@ function DropBuilder({ options, correctId, total, onChangeOptions, onBatchChange
     <div className="flex flex-col gap-3">
       <label className="block text-xs font-medium text-gray-700 mb-1.5">The 4 tiles</label>
       <p className="text-xs text-gray-400 -mt-2">
-        Teams split {total} points across these on their phones, {chip} per tap. Points left on the correct tile are their score; the rest is lost.
+        Teams split {total} points across these on their phones. They pick 1 to 5 points per tap (starting at {chip}) and can go all in on a tile. Points left on the correct tile are their score; the rest is lost.
         On the TV each Next drops one wrong tile off, in a random order, never the correct one. The ↑↓ order is just how the tiles are laid out.
       </p>
       {!correctUsable && (

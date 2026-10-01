@@ -16,7 +16,12 @@ export default function DropBoard({ slide, team, theme, preview = false, onAnswe
   const options = useMemo(() => dropOptions(data), [data])
   const optionIds = useMemo(() => options.map(o => o.id), [options])
   const total = data.dropTotal ?? DEFAULT_DROP_TOTAL
-  const chip = dropChip(total)
+  // Points per tap is the team's own call (1 to 5, only sizes that fit the
+  // pool). The default is dropChip(total); a team that wants fine control or a
+  // fast fill changes it, and the last tap always places just what is left.
+  const stepChoices = useMemo(() => [1, 2, 3, 4, 5].filter(n => n <= total), [total])
+  const [pickedStep, setPickedStep] = useState(null)
+  const chip = stepChoices.includes(pickedStep) ? pickedStep : dropChip(total)
   const locked = !!data.dropLocked
   const step = data.dropStep ?? 0
   const droppedIds = useMemo(() => (locked ? dropSequence(data).slice(0, step) : []), [locked, data, step])
@@ -44,12 +49,14 @@ export default function DropBoard({ slide, team, theme, preview = false, onAnswe
   }, [preview, optionsKey])
 
   function tapAdd(id) {
-    if (locked || remaining < chip) return
-    setAlloc(a => ({ ...a, [id]: (a[id] ?? 0) + chip }))
+    const amt = Math.min(chip, remaining)
+    if (locked || amt <= 0) return
+    setAlloc(a => ({ ...a, [id]: (a[id] ?? 0) + amt }))
   }
   function tapSub(id) {
-    if (locked || (alloc[id] ?? 0) < chip) return
-    setAlloc(a => ({ ...a, [id]: a[id] - chip }))
+    const amt = Math.min(chip, alloc[id] ?? 0)
+    if (locked || amt <= 0) return
+    setAlloc(a => ({ ...a, [id]: a[id] - amt }))
   }
 
   // All in: the whole pool on one tile, replacing whatever was placed. There is
@@ -150,6 +157,29 @@ export default function DropBoard({ slide, team, theme, preview = false, onAnswe
           </span>
         </div>
 
+        {!locked && stepChoices.length > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+            <span style={{ color: `${text}b3`, fontSize: '0.8rem', fontFamily: 'DM Sans, sans-serif' }}>Per tap</span>
+            {stepChoices.map(n => (
+              <button
+                key={n}
+                onClick={() => setPickedStep(n)}
+                aria-pressed={chip === n}
+                aria-label={`${n} ${n === 1 ? 'point' : 'points'} per tap`}
+                style={{
+                  minWidth: 48, height: 36, borderRadius: 999, padding: '0 0.8rem',
+                  border: chip === n ? `2px solid ${highlight}` : `1px solid ${text}30`,
+                  background: chip === n ? `${highlight}26` : 'transparent',
+                  color: chip === n ? highlight : text, fontSize: '0.9rem', fontWeight: 700,
+                  fontFamily: 'DM Sans, sans-serif', cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+                }}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.7rem' }}>
           {options.map((opt, i) => (
             <DropTile
@@ -160,8 +190,8 @@ export default function DropBoard({ slide, team, theme, preview = false, onAnswe
               locked={locked}
               dropped={droppedIds.includes(opt.id)}
               winner={revealed && opt.id === data.correctId}
-              canAdd={!locked && remaining >= chip}
-              canSub={!locked && (alloc[opt.id] ?? 0) >= chip}
+              canAdd={!locked && remaining > 0}
+              canSub={!locked && (alloc[opt.id] ?? 0) > 0}
               chip={chip}
               onAdd={() => tapAdd(opt.id)}
               onSub={() => tapSub(opt.id)}
