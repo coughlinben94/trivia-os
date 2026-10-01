@@ -4,7 +4,7 @@ import { SHINY_GOLD } from '../../../lib/shinyGold.js'
 import { EASE_PANEL, EASE_OUT } from '../../../lib/easings.js'
 import { seededShuffle } from '../../../lib/matchingScoring.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
-import { supabase } from '../../../lib/supabase.js'
+import { usePhoneSubmitCounts } from '../../../hooks/usePhoneSubmitCounts.js'
 import ShinySignal from '../ShinySignal.jsx'
 
 // Two-beat pan reveal (2026-08-18, Ben: "make it not so different — pans
@@ -30,28 +30,7 @@ export default function ShinyMatchingQuestion({ slide, show, theme }) {
   const revealed = !!data.matchingRevealed
   const reduce = useReducedMotion()
 
-  const [submittedCount, setSubmittedCount] = useState(0)
-  const [teamCount, setTeamCount] = useState(0)
-
-  useEffect(() => {
-    if (locked || revealed) return
-    let cancelled = false
-    async function load() {
-      const { data: count } = await supabase.rpc('phone_answers_count', { p_slide_id: slide.id })
-      if (!cancelled) setSubmittedCount(count ?? 0)
-    }
-    load()
-    const interval = setInterval(load, 2000)
-    return () => { cancelled = true; clearInterval(interval) }
-  }, [slide.id, locked, revealed])
-
-  useEffect(() => {
-    if (!show?.id || revealed) return
-    let cancelled = false
-    supabase.from('teams').select('id', { count: 'exact', head: true }).eq('show_id', show.id)
-      .then(({ count }) => { if (!cancelled) setTeamCount(count ?? 0) })
-    return () => { cancelled = true }
-  }, [show?.id, revealed])
+  const { submitted: submittedCount, teamCount } = usePhoneSubmitCounts(slide.id, show?.id, { pollStop: locked || revealed, teamsStop: revealed })
 
   const leftItems = pairs.map((p, i) => ({ id: p.id, label: p.left, image: p.leftImage, pairRank: i }))
   const shuffledRight = seededShuffle(pairs, slide.id ?? 'preview')
