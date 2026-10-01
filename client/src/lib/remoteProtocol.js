@@ -30,10 +30,14 @@ export function readRemoteLinkFlag(storage = globalThis.localStorage) {
 
 export const MAX_INBOUND_BYTES = 8192
 export const COMMAND_TTL_MS = 1500
-// The Timer drawer sends whole minutes in this range (lib/showTimer.js parseMinutes allows 0.05 to 180).
-export const TIMER_MIN_MINUTES = 1
-export const TIMER_MAX_MINUTES = 180
-export const TIMER_PRESETS = [1, 2, 3, 5, 10]
+// The Timer drawer works in 30 second steps, 30 seconds to 3 hours.
+export const TIMER_STEP_SECONDS = 30
+export const TIMER_MIN_SECONDS = 30
+export const TIMER_MAX_SECONDS = 10800
+export const TIMER_PRESETS_SECONDS = [30, 60, 120, 180, 300, 600]
+// An iPad page cached from before seconds still sends { minutes } (whole, 1 to 180).
+export const TIMER_LEGACY_MAX_MINUTES = 180
+export const TIMER_ADD_SECONDS = [30, 60]
 export const BEAT_MS = 2000
 export const STALE_BEAT_MS = 5000
 
@@ -84,7 +88,8 @@ export const REFUSAL_TEXT = {
   'timer-running': 'A timer is already running. Use Restart to replace it',
   'timer-changed': 'The timer changed on the laptop. Look again',
   'no-timer': 'No timer is running',
-  'bad-minutes': 'Pick a whole number of minutes, 1 to 180',
+  'bad-minutes': 'Pick a time in 30 second steps, 30 seconds to 3 hours',
+  'bad-add': 'Add 30 seconds or 1 minute',
 }
 // One line for a score fix, shown on the laptop and written to the relay log.
 // Team names come from phones: any newline or other whitespace run becomes one

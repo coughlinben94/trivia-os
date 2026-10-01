@@ -63,7 +63,7 @@ describe('<TimerControl>', () => {
     expect(actions.setShowTimer).not.toHaveBeenCalled()
   })
 
-  it('running timer: shows the reading, offers Restart, Pause, +1 min, Cancel', () => {
+  it('running timer: shows the reading, offers Restart, Pause, +30 s, +1 min, Cancel', () => {
     render(startTimer(90000, Date.now()))
     expect(container.querySelector('[data-timer-readout]').textContent).toContain('1:30')
     expect(button('Restart')).toBeTruthy()
@@ -71,9 +71,34 @@ describe('<TimerControl>', () => {
     expect(actions.setShowTimer.mock.calls[0][0]).toMatchObject({ state: 'paused', remainingMs: 90000 })
     act(() => button('+1 min').click())
     expect(actions.setShowTimer.mock.calls[1][0].endsAt).toBe(5_000_000 + 150000)
+    act(() => button('+30 s').click())
+    expect(actions.setShowTimer.mock.calls[2][0].endsAt).toBe(5_000_000 + 120000)
     act(() => button('Cancel').click())
     act(() => button('Tap again to cancel').click())
-    expect(actions.setShowTimer.mock.calls[2][0]).toBeNull()
+    expect(actions.setShowTimer.mock.calls[3][0]).toBeNull()
+  })
+
+  it.each([['1:30'], ['90s'], ['1.5'], ['90 seconds']])('typing %s starts a 90 second timer', t => {
+    render(null)
+    type(t)
+    act(() => button('Start').click())
+    expect(actions.setShowTimer.mock.calls[0][0]).toMatchObject({ state: 'running', totalMs: 90000 })
+  })
+
+  it('bad seconds like 1:75 keep Start off and show the hint with the new forms', () => {
+    render(null)
+    type('1:75')
+    expect(button('Start').disabled).toBe(true)
+    expect(container.textContent).toContain('1:30')
+    expect(container.textContent).toContain('90s')
+    expect(input().placeholder).toContain('1:30')
+  })
+
+  it('+30 s on a finished timer starts a fresh 30 seconds', async () => {
+    render(startTimer(3000, Date.now()))
+    await act(async () => { vi.advanceTimersByTime(3500) })
+    act(() => button('+30 s').click())
+    expect(actions.setShowTimer.mock.calls[0][0]).toMatchObject({ state: 'running', totalMs: 30000 })
   })
 
   it('paused timer: Resume restarts the clock from what was left', () => {
