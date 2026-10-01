@@ -1,5 +1,5 @@
 // Forest verifier (Halloween forest spec §3 gates 2, 3, 3b, 5, 6-subset, 7-core; plan 3b-4, metric-free part).
-//   node scripts/forest-verify.mjs probe-api | safebox | census [--freeze-baseline] | perf | covered-cut | reduced-motion | all | selftest
+//   node scripts/forest-verify.mjs probe-api | safebox | census [--freeze-baseline] | perf | covered-cut | reduced-motion | strobe [--walk A>B] | all | selftest
 // census compares against scripts/forest-census.frozen.json: a REGRESSION baseline captured from the current
 // build (census --freeze-baseline), not a design threshold.
 // Prints PASS / FAIL / INFO lines with measured values; exits 1 on any FAIL, 3 on POISONED (the sampler
@@ -9,7 +9,7 @@
 // The REAL /display route needs a live Supabase show and is the later gate 9 (and gate 6's "measured on
 // real /display with a slide transition running"); nothing here measures /display.
 //
-// NOT HERE (deliberately): gate 6 STROBE, gate 4 FIDELITY vs v3 (metric + tolerance are Ben's,
+// NOT HERE (deliberately): gate 4 FIDELITY vs v3 (metric + tolerance are Ben's,
 // STAYS-HUMAN), the covered-cut tolerance (NOT DECIDED; a PROVISIONAL line uses the critique suggestion), gate 7's
 // state checks other than the covered cut.
 //
@@ -32,7 +32,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { SAFE_BOX, lumaStats, contrastRatio, easeInOut, compositeStack, diffStats, quantile } from '../client/src/lib/forestVerifyMath.js'
+import { SAFE_BOX, lumaStats, contrastRatio, easeInOut, compositeStack, diffStats, quantile, edgeSpeeds, strobeVerdict, layerContrast, STROBE_SPEED_PX, STROBE_CONTRAST, STROBE_MIN_PX } from '../client/src/lib/forestVerifyMath.js'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const PORT = 5206, BASE = `http://localhost:${PORT}`
@@ -551,6 +551,114 @@ async function reducedMotion() {
   await page.context().close()
 }
 
+// ---------------------------------------------------------------- 6b. strobe (spec §3 gate 6 STROBE)
+// LOCKED rule (spec; constants live in forestVerifyMath.js, never flags): a layer faster than
+// STROBE_SPEED_PX = 8 px/frame at 60 Hz must have effective Michelson contrast <= STROBE_CONTRAST = 0.10.
+// LAYER = each separately animated unit of a walk: every .it item wrapper, every .ly sub-layer inside it
+//   (v3 animates sub-layer opacity for lit bark / lantern glass), and .fs-ground.
+// SPEED = freeze(t) stepped every 16.667 ms across the whole walk; each layer's getBoundingClientRect,
+//   clipped to the 1920x1080 viewport (the ON-SCREEN box); per step the largest |delta| of its four edges.
+//   Known limit: a layer larger than the screen (the ground, a near trunk) has clipped edges that do not
+//   move, so its INTERNAL motion is not seen by this box method.
+// CONTRAST = for each layer over the speed lock, at the frame ending its fastest step (first if tied):
+//   capture the frozen frame (retake-until-identical sampler), capture again with THAT layer
+//   visibility:hidden, restore. Its pixels = pixels that differ; Lin / Lout = mean luma (Rec.709 on sRGB
+//   bytes, as safebox) of those pixels with / without it; contrast = |Lin-Lout|/(Lin+Lout). Fewer than
+//   STROBE_MIN_PX = 25 changed pixels = invisible in that frame: INFO, skipped. Only the peak-speed frame
+//   is measured (not the worst-contrast frame among all over-lock frames). Every over-lock layer is
+//   measured: no sampling.
+const STEP_MS = 1000 / 60
+function speedSample(tEnd, step) {
+  const stage = document.querySelector('.fs-stage')
+  const layers = [...stage.querySelectorAll('.fs-world .it, .fs-world .it .ly, .fs-ground, [data-fv-layer]')]
+  layers.forEach((e, i) => e.setAttribute('data-fv-sid', String(i)))
+  const kind = e => (e.hasAttribute('data-fv-layer') ? 'fixture' : e.classList.contains('fs-ground') ? 'ground' : e.classList.contains('it') ? 'item' : 'sublayer')
+  const rects = layers.map(() => [])
+  const n = Math.round(tEnd / step)
+  for (let k = 0; k <= n; k++) {
+    window.__forest.freeze(k * step)
+    layers.forEach((e, i) => {
+      const r = e.getBoundingClientRect()
+      const l = Math.max(0, r.left), t = Math.max(0, r.top), R = Math.min(innerWidth, r.right), B = Math.min(innerHeight, r.bottom)
+      rects[i].push(R > l && B > t ? [l, t, R, B].map(v => Math.round(v * 100) / 100) : null)
+    })
+  }
+  return layers.map((e, i) => ({
+    sid: i, kind: kind(e), cls: e.className.toString().trim(), ownAnim: e.getAnimations().length > 0,
+    item: e.closest('.it') ? [...e.closest('.fs-world').children].indexOf(e.closest('.it')) : -1, rects: rects[i],
+  }))
+}
+// speeds -> over-lock layers -> raster contrast. Returns rows (one per over-lock layer) + stats.
+async function strobeRun(page, tEnd, label) {
+  const layers = await page.evaluate(`(${speedSample})(${tEnd}, ${STEP_MS})`)
+  const fast = []
+  let maxSpeed = 0
+  for (const L of layers) {
+    const sp = edgeSpeeds(L.rects)
+    let pk = -1
+    sp.forEach((v, i) => { if (v != null && (pk < 0 || v > sp[pk])) pk = i })
+    if (pk < 0) continue
+    maxSpeed = Math.max(maxSpeed, sp[pk])
+    if (sp[pk] > STROBE_SPEED_PX) fast.push({ ...L, speed: sp[pk], t: (pk + 1) * STEP_MS, rects: undefined })
+  }
+  // group by peak time: one "with" capture per time, one "hidden" capture per layer
+  const rows = [], byT = new Map()
+  for (const f of fast) { const k = f.t.toFixed(3); if (!byT.has(k)) byT.set(k, []); byT.get(k).push(f) }
+  let captures = 0
+  for (const group of byT.values()) {
+    await freeze(page, group[0].t)
+    const withF = await shot(page); captures++
+    for (const f of group) {
+      // effective opacity = product of computed opacities up to the stage (INFO, helps read invisible layers)
+      const op = await page.evaluate(sid => {
+        const e = document.querySelector(`[data-fv-sid="${sid}"]`); let o = 1
+        for (let x = e; x && !x.classList.contains('fs-stage'); x = x.parentElement) o *= +getComputedStyle(x).opacity
+        e.style.visibility = 'hidden'; return Math.round(o * 1e4) / 1e4
+      }, f.sid)
+      const without = await shot(page); captures++
+      await page.evaluate(sid => { document.querySelector(`[data-fv-sid="${sid}"]`).style.visibility = '' }, f.sid)
+      const c = layerContrast(withF, without)
+      rows.push({ ...f, ...c, opacity: +op, label, pass: c.visible ? strobeVerdict(f.speed, c.contrast) : true })
+    }
+  }
+  return { rows, layers: layers.length, fast: fast.length, maxSpeed, captures }
+}
+const strobeLine = r => `${r.label} t=${f1(r.t)}ms ${r.kind}${r.item >= 0 ? ` item#${r.item}` : ''} .${r.cls || '?'}${r.ownAnim ? ' (own anim)' : ''}: speed ${f2(r.speed)} px/frame, ` +
+  (r.visible ? `contrast ${r.contrast.toFixed(3)} (Lin ${f1(r.Lin)} Lout ${f1(r.Lout)}, ${r.n} px` : `invisible (${r.n} px changed < ${STROBE_MIN_PX}`) + `, effective opacity ${r.opacity})`
+
+async function strobe() {
+  const t0 = Date.now()
+  const wi = process.argv.indexOf('--walk')
+  let walks = [...Array(NS).keys()]
+  if (wi > 0) {
+    const m = /^(\d+)>(\d+)$/.exec(process.argv[wi + 1] || '')
+    if (!m || +m[2] !== (+m[1] + 1) % NS) throw new Error('usage: strobe --walk A>B with B = A+1 mod 13')
+    walks = [+m[1]]
+  }
+  console.log(`== strobe (gate 6, LOCKED: speed > ${STROBE_SPEED_PX} px/frame at 60 Hz needs Michelson contrast <= ${STROBE_CONTRAST}; ${walks.length} walk(s))`)
+  const page = await openPage()
+  const all = []
+  let captures = 0
+  for (const a of walks) {
+    const label = `walk ${a}>${(a + 1) % NS}`
+    await rest(page, a)
+    await page.evaluate(() => { window.__forest.freeze(0); window.__forest.turn() })
+    const r = await strobeRun(page, page.durMs, label)
+    captures += r.captures
+    const vis = r.rows.filter(x => x.visible), bad = vis.filter(x => !x.pass)
+    out(bad.length ? 'FAIL' : 'PASS', `${label}: ${r.layers} layers, ${r.fast} over ${STROBE_SPEED_PX} px/frame (max speed ${f2(r.maxSpeed)}), ${vis.length} measured, ${r.rows.length - vis.length} invisible, ${bad.length} over contrast ${STROBE_CONTRAST}`)
+    for (const x of bad) out('FAIL', '  ' + strobeLine(x))
+    for (const x of r.rows.filter(y => !y.visible)) out('INFO', '  ' + strobeLine(x))
+    all.push(...r.rows)
+  }
+  const vis = all.filter(x => x.visible)
+  const worst = vis.reduce((w, x) => (!w || x.contrast > w.contrast ? x : w), null)
+  out('INFO', `worst layer over the speed lock (speed, contrast): ${worst ? `(${f2(worst.speed)}, ${worst.contrast.toFixed(3)}) ${strobeLine(worst)}` : 'none measured'}`)
+  out('INFO', `raster contrast measurements: ${vis.length}; invisible-skipped: ${all.length - vis.length}; captures: ${captures}; runtime ${f1((Date.now() - t0) / 1000)} s`)
+  if (page.errors.length) out('FAIL', `page errors: ${page.errors.slice(0, 3).join(' | ')}`)
+  await page.context().close()
+}
+
 // ---------------------------------------------------------------- 7. selftest (gate 3b fixtures)
 async function selftest() {
   console.log('== selftest (gate 3b: each check must FAIL on its fixture)')
@@ -616,13 +724,53 @@ async function selftest() {
   await rp.evaluate(() => { const d = document.createElement('div'); document.querySelector('.fs-world').appendChild(d); d.animate([{ transform: 'none' }, { transform: 'scale(2)' }], { duration: 1000, iterations: Infinity }) })
   expectFail(judgeRM(await rp.evaluate(censusRaw), 'rest'), 'reduced-motion injected-animation fixture', /web-animation/)
   await rp.context().close()
+  // strobe: the spec's four known-answer fixtures through the production verdict
+  for (const [sp, c, want] of [[7.5, 0.09, true], [8.5, 0.11, false], [8.5, 0.09, true], [7.5, 0.11, true]]) {
+    const got = strobeVerdict(sp, c)
+    out(got === want ? 'PASS' : 'FAIL', `strobe spec fixture (${sp} px/frame, ${c}): verdict ${got ? 'PASS' : 'FAIL'} (spec: ${want ? 'PASS' : 'FAIL'})`)
+  }
+  // strobe raster fixtures through the production path (speed sampler + hide-and-compare + verdict)
+  const sp = await openPage()
+  const strobeFixture = async (bg, label) => {
+    await rest(sp, 0)
+    await sp.evaluate(bg => {
+      const s = document.createElement('style'); s.id = 'fv-skf'; s.textContent = '@keyframes fv-slide{from{transform:translateX(0)}to{transform:translateX(1600px)}}'; document.head.appendChild(s)
+      const d = document.createElement('div'); d.id = 'fv-sl'; d.setAttribute('data-fv-layer', '')
+      d.style.cssText = `position:absolute;left:100px;top:420px;width:300px;height:200px;background:${bg};animation:fv-slide 1600ms linear infinite`
+      document.querySelector('.fs-world').appendChild(d)
+    }, bg)
+    const r = await strobeRun(sp, 1000, label)
+    await sp.evaluate(() => { document.getElementById('fv-sl').remove(); document.getElementById('fv-skf').remove() })
+    const row = r.rows.find(x => x.kind === 'fixture')
+    return { row, others: r.rows.filter(x => x.kind !== 'fixture' && x.visible && !x.pass).length }
+  }
+  const bright = await strobeFixture('#fff', 'fixture bright')
+  const bOk = bright.row && bright.row.visible && bright.row.speed > STROBE_SPEED_PX && !bright.row.pass
+  out(bOk ? 'PASS' : 'FAIL', `strobe raster fixture: fast BRIGHT layer must FAIL the gate: ${bright.row ? strobeLine(bright.row) + ` -> ${bright.row.pass ? 'PASS (NOT caught)' : 'FAIL (caught)'}` : 'fixture layer not over the speed lock (NOT measured)'}`)
+  const dim = await strobeFixture('rgba(255,255,255,.012)', 'fixture dim')
+  const dOk = dim.row && dim.row.visible && dim.row.speed > STROBE_SPEED_PX && dim.row.pass && dim.others === 0
+  out(dOk ? 'PASS' : 'FAIL', `strobe raster fixture: same-speed DIM layer must PASS: ${dim.row ? strobeLine(dim.row) + ` -> ${dim.row.pass ? 'PASS' : 'FAIL'}` : 'fixture layer not measured'}`)
+  // stale / unfrozen frame: something moving that freeze() cannot hold must be rejected, never measured
+  await rest(sp, 0)
+  await sp.evaluate(() => {
+    const s = document.createElement('style'); s.id = 'fv-skf'; s.textContent = '@keyframes fv-slide{from{transform:translateX(0)}to{transform:translateX(1600px)}}'; document.head.appendChild(s)
+    const d = document.createElement('div'); d.id = 'fv-live'; d.style.cssText = 'position:fixed;left:0;top:420px;width:300px;height:200px;background:#fff;z-index:2147483647;animation:fv-slide 1600ms linear infinite'
+    document.body.appendChild(d) // outside .fs-stage: freeze() does not reach it, so it keeps moving
+  })
+  let stale = 'measured (NOT rejected)'
+  const wasPoisoned = poisoned
+  try { await shot(sp) } catch (e) { stale = /POISONED/.test(e.message) ? 'rejected: POISONED' : `error: ${e.message}` }
+  poisoned = wasPoisoned // the deliberate fixture must not poison the run
+  await sp.evaluate(() => { document.getElementById('fv-live').remove(); document.getElementById('fv-skf').remove() })
+  out(stale === 'rejected: POISONED' ? 'PASS' : 'FAIL', `strobe stale-frame fixture (unfrozen moving layer): ${stale}`)
+  await sp.context().close()
 }
 
 // ---------------------------------------------------------------- main
-const CMDS = { 'probe-api': probeApi, safebox, census, perf, 'covered-cut': coveredCut, 'reduced-motion': reducedMotion, selftest }
+const CMDS = { 'probe-api': probeApi, safebox, census, perf, 'covered-cut': coveredCut, 'reduced-motion': reducedMotion, strobe, selftest }
 const cmd = process.argv[2]
-const run = cmd === 'all' ? ['probe-api', 'safebox', 'census', 'perf', 'covered-cut', 'reduced-motion'] : [cmd]
-if (!run.every(c => CMDS[c])) { console.error('usage: node scripts/forest-verify.mjs probe-api|safebox|census [--freeze-baseline]|perf|covered-cut|reduced-motion|all|selftest'); process.exit(2) }
+const run = cmd === 'all' ? ['probe-api', 'safebox', 'census', 'perf', 'covered-cut', 'reduced-motion', 'strobe'] : [cmd]
+if (!run.every(c => CMDS[c])) { console.error('usage: node scripts/forest-verify.mjs probe-api|safebox|census [--freeze-baseline]|perf|covered-cut|reduced-motion|strobe [--walk A>B]|all|selftest'); process.exit(2) }
 let code = 0
 try {
   await startServer()

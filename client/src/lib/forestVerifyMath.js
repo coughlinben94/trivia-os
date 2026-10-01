@@ -109,3 +109,45 @@ export function quantile(xs, p) {
   const s = [...xs].sort((a, b) => a - b)
   return s[Math.min(s.length - 1, Math.max(0, Math.ceil(p * s.length) - 1))]
 }
+
+// ---------------------------------------------------------------- STROBE (spec §3 gate 6)
+// LOCKED by the spec before the port was measured: any layer moving faster than 8 px/frame at 60 Hz
+// (1920x1080) must have effective local Michelson contrast <= 0.10 against its surroundings. These numbers
+// are provisional until Ben's real-TV look (gate 9); moving them is a recorded human decision, never a
+// tuning knob: do not turn them into flags or parameters.
+export const STROBE_SPEED_PX = 8
+export const STROBE_CONTRAST = 0.10
+export const STROBE_MIN_PX = 25 // a layer that changes fewer pixels than this is invisible in that frame
+
+// rects: one entry per 60 Hz frame, [left, top, right, bottom] of the on-screen (viewport-clipped) box,
+// or null when off screen. Returns speed per step (px/frame) = max |delta| over the four edges; null
+// when the layer is off screen in either frame.
+export function edgeSpeeds(rects) {
+  const out = []
+  for (let i = 0; i + 1 < rects.length; i++) {
+    const a = rects[i], b = rects[i + 1]
+    out.push(a && b ? Math.max(...a.map((v, j) => Math.abs(b[j] - v))) : null)
+  }
+  return out
+}
+
+export const michelson = (a, b) => (a + b > 0 ? Math.abs(a - b) / (a + b) : 0)
+
+// true = passes the lock
+export const strobeVerdict = (speed, contrast) => !(speed > STROBE_SPEED_PX && contrast > STROBE_CONTRAST)
+
+// Effective contrast of one layer from two captures of the same frozen frame: with the layer, and with it
+// hidden. Its pixels = pixels that differ; Lin / Lout = mean luma (Rec.709 on sRGB bytes) of those pixels
+// with / without it.
+export function layerContrast(withRgba, withoutRgba, minPx = STROBE_MIN_PX) {
+  if (withRgba.length !== withoutRgba.length) throw new Error('size mismatch')
+  let n = 0, sIn = 0, sOut = 0
+  for (let i = 0; i < withRgba.length; i += 4) {
+    if (withRgba[i] !== withoutRgba[i] || withRgba[i + 1] !== withoutRgba[i + 1] || withRgba[i + 2] !== withoutRgba[i + 2]) {
+      n++; sIn += luma(withRgba[i], withRgba[i + 1], withRgba[i + 2]); sOut += luma(withoutRgba[i], withoutRgba[i + 1], withoutRgba[i + 2])
+    }
+  }
+  if (n < minPx) return { n, visible: false }
+  const Lin = sIn / n, Lout = sOut / n
+  return { n, visible: true, Lin, Lout, contrast: michelson(Lin, Lout) }
+}

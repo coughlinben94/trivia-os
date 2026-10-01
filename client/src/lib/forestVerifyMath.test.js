@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { luma, lumaStats, SAFE_BOX, boxPx, contrastRatio, easeInOut, cubicBezier, composite, compositeStack, diffStats, quantile } from './forestVerifyMath.js'
+import { luma, lumaStats, SAFE_BOX, boxPx, contrastRatio, easeInOut, cubicBezier, composite, compositeStack, diffStats, quantile, edgeSpeeds, michelson, strobeVerdict, layerContrast, STROBE_SPEED_PX, STROBE_CONTRAST } from './forestVerifyMath.js'
 
 const frame = (W, H, rgb) => { const a = new Uint8Array(W * H * 4); for (let i = 0; i < a.length; i += 4) { a[i] = rgb[0]; a[i + 1] = rgb[1]; a[i + 2] = rgb[2]; a[i + 3] = 255 } return a }
 
@@ -51,6 +51,23 @@ describe('forestVerifyMath', () => {
   it('diffStats over-threshold counts', () => {
     const A = frame(3, 1, [0, 0, 0]), B = frame(3, 1, [0, 0, 0]); B[0] = 8; B[4] = 12; B[9] = 20
     const d = diffStats(A, B); expect([d.ge8, d.ge12, d.ge16, d.max]).toEqual([3, 2, 1, 20])
+  })
+  it('strobe: lock constants and the four spec fixtures', () => {
+    expect([STROBE_SPEED_PX, STROBE_CONTRAST]).toEqual([8, 0.10])
+    expect(strobeVerdict(7.5, 0.09)).toBe(true)
+    expect(strobeVerdict(8.5, 0.11)).toBe(false)
+    expect(strobeVerdict(8.5, 0.09)).toBe(true)
+    expect(strobeVerdict(7.5, 0.11)).toBe(true)
+  })
+  it('strobe: edge speeds take the fastest edge; off-screen gives null', () => {
+    expect(edgeSpeeds([[0, 0, 10, 10], [2, 0, 19, 10], null, [0, 0, 1, 1]])).toEqual([9, null, null])
+  })
+  it('strobe: michelson + layerContrast', () => {
+    expect(michelson(30, 10)).toBeCloseTo(0.5); expect(michelson(0, 0)).toBe(0)
+    const A = frame(10, 10, [20, 20, 20]), B = frame(10, 10, [20, 20, 20])
+    for (let i = 0; i < 30 * 4; i += 4) { A[i] = A[i + 1] = A[i + 2] = 60 }
+    const c = layerContrast(A, B); expect(c.n).toBe(30); expect(c.contrast).toBeCloseTo(0.5)
+    expect(layerContrast(A, B, 31).visible).toBe(false)
   })
   it('quantile', () => {
     expect(quantile([5, 1, 3, 2, 4], 0.5)).toBe(3)
