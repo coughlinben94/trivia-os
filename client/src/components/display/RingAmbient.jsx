@@ -39,7 +39,7 @@ import { forwardRef, useEffect, useLayoutEffect, useImperativeHandle, useRef } f
 import { cylinderOf, authorPeriodOf, buildArc, loudnessOf, fillOf, rng, lerp, assertLayerPeriods } from '../../lib/ringEngine.js'
 import { ringNavAction } from '../../lib/ringStationIndex.js'
 import { EASE_SURGE } from '../../lib/easings.js'
-import { ringDom, px, ringCss, SKY_REGIONS, skyRegionWeights, skyRegionHues, accentCompanionHue, applySkyTints, applyTints } from '../../lib/ringPrimitives.js'
+import { ringDom, px, ringCss, SKY_REGIONS, SKY_TINT_IN_MS, skyRegionWeights, skyRegionHues, accentCompanionHue, applySkyTints, applyTints } from '../../lib/ringPrimitives.js'
 import { SLOTS } from '../../worlds/midnightGalaxy.slots.js'
 import { seedFrom } from '../../lib/paletteGenerator.js'
 
@@ -782,13 +782,47 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
   const panePlanRef = useRef(panePlan)
   panePlanRef.current = panePlan
   const paintedRef = useRef([])
+  const skyInnerRef = useRef(null)
+  const skySetsRef = useRef(new Map()) // world -> { void, tints, weights }, built lazily per-pane mode
 
   // One choke point so turn()/jumpTo() can't drift on the animate flag —
   // turns animate (that's the whole effect), jumps snap (authoritative
   // resync, and the only path ring-verify.mjs drives; see applySkyTints).
   function writeSkyTints(station, animate) {
+    if (panePlanRef.current) { writeSkySets(station, animate); return }
     if (skyTintsRef.current && skyWeightsRef.current) {
       applySkyTints(skyTintsRef.current, skyWeightsRef.current, station, animate)
+    }
+  }
+
+  // Per-pane mode: the sky follows the world painted on the pane in frame.
+  // Each world gets its own sky set (colour ramp + region tints) built on
+  // first use; only the set of the on-screen world is lit, the rest fade
+  // out on the same slow clock as ordinary tints. A gap pane lights none, so
+  // the sky dips to plain dark exactly where the black space is, then the new
+  // world's sky fades in as its panes arrive. Sets crossfade by opacity —
+  // nothing snaps and nothing slides with the pan.
+  function writeSkySets(station, animate) {
+    const skyInner = skyInnerRef.current
+    if (!skyInner) return
+    const painted = paintedRef.current[station]
+    const live = painted && typeof painted === 'object' ? painted : null
+    if (live && !skySetsRef.current.has(live)) {
+      const [a, b, c, d] = live.sky
+      const v = dom.el('void')
+      v.style.background = `radial-gradient(ellipse 138% 128% at 50% 48%, ${a} 0%, ${b} 46%, ${c} 78%, ${d} 100%)`
+      v.style.opacity = '0'
+      v.style.transitionProperty = 'opacity'
+      const tints = dom.makeSkyTints(skyRegionHues(live.stations))
+      skyInner.appendChild(v)
+      for (const t of Object.values(tints)) skyInner.appendChild(t)
+      skySetsRef.current.set(live, { void: v, tints, weights: skyRegionWeights(live.stations) })
+    }
+    for (const [world, set] of skySetsRef.current) {
+      const on = world === live
+      set.void.style.transitionDuration = animate ? SKY_TINT_IN_MS + 'ms' : '0ms'
+      set.void.style.opacity = on ? '1' : '0'
+      applySkyTints(set.tints, on ? set.weights : [], station, animate)
     }
   }
 
@@ -834,6 +868,11 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     const skyTints = dom.makeSkyTints(skyRegionHues(worldData.stations)) // 2026-09-02 palette-aware, synced with world-07-ring.html
     for (const t of Object.values(skyTints)) skyInner.appendChild(t)
     skyTintsRef.current = skyTints
+    skyInnerRef.current = skyInner
+    skySetsRef.current = new Map() // a StrictMode re-run starts from an emptied DOM; stale sets would never be re-appended
+    // Per-pane mode: the base ramp is plain dark; each world's own sky is an
+    // overlay lit by writeSkySets.
+    if (panePlanRef.current) skyInner.firstChild.style.background = '#000'
     // Plain sky in per-pane mode: region tints bake one world's hues, which
     // would clash once the ring shows another duo. Empty weights -> all 0.
     skyWeightsRef.current = panePlanRef.current ? [] : skyRegionWeights(worldData.stations)
@@ -925,6 +964,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     if (stationRef.current !== 0) dom.clampSafeBoxStarPeaks(design)
     paintedRef.current = Array.from({ length: ENGINE.PANES }, () => worldData)
     applyPanes(lastSlideIndexRef.current, stationRef.current)
+    writeSkyTints(stationRef.current, false) // panes are painted now; light the right world's sky
     shootLoop()
 
     // React 18 StrictMode double-invokes this effect in dev; clear what we
@@ -1038,6 +1078,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     // behind a glide in flight (stationRef only moves when a turn starts).
     const queued = queuedTurnsRef.current.reduce((a, d) => a + d, 0)
     applyPanes(slideIndex, ((stationRef.current + queued) % ENGINE.PANES + ENGINE.PANES) % ENGINE.PANES)
+    if (panePlanRef.current) writeSkyTints(stationRef.current, action !== 'jump')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slideIndex, forceSnap])
 
@@ -1094,6 +1135,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
       jumpTo(returnStationRef.current)
       returnStationRef.current = null
       applyPanes(lastSlideIndexRef.current, stationRef.current) // restore pane 10 etc. to the real mapping
+      if (panePlanRef.current) writeSkyTints(stationRef.current, false)
       return
     }
     returnStationRef.current = stationRef.current
@@ -1101,6 +1143,7 @@ const RingAmbient = forwardRef(function RingAmbient({ worldData, slideIndex, sta
     // The break shows the eclipse pane, never a gap: paint just that pane
     // with the current slide's own world (solidCenter).
     applyPanes(lastSlideIndexRef.current, stationRef.current, stationRef.current)
+    if (panePlanRef.current) writeSkyTints(stationRef.current, false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stationOverride])
 

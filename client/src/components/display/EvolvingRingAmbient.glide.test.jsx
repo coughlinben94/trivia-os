@@ -20,6 +20,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import EvolvingRingAmbient from './EvolvingRingAmbient.jsx'
+import { RING_RETURN } from './RingAmbient.jsx'
 import { isTransitionSlide } from '../../lib/duoTransition.js'
 
 const FAR_SURGE = 480
@@ -145,5 +146,44 @@ describe('EvolvingRingAmbient — every single-step advance glides on screen', (
       const els = [...copy.querySelectorAll('[data-pane="3"]')]
       expect(els.length).toBeGreaterThan(2) // no longer the two-object gap
     }
+  }, 60_000)
+
+  it('a fresh mount mid-show (reload, Go Live) paints the same gap and worlds the plan says', async () => {
+    await show('show_b', 6) // slide 6 is the second world change
+    expect(window.__world.station).toBe(6)
+    expect(paneEls(6)).toHaveLength(2) // gap right where the camera is
+    expect(paneEls(5).length).toBeGreaterThan(2)
+    expect(paneEls(7).length).toBeGreaterThan(2)
+  }, 60_000)
+
+  it('the grading-break jump never lands on an empty pane, and the return restores the gap', async () => {
+    // Find a slide whose pane 10 (the eclipse) currently holds ANOTHER slide's
+    // gap, so the override has to repaint it.
+    let slide = null
+    for (let s = 4; s < 400 && slide == null; s++) {
+      const x = (((10 - (s % PANES)) % PANES) + PANES) % PANES
+      const d = x > 6 ? x - PANES : x // which slide (s + d) the ring puts on pane 10
+      if (d !== 0 && isTransitionSlide('show_b', s + d)) slide = s
+    }
+    expect(slide).not.toBeNull()
+    await show('show_b', slide)
+    expect(paneEls(10)).toHaveLength(2) // pane 10 is a gap before the break
+    const render = (override) => act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={slide} stationOverride={override} />) })
+    await render(10)
+    expect(window.__world.station).toBe(10)
+    expect(paneEls(10).length).toBeGreaterThan(2) // eclipse pane holds a real world
+    await render(RING_RETURN)
+    expect(window.__world.station).toBe(slide % PANES)
+    expect(paneEls(10)).toHaveLength(2) // restored to the real mapping
+  }, 60_000)
+
+  it('the grading break on a world-change slide still shows a real world on the eclipse pane', async () => {
+    // Slide 3 is a gap slide: without the solid-center rule the jump to
+    // station 10 would put that gap on the eclipse.
+    await show('show_b', 3)
+    expect(paneEls(3)).toHaveLength(2)
+    await act(async () => { root.render(<EvolvingRingAmbient showId="show_b" slideIndex={3} stationOverride={10} />) })
+    expect(window.__world.station).toBe(10)
+    expect(paneEls(10).length).toBeGreaterThan(2)
   }, 60_000)
 })

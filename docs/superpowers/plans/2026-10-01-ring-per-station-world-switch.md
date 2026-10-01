@@ -43,5 +43,11 @@ Pure function of (showId, slide, ring station counter). No stored state. Back-na
 
 ## Open decisions for Ben
 
-1. Sky: follow the on-screen duo (snaps), or one plain dark sky all night (no jump)? Default until told: plain dark sky.
+1. Sky: DECIDED 2026-10-01 (Ben: "i dont want it to be plain dark") — the sky follows the world painted on the pane in frame (own colour ramp + region tints per world, crossfaded by opacity); the gap pane lights none, so the sky dips to dark exactly at the black space.
 2. Empty pane = first slide of each new duo (about 1 in 3-4 slides is stars over dark). Ben accepted this on 2026-10-01 provided it shows bleed from both worlds.
+
+## Update 2026-10-01 (later)
+
+- Gap pane = two real objects (never the neighbour's own headline kind), 30-70% of each object's width visible. Colour-haze version rejected ("not natural").
+- Planet-glow boundary mask feathers 240px in per-pane mode (24px made a straight line mid-glide).
+- Verified in real engine: fresh mount mid-show, grading-break jump (incl. on a gap slide), return restores the gap. Mutation-checked.
