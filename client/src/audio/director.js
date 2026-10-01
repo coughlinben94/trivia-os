@@ -432,6 +432,18 @@ export function createDirector(overrides = {}) {
     for (const [k, h] of [...parked]) { parked.delete(k); safe(() => h.destroy()) } // players parked by clips that already ended
   }
 
+  // Test seam: the app uses one singleton, so slide tests need a clean slate between cases.
+  function reset() {
+    stopAll()
+    handles.clear()
+    reported.clear()
+    parked.clear()
+    ctx = null
+    gestureSeen = false
+    preview = false
+    snapshot = { status: status(), blocked: [], playing: [] }
+  }
+
   function retryBlocked() {
     unlock()
     for (const h of [...handles.values()]) if (h.state === 'blocked') h.retry()
@@ -443,7 +455,7 @@ export function createDirector(overrides = {}) {
     status, unlock, installGestureUnlock, subscribe, getSnapshot: () => snapshot,
     setPreview, warm, play, retryBlocked, getContext, stopSlide, stopAll,
     // internals shared with later tasks in this file
-    _internals: { d, handles, reported, emit, ensureContext, previewHandle, isPreview: () => preview, dbToGain, mediaIsSounding, youtubeIsSounding },
+    _internals: { reset, d, handles, reported, emit, ensureContext, previewHandle, isPreview: () => preview, dbToGain, mediaIsSounding, youtubeIsSounding },
   }
 }
 

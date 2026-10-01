@@ -850,4 +850,15 @@ describe('review fixes (2026-10-01)', () => {
     h.stop()
     expect(f.elements[0].remove).toHaveBeenCalled()
   })
+
+  it('reset() returns the director to a clean slate (stops clips, drops the context and reports)', () => {
+    const f = runningFakes()
+    const d = createDirector(f.deps)
+    const h = d.play(fileClip, { slideId: 's' })
+    d._internals.reset()
+    expect(h.state).toBe('stopped')
+    expect(d._internals.handles.size).toBe(0)
+    d.getContext()
+    expect(f.deps.makeContext).toHaveBeenCalledTimes(2) // a new context, not the old one
+  })
 })

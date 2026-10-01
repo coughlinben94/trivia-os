@@ -15,6 +15,26 @@ import { audioPartOf } from './audioPending.js'
 
 const isAudioMime = type => String(type ?? '').startsWith('audio')
 
+// The clip a resolved part describes (youtube slot or uploaded audio), or null. Slides that
+// already hold a resolved part (QuestionAudio, ShinyAudioQuestion) call this instead of
+// rebuilding the clip by hand, so there is one place that decides what a part sounds like.
+export function clipFromPart(part, gainDb = 0, partIdx = 0) {
+  if (part?.youtubeId) {
+    return {
+      kind: 'youtube',
+      videoId: part.youtubeId,
+      start: part.youtubeStart ?? 0,
+      end: part.youtubeEnd ?? null,
+      volume: part.volume ?? 100,
+      part: partIdx,
+    }
+  }
+  if (part?.mediaUrl && isAudioMime(part.mediaType)) {
+    return { kind: 'file', url: part.mediaUrl, gainDb: gainDb ?? 0, part: partIdx }
+  }
+  return null
+}
+
 export function resolveSlideClip(slide) {
   if (!slide || slide.type !== 'question') return null
   const data = slide.data ?? {}
@@ -33,21 +53,6 @@ export function resolveSlideClip(slide) {
   const part = resolveShinyPart(data)
   const partIdx = audioPartOf(data)
 
-  if (part.youtubeId) {
-    return {
-      clip: {
-        kind: 'youtube',
-        videoId: part.youtubeId,
-        start: part.youtubeStart ?? 0,
-        end: part.youtubeEnd ?? null,
-        volume: part.volume ?? 100,
-        part: partIdx,
-      },
-      trigger,
-    }
-  }
-  if (part.mediaUrl && isAudioMime(part.mediaType)) {
-    return { clip: { kind: 'file', url: part.mediaUrl, gainDb: data.audioGainDb ?? 0, part: partIdx }, trigger }
-  }
-  return null
+  const clip = clipFromPart(part, data.audioGainDb, partIdx)
+  return clip ? { clip, trigger } : null
 }
