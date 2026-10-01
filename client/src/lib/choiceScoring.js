@@ -1,4 +1,4 @@
-import { applyPhoneScoreUpdates } from './scoreboardMath.js'
+import { applyPhoneScoreUpdates, scoreAllOrNothing } from './scoreboardMath.js'
 
 // Host-set default for a fresh Choice format/slide (shiny_formats.input_schema's
 // pointsForChoice, and SlideEditor/LiveMode's per-slide fallback) — one shared
@@ -10,17 +10,11 @@ export const DEFAULT_CHOICE_POINTS = 10
 // No partial credit (Ben's call, 2026-09-06): any extra or missing id fails
 // the whole submission, same all-or-nothing rule as Order/Matching.
 export function scoreChoiceSubmission(answer, correctIds, points) {
-  if (!Array.isArray(answer)) return 0
-  if (!Array.isArray(correctIds)) return 0
-  // An empty answer key can never be "correct" — mirrors orderScoring's
-  // guard: without it, two empty arrays compare vacuously equal and would
-  // score full points for a question nobody ever set an answer key on.
-  if (correctIds.length === 0) return 0
-  if (answer.length !== correctIds.length) return 0
-  const sortedAnswer = [...answer].sort()
-  const sortedCorrect = [...correctIds].sort()
-  if (sortedAnswer.every((id, i) => id === sortedCorrect[i])) return Number(points) || 0
-  return 0
+  return scoreAllOrNothing(answer, correctIds, points, (ans, key) => {
+    const sortedAnswer = [...ans].sort()
+    const sortedCorrect = [...key].sort()
+    return sortedAnswer.every((id, i) => id === sortedCorrect[i])
+  })
 }
 
 // Pure fold-in: given phone_answers + live team registrations + the admin

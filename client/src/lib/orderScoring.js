@@ -1,4 +1,4 @@
-import { applyPhoneScoreUpdates } from './scoreboardMath.js'
+import { applyPhoneScoreUpdates, scoreAllOrNothing } from './scoreboardMath.js'
 import { seededShuffleWith } from './seededRandom.js'
 
 // Host-set default for a fresh Order format/slide (shiny_formats.input_schema's
@@ -12,17 +12,7 @@ export const DEFAULT_ORDER_POINTS = 10
 // length fails the whole submission.
 
 export function scoreOrderSubmission(answer, correctOrder, points) {
-  if (!Array.isArray(answer)) return 0
-  if (!Array.isArray(correctOrder)) return 0
-  // An empty answer key can never be "correct" — without this, an empty
-  // answer against an empty correctOrder is vacuously true (`[].every(...)`)
-  // and scores FULL points for a question nobody ever set an answer key on
-  // (found in review 2026-08-25: a host who never touches the position
-  // controls never gets correctOrder persisted at all).
-  if (correctOrder.length === 0) return 0
-  if (answer.length !== correctOrder.length) return 0
-  if (answer.every((id, i) => id === correctOrder[i])) return Number(points) || 0
-  return 0
+  return scoreAllOrNothing(answer, correctOrder, points, (ans, key) => ans.every((id, i) => id === key[i]))
 }
 
 // Fisher-Yates, seeded by `seed` (typically a slide id) so the shuffle is

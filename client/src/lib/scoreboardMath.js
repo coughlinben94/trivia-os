@@ -320,3 +320,13 @@ export function revealRowDelay(rank, teamCount) {
   const { base, step } = revealStagger(teamCount)
   return base + (Math.max(teamCount, 1) - rank) * step
 }
+
+// Shared guard stack for all-or-nothing phone scorers (Choice, Order): not
+// arrays, EMPTY answer key (vacuously "equal" to an empty answer, would pay full
+// points for a question nobody set a key on), length mismatch -> 0. Otherwise
+// `isMatch(answer, key)` decides; a match pays Number(points) || 0.
+export function scoreAllOrNothing(answer, key, points, isMatch) {
+  if (!Array.isArray(answer) || !Array.isArray(key)) return 0
+  if (key.length === 0 || answer.length !== key.length) return 0
+  return isMatch(answer, key) ? Number(points) || 0 : 0
+}
