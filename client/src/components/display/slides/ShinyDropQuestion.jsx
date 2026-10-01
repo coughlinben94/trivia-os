@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { supabase } from '../../../lib/supabase.js'
+import { usePhoneSubmitCounts } from '../../../hooks/usePhoneSubmitCounts.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { fitToBox, SHINY_CHOICE_Q_BOX } from '../../../lib/autoFitText.js'
@@ -49,30 +49,7 @@ export default function ShinyDropQuestion({ slide, show, theme }) {
     [options, droppedIds]
   )
 
-  const [submittedCount, setSubmittedCount] = useState(0)
-  const [teamCount, setTeamCount] = useState(0)
-
-  // Polled aggregate, same as ShinyChoiceQuestion: phone_answers' SELECT never
-  // opens to the anonymous TV, phone_answers_count is the narrow RPC for this.
-  useEffect(() => {
-    if (locked) return
-    let cancelled = false
-    async function load() {
-      const { data: count } = await supabase.rpc('phone_answers_count', { p_slide_id: slide.id })
-      if (!cancelled) setSubmittedCount(count ?? 0)
-    }
-    load()
-    const interval = setInterval(load, 2000)
-    return () => { cancelled = true; clearInterval(interval) }
-  }, [slide.id, locked])
-
-  useEffect(() => {
-    if (!show?.id || locked) return
-    let cancelled = false
-    supabase.from('teams').select('id', { count: 'exact', head: true }).eq('show_id', show.id)
-      .then(({ count }) => { if (!cancelled) setTeamCount(count ?? 0) })
-    return () => { cancelled = true }
-  }, [show?.id, locked])
+  const { submitted: submittedCount, teamCount } = usePhoneSubmitCounts(slide.id, show?.id, { pollStop: locked, teamsStop: locked })
 
   const results = data.dropResults
   // What the whole room put on each tile — aggregate only, shown from the lock
