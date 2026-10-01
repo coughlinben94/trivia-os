@@ -36,6 +36,12 @@ export default function AmbientAudit() {
     const colorsParam = params.get('colors')
     const stationsParam = params.get('stations')
     if (!colorsParam && !stationsParam) return base
+    // A forest world has no palette/pool to recolor or redraw (and its station keys contain commas, so
+    // ?stations= cannot name them): ignore the params loudly instead of quietly mangling the world.
+    if (base.renderer === 'forest') {
+      console.warn('[AmbientAudit] ?colors=/?stations= do not apply to a forest world, using base')
+      return base
+    }
     try {
       return worldFromParams({
         colorsParam,
