@@ -200,10 +200,10 @@ describe('multi-part audio series', () => {
     expect(p).toEqual({ audio_playing: { slideId: 's1', playing: true, part: 0 } }) // press 1: play part 0
     p = await computeTvNextStep(mk(0, { slideId: 's1', playing: true, part: 0 }), noTeams)
     expect(p.slides.find(s => s.id === 's1').data.currentPart).toBe(1) // press 2: step + play part 1
-    expect(p.audio_playing).toEqual({ slideId: 's1', playing: true, part: 1 })
+    expect(p.audio_playing).toEqual({ slideId: 's1', playing: true, part: 1, at: expect.any(Number) })
     p = await computeTvNextStep(mk(1, { slideId: 's1', playing: true, part: 1 }), noTeams)
     expect(p.slides.find(s => s.id === 's1').data.currentPart).toBe(2) // press 3: step + play part 2
-    expect(p.audio_playing).toEqual({ slideId: 's1', playing: true, part: 2 })
+    expect(p.audio_playing).toEqual({ slideId: 's1', playing: true, part: 2, at: expect.any(Number) })
     p = await computeTvNextStep(mk(2, { slideId: 's1', playing: true, part: 2 }), noTeams)
     expect(p.current_slide_id).toBe('end') // press 4: leaves
   })

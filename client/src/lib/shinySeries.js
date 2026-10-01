@@ -83,7 +83,19 @@ export function audioMarkForPart(slideId, data) {
   if (!hasAudio) return null
   const n = Array.isArray(data.parts) ? data.parts.length : 0
   const idx = n === 0 ? 0 : Math.min(Math.max(data.currentPart ?? 0, 0), n - 1)
-  return { slideId, playing: true, part: idx }
+  // `at` makes every part-step mark a NEW request: p0 audio / p1 silent / p2 audio, Prev
+  // back from p1 to p0 writes {part:0} again with identical values, and the TV's
+  // value-keyed play effect would otherwise see no change and stay silent (main
+  // replayed it). An echo of the SAME write carries the same `at`, so it still
+  // does not replay. Date.now() alone could collide inside one millisecond, so a
+  // counter rides in the low digits.
+  return { slideId, playing: true, part: idx, at: nextMarkNonce() }
+}
+
+let markSeq = 0
+function nextMarkNonce() {
+  markSeq = (markSeq + 1) % 1000
+  return Date.now() * 1000 + markSeq
 }
 
 export function isVisualShiny(data) {

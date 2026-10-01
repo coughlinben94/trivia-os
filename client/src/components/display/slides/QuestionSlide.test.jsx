@@ -431,6 +431,32 @@ describe('<QuestionSlide> — audio on a plain question', () => {
       expect(cue()).toBeTruthy() // ...and back, because it is STILL not sounding
     })
 
+    // Re-review of c754c7c: the retry's 2s check lived on watchRef and was only cancelled by
+    // the pause button or unmount, so a clip that ENDED (or auto-stopped) before 2s still got
+    // a false cue + false Sentry report.
+    it('a clip that ends before the retry check fires raises no false cue', async () => {
+      let onState
+      let state = 2
+      const p = { setVolume: vi.fn(), unMute: vi.fn(), seekTo: vi.fn(), playVideo: vi.fn(), pauseVideo: vi.fn(), getPlayerState: () => state, isMuted: () => false }
+      yt.claim.mockReturnValue({ whenReady: cb => cb(p), onStateChange: cb => { onState = cb }, destroy: () => {} })
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        const slide = slideWith({ mediaSlots: [{ type: 'youtube', videoId: 'short', start: 0, end: 30 }] })
+        render(slide, marked(slide))
+        await later(2100)
+        expect(cue()).toBeTruthy()
+        warn.mockClear()
+        await act(async () => { cue().click() }) // retry arms a fresh 2s check
+        state = 0
+        await act(async () => { onState(0) }) // the clip ends right away (ENDED)
+        await later(3000)
+        expect(cue()).toBeFalsy()
+        expect(warn.mock.calls.filter(c => String(c[0]).includes('play blocked'))).toHaveLength(0)
+      } finally {
+        warn.mockRestore()
+      }
+    })
+
     it('the cue is fixed-positioned so it cannot push the question text around', async () => {
       mediaPlay.mockImplementationOnce(() => Promise.reject(new DOMException('blocked', 'NotAllowedError')))
       const slide = upload()
@@ -568,6 +594,32 @@ describe('<QuestionSlide> — shiny audio question, remote play via show.audio_p
       expect(mediaPlay).toHaveBeenCalledTimes(1)
       render(slide, { slides: [slide], audio_playing: { slideId: 'shiny-1', playing: true, part: 0 }, answer_reveal: true })
       expect(mediaPlay).toHaveBeenCalledTimes(1)
+    })
+
+    // Re-review of c754c7c. Series p0 audio / p1 silent / p2 audio: play p0, Next to p1 (no
+    // mark), Prev back to p0 writes the SAME {part:0} values again. A nonce (`at`) makes it a
+    // new request; an echo of the SAME write (same `at`) must still not replay.
+    it('the same slide+part with a NEW nonce plays again; the same nonce re-delivered does not', () => {
+      const slide = series(0)
+      render(slide, { slides: [slide], audio_playing: { slideId: 'shiny-1', playing: true, part: 0, at: 1 } })
+      expect(mediaPlay).toHaveBeenCalledTimes(1)
+      render(slide, { slides: [slide], audio_playing: { slideId: 'shiny-1', playing: true, part: 0, at: 1 } }) // echo
+      expect(mediaPlay).toHaveBeenCalledTimes(1)
+      render(slide, { slides: [slide], audio_playing: { slideId: 'shiny-1', playing: true, part: 0, at: 2 } }) // a real new request
+      expect(mediaPlay).toHaveBeenCalledTimes(2)
+    })
+
+    // The real write lands the part change and the new mark in ONE render (one UPDATE
+    // carries both). The earlier tests deliver them in two renders; this pins the real
+    // shape, which only works because the partKey pause effect runs before the play effect.
+    it('plays the new part when the part change and its mark arrive in the SAME render', () => {
+      const s0 = series(0)
+      render(s0, { slides: [s0], audio_playing: { slideId: 'shiny-1', playing: true, part: 0, at: 1 } })
+      expect(mediaPlay).toHaveBeenCalledTimes(1)
+      const s1 = series(1)
+      render(s1, { slides: [s1], audio_playing: { slideId: 'shiny-1', playing: true, part: 1, at: 2 } })
+      expect(mediaPlay).toHaveBeenCalledTimes(2)
+      expect(container.querySelector('audio').getAttribute('src')).toContain('p1.mp3')
     })
 
     it('a new mark for the next part plays it without remounting', () => {

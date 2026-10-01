@@ -77,7 +77,13 @@ function QuestionAudio({ part, gainDb, theme, isPreview, autoPlay, show, slideId
   }, [])
 
   // The cue only means something while a clip is supposed to be playing.
-  useEffect(() => { if (!playing) clearBlocked() }, [playing, clearBlocked])
+  useEffect(() => {
+    if (playing) return
+    // The clip stopped (ENDED, auto-stop, pause): a pending 2s check, including the
+    // one a cue-retry arms, must not raise a false cue + Sentry report afterwards.
+    watchRef.current?.()
+    clearBlocked()
+  }, [playing, clearBlocked])
 
   useEffect(() => {
     if (!isYoutube || isPreview) return
@@ -723,6 +729,7 @@ function ShinyAudioQuestion({ slide, show, theme, isPreview }) {
   const apSlideId = show?.audio_playing?.slideId
   const apPlaying = !!show?.audio_playing?.playing
   const apPart = show?.audio_playing?.part ?? 0
+  const apAt = show?.audio_playing?.at // part-step marks carry a nonce: a repeat of the same slide+part is still a new request
 
   // A multi-part series keeps the same slide.id across parts, so this
   // component never remounts when the host steps to a new part — only
@@ -750,7 +757,13 @@ function ShinyAudioQuestion({ slide, show, theme, isPreview }) {
   }, [])
 
   // The cue only means something while a clip is supposed to be playing.
-  useEffect(() => { if (!playing) clearBlocked() }, [playing, clearBlocked])
+  useEffect(() => {
+    if (playing) return
+    // The clip stopped (ENDED, auto-stop, pause): a pending 2s check, including the
+    // one a cue-retry arms, must not raise a false cue + Sentry report afterwards.
+    watchRef.current?.()
+    clearBlocked()
+  }, [playing, clearBlocked])
 
   // Pre-build the whole player at slide mount, not just the API script
   // (2026-08-24, Ben: close the build/load/buffer latency "on any slide
@@ -912,7 +925,7 @@ function ShinyAudioQuestion({ slide, show, theme, isPreview }) {
     if (isYoutubeSource) setPlaying(true)
     else if (audioRef.current) playWithGain().catch(() => markBlocked('upload', () => mediaIsSounding(audioRef.current, audioCtxRef.current)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apSlideId, apPlaying, apPart, slide.id, isYoutubeSource, isPreview])
+  }, [apSlideId, apPlaying, apPart, apAt, slide.id, isYoutubeSource, isPreview])
 
   return (
     <div
