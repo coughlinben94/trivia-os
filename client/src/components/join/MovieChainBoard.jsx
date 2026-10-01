@@ -177,7 +177,7 @@ export default function MovieChainBoard({ slide, team, theme, preview = false, o
           <button type="button" data-action="finish" onClick={finish} style={{ color: ink, border: `2px solid ${accent}`, borderRadius: 10, padding: '0.8rem', fontWeight: 700 }}>Finish with {person.name} → {end?.title}</button>
         </>}
       </>}
-      {complete && <button type="button" data-action="lock-in" onClick={lockIn} disabled={busy || committed} style={{ color: ink, border: `2px solid ${accent}`, borderRadius: 10, padding: '0.9rem', fontWeight: 700 }}>{busy ? 'Saving…' : committed ? 'Chain locked in' : 'Lock In Chain'}</button>}
+      {complete && <button type="button" data-action="lock-in" data-committed={committed ? 'true' : undefined} onClick={lockIn} disabled={busy || committed} style={{ color: ink, border: `2px solid ${accent}`, borderRadius: 10, padding: '0.9rem', fontWeight: 700 }}>{busy ? 'Saving…' : committed ? '✓ Chain locked in' : 'Lock In Chain'}</button>}
     </>}
     {error && <p role="alert" style={{ color: '#ff8888', margin: 0 }}>{error}</p>}
     {result ? <div style={{ border: `1px solid ${accent}`, borderRadius: 12, padding: '0.8rem', lineHeight: 1.4 }}>
