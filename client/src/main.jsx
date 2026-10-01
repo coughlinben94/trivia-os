@@ -60,6 +60,8 @@ if (import.meta.env.VITE_SENTRY_DSN && window.location.pathname === '/display') 
 
 window.addEventListener('vite:preloadError', (event) => {
   event.preventDefault()
+  // A cosmetic chunk (Join's phone backdrop) failed: it falls back by itself, never reload a live phone for it.
+  if (window.__optionalChunkLoads > 0) return
   if (!sessionStorage.getItem('chunk-reload')) {
     sessionStorage.setItem('chunk-reload', '1')
     reloadingForStaleChunk = true

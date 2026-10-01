@@ -71,8 +71,36 @@ describe('PhoneBackdrop', () => {
     expect(staticImports).not.toMatch(/PhoneBackdrop\.jsx|ringWorldFor|hauntedOctober|forest/)
     const tiny = readFileSync(new URL('./phoneBackdropThemes.js', import.meta.url), 'utf8')
     expect(tiny.match(/^import .*$/gm)).toBeNull() // zero static imports
-    expect(tiny).toContain("load: () => import('./PhoneBackdrop.jsx')")
+    expect(tiny).toContain("trackOptionalLoad(() => import('./PhoneBackdrop.jsx'))")
     // Roots go transparent only when the backdrop is on; otherwise the original gradient string.
     expect(join.match(/background: backdrop \? 'transparent' : `linear-gradient\(180deg, \$\{bg\} 0%, \$\{bgDeep\} 100%\)`/g)).toHaveLength(2)
+  })
+})
+
+// ---- optional-chunk guard (critique of 3d-3) ----
+import { trackOptionalLoad } from './phoneBackdropThemes.js'
+describe('optional chunk load tracking', () => {
+  it('holds the counter while a load is pending and releases it on resolve and on reject', async () => {
+    globalThis.__optionalChunkLoads = 0
+    let res, rej
+    const ok = trackOptionalLoad(() => new Promise(r => { res = r }))
+    expect(globalThis.__optionalChunkLoads).toBe(1)
+    res('x'); await ok
+    expect(globalThis.__optionalChunkLoads).toBe(0)
+    const bad = trackOptionalLoad(() => new Promise((_, r) => { rej = r }))
+    expect(globalThis.__optionalChunkLoads).toBe(1)
+    rej(new Error('404')); await expect(bad).rejects.toThrow('404')
+    expect(globalThis.__optionalChunkLoads).toBe(0)
+    expect(() => trackOptionalLoad(() => { throw new Error('sync') })).toThrow('sync')
+    expect(globalThis.__optionalChunkLoads).toBe(0)
+  })
+  it('main.jsx skips the stale-chunk reload while an optional load is in flight', () => {
+    const main = readFileSync(new URL('../../main.jsx', import.meta.url), 'utf8')
+    const i = main.indexOf("addEventListener('vite:preloadError'")
+    const guard = main.indexOf('window.__optionalChunkLoads > 0', i)
+    const reload = main.indexOf('window.location.reload()', i)
+    expect(i).toBeGreaterThan(-1)
+    expect(guard).toBeGreaterThan(i)
+    expect(guard).toBeLessThan(reload) // the guard precedes the reload
   })
 })
