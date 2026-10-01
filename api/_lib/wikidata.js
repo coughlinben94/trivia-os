@@ -1,6 +1,6 @@
 const API_URL = 'https://www.wikidata.org/w/api.php'
-// film, animated film, short film, feature film, silent film, documentary film, anime film, television film
-const FILM_IDS = ['Q11424', 'Q202866', 'Q24862', 'Q24869', 'Q226730', 'Q93204', 'Q20650540', 'Q506240']
+// film, animated film, short film, feature film, silent film, documentary film
+const FILM_IDS = ['Q11424', 'Q202866', 'Q24862', 'Q24869', 'Q226730', 'Q93204']
 const QID = /^Q[1-9]\d*$/
 
 export function isQid(value) {
