@@ -1,5 +1,7 @@
 # Audio Director 3: Every Other Sound on /display
 
+> **STATUS 2026-10-01: BUILT** on `feat/audio-director` (tasks 1-9 below, with the changes noted under "As built"). Unit tests with fakes plus real-Chromium e2e for race, rules and team intro. YouTube walkouts are unit-tested only.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development or superpowers:executing-plans. Steps use checkbox syntax. Build test-first, mutation-check, run the real-Chromium e2e, get an independent review before anything ships. Plans 1-2 are the base (`client/src/audio/director.js`, `useClipPlayback.js`).
 
 **Goal:** Every sound /display makes (walkout songs, team-intro theme, rules alert, last-call bell, winner drum roll, race sounds) goes through the audio director, so the tab has ONE AudioContext, ONE unlock state, ONE "Click for sound" cue and ONE Sentry trail. Delete the per-slide `new Audio` / `new AudioContext` / YouTube-claim code.
@@ -82,3 +84,13 @@ Files: `client/src/audio/director.js`, `director.test.js`, `director.fakes.js`.
 
 ## Not covered
 Visible-iframe video slides, jukebox/Spotify, relay, host-side previews (YoutubeClipEditor, BendleOffsetScrubber, MediaUpload keep their own players). Needs a real TV: YouTube walkouts, Safari, a never-clicked tab, loudness by ear.
+
+## As built (differences from the plan above)
+- `lib/walkoutAudio.js` (not `walkoutClip.js`, which already holds the host editor's `mergeWalkoutClip`): `walkoutClip(song, onOut, volumeFactor)`.
+- `director.audioContext({ label, waitMs })` is the synth-sound entry (last-call bell, rules beeps, host timer chime; chime keeps main's 1.5 s resume wait). A locked tab skips the sound and reports once per label.
+- Rules: a locked tab reveals at once instead of strobing silent for the 12 s watchdog; `playAlertSequence`/`stopAlertSequence` are exported and unit-tested.
+- Team intro: `audio/useTeamIntroAudio.js` (hook, fully unit-tested with a fake director) instead of inline slide code; `useClipPlayback.play(opts)` accepts `{ level }`.
+- Race: no cue (decorative sounds; the director still reports). Winner: `playDrumRoll` exported; a refused/dead roll reveals after 2 s and the clip is released.
+- Display's throwaway "prime" AudioContext and `analyzeAudioGain`'s own context are gone (OfflineAudioContext decode).
+- Deleted: `reportBlocked`, per-slide `new Audio`/`new AudioContext`/YouTube claims on /display.
+- e2e: `e2e/audio-slides.spec.js` runs against a production build (StrictMode double-effect cancels the Rules alert under the dev server, same as before this work).
