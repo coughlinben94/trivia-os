@@ -1,5 +1,7 @@
 // Forest verifier (Halloween forest spec §3 gates 2, 3, 3b, 5, 6-subset, 7-core; plan 3b-4, metric-free part).
-//   node scripts/forest-verify.mjs probe-api | safebox | census | perf | covered-cut | all | selftest
+//   node scripts/forest-verify.mjs probe-api | safebox | census [--freeze-baseline] | perf | covered-cut | reduced-motion | all | selftest
+// census compares against scripts/forest-census.frozen.json: a REGRESSION baseline captured from the current
+// build (census --freeze-baseline), not a design threshold.
 // Prints PASS / FAIL / INFO lines with measured values; exits 1 on any FAIL, 3 on POISONED (the sampler
 // is not deterministic, so no probe result can be trusted), 2 on usage/infra error.
 //
@@ -8,7 +10,7 @@
 // real /display with a slide transition running"); nothing here measures /display.
 //
 // NOT HERE (deliberately): gate 6 STROBE, gate 4 FIDELITY vs v3 (metric + tolerance are Ben's,
-// STAYS-HUMAN), the covered-cut pass/fail tolerance (printed as PROPOSED, PROVISIONAL), gate 7's
+// STAYS-HUMAN), the covered-cut tolerance (NOT DECIDED; a PROVISIONAL line uses the critique suggestion), gate 7's
 // state checks other than the covered cut.
 //
 // SERVER: starts its own `npx vite --strictPort --port 5206` and kills it on exit, error, or signal.
@@ -30,7 +32,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { SAFE_BOX, lumaStats, contrastRatio, easeInOut, composite, diffStats, quantile } from '../client/src/lib/forestVerifyMath.js'
+import { SAFE_BOX, lumaStats, contrastRatio, easeInOut, compositeStack, diffStats, quantile } from '../client/src/lib/forestVerifyMath.js'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const PORT = 5206, BASE = `http://localhost:${PORT}`
@@ -66,11 +68,12 @@ async function startServer() {
   throw new Error('vite did not come up on ' + PORT)
 }
 
-async function openPage({ fakeClock = true } = {}) {
+async function openPage({ fakeClock = true, reducedMotion = false } = {}) {
   const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1 })
   const page = await ctx.newPage()
   page.errors = []
   page.on('pageerror', e => page.errors.push(e.message))
+  if (reducedMotion) await page.emulateMedia({ reducedMotion: 'reduce' })
   if (fakeClock) { const t0 = Date.now(); await page.clock.install({ time: t0 }); await page.clock.pauseAt(t0 + 1000) }
   await page.goto(BASE + URL_PATH, { waitUntil: 'load' })
   await page.waitForFunction(() => window.__forest && document.querySelector('.fs-stage'), null, { polling: 50, timeout: 20000 })
@@ -157,6 +160,39 @@ async function probeApi() {
   const d = diffStats(A1, D)
   out(st === 0 && sc === 'rest:0' ? 'PASS' : 'FAIL', `(d) after 13 turn()s: station=${st} scene=${sc}`)
   out(d.differing === 0 ? 'PASS' : 'FAIL', `(d) station 0 after 13 finished walks vs fresh station 0 at t=${REST_T} ms: ${d.differing} px differ (max ${d.max}) [want 0]`)
+  // a WALK frame from this long-running page vs a brand-new page at the same frozen fraction
+  const Wl = await walkShot(page, 5, 0.5)
+  const fresh = await openPage()
+  const Wf = await walkShot(fresh, 5, 0.5)
+  const wd = diffStats(Wl, Wf)
+  out(wd.differing === 0 ? 'PASS' : 'FAIL', `(e) walk 5>6 @50%: long-running page vs fresh page: ${wd.differing} px differ (max ${wd.max}) [want 0]`)
+  // independent oracle: computed scale/opacity of animated items vs their generated keyframes at 37%
+  await rest(fresh, 5)
+  await fresh.evaluate(() => { window.__forest.freeze(0); window.__forest.turn() })
+  await freeze(fresh, 0.37 * fresh.durMs)
+  const orc = await fresh.evaluate(t => {
+    const items = [...document.querySelectorAll('.fs-world .it')].filter(e => e.getAnimations().length)
+    const pick = items.filter((e, i) => i % Math.max(1, Math.floor(items.length / 8)) === 0).slice(0, 8)
+    const at = (kfs, p, get) => {
+      const ks = kfs.filter(k => get(k) != null)
+      for (let i = 0; i < ks.length - 1; i++) {
+        const a = ks[i], b = ks[i + 1]
+        if (p >= a.computedOffset && p <= b.computedOffset) { const f = (p - a.computedOffset) / ((b.computedOffset - a.computedOffset) || 1); return get(a) + (get(b) - get(a)) * f }
+      }
+      return get(ks[ks.length - 1])
+    }
+    let ds = 0, dop = 0
+    for (const e of pick) {
+      const a = e.getAnimations()[0], kfs = a.effect.getKeyframes(), p = t / a.effect.getTiming().duration
+      const sc = at(kfs, p, k => { const m = /scale\(([-\d.e]+)\)/.exec(k.transform || ''); return m ? +m[1] : null })
+      const op = at(kfs, p, k => (k.opacity != null ? +k.opacity : null))
+      const cs = getComputedStyle(e), m = /matrix\(([^,]+)/.exec(cs.transform)
+      ds = Math.max(ds, Math.abs((m ? +m[1] : 1) - sc)); dop = Math.max(dop, Math.abs(+cs.opacity - op))
+    }
+    return { n: pick.length, of: items.length, ds, dop }
+  }, 0.37 * fresh.durMs)
+  out('INFO', `oracle walk 5>6 @37% (between keyframe stops): ${orc.n}/${orc.of} animated items, max |computed scale - keyframe interpolation| ${orc.ds.toExponential(2)}, max |opacity diff| ${orc.dop.toExponential(2)}`)
+  await fresh.context().close()
   if (page.errors.length) out('FAIL', `page errors: ${page.errors.slice(0, 3).join(' | ')}`)
   await page.context().close()
 }
@@ -186,6 +222,18 @@ async function safebox() {
   for (let k = 0; k < NS; k++) rows.push(safeboxCheck(await restShot(page, k), `rest ${k} @${REST_T}ms`))
   for (let k = 0; k < NS; k++) for (const f of FRACS) rows.push(safeboxCheck(await walkShot(page, k, f), `walk ${k}>${(k + 1) % NS} @${f * 100}%`))
   for (const r of rows) out(r.pass ? 'PASS' : 'FAIL', r.line)
+  // later rest times: 5 s (creep part way), 41 s (creep done, idle sway running; freeze(41000) also sets
+  // the idle animation to 41000 ms of its own time: a valid sway pose, not its exact live phase). INFO
+  // unless over the locked caps.
+  for (let k = 0; k < NS; k++) {
+    for (const t of [5000, 41000]) {
+      await rest(page, k)
+      if (t > 40000) await page.clock.runFor(41000)
+      await freeze(page, t)
+      const r = safeboxCheck(await shot(page), `rest ${k} @${t / 1000}s`)
+      out(r.pass ? 'INFO' : 'FAIL', r.line)
+    }
+  }
   const ok = rows.filter(r => r.s)
   const worst = ok.reduce((a, r) => (!a || r.s.p995 > a.s.p995 ? r : a), null)
   const worstMean = ok.reduce((a, r) => (!a || r.s.mean > a.s.mean ? r : a), null)
@@ -203,21 +251,24 @@ async function safebox() {
 function censusRaw() {
   const stage = document.querySelector('.fs-stage'), rig = stage.querySelector('.fs-rig')
   const vis = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.right > 0 && r.bottom > 0 && r.left < innerWidth && r.top < innerHeight }
+  // element identity: child-index path from .fs-stage (rest rendering is deterministic per station + seed)
+  const pathOf = el => { const p = []; while (el && el !== stage) { p.unshift([...el.parentElement.children].indexOf(el)); el = el.parentElement } return p.join('/') }
   return stage.getAnimations({ subtree: true }).map(a => {
     const e = a.effect, tg = e.target, tm = e.getTiming()
     const kfs = e.getKeyframes()
     const props = [...new Set(kfs.flatMap(k => Object.keys(k).filter(p => !['offset', 'computedOffset', 'easing', 'composite'].includes(p))))]
     const op = kfs.map(k => k.opacity).filter(v => v != null).map(Number)
     return {
-      name: a.transitionProperty ? `transition:${a.transitionProperty}` : a.animationName,
+      name: a.transitionProperty ? `transition:${a.transitionProperty}` : (a.animationName || 'web-animation'), path: pathOf(tg),
       cls: (tg.className && tg.className.baseVal === undefined ? tg.className : '').toString().trim(),
-      isRig: tg === rig, iterations: tm.iterations, duration: tm.duration, props,
+      isRig: tg === rig, isClone: !!tg.closest('[data-forest-clone]'), iterations: tm.iterations, duration: tm.duration, props,
       opMin: op.length ? Math.min(...op) : null, opMax: op.length ? Math.max(...op) : null, onScreen: vis(tg),
     }
   })
 }
 // expectIdle: false at rest start (must be absent), true after 40 s (must be present and the rig's only one)
-function judgeCensus(list, expectIdle) {
+// base: this station's entry of the frozen census baseline ({ drift:[paths], flick:[{path,onScreen}] }) or null
+function judgeCensus(list, expectIdle, base) {
   const bad = [], counts = {}
   for (const a of list) counts[a.name] = (counts[a.name] || 0) + 1
   for (const a of list) {
@@ -240,11 +291,25 @@ function judgeCensus(list, expectIdle) {
   if (creep !== 2) bad.push(`creep transitions ${creep}, want 2 (one per .creep layer)`)
   const rigA = list.filter(a => a.isRig)
   if (expectIdle && !(rigA.length === 1 && rigA[0].name === 'fs-idle')) bad.push(`after 40 s the rig runs [${rigA.map(a => a.name).join(',') || 'nothing'}], want exactly fs-idle`)
-  return { pass: !bad.length, bad, counts, flickOn }
+  const snap = censusSnap(list)
+  if (!base) bad.push('no frozen census baseline for this station (run: census --freeze-baseline)')
+  else {
+    const miss = base.drift.filter(p => !snap.drift.includes(p)), extra = snap.drift.filter(p => !base.drift.includes(p))
+    if (miss.length || extra.length) bad.push(`fog drift ${snap.drift.length} vs baseline ${base.drift.length}: missing [${miss.join(' ')}] extra [${extra.join(' ')}]`)
+    const fk = f => `${f.path}${f.onScreen ? '' : '(off)'}`
+    if (snap.flick.map(fk).join() !== base.flick.map(fk).join()) bad.push(`flicker targets [${snap.flick.map(fk).join(' ')}] vs baseline [${base.flick.map(fk).join(' ')}]`)
+  }
+  return { pass: !bad.length, bad, counts, flickOn, snap }
 }
+const censusSnap = list => ({
+  drift: list.filter(a => a.name === 'fs-drift').map(a => a.path).sort(),
+  flick: list.filter(a => a.name === 'fs-flick').map(a => ({ path: a.path, onScreen: a.onScreen })).sort((x, y) => (x.path < y.path ? -1 : 1)),
+})
+const BASELINE = path.join(ROOT, 'scripts/forest-census.frozen.json')
+const loadBaseline = () => { try { return JSON.parse(fs.readFileSync(BASELINE, 'utf8')) } catch { return null } }
 const fmtCounts = c => Object.entries(c).map(([k, v]) => `${k}x${v}`).join(' ')
 
-async function censusAt(page, k) {
+async function censusAt(page, k, base) {
   await rest(page, k)
   // a jump out of the previous station's idle sway starts a 700 ms rig settle transition (CSS time,
   // real clock), and rest()'s freeze(0) would hold it paused forever: unfreeze and let that transient
@@ -255,21 +320,30 @@ async function censusAt(page, k) {
     if (!busy) break
     await page.waitForTimeout(100)
   }
-  const r0 = judgeCensus(await page.evaluate(censusRaw), false)
+  const r0 = judgeCensus(await page.evaluate(censusRaw), false, base)
   await page.clock.runFor(40000)
-  const r1 = judgeCensus(await page.evaluate(censusRaw), true)
+  const r1 = judgeCensus(await page.evaluate(censusRaw), true, base)
   return { r0, r1 }
 }
 
 async function census() {
   console.log('== census (spec 2.3: allowed at rest = fs-drift(transform), <=1 on-screen fs-flick (opacity, amp<=12%, period>333ms), 2 creep transitions (40 s), fs-idle on the rig only after 40 s)')
+  const freezeBase = process.argv.includes('--freeze-baseline')
+  const baseline = freezeBase ? null : loadBaseline()
+  if (!freezeBase) out(baseline ? 'INFO' : 'FAIL', baseline ? `baseline ${path.relative(ROOT, BASELINE)} (${baseline.capturedFrom})` : `no baseline at ${BASELINE}: run census --freeze-baseline`)
   const page = await openPage()
   let driftMissing = 0
+  const snaps = {}
   for (let k = 0; k < NS; k++) {
-    const { r0, r1 } = await censusAt(page, k)
+    const { r0, r1 } = await censusAt(page, k, freezeBase ? null : baseline?.stations?.[k])
+    if (freezeBase) { // only the baseline-independent checks decide whether this run may be frozen
+      const own = r0.bad.concat(r1.bad).filter(b => !b.startsWith('no frozen census baseline'))
+      if (own.length) out('FAIL', `station ${k}: not freezing a baseline from a failing census :: ${own.join('; ')}`)
+      snaps[k] = r0.snap
+    }
     if (!r0.counts['fs-drift']) driftMissing++
-    out(r0.pass ? 'PASS' : 'FAIL', `station ${k} rest start: ${fmtCounts(r0.counts)} (flicker on screen ${r0.flickOn})${r0.bad.length ? ' :: ' + r0.bad.join('; ') : ''}`)
-    out(r1.pass ? 'PASS' : 'FAIL', `station ${k} +40 s: ${fmtCounts(r1.counts)}${r1.bad.length ? ' :: ' + r1.bad.join('; ') : ''}`)
+    if (!freezeBase) out(r0.pass ? 'PASS' : 'FAIL', `station ${k} rest start: ${fmtCounts(r0.counts)} (flicker on screen ${r0.flickOn})${r0.bad.length ? ' :: ' + r0.bad.join('; ') : ''}`)
+    if (!freezeBase) out(r1.pass ? 'PASS' : 'FAIL', `station ${k} +40 s: ${fmtCounts(r1.counts)}${r1.bad.length ? ' :: ' + r1.bad.join('; ') : ''}`)
     // walk keyframes (spec 2.3c): transform/opacity only
     await rest(page, k)
     await page.evaluate(() => { window.__forest.freeze(0); window.__forest.turn() })
@@ -278,6 +352,17 @@ async function census() {
     out(nonTO.length ? 'FAIL' : 'PASS', `walk ${k}>${(k + 1) % NS}: ${w.length} animations, non transform/opacity properties: ${nonTO.join(',') || 'none'}`)
   }
   out('INFO', `stations with no fog drift at rest: ${driftMissing}/13`)
+  if (freezeBase) {
+    if (fails) out('FAIL', 'baseline NOT written (census failed)')
+    else {
+      fs.writeFileSync(BASELINE, JSON.stringify({
+        note: 'Regression baseline captured from the current build by `node scripts/forest-verify.mjs census --freeze-baseline`, NOT a design threshold. Per station: element paths (child indexes from .fs-stage) running fs-drift, and fs-flick targets with on-screen status, at rest start. Re-freeze only after a deliberate, reviewed change to the forest.',
+        capturedFrom: `seed ${await page.evaluate(() => window.__forest.seed)}, ${new Date().toISOString().slice(0, 10)}, ${URL_PATH}`,
+        stations: snaps,
+      }, null, 1) + '\n')
+      out('INFO', `wrote ${path.relative(ROOT, BASELINE)}: ` + Object.entries(snaps).map(([k, v]) => `${k}:drift${v.drift.length}/flick${v.flick.map(f => (f.onScreen ? 'on' : 'off')).join('') || '-'}`).join(' '))
+    }
+  }
   if (page.errors.length) out('FAIL', `page errors: ${page.errors.slice(0, 3).join(' | ')}`)
   await page.context().close()
 }
@@ -316,12 +401,29 @@ async function perf() {
 }
 
 // ---------------------------------------------------------------- 5. covered-cut (gate 7 core)
+// Expected frame model: the browser paints the live destination layer, then each clone in DOM order,
+// each source-over at its own computed opacity (read from the DOM at that frozen step). Layer images:
+//   destination = rest(dest) re-rendered via jumpTo, creep not started, frozen at the same u (independent
+//     of the cut's own live layer, so a wrong live station is caught);
+//   clone 1 = the cut's OWN first frame (u=0: clone 1 opaque at opacity 1 covers everything);
+//   clone 2 = the in-between rest frame it snapshots (rest 2 at u=200, creep not started).
+// The first-cut-instant step (live walk frame vs clone 1's first frame: Chrome rasterizes the animated
+// layer at a different scale than the frozen inline-transform clone) is reported SEPARATELY.
+// GRAIN: .fs-grain (overlay blend, opacity .035) is hidden for every fit capture so the linear model is
+// exact; its contribution is reported separately as a residual on one real frame.
+// Tolerance: NOT DECIDED (Ben). The PROVISIONAL line uses the critique's suggested numbers only.
 const FRAME_MS = 1000 / 60, FADE = 400
+const PROV = { max: 8, mae: 1.2, stepMae: 0.6 } // critique's suggestion, PROVISIONAL, not a gate
+const provisionalFrame = d => d.max <= PROV.max && d.mae <= PROV.mae
+const fmtD = d => `MAE ${f2(d.mae)} max ${d.max} >=8:${d.ge8} >=12:${d.ge12} >=16:${d.ge16}`
+const clonesInfo = page => page.evaluate(() => [...document.querySelector('.fs-rig').children]
+  .filter(e => e.hasAttribute('data-forest-clone')).map(e => ({ tag: e.getAttribute('data-fv') || '?', a: parseFloat(getComputedStyle(e).opacity) })))
+const setGrain = (page, visible) => page.evaluate(v => { document.querySelector('.fs-grain').style.visibility = v ? '' : 'hidden' }, visible)
+
 async function coveredCut() {
   console.log('== covered-cut (gate 7 core: walk 0>1, retarget at +1000 ms, retarget again at +200 ms)')
   const page = await openPage()
-  // Destination rest frames as the cut shows them: jumpTo with the creep NOT started (the cut's live
-  // layer has the creep held at scale(1)), frozen at the cut's own time u. Kept as PNG, decoded on use.
+  await setGrain(page, false)
   const restNoCreep = async (k, u) => { await rest(page, k, { creep: false }); await freeze(page, u); return shotPng(page) }
   const grid1 = [], grid2 = []
   for (let u = 0; u <= 200 + 1e-6; u += FRAME_MS) grid1.push(u)
@@ -329,69 +431,122 @@ async function coveredCut() {
   const D1 = [], D2 = []
   for (const u of grid1) D1.push(await restNoCreep(2, u))
   for (const u of grid2) D2.push(await restNoCreep(3, u))
+  const C2 = decode(await restNoCreep(2, 200)) // what clone 2 snapshots
   const FAULT_K = 4 // 66.7 ms: between a 50 ms sampler's looks at 50 and 100 ms
   const wrongPng = await restNoCreep(7, grid2[FAULT_K])
-  const reRender = diffStats(decode(D2[12]), decode(await restNoCreep(3, grid2[12])))
 
   // the scenario
   await rest(page, 0)
   await page.evaluate(() => { window.__forest.freeze(0); window.__forest.turn() })
   await page.clock.runFor(1000)
   await freeze(page, 1000)
-  const W1000 = await shot(page) // source of cut 1: the walk frame just before it
-  await page.evaluate(() => window.__forest.turn())
+  const W1000 = await shot(page) // the live walk frame just before cut 1
+  await page.evaluate(() => { window.__forest.turn(); document.querySelector('[data-forest-clone]').setAttribute('data-fv', 'c1') })
   let sc = await scene(page); if (sc !== 'cut:2') throw new Error(`after retarget 1 expected cut:2, got ${sc}`)
-  const series1 = []
+  await freeze(page, 0)
+  const C1 = await shot(page) // clone 1's own first frame
+  const step = diffStats(W1000, C1)
+  const series1 = [], opDev = []
+  const expectedAt = async (D, layerOf) => {
+    const cl = await clonesInfo(page)
+    return { cl, exp: compositeStack(D, cl.map(c => ({ rgba: layerOf(c.tag), a: c.a }))) }
+  }
   for (let i = 0; i < grid1.length; i++) {
     await freeze(page, grid1[i])
-    const a = 1 - easeInOut(grid1[i] / FADE)
-    series1.push(diffStats(await shot(page), composite(W1000, decode(D1[i]), a)))
+    const { cl, exp } = await expectedAt(decode(D1[i]), () => C1)
+    opDev.push(Math.abs(cl[0].a - (1 - easeInOut(grid1[i] / FADE))))
+    series1.push(diffStats(await shot(page), exp))
   }
   await page.clock.runFor(200)
   await freeze(page, 200)
-  const S = await shot(page) // source of cut 2: the frame just before it
-  await page.evaluate(() => window.__forest.turn())
+  const held = (await clonesInfo(page))[0].a
+  await page.evaluate(() => {
+    window.__forest.turn()
+    for (const e of document.querySelectorAll('[data-forest-clone]')) if (!e.hasAttribute('data-fv')) e.setAttribute('data-fv', 'c2')
+  })
   sc = await scene(page); if (sc !== 'cut:3') throw new Error(`after retarget 2 expected cut:3, got ${sc}`)
-  const series2 = [], frames2 = []
-  let noise = null, blankErr = null
+  const order = (await clonesInfo(page)).map(c => c.tag).join('<')
+  const series2 = []
+  const probes = {}
+  const layer = tag => (tag === 'c1' ? C1 : tag === 'c2' ? C2 : null)
+  let grainRes = null
   for (let i = 0; i < grid2.length; i++) {
     await freeze(page, grid2[i])
-    const png = await shotPng(page)
-    if (i === 12) noise = diffStats(decode(png), await shot(page)) // identical frame captured twice
-    const exp = composite(S, decode(D2[i]), 1 - easeInOut(grid2[i] / FADE))
-    series2.push(diffStats(decode(png), exp)); frames2.push(png)
-    if (i === FAULT_K) { // ONE-FRAME blank fault, injected in the page at this instant only
-      await page.evaluate(() => { const d = document.createElement('div'); d.id = 'fv-blank'; d.style.cssText = 'position:fixed;inset:0;background:#000;z-index:2147483647'; document.body.appendChild(d) })
-      blankErr = diffStats(await shot(page), exp)
-      await page.evaluate(() => document.getElementById('fv-blank').remove())
+    const { cl, exp } = await expectedAt(decode(D2[i]), layer)
+    if (cl.some(c => !layer(c.tag))) throw new Error(`unknown clone in stack: ${JSON.stringify(cl)}`)
+    const e = 1 - easeInOut(grid2[i] / FADE)
+    for (const c of cl) opDev.push(Math.abs(c.a - (c.tag === 'c1' ? held * e : e)))
+    const F = await shot(page)
+    series2.push(diffStats(F, exp))
+    if (i === 12) { await setGrain(page, true); grainRes = diffStats(await shot(page), F); await setGrain(page, false) }
+    if (i === FAULT_K) {
+      // ONE-FRAME faults, each injected in the page at this instant only, judged by the same functions
+      const inject = async css => {
+        await page.evaluate(c => { const d = document.createElement('div'); d.id = 'fv-fault'; d.style.cssText = c; document.body.appendChild(d) }, css)
+        const r = diffStats(await shot(page), exp)
+        await page.evaluate(() => document.getElementById('fv-fault').remove())
+        return r
+      }
+      probes.blank = await inject('position:fixed;inset:0;background:#000;z-index:2147483647')
+      probes.pop = await inject('position:fixed;left:1000px;top:600px;width:120px;height:80px;background:rgba(255,255,255,.2);z-index:2147483647')
+      probes.wrong = diffStats(decode(wrongPng), exp)
     }
   }
-  const wrongErr = diffStats(decode(wrongPng), composite(S, decode(D2[FAULT_K]), 1 - easeInOut(grid2[FAULT_K] / FADE)))
+  await setGrain(page, true)
   await page.clock.runFor(500)
   const end = await scene(page), st = await page.evaluate(() => window.__forest.station)
   const clones = await page.evaluate(() => document.querySelectorAll('[data-forest-clone]').length)
 
-  const fmt = s => s.map((d, i) => `${i}:${f2(d.mae)}/${d.max}`).join(' ')
-  out('INFO', `cut 1 (source = walk frame @1000 ms, dest = rest 2), ${series1.length} frames, per frame MAE/max-channel: ${fmt(series1)}`)
-  out('INFO', `cut 2 (source = frame before retarget, dest = rest 3), ${series2.length} frames, per frame MAE/max-channel: ${fmt(series2)}`)
-  out('INFO', `cut 2 differing-pixel counts: ${series2.map(d => d.differing).join(',')}`)
-  out('INFO', `noise floor (same frozen frame captured twice): MAE ${noise.mae.toFixed(4)}, max ${noise.max}, ${noise.differing} px; re-render of the same rest frame: MAE ${reRender.mae.toFixed(4)}, ${reRender.differing} px`)
+  out('INFO', `first-cut-instant step (live walk frame @1000 ms vs clone 1's own first frame): ${fmtD(step)} (${step.differing} px differ)`)
+  out(step.mae <= PROV.stepMae ? 'PASS' : 'FAIL', `PROVISIONAL first-cut step: MAE ${f2(step.mae)} vs suggested ${PROV.stepMae}; ${step.ge16} px >= 16 (critique: "a few hundred", reported not judged)`)
+  out('INFO', `cut 2 stack paint order (bottom<top): live<${order}; clone 1 held at opacity ${held.toFixed(4)}; max |DOM opacity - ease-in-out prediction| = ${Math.max(...opDev).toFixed(4)}`)
+  for (const [n, s] of [['cut 1 (dest rest 2)', series1], ['cut 2 (dest rest 3)', series2]]) {
+    out('INFO', `${n}, ${s.length} frames, per frame MAE/max/>=8/>=12/>=16: ${s.map((d, i) => `${i}:${f2(d.mae)}/${d.max}/${d.ge8}/${d.ge12}/${d.ge16}`).join(' ')}`)
+  }
+  out('INFO', `grain residual (cut-2 frame 12, grain shown vs hidden; NOT in the fit): ${fmtD(grainRes)}`)
   out(end === 'rest:3' && st === 3 && clones === 0 ? 'PASS' : 'FAIL', `after the fade: scene=${end} station=${st} clones=${clones} (want rest:3, 3, 0)`)
-  const tol = 3 * noise.mae
-  console.log(`PROPOSED tolerance = 3 x noise floor = ${tol.toFixed(4)} MAE (needs Ben; the metric, MAE per frame, is also a proposal)`)
-  const all = [...series1, ...series2], worst = Math.max(...all.map(d => d.mae))
-  const over = all.map((d, i) => [i, d]).filter(([, d]) => d.mae > tol)
-  out(over.length ? 'FAIL' : 'PASS', `PROVISIONAL covered-cut vs proposed tolerance: ${over.length}/${all.length} frames above ${tol.toFixed(4)}; worst frame MAE ${f2(worst)}`)
+  console.log('tolerance: NOT DECIDED (Ben)')
+  out('INFO', `critique's suggestion (not a gate): max channel ~${PROV.max} from frame 1 on, MAE ~${PROV.mae}; first-cut step MAE ~${PROV.stepMae} and a few hundred px >= 16`)
+  const judged = [...series1.slice(1), ...series2.slice(1)]
+  const bad = judged.filter(d => !provisionalFrame(d))
+  const wMax = Math.max(...judged.map(d => d.max)), wMae = Math.max(...judged.map(d => d.mae))
+  out(bad.length ? 'FAIL' : 'PASS', `PROVISIONAL fade fit (frames >= 1 of both cuts, max <= ${PROV.max} and MAE <= ${PROV.mae}): ${bad.length}/${judged.length} frames outside; worst max ${wMax}, worst MAE ${f2(wMae)}; frame 0s: cut1 ${fmtD(series1[0])}, cut2 ${fmtD(series2[0])}`)
   const sampled = grid2.map((u, i) => i).filter(i => Math.abs((grid2[i] / 50) - Math.round(grid2[i] / 50)) < 1e-6)
   out('INFO', `a 50 ms sampler looks at cut-2 frames ${sampled.join(',')}: fault frame ${FAULT_K} (${f1(grid2[FAULT_K])} ms) is ${sampled.includes(FAULT_K) ? 'SAMPLED (probe invalid)' : 'between its looks'}`)
-  // flagged = above the proposed tolerance AND above every real frame of the cut it is injected into
-  // (so the flag cannot come from a tolerance that already fails everything); the all-cuts comparison is INFO
-  const worst2 = Math.max(...series2.map(d => d.mae))
-  for (const [name, e] of [['blank (black) frame', blankErr], ['wrong-station frame (rest 7)', wrongErr]]) {
-    const flagged = e.mae > tol && e.mae > worst2
-    out(flagged ? 'PASS' : 'FAIL', `probe ${name} at cut-2 frame ${FAULT_K}: MAE ${f2(e.mae)} (${e.differing} px) vs tolerance ${tol.toFixed(4)} and worst real cut-2 frame ${f2(worst2)}: ${flagged ? 'FLAGGED' : 'NOT detected'}`)
-    out('INFO', `  same fault vs worst real frame of BOTH cuts (${f2(worst)}): ${e.mae > worst ? 'above' : 'NOT above (cut-1 real error is as large as this fault)'}`)
+  for (const [name, d] of [['blank (black) frame', probes.blank], ['wrong-station frame (rest 7)', probes.wrong], ['small-area pop (120x80 patch, +20% white)', probes.pop]]) {
+    const flagged = !provisionalFrame(d)
+    out(flagged ? 'PASS' : 'FAIL', `probe ${name} at cut-2 frame ${FAULT_K}: ${fmtD(d)} -> ${flagged ? 'FLAGGED' : 'NOT detected'} by the provisional frame check`)
   }
+  out(probes.pop.mae <= PROV.mae ? 'PASS' : 'FAIL', `probe small-area pop: whole-frame MAE ${f2(probes.pop.mae)} is within MAE ${PROV.mae} (flat MAE alone would miss it; max-channel/over-threshold count catches it)`)
+  if (page.errors.length) out('FAIL', `page errors: ${page.errors.slice(0, 3).join(' | ')}`)
+  await page.context().close()
+}
+
+// ---------------------------------------------------------------- 6. reduced-motion (spec 2.2 / 2.3d)
+// phase 'rest' and 'late': nothing animates; 'cut': exactly one 400 ms opacity transition, on a clone
+function judgeRM(list, phase) {
+  const bad = []
+  if (phase === 'cut') {
+    const ok = list.length === 1 && list[0].name === 'transition:opacity' && list[0].duration === 400 && list[0].isClone && list[0].props.join() === 'opacity'
+    if (!ok) bad.push(`want exactly one 400 ms opacity transition on a clone, got [${list.map(a => `${a.name}@${a.duration}ms on .${a.cls}${a.isClone ? '(clone)' : ''}`).join(', ')}]`)
+  } else if (list.length) bad.push(`${list.length} animating: ${list.map(a => `${a.name} on .${a.cls || '?'}`).join(', ')}`)
+  return { pass: !bad.length, bad, line: `${phase}: ${list.length} animation(s)${bad.length ? ' :: ' + bad.join('; ') : ''}` }
+}
+async function reducedMotion() {
+  console.log('== reduced-motion (prefers-reduced-motion: reduce emulated)')
+  const page = await openPage({ reducedMotion: true })
+  const rm = await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)
+  out(rm ? 'PASS' : 'FAIL', `matchMedia reduce = ${rm}`)
+  await rest(page, 0)
+  let r = judgeRM(await page.evaluate(censusRaw), 'rest'); out(r.pass ? 'PASS' : 'FAIL', `rest 0 ${r.line}`)
+  await page.evaluate(() => { window.__forest.freeze(0); window.__forest.turn() })
+  const sc = await scene(page)
+  r = judgeRM(await page.evaluate(censusRaw), 'cut'); out(r.pass && sc === 'cut:1' ? 'PASS' : 'FAIL', `turn(): scene ${sc}, ${r.line}`)
+  await page.clock.runFor(500)
+  const sc2 = await scene(page)
+  r = judgeRM(await page.evaluate(censusRaw), 'late'); out(r.pass && sc2 === 'rest:1' ? 'PASS' : 'FAIL', `+500 ms: scene ${sc2}, ${r.line}`)
+  await page.clock.runFor(41000)
+  r = judgeRM(await page.evaluate(censusRaw), 'late'); out(r.pass ? 'PASS' : 'FAIL', `+41 s: ${r.line}`)
   if (page.errors.length) out('FAIL', `page errors: ${page.errors.slice(0, 3).join(' | ')}`)
   await page.context().close()
 }
@@ -399,7 +554,12 @@ async function coveredCut() {
 // ---------------------------------------------------------------- 7. selftest (gate 3b fixtures)
 async function selftest() {
   console.log('== selftest (gate 3b: each check must FAIL on its fixture)')
-  const expectFail = (r, what) => out(r.pass ? 'FAIL' : 'PASS', `${what}: check says ${r.pass ? 'PASS (fixture NOT caught)' : 'FAIL (caught)'} :: ${r.line ?? r.bad?.join('; ')}`)
+  // want: the failure must be for the fixture's own reason, not an unrelated one
+  const expectFail = (r, what, want) => {
+    const why = r.line ?? r.bad?.join('; ')
+    const caught = !r.pass && (!want || want.test(why))
+    out(caught ? 'PASS' : 'FAIL', `${what}: check says ${r.pass ? 'PASS (fixture NOT caught)' : caught ? 'FAIL (caught)' : 'FAIL but not for the fixture reason'} :: ${why}`)
+  }
   const expectPass = (r, what) => out(r.pass ? 'PASS' : 'FAIL', `${what}: check says ${r.pass ? 'PASS' : 'FAIL'} :: ${r.line ?? r.bad?.join('; ')}`)
   const page = await openPage()
   const base = await restShot(page, 0)
@@ -407,39 +567,62 @@ async function selftest() {
   await page.evaluate(() => { const d = document.createElement('div'); d.id = 'fv-patch'; d.style.cssText = 'position:fixed;left:900px;top:500px;width:200px;height:60px;background:#fff;z-index:2147483647'; document.body.appendChild(d) })
   const patched = await shot(page)
   await page.evaluate(() => document.getElementById('fv-patch').remove())
-  expectFail(safeboxCheck(patched, 'bright patch 200x60 inside the box'), 'safebox bright-patch fixture')
+  expectFail(safeboxCheck(patched, 'bright patch 200x60 inside the box'), 'safebox bright-patch fixture', /p99\.5 2\d\d/)
   expectFail(safeboxCheck(base, 'zero-size crop', { left: 0.5, top: 0.5, width: 0, height: 0.2 }), 'safebox empty-crop fixture')
   expectFail(safeboxCheck(new Uint8Array(0), 'zero-length frame'), 'safebox empty-frame fixture')
   expectPass(contrastCheck(themeTextColor(), 68, 'control: theme text vs the 68 cap'), 'contrast control')
   expectFail(contrastCheck('#5a5048', 30, 'low-contrast fixture #5a5048 on luma 30'), 'contrast low-contrast fixture')
-  // census: control, injected unexpected continuous animation, removed layer
-  await rest(page, 0)
-  expectPass(judgeCensus(await page.evaluate(censusRaw), false), 'census control (station 0)')
+  // census (against the frozen baseline): controls, then each fixture must FAIL
+  const bl = loadBaseline()
+  if (!bl) out('FAIL', 'census fixtures need scripts/forest-census.frozen.json (run census --freeze-baseline)')
+  const cen = async (k, idle = false) => judgeCensus(await page.evaluate(censusRaw), idle, bl?.stations?.[k])
+  await rest(page, 0); expectPass(await cen(0), 'census control (station 0)')
+  await rest(page, 1); expectPass(await cen(1), 'census control (station 1, has a lantern flicker)')
   await page.evaluate(() => {
     const s = document.createElement('style'); s.id = 'fv-kf'; s.textContent = '@keyframes fv-pulse{from{left:0}to{left:40px}}'; document.head.appendChild(s)
     const d = document.createElement('div'); d.id = 'fv-anim'; d.style.cssText = 'position:absolute;width:10px;height:10px;animation:fv-pulse 2s linear infinite'
     document.querySelector('.fs-world').appendChild(d)
   })
-  expectFail(judgeCensus(await page.evaluate(censusRaw), false), 'census unexpected-animation fixture')
+  expectFail(await cen(1), 'census unexpected-animation fixture', /unexpected: fv-pulse/)
   await page.evaluate(() => { document.getElementById('fv-anim').remove(); document.getElementById('fv-kf').remove() })
   await rest(page, 0)
+  await page.evaluate(() => { document.querySelector('.fs-stage .drift').style.animation = 'none' })
+  expectFail(await cen(0), 'census one-fog-drift-removed fixture', /fog drift 17 vs baseline 18: missing \[\S+\] extra \[\]/)
+  await rest(page, 0)
+  await page.evaluate(() => {
+    const e = [...document.querySelectorAll('.fs-world .it')].find(x => !x.querySelector('.drift'))
+    e.classList.add('drift'); e.style.setProperty('--d', '5s'); e.style.setProperty('--dx', '3px'); e.style.setProperty('--dl', '0s')
+  })
+  expectFail(await cen(0), 'census drift-on-wrong-element fixture', /extra \[\S+\]/)
+  await rest(page, 1)
+  await page.evaluate(() => {
+    const f = document.querySelector('.fs-stage .flick'); f.classList.remove('flick')
+    const other = [...document.querySelectorAll('.fs-world .ly')].find(x => x !== f && !x.classList.contains('drift') && !x.classList.contains('flick'))
+    other.classList.add('flick')
+  })
+  expectFail(await cen(1), 'census flicker-moved-to-wrong-element fixture', /flicker targets/)
+  await rest(page, 0)
   await page.evaluate(() => document.querySelectorAll('.fs-stage .creep')[0].remove())
-  expectFail(judgeCensus(await page.evaluate(censusRaw), false), 'census removed-layer fixture (one .creep layer gone)')
-  // census: idle running at rest start must fail; a second on-screen flicker must fail
-  const idleEarly = judgeCensus([{ name: 'fs-idle', isRig: true, cls: 'fs-rig idle', props: ['transform'], iterations: Infinity, duration: 7300 },
-    ...[1, 2].map(() => ({ name: 'transition:transform', cls: 'creep', props: ['transform'], duration: 40000, iterations: 1 }))], false)
-  expectFail(idleEarly, 'census idle-at-rest-start fixture')
-  const twoFlick = judgeCensus([...[1, 2].map(() => ({ name: 'fs-flick', cls: 'ly flick', props: ['opacity'], opMin: 0.88, opMax: 1, duration: 2700, onScreen: true })),
-    ...[1, 2].map(() => ({ name: 'transition:transform', cls: 'creep', props: ['transform'], duration: 40000, iterations: 1 }))], false)
-  expectFail(twoFlick, 'census two-flickers-on-screen fixture')
+  expectFail(await cen(0), 'census removed-layer fixture (one .creep layer gone)', /creep transitions 1, want 2/)
+  // synthetic lists: idle running at rest start; a second on-screen flicker
+  const creeps2 = [1, 2].map(() => ({ name: 'transition:transform', cls: 'creep', props: ['transform'], duration: 40000, iterations: 1 }))
+  expectFail(judgeCensus([{ name: 'fs-idle', isRig: true, cls: 'fs-rig idle', props: ['transform'], iterations: Infinity, duration: 7300 }, ...creeps2], false, { drift: [], flick: [] }), 'census idle-at-rest-start fixture', /^idle sway running at rest start[^;]*$/)
+  expectFail(judgeCensus([...[1, 2].map((x, i) => ({ name: 'fs-flick', path: `x/${i}`, cls: 'ly flick', props: ['opacity'], opMin: 0.88, opMax: 1, duration: 2700, onScreen: true })), ...creeps2], false, { drift: [], flick: [{ path: 'x/0', onScreen: true }, { path: 'x/1', onScreen: true }] }), 'census two-flickers-on-screen fixture', /^2 lantern flickers on screen at once \(max 1\)$/)
   await page.context().close()
+  // reduced motion: control, then an animation injected under reduced motion must FAIL
+  const rp = await openPage({ reducedMotion: true })
+  await rest(rp, 0)
+  expectPass(judgeRM(await rp.evaluate(censusRaw), 'rest'), 'reduced-motion control (rest 0)')
+  await rp.evaluate(() => { const d = document.createElement('div'); document.querySelector('.fs-world').appendChild(d); d.animate([{ transform: 'none' }, { transform: 'scale(2)' }], { duration: 1000, iterations: Infinity }) })
+  expectFail(judgeRM(await rp.evaluate(censusRaw), 'rest'), 'reduced-motion injected-animation fixture', /web-animation/)
+  await rp.context().close()
 }
 
 // ---------------------------------------------------------------- main
-const CMDS = { 'probe-api': probeApi, safebox, census, perf, 'covered-cut': coveredCut, selftest }
+const CMDS = { 'probe-api': probeApi, safebox, census, perf, 'covered-cut': coveredCut, 'reduced-motion': reducedMotion, selftest }
 const cmd = process.argv[2]
-const run = cmd === 'all' ? ['probe-api', 'safebox', 'census', 'perf', 'covered-cut'] : [cmd]
-if (!run.every(c => CMDS[c])) { console.error('usage: node scripts/forest-verify.mjs probe-api|safebox|census|perf|covered-cut|all|selftest'); process.exit(2) }
+const run = cmd === 'all' ? ['probe-api', 'safebox', 'census', 'perf', 'covered-cut', 'reduced-motion'] : [cmd]
+if (!run.every(c => CMDS[c])) { console.error('usage: node scripts/forest-verify.mjs probe-api|safebox|census [--freeze-baseline]|perf|covered-cut|reduced-motion|all|selftest'); process.exit(2) }
 let code = 0
 try {
   await startServer()

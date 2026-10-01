@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { luma, lumaStats, SAFE_BOX, boxPx, contrastRatio, easeInOut, cubicBezier, composite, diffStats, quantile } from './forestVerifyMath.js'
+import { luma, lumaStats, SAFE_BOX, boxPx, contrastRatio, easeInOut, cubicBezier, composite, compositeStack, diffStats, quantile } from './forestVerifyMath.js'
 
 const frame = (W, H, rgb) => { const a = new Uint8Array(W * H * 4); for (let i = 0; i < a.length; i += 4) { a[i] = rgb[0]; a[i + 1] = rgb[1]; a[i + 2] = rgb[2]; a[i + 3] = 255 } return a }
 
@@ -40,6 +40,17 @@ describe('forestVerifyMath', () => {
     expect(m.differing).toBe(0)
     const z = diffStats(S, D); expect(z.differing).toBe(16); expect(z.max).toBe(200)
     expect(z.mae).toBeCloseTo(400 / 3)
+  })
+  it('compositeStack: single layer equals composite; stacked layers are source-over in order', () => {
+    const D = frame(2, 2, [0, 0, 0]), A = frame(2, 2, [200, 200, 200]), B = frame(2, 2, [100, 100, 100])
+    expect(diffStats(compositeStack(D, [{ rgba: A, a: 0.3 }]), composite(A, D, 0.3)).differing).toBe(0)
+    // B at 0.5 over D gives 50, then A at 0.5 over that gives 125
+    expect(compositeStack(D, [{ rgba: B, a: 0.5 }, { rgba: A, a: 0.5 }])[0]).toBe(125)
+    expect(compositeStack(D, [])[0]).toBe(0)
+  })
+  it('diffStats over-threshold counts', () => {
+    const A = frame(3, 1, [0, 0, 0]), B = frame(3, 1, [0, 0, 0]); B[0] = 8; B[4] = 12; B[9] = 20
+    const d = diffStats(A, B); expect([d.ge8, d.ge12, d.ge16, d.max]).toEqual([3, 2, 1, 20])
   })
   it('quantile', () => {
     expect(quantile([5, 1, 3, 2, 4], 0.5)).toBe(3)

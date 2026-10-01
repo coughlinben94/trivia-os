@@ -72,18 +72,35 @@ export function composite(S, D, a) {
   return out
 }
 
+// Covered cut as the browser paints it: layers in DOM (paint) order, each source-over the result so far
+// at its own opacity, starting from the destination D. layers = [{ rgba, a }], bottom first.
+export function compositeStack(D, layers) {
+  const acc = Float64Array.from(D)
+  for (const { rgba, a } of layers) {
+    for (let i = 0; i < acc.length; i += 4) {
+      acc[i] = rgba[i] * a + acc[i] * (1 - a)
+      acc[i + 1] = rgba[i + 1] * a + acc[i + 1] * (1 - a)
+      acc[i + 2] = rgba[i + 2] * a + acc[i + 2] * (1 - a)
+    }
+  }
+  const out = new Uint8Array(D.length)
+  for (let i = 0; i < acc.length; i += 4) { out[i] = Math.round(acc[i]); out[i + 1] = Math.round(acc[i + 1]); out[i + 2] = Math.round(acc[i + 2]); out[i + 3] = 255 }
+  return out
+}
+
 // Pixel diff: count of pixels whose largest RGB channel difference is non-zero, the largest such
-// difference, and the mean absolute channel difference (0-255) over all pixels and channels.
+// difference, the mean absolute channel difference (0-255) over all pixels and channels, and the
+// number of pixels whose largest channel difference is >= 8, >= 12, >= 16.
 export function diffStats(A, B) {
   if (A.length !== B.length) throw new Error(`size mismatch ${A.length} vs ${B.length}`)
-  let differing = 0, max = 0, sum = 0
+  let differing = 0, max = 0, sum = 0, ge8 = 0, ge12 = 0, ge16 = 0
   for (let i = 0; i < A.length; i += 4) {
     const d0 = Math.abs(A[i] - B[i]), d1 = Math.abs(A[i + 1] - B[i + 1]), d2 = Math.abs(A[i + 2] - B[i + 2])
     const d = Math.max(d0, d1, d2)
     sum += d0 + d1 + d2
-    if (d) { differing++; if (d > max) max = d }
+    if (d) { differing++; if (d > max) max = d; if (d >= 8) { ge8++; if (d >= 12) { ge12++; if (d >= 16) ge16++ } } }
   }
-  return { differing, max, mae: sum / (A.length / 4 * 3) }
+  return { differing, max, mae: sum / (A.length / 4 * 3), ge8, ge12, ge16 }
 }
 
 // p-quantile of a numeric list (nearest rank); median = quantile(xs, 0.5)
