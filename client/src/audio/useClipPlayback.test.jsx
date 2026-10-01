@@ -59,6 +59,7 @@ describe('useClipPlayback', () => {
     act(() => { last.play() })
     expect(dir.play).toHaveBeenCalledWith(clipA, { slideId: 's' })
     expect(last.active).toBe(true)
+    dir.handles[0].state = 'playing'
     act(() => { last.toggle() })
     expect(dir.handles[0].stop).toHaveBeenCalled()
     expect(last.active).toBe(false)
@@ -127,6 +128,19 @@ describe('useClipPlayback', () => {
     expect(last.blocked).toBe(false)
     act(() => { dir.set({ ...dir.snap, blocked: [{ key: 'k', slideId: 's', part: 1, kind: 'file', reason: 'x' }] }) })
     expect(last.blocked).toBe(false)
+  })
+
+  it('pressing the button on a clip that was asked but not yet sounding retries it (never stops it)', () => {
+    const dir = fakeDirector()
+    render({ dir, clip: clipA })
+    act(() => { last.play() })
+    dir.handles[0].state = 'blocked'
+    act(() => { last.toggle() })
+    expect(dir.handles[0].stop).not.toHaveBeenCalled()
+    expect(dir.retryBlocked).toHaveBeenCalled()
+    dir.handles[0].state = 'playing'
+    act(() => { last.toggle() })
+    expect(dir.handles[0].stop).toHaveBeenCalled()
   })
 
   it('retry() asks the director to retry blocked clips', () => {

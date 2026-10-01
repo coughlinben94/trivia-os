@@ -22,6 +22,7 @@ import { warmYoutubeAudio, claimYoutubeAudio } from '../lib/youtubeWarmAudio.js'
 
 export const SOUND_CHECK_MS = 2000 // a clip asked to play must be sounding by now
 export const BLOCKED_RECHECK_MS = 1000 // while blocked, keep looking
+export const NOT_READY_EXTRA_MS = 4000 // extra wait when the YouTube player has not even loaded yet
 
 function browserDeps() {
   return {
@@ -243,12 +244,18 @@ export function createDirector(overrides = {}) {
       arm(check, whyNot = () => 'not-sounding') {
         checkFn = check
         stopTimers()
-        watch = d.setTimer(() => {
+        let extended = false
+        const tick = () => {
           watch = null
           if (done()) return
-          if (safe(checkFn)) ctl.playing()
-          else ctl.block(whyNot())
-        }, SOUND_CHECK_MS)
+          if (safe(checkFn)) { ctl.playing(); return }
+          const why = whyNot()
+          // A player still loading (cold build, 1.5s pool rebuild, next series part) is slow,
+          // not blocked: give it one longer window before a cue + Sentry event.
+          if (why === 'not-ready' && !extended) { extended = true; watch = d.setTimer(tick, NOT_READY_EXTRA_MS); return }
+          ctl.block(why)
+        }
+        watch = d.setTimer(tick, SOUND_CHECK_MS)
       },
       playing() {
         if (done() || state === 'playing' || state === 'paused') return
@@ -364,6 +371,7 @@ export function createDirector(overrides = {}) {
     const owner = {}
     h.__owner = owner // a stale handle's release() must not destroy a player a newer handle owns
     let player = null
+    let live = false // false once stopped: a player that becomes ready LATER must not start
     let endTimer = null
     const check = () => !!player && youtubeIsSounding(player)
     // Backstop for a clip with an end: the player's own `end` normally stops it and
@@ -383,7 +391,9 @@ export function createDirector(overrides = {}) {
 
     const go = () => {
       ctl.arm(check, () => (player ? 'not-sounding' : 'not-ready')) // FIRST: the player may never become ready — that must still be reported
+      live = true
       h.whenReady(p => {
+        if (!live) return
         player = p
         safe(() => {
           p.setVolume(clip.volume)
@@ -406,6 +416,7 @@ export function createDirector(overrides = {}) {
     // Stop and natural end both PARK the player at the clip start (replay is instant and
     // takes no pool slot); release() is what destroys it.
     ctl.setStop(() => {
+      live = false
       if (endTimer != null) d.clearTimer(endTimer)
       endTimer = null
       safe(() => { player?.pauseVideo(); player?.seekTo(clip.start, true) })

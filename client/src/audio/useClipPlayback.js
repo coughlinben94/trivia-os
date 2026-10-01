@@ -43,7 +43,15 @@ export function useClipPlayback(clip, { slideId, autoPlay = false, isPreview = f
     setActive(false)
   }, [])
 
-  const toggle = useCallback(() => (handleRef.current && active ? stop() : play()), [active, play, stop])
+  // A press on a clip that was asked but is not sounding yet (pending/blocked) is a RETRY, never
+  // a stop: the TV's gesture handler may already have restarted it on this same pointerdown,
+  // and a stop here would turn a recovered clip back into silence.
+  const toggle = useCallback(() => {
+    const h = handleRef.current
+    if (!h || !active) return play()
+    if (h.state === 'playing' || h.state === 'paused') return stop()
+    return dir.retryBlocked()
+  }, [active, play, stop, dir])
 
   // Director-side stops (stopSlide, stopAll) clear the button too.
   useEffect(() => {

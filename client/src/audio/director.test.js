@@ -453,6 +453,8 @@ describe('director plays YouTube clips', () => {
     const d = createDirector(f.deps)
     const h = d.play(clip, { slideId: 's1' })
     vi.advanceTimersByTime(2000)
+    expect(h.state).toBe('pending') // a slow load gets a longer window before it counts as blocked
+    vi.advanceTimersByTime(4000)
     expect(h.state).toBe('blocked')
     expect(h.reason).toBe('not-ready') // slow load, told apart from an autoplay-policy block
     expect(f.youtube.claims[0].player.playVideo).not.toHaveBeenCalled()
@@ -860,5 +862,30 @@ describe('review fixes (2026-10-01)', () => {
     expect(d._internals.handles.size).toBe(0)
     d.getContext()
     expect(f.deps.makeContext).toHaveBeenCalledTimes(2) // a new context, not the old one
+  })
+
+  it('a clip stopped before its player is ready never plays when the player finally loads', () => {
+    const yt = fakeYoutube()
+    yt.neverReady = true
+    const f = runningFakes({ youtube: yt })
+    const d = createDirector(f.deps)
+    const h = d.play({ kind: 'youtube', videoId: 'v' }, { slideId: 's' })
+    h.stop()
+    yt.claims[0].readyCbs.forEach(cb => cb(yt.claims[0].player)) // the player becomes ready LATER
+    expect(yt.claims[0].player.playVideo).not.toHaveBeenCalled()
+  })
+
+  it('a slow cold YouTube load (ready at 3s) never raises a cue or a Sentry event', () => {
+    const yt = fakeYoutube()
+    yt.neverReady = true
+    const f = runningFakes({ youtube: yt })
+    const d = createDirector(f.deps)
+    const h = d.play({ kind: 'youtube', videoId: 'v' }, { slideId: 's' })
+    vi.advanceTimersByTime(3000)
+    yt.claims[0].readyCbs.forEach(cb => cb(yt.claims[0].player))
+    vi.advanceTimersByTime(3200) // the extended check at 6s finds it sounding
+    expect(h.state).toBe('playing')
+    expect(f.events).toHaveLength(0)
+    expect(d.getSnapshot().blocked).toEqual([])
   })
 })
