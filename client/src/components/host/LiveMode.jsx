@@ -12,7 +12,7 @@ import { deriveRoundCols, computeTotal, pickableTeams } from '../../lib/scoreboa
 import { computeMatchingScoreUpdates } from '../../lib/matchingScoring.js'
 import { computeOrderScoreUpdates, DEFAULT_ORDER_POINTS } from '../../lib/orderScoring.js'
 import { computeChoiceScoreUpdates, DEFAULT_CHOICE_POINTS } from '../../lib/choiceScoring.js'
-import { computeDropScoreUpdates, summarizeDrop, dropOptions, DEFAULT_DROP_TOTAL } from '../../lib/dropScoring.js'
+import { computeDropScoreUpdates, summarizeDrop, dropOptions, dropStepCount, DEFAULT_DROP_TOTAL } from '../../lib/dropScoring.js'
 import { scoreWagerRound, computeWagerScoreUpdates, parseWagerNumber, DEFAULT_TIER_ID } from '../../lib/wagerScoring.js'
 import { scoreHuesCuesRound, computeHuesCuesScoreUpdates } from '../../lib/huesCuesScoring.js'
 import { computeHorseRaceScoreUpdates, DEFAULT_RACE_POINTS } from '../../lib/raceScoring.js'
@@ -729,8 +729,9 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // at the end (points per tile, all-in count) is computed here, now, and
   // stored — /display can't read phone_answers itself. Re-entering this on an
   // already-locked slide (Retry Scoring, or the host fixing the correct tile)
-  // re-scores from scratch and rewinds the drops, since the reveal it showed
-  // is no longer the truth. Scores are keyed by slideId, so nothing doubles.
+  // re-scores from scratch. Plain Retry keeps the drops where they are; only
+  // fixDropCorrect rewinds them, since the reveal it showed is then wrong.
+  // Scores are keyed by slideId, so nothing doubles.
   async function handleLockAndScoreDrop(slide) {
     await lockAndScore({
       slide,
@@ -747,10 +748,14 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         return {
           results: null,
           updates,
+          // Retry Scoring keeps wherever the drops are (fixDropCorrect is what
+          // rewinds them, by handing in a slide already reset to step 0). A
+          // slide with no wrong tile to drop has nothing to step, so it is
+          // revealed the moment it is scored.
           extraData: {
             dropResults: summarizeDrop(answers, optionIds, correctId, total),
-            dropStep: 0,
-            dropRevealed: false,
+            dropStep: slide.data.dropStep ?? 0,
+            dropRevealed: dropStepCount(slide.data) === 0 ? true : !!slide.data.dropRevealed,
           },
           unmatchedError: (teams?.length ?? 0) > 0 && updates.length === 0
             ? 'No teams could be matched to the scoreboard — check team names match, then retry'

@@ -99,9 +99,13 @@ export default function DropBoard({ slide, team, theme, preview = false, onAnswe
       .maybeSingle()
       .then(({ data: row }) => {
         if (cancelled || !row?.answer || Array.isArray(row.answer)) return
+        // A split that no longer fits (the host changed the pool, or blanked a
+        // tile the team had points on) is dropped, not half-restored: the
+        // counter would go negative and the team couldn't tap their way out.
         const saved = normalize(row.answer, optionIds)
+        if (!isValidAlloc(saved, optionIds, total)) return
         setAlloc(saved)
-        if (isValidAlloc(saved, optionIds, total)) setCommitted(saved)
+        setCommitted(saved)
       })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps

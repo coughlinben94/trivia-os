@@ -2088,10 +2088,13 @@ function DropBuilder({ options, correctId, total, onChangeOptions, onBatchChange
     ;[next[i], next[j]] = [next[j], next[i]]
     onChangeOptions(next)
   }
+  // SlideEditor's wrapper hands back the bare URL string (ChoiceBuilder's
+  // `result?.url` read of that same string silently no-ops — not copied here).
   async function uploadImage(i, file) {
     if (!file) return
     const result = await onMediaUpload(file)
-    if (result?.url) updateOption(i, { image: result.url })
+    const url = typeof result === 'string' ? result : result?.url
+    if (url) updateOption(i, { image: url })
   }
 
   return (
@@ -2145,6 +2148,9 @@ function DropBuilder({ options, correctId, total, onChangeOptions, onBatchChange
           className="w-16 border border-gray-200 rounded px-2 py-1.5 text-sm text-center text-gray-900 focus:outline-none focus:ring-1 focus:ring-baynes-forest"
         />
       </div>
+      <p className="text-xs text-gray-400 -mt-1">
+        Set this before the show. Changing it, or blanking a tile, after teams have placed points makes their saved splits invalid and they score 0.
+      </p>
     </div>
   )
 }

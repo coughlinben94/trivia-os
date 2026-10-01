@@ -4,7 +4,13 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import DropBoard from './DropBoard.jsx'
 
-vi.mock('../../lib/supabase.js', () => ({ supabase: {} }))
+// Non-preview mounts rehydrate a saved split with
+// from().select().eq().eq().maybeSingle(); `saved.row` is what that resolves.
+const saved = vi.hoisted(() => ({ row: null }))
+vi.mock('../../lib/supabase.js', () => {
+  const chain = { select: () => chain, eq: () => chain, maybeSingle: () => Promise.resolve({ data: saved.row }) }
+  return { supabase: { from: () => chain } }
+})
 
 const theme = { colors: { text: '#fff', highlight: '#fc0' }, fonts: { display: 'Boogaloo' } }
 const options = ['a', 'b', 'c', 'd'].map(id => ({ id, label: `Tile ${id}` }))
@@ -14,6 +20,7 @@ describe('<DropBoard>', () => {
   let container, root
   beforeEach(() => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true
+    globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} }
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -79,5 +86,27 @@ describe('<DropBoard>', () => {
     expect(tileOf(1).style.borderWidth).toBe('3px')
     expect(tileOf(0).style.borderWidth).toBe('1px')
     expect(container.textContent).toContain('That’s the drop!')
+  })
+
+  it('ignores a saved split that no longer fits the pool (host changed the total) instead of showing a negative counter', async () => {
+    saved.row = { answer: { a: 30, b: 0, c: 0, d: 0 } }
+    await act(async () => {
+      root.render(<DropBoard theme={theme} team={{ id: 't', showId: 's' }} slide={{ id: 'sl', data: { ...baseData, dropTotal: 20 } }} />)
+    })
+    expect(container.textContent).not.toContain('-10')
+    expect(container.textContent).toContain('20')
+    expect(container.textContent).toContain('left to place')
+    expect(lockBtn().textContent).toContain('Place 20 more')
+    saved.row = null
+  })
+
+  it('restores a saved split that still fits', async () => {
+    saved.row = { answer: { a: 10, b: 20, c: 0, d: 0 } }
+    await act(async () => {
+      root.render(<DropBoard theme={theme} team={{ id: 't', showId: 's' }} slide={{ id: 'sl', data: baseData }} />)
+    })
+    expect(container.textContent).toContain('all placed')
+    expect(lockBtn().textContent).toContain('Split Locked')
+    saved.row = null
   })
 })
