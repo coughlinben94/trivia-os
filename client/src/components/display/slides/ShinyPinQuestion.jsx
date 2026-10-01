@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../../lib/supabase.js'
+import { usePhoneSubmitCounts } from '../../../hooks/usePhoneSubmitCounts.js'
 import UsMap, { PinMarker } from '../../shared/UsMap.jsx'
 import MapLoadRetry from '../../shared/MapLoadRetry.jsx'
 import { useUsMapData } from '../../../hooks/useUsMapData.js'
@@ -13,6 +14,7 @@ import { EASE_OUT } from '../../../lib/easings.js'
 import { SHINY_GOLD } from '../../../lib/shinyGold.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 import ShinySignal from '../ShinySignal.jsx'
+import { useFontsReady } from './shinyParts.jsx'
 
 // TV side of Pin It: prompt + the same map the phones have (waiting), a held
 // "locked" beat, then a reveal where the camera frames the true spot plus the
@@ -61,24 +63,12 @@ export default function ShinyPinQuestion({ slide, show, theme }) {
   const revealed = !!data.pinRevealed
   const reduce = useReducedMotion()
   const states = useUsMapData()
-  const [submitted, setSubmitted] = useState(0)
   const [teamCount, setTeamCount] = useState(0)
   const [colors, setColors] = useState({})
-  const [fontsReady, setFontsReady] = useState(false)
-  useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
+  const fontsReady = useFontsReady()
 
-  // Same polled aggregate the other phone mechanics use: /display is anonymous
-  // and cannot read phone_answers, but phone_answers_count is SECURITY DEFINER.
-  useEffect(() => {
-    if (locked || revealed) return
-    let cancelled = false
-    const load = async () => {
-      const { data: n } = await supabase.rpc('phone_answers_count', { p_slide_id: slide.id })
-      if (!cancelled) setSubmitted(n ?? 0)
-    }
-    load(); const id = setInterval(load, 2000)
-    return () => { cancelled = true; clearInterval(id) }
-  }, [slide.id, locked, revealed])
+  // Own teams query below (also fetches color), so the hook skips its head-count.
+  const { submitted } = usePhoneSubmitCounts(slide.id, show?.id, { pollStop: locked || revealed, teams: false })
 
   useEffect(() => {
     if (!show?.id) return

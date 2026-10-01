@@ -1050,17 +1050,7 @@ function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, up
                 onChangePoints={pts => onChange('pointsPerMatch', pts)}
                 onMediaUpload={async file => { const r = await uploadMedia(file); return r?.url }}
               />
-              <div className="flex flex-col gap-2">
-                <label className="block text-xs font-medium text-gray-700">Phone preview — live, matches what teams will see</label>
-                <div style={{ width: 300, margin: '0 auto', padding: '1.25rem 1rem', borderRadius: 20, background: theme.colors.bg }}>
-                  <MatchingBoard
-                    preview
-                    theme={theme}
-                    team={{ id: '__preview__', showId: show?.id ?? '__preview__' }}
-                    slide={{ id: slide.id, showId: show?.id, data: { ...data, pairs: data.pairs ?? [{ id: 'p0', left: '', right: '' }, { id: 'p1', left: '', right: '' }] } }}
-                  />
-                </div>
-              </div>
+              <PhonePreview Board={MatchingBoard} theme={theme} show={show} slide={slide} data={{ ...data, pairs: data.pairs ?? [{ id: 'p0', left: '', right: '' }, { id: 'p1', left: '', right: '' }] }} />
             </>
           )}
 
@@ -1073,17 +1063,7 @@ function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, up
           {schema.type === 'wager' && (
             <>
               <WagerBuilder answer={data.answer} />
-              <div className="flex flex-col gap-2">
-                <label className="block text-xs font-medium text-gray-700">Phone preview — the blind wager teams see first</label>
-                <div style={{ width: 300, margin: '0 auto', padding: '1.25rem 1rem', borderRadius: 20, background: theme.colors.bg }}>
-                  <WagerBoard
-                    preview
-                    theme={theme}
-                    team={{ id: '__preview__', showId: show?.id ?? '__preview__' }}
-                    slide={{ id: slide.id, showId: show?.id, data: { ...data, wagerTiersLocked: false, wagerGuessesLocked: false } }}
-                  />
-                </div>
-              </div>
+              <PhonePreview Board={WagerBoard} label="Phone preview — the blind wager teams see first" theme={theme} show={show} slide={slide} data={{ ...data, wagerTiersLocked: false, wagerGuessesLocked: false }} />
             </>
           )}
 
@@ -1127,17 +1107,7 @@ function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, up
                 onBatchChange={onBatchChange}
                 onMediaUpload={async file => { const r = await uploadMedia(file); return r?.url }}
               />
-              <div className="flex flex-col gap-2">
-                <label className="block text-xs font-medium text-gray-700">Phone preview — live, matches what teams will see</label>
-                <div style={{ width: 300, margin: '0 auto', padding: '1.25rem 1rem', borderRadius: 20, background: theme.colors.bg }}>
-                  <OrderBoard
-                    preview
-                    theme={theme}
-                    team={{ id: '__preview__', showId: show?.id ?? '__preview__' }}
-                    slide={{ id: slide.id, showId: show?.id, data: { ...data, items: orderItems, orderLocked: false } }}
-                  />
-                </div>
-              </div>
+              <PhonePreview Board={OrderBoard} theme={theme} show={show} slide={slide} data={{ ...data, items: orderItems, orderLocked: false }} />
             </>
           )}
 
@@ -1159,17 +1129,7 @@ function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, up
                 onBatchChange={onBatchChange}
                 onMediaUpload={async file => { const r = await uploadMedia(file); return r?.url }}
               />
-              <div className="flex flex-col gap-2">
-                <label className="block text-xs font-medium text-gray-700">Phone preview — live, matches what teams will see</label>
-                <div style={{ width: 300, margin: '0 auto', padding: '1.25rem 1rem', borderRadius: 20, background: theme.colors.bg }}>
-                  <ChoiceBoard
-                    preview
-                    theme={theme}
-                    team={{ id: '__preview__', showId: show?.id ?? '__preview__' }}
-                    slide={{ id: slide.id, showId: show?.id, data: { ...data, options: choiceOptions, choiceLocked: false } }}
-                  />
-                </div>
-              </div>
+              <PhonePreview Board={ChoiceBoard} theme={theme} show={show} slide={slide} data={{ ...data, options: choiceOptions, choiceLocked: false }} />
             </>
           )}
 
@@ -1185,17 +1145,7 @@ function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, up
                 onChangeTotal={n => onChange('dropTotal', n)}
                 onMediaUpload={async file => { const r = await uploadMedia(file); return r?.url }}
               />
-              <div className="flex flex-col gap-2">
-                <label className="block text-xs font-medium text-gray-700">Phone preview — live, matches what teams will see</label>
-                <div style={{ width: 300, margin: '0 auto', padding: '1.25rem 1rem', borderRadius: 20, background: theme.colors.bg }}>
-                  <DropBoard
-                    preview
-                    theme={theme}
-                    team={{ id: '__preview__', showId: show?.id ?? '__preview__' }}
-                    slide={{ id: slide.id, showId: show?.id, data: { ...data, options: dropTiles, dropLocked: false } }}
-                  />
-                </div>
-              </div>
+              <PhonePreview Board={DropBoard} theme={theme} show={show} slide={slide} data={{ ...data, options: dropTiles, dropLocked: false }} />
             </>
           )}
 
@@ -1236,46 +1186,20 @@ function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, up
           {schema.type === 'hues-cues' && (
             <>
               <HuesCuesAnswerPicker data={data} onChange={onChange} />
-              <div className="flex flex-col gap-2">
-                <label className="block text-xs font-medium text-gray-700">Phone preview — live, matches what teams will see</label>
-                <div style={{ width: 300, margin: '0 auto', padding: '1.25rem 1rem', borderRadius: 20, background: theme.colors.bg }}>
-                  <HuesCuesBoard
-                    preview
-                    theme={theme}
-                    team={{ id: '__preview__', showId: show?.id ?? '__preview__' }}
-                    slide={{ id: slide.id, showId: show?.id, data: { ...data, huesCuesLocked: false } }}
-                  />
-                </div>
-              </div>
+              <PhonePreview Board={HuesCuesBoard} theme={theme} show={show} slide={slide} data={{ ...data, huesCuesLocked: false }} />
             </>
           )}
 
           {schema.type === 'pin' && (
             <>
               <PinAnswerPicker data={data} onChange={onChange} onBatchChange={onBatchChange} />
-              <div className="flex flex-col gap-2">
-                <label className="block text-xs font-medium text-gray-700">Phone preview — live, matches what teams will see</label>
-                <div style={{ width: 300, margin: '0 auto', padding: '1.25rem 1rem', borderRadius: 20, background: theme.colors.bg }}>
-                  <PinBoard
-                    preview
-                    theme={theme}
-                    team={{ id: '__preview__', showId: show?.id ?? '__preview__' }}
-                    slide={{ id: slide.id, showId: show?.id, data: { ...data, pinLocked: false } }}
-                  />
-                </div>
-              </div>
+              <PhonePreview Board={PinBoard} theme={theme} show={show} slide={slide} data={{ ...data, pinLocked: false }} />
             </>
           )}
 
           {schema.type === 'movie-chain' && <>
             <MovieChainEditor data={data} onChange={onChange} />
-            {!movieChainConfigError(data) && <div className="flex flex-col gap-2">
-              <label className="block text-xs font-medium text-gray-700">Phone preview — live, matches what teams will see</label>
-              <div style={{ width: 300, margin: '0 auto', padding: '1.25rem 1rem', borderRadius: 20, background: theme.colors.bg }}>
-                <MovieChainBoard preview theme={theme} team={{ id: '__preview__', showId: show?.id ?? '__preview__' }}
-                  slide={{ id: slide.id, showId: show?.id, data: { ...data, movieChainLocked: false, movieChainRevealed: false } }} />
-              </div>
-            </div>}
+            {!movieChainConfigError(data) && <PhonePreview Board={MovieChainBoard} theme={theme} show={show} slide={slide} data={{ ...data, movieChainLocked: false, movieChainRevealed: false }} />}
           </>}
         </>
       )}
@@ -1445,6 +1369,26 @@ function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, up
         />
       )}
     </>
+  )
+}
+
+// The phone-preview frame every phone-scored format shows under its builder:
+// a 300px rounded stand-in for a team's phone, themed bg, wrapping the real
+// <Board preview />. `data` is the slide data with that format's
+// locked/revealed flags overridden so the preview always shows the live state.
+function PhonePreview({ Board, label = 'Phone preview — live, matches what teams will see', theme, show, slide, data }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="block text-xs font-medium text-gray-700">{label}</label>
+      <div style={{ width: 300, margin: '0 auto', padding: '1.25rem 1rem', borderRadius: 20, background: theme.colors.bg }}>
+        <Board
+          preview
+          theme={theme}
+          team={{ id: '__preview__', showId: show?.id ?? '__preview__' }}
+          slide={{ id: slide.id, showId: show?.id, data }}
+        />
+      </div>
+    </div>
   )
 }
 

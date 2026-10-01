@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { SHINY_GOLD } from '../../../lib/shinyGold.js'
-import { EASE_PANEL, EASE_OUT } from '../../../lib/easings.js'
+import { EASE_PANEL } from '../../../lib/easings.js'
 import { seededShuffle } from '../../../lib/matchingScoring.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
-import { supabase } from '../../../lib/supabase.js'
+import { usePhoneSubmitCounts } from '../../../hooks/usePhoneSubmitCounts.js'
 import ShinySignal from '../ShinySignal.jsx'
+import { StatusSlot, CountLine } from './shinyParts.jsx'
 
 // Two-beat pan reveal (2026-08-18, Ben: "make it not so different — pans
 // up, so does the swing round questions") — same mechanic as
@@ -30,28 +30,7 @@ export default function ShinyMatchingQuestion({ slide, show, theme }) {
   const revealed = !!data.matchingRevealed
   const reduce = useReducedMotion()
 
-  const [submittedCount, setSubmittedCount] = useState(0)
-  const [teamCount, setTeamCount] = useState(0)
-
-  useEffect(() => {
-    if (locked || revealed) return
-    let cancelled = false
-    async function load() {
-      const { data: count } = await supabase.rpc('phone_answers_count', { p_slide_id: slide.id })
-      if (!cancelled) setSubmittedCount(count ?? 0)
-    }
-    load()
-    const interval = setInterval(load, 2000)
-    return () => { cancelled = true; clearInterval(interval) }
-  }, [slide.id, locked, revealed])
-
-  useEffect(() => {
-    if (!show?.id || revealed) return
-    let cancelled = false
-    supabase.from('teams').select('id', { count: 'exact', head: true }).eq('show_id', show.id)
-      .then(({ count }) => { if (!cancelled) setTeamCount(count ?? 0) })
-    return () => { cancelled = true }
-  }, [show?.id, revealed])
+  const { submitted: submittedCount, teamCount } = usePhoneSubmitCounts(slide.id, show?.id, { pollStop: locked || revealed, teamsStop: revealed })
 
   const leftItems = pairs.map((p, i) => ({ id: p.id, label: p.left, image: p.leftImage, pairRank: i }))
   const shuffledRight = seededShuffle(pairs, slide.id ?? 'preview')
@@ -98,36 +77,6 @@ export default function ShinyMatchingQuestion({ slide, show, theme }) {
         </div>
       </motion.div>
     </div>
-  )
-}
-
-// Fixed-height band under the board holding whichever status line the beat
-// has, or nothing. Both beats render one so the board above never changes
-// height between them — see beat 2's comment.
-function StatusSlot({ theme, children }) {
-  return (
-    <div style={{
-      minHeight: '3.4rem', flexShrink: 0,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      color: `${theme.colors.text}d9`,
-      fontSize: 'clamp(1.6rem, 2vw, 2.3rem)',
-      fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
-    }}>
-      {children}
-    </div>
-  )
-}
-
-function CountLine({ n, total }) {
-  return (
-    <motion.span
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.3, ease: EASE_OUT }}
-      style={{ fontVariantNumeric: 'tabular-nums' }}
-    >
-      {total > 0 ? `${n} of ${total} teams submitted` : `${n} team${n === 1 ? '' : 's'} submitted`}
-    </motion.span>
   )
 }
 
