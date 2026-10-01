@@ -581,7 +581,8 @@ export function createDirector(overrides = {}) {
 
   function retryBlocked() {
     unlock()
-    for (const h of [...handles.values()]) if (h.state === 'blocked') h.retry()
+    // pending too: the first gesture on a cold tab usually lands inside the 2s window before a refused clip is flagged blocked
+    for (const h of [...handles.values()]) if (h.state === 'blocked' || h.state === 'pending') h.retry()
   }
 
   snapshot = { status: status(), blocked: [] }

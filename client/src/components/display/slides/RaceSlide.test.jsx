@@ -218,6 +218,23 @@ describe('<RaceSlide>', () => {
       root = createRoot(container)
     })
 
+    it('on a locked tab the one-shot cues are released, so a later click cannot ring them late (the loop stays retryable)', async () => {
+      HTMLMediaElement.prototype.play = vi.fn(() => Promise.reject(new DOMException('blocked', 'NotAllowedError')))
+      render(makeSlide({ raceStartedAt: null }))
+      render(makeSlide({ raceStartedAt: Date.now() }))
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      expect(bySrc('gate-bell.mp3')).toBeFalsy()
+      expect(bySrc('crowd-hoofbeats-loop.mp3')).toBeTruthy()
+    })
+
+    it('a refused finish horn is released too', async () => {
+      render(makeSlide({ raceStartedAt: null }))
+      render(makeSlide({ raceStartedAt: Date.now() }))
+      HTMLMediaElement.prototype.play = vi.fn(() => Promise.reject(new DOMException('blocked', 'NotAllowedError')))
+      await act(async () => { await vi.advanceTimersByTimeAsync(120_000) })
+      expect(bySrc('finish-horn.mp3')).toBeFalsy()
+    })
+
     it('Reset mid-race stops the loop', () => {
       render(makeSlide({ raceStartedAt: null }))
       render(makeSlide({ raceStartedAt: Date.now() }))

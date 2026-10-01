@@ -192,6 +192,7 @@ export default function RaceSlide({ slide }) {
     let bell, loop
     try {
       bell = director.play(RACE_SOUNDS.bell, { slideId: slide.id })
+      bell.onBlocked(() => bell.release()) // a one-shot cue: never ring late at a later click
       loop = director.play(RACE_SOUNDS.loop, { slideId: slide.id })
       loopHandleRef.current = loop
     } catch (_) { /* a failed/blocked clip must never break the race */ }
@@ -209,7 +210,11 @@ export default function RaceSlide({ slide }) {
     if (reduce || !finished || wasFinished) return
     loopHandleRef.current?.release()
     loopHandleRef.current = null
-    try { hornHandleRef.current = director.play(RACE_SOUNDS.horn, { slideId: slide.id }) } catch (_) { /* never break the race */ }
+    try {
+      const horn = director.play(RACE_SOUNDS.horn, { slideId: slide.id })
+      horn.onBlocked(() => horn.release()) // a one-shot cue: never sound late at a later click
+      hornHandleRef.current = horn
+    } catch (_) { /* never break the race */ }
   }, [finished, reduce, slide.id])
   useEffect(() => () => { hornHandleRef.current?.release() }, [])
 

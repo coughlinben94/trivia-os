@@ -1213,4 +1213,26 @@ describe('review fixes (2026-10-01)', () => {
       expect(await p).toBe(f.ctx)
     })
   })
+
+  it('a gesture while a clip is still PENDING (refused, not yet flagged blocked) retries it at once', () => {
+    const yt = fakeYoutube({ state: 2 }) // the player is refusing: parked, not playing
+    const f = runningFakes({ youtube: yt })
+    const d = createDirector(f.deps)
+    const h = d.play({ kind: 'youtube', videoId: 'v' }, { slideId: 's' })
+    vi.advanceTimersByTime(500)
+    expect(h.state).toBe('pending')
+    const before = yt.claims[0].player.playVideo.mock.calls.length
+    d.retryBlocked() // the first click on a cold TV lands inside the 2s window
+    expect(yt.claims[0].player.playVideo.mock.calls.length).toBe(before + 1)
+  })
+
+  it('a gesture does not retry a clip that is already playing or ended', async () => {
+    const f = runningFakes()
+    const d = createDirector(f.deps)
+    d.play(fileClip, { slideId: 's' })
+    await flush()
+    const plays = f.elements[0].playCalls
+    d.retryBlocked()
+    expect(f.elements[0].playCalls).toBe(plays)
+  })
 })
