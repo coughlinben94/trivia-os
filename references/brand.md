@@ -34,7 +34,7 @@ Every surface of Trivia OS carries the Baynes Apple Valley identity. This is not
 
 ### Logo Placement
 
-- `/display` — bottom-right watermark, 18% opacity, theme text color (not full-color). Present on every slide. Implemented in `BaynesWatermark.jsx`.
+- `/display` — no watermark (removed 2026-08-17; the unused `BaynesWatermark.jsx` was deleted 2026-10-01).
 - Round intro slides — centered above round title, 35% opacity, slightly more prominent
 - Host panel — full-color logo top-left nav bar
 - `/join` — top of registration screen, cream/white variant

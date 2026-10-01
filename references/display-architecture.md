@@ -30,7 +30,6 @@ Shows during `is_live=true` but before first slide advance.
 [AnimatePresence]     ← wraps SlideRenderer only
   [SlideRenderer]     ← current slide + transition animation
     [QuestionCounter] ← top-right (question slides only): "Q3 · R1"
-    [BaynesWatermark] ← bottom-right, 18% opacity, all slides
 ```
 
 ## ParticleBackground — The Most Important Rule
@@ -88,10 +87,6 @@ Old names `EASE_SNAP`/`EASE_QUINT`/`EASE_QUART`/`EASE_CUBIC`/`EASE_DRAWER` are r
 - Top-right corner, 20px from edge
 - Theme accent color at 70% opacity, uppercase, letter-spaced
 - Never animates
-
-## BaynesWatermark
-- Bottom-right, all slide types
-- 18% opacity, theme text color (not full-color logo)
 
 ## Audio (question slides with shinyType: 'audio')
 - WaveformBars.jsx renders animated bars

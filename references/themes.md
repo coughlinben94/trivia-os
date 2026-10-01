@@ -444,4 +444,4 @@ rather than re-tuning the first fix further.
 
 ## ThemeCanvas + ThemeForeground
 
-`ThemeCanvas.jsx` and `ThemeForeground.jsx` are wired into the display pipeline but currently have `scene: null` on all 21 themes. Reserved for future 3D/WebGL foreground elements — keep them pass-through until a feature spec exists. Do not add ambient logic to them.
+Removed 2026-10-01. They had no importers and every theme has `scene: null`. If 3D/WebGL foreground elements are ever specced, build them fresh.

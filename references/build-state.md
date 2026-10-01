@@ -17,7 +17,7 @@
 
 ### `/host` Build Mode
 - `useShow.js` — full show CRUD, normalizeShow, Realtime subscription, all actions (spread pattern — never a hand-curated object)
-- `ShowManager.jsx` — show list, create/load/duplicate/delete
+- `ShowLibrary.jsx` — show list, load/duplicate/delete/export/import (new shows are created on the pre-load ShowPicker screen)
 - `BuildMode.jsx` — slide builder layout, mode switching (wizard/editing); onOpenScoreboard prop
 - `RoundSidebar.jsx` — accordion sidebar (all rounds start collapsed); drag-and-drop rewrite; direction-based reorder; divider lines between all sections (i > 0 segment-level + slideIdx > 0 within multi-slide general segments)
 - `SlideEditor.jsx` — per-slide editing panel; GradingBreakEditor has "Final Break" toggle
@@ -75,7 +75,7 @@
 - Cross-theme contrast floor on top-bar labels
 
 ### `/shows` Show Library + ShowDetail
-- `ShowManager.jsx` / Show library route — list, create/load/duplicate/delete/export/import
+- `ShowLibrary.jsx` / Show library route — list, load/duplicate/delete/export/import
 - `ShowDetail.jsx` — per-show history, "📊 Final Scoreboard" section from `scoreboard_teams`
 
 ### Powerup System
@@ -121,8 +121,7 @@
 
 ## Known Issues
 
-- **`ThemeCanvas.jsx` / `ThemeForeground.jsx`** — wired but `scene: null` (background/foreground) on all 21 themes; a `cssClass` field now also exists on `scene`. Future use.
-- **`baynes-logo.svg`** — shipped 2026-07-07 at repo-root `public/baynes-logo.svg` (the Baynes circle emblem; served from there because Vite's `publicDir` is repo-root `public/`, not `client/public/`). Referenced by `BaynesWatermark.jsx` (every slide, forced white via `brightness(0) invert(1)`), `RoundIntroSlide.jsx`, and `Join.jsx` (top-of-form + NoShowScreen) — all now render the mark. (Was missing for a long time; those five surfaces silently rendered nothing until this file landed.)
+- **`baynes-logo.svg`** — shipped 2026-07-07 at repo-root `public/baynes-logo.svg` (the Baynes circle emblem; served from there because Vite's `publicDir` is repo-root `public/`, not `client/public/`). Referenced by `RoundIntroSlide.jsx`, and `Join.jsx` (top-of-form + NoShowScreen) — all now render the mark. (Was missing for a long time; those five surfaces silently rendered nothing until this file landed.)
 - **`AmbientAudit.jsx`** / **`GradientAudit.jsx`** — dev tools, routed at `/ambient` and `/gradient` respectively (`App.jsx`). They ARE reachable in prod — the safety net is that both are `lazy()`-imported, so neither ships in the main bundle.
 
 ---
