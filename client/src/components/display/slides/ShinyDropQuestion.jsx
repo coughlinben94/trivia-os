@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { useState, useLayoutEffect, useMemo, useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { usePhoneSubmitCounts } from '../../../hooks/usePhoneSubmitCounts.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
@@ -7,6 +7,7 @@ import { fitToBox, SHINY_CHOICE_Q_BOX } from '../../../lib/autoFitText.js'
 import { dropOptions, dropSequence, survivorShifts } from '../../../lib/dropScoring.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 import ShinySignal from '../ShinySignal.jsx'
+import { StatusSlot, useFontsReady } from './shinyParts.jsx'
 
 // The TV side of The Drop. Four tiles pop in; teams split their points over
 // them on their phones. Once Ben locks, each Next press drops one WRONG tile
@@ -95,8 +96,7 @@ export default function ShinyDropQuestion({ slide, show, theme }) {
 
 // Same measure-to-fit question text as ShinyChoiceQuestion.
 function QuestionText({ text, theme }) {
-  const [fontsReady, setFontsReady] = useState(false)
-  useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
+  const fontsReady = useFontsReady()
   const size = useMemo(
     () => fitToBox(text ?? '', { ...SHINY_CHOICE_Q_BOX, family: theme.fonts.display }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -112,22 +112,6 @@ function QuestionText({ text, theme }) {
       }}>
         {text}
       </p>
-    </div>
-  )
-}
-
-// Fixed-height slot so the count line / locked badge / all-in line never
-// shift the tiles when they swap.
-function StatusSlot({ theme, children }) {
-  return (
-    <div style={{
-      minHeight: '3.4rem', flexShrink: 0,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      color: `${theme.colors.text}d9`,
-      fontSize: 'clamp(1.6rem, 2vw, 2.3rem)',
-      fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
-    }}>
-      {children}
     </div>
   )
 }

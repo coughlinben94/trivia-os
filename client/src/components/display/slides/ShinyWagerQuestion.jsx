@@ -7,6 +7,7 @@ import { WAGER_TIERS, getWagerTier, wagerOddsLine, wagerTierReachable, parseWage
 import { fitToBox, SHINY_WAGER_Q_BOX } from '../../../lib/autoFitText.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 import ShinySignal from '../ShinySignal.jsx'
+import { useFontsReady } from './shinyParts.jsx'
 
 // Fixed tier signal colors, same rule as SHINY_GOLD: the calm → dangerous
 // escalation must read identically on all 21 themes, so it is not derived
@@ -186,8 +187,7 @@ export default function ShinyWagerQuestion({ slide, show, theme }) {
 // narrower than 1920px, since the host's editor preview always measures a
 // hard-pinned 1920x1080 iframe instead.
 function QuestionText({ text: questionText, theme }) {
-  const [fontsReady, setFontsReady] = useState(false)
-  useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
+  const fontsReady = useFontsReady()
   const size = useMemo(
     () => fitToBox(questionText ?? '', { ...SHINY_WAGER_Q_BOX, family: theme.fonts.display }),
     // eslint-disable-next-line react-hooks/exhaustive-deps

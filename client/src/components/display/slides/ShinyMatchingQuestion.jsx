@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { SHINY_GOLD } from '../../../lib/shinyGold.js'
-import { EASE_PANEL, EASE_OUT } from '../../../lib/easings.js'
+import { EASE_PANEL } from '../../../lib/easings.js'
 import { seededShuffle } from '../../../lib/matchingScoring.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 import { usePhoneSubmitCounts } from '../../../hooks/usePhoneSubmitCounts.js'
 import ShinySignal from '../ShinySignal.jsx'
+import { StatusSlot, CountLine } from './shinyParts.jsx'
 
 // Two-beat pan reveal (2026-08-18, Ben: "make it not so different — pans
 // up, so does the swing round questions") — same mechanic as
@@ -77,36 +77,6 @@ export default function ShinyMatchingQuestion({ slide, show, theme }) {
         </div>
       </motion.div>
     </div>
-  )
-}
-
-// Fixed-height band under the board holding whichever status line the beat
-// has, or nothing. Both beats render one so the board above never changes
-// height between them — see beat 2's comment.
-function StatusSlot({ theme, children }) {
-  return (
-    <div style={{
-      minHeight: '3.4rem', flexShrink: 0,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      color: `${theme.colors.text}d9`,
-      fontSize: 'clamp(1.6rem, 2vw, 2.3rem)',
-      fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
-    }}>
-      {children}
-    </div>
-  )
-}
-
-function CountLine({ n, total }) {
-  return (
-    <motion.span
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.3, ease: EASE_OUT }}
-      style={{ fontVariantNumeric: 'tabular-nums' }}
-    >
-      {total > 0 ? `${n} of ${total} teams submitted` : `${n} team${n === 1 ? '' : 's'} submitted`}
-    </motion.span>
   )
 }
 

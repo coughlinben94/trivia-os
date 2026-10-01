@@ -1,11 +1,11 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { usePhoneSubmitCounts } from '../../../hooks/usePhoneSubmitCounts.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
-import { EASE_OUT } from '../../../lib/easings.js'
 import { fitToBox, SHINY_CHOICE_Q_BOX } from '../../../lib/autoFitText.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 import ShinySignal from '../ShinySignal.jsx'
+import { StatusSlot, CountLine, useFontsReady } from './shinyParts.jsx'
 
 // The TV side of a Choice question — Mandela Effect (single-select images)
 // and Mixology 101 (multi-select ingredient chips) are both this one
@@ -61,8 +61,7 @@ export default function ShinyChoiceQuestion({ slide, show, theme }) {
 // browser narrower than 1920px than the host's editor preview (always a
 // hard-pinned 1920x1080 iframe) ever showed.
 function QuestionText({ text, theme }) {
-  const [fontsReady, setFontsReady] = useState(false)
-  useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
+  const fontsReady = useFontsReady()
   const size = useMemo(
     () => fitToBox(text ?? '', { ...SHINY_CHOICE_Q_BOX, family: theme.fonts.display }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -79,36 +78,6 @@ function QuestionText({ text, theme }) {
         {text}
       </p>
     </div>
-  )
-}
-
-// Same fixed-height reserved slot as ShinyOrderQuestion's StatusSlot — keeps
-// the count line / locked badge from shifting anything else when it
-// disappears on reveal.
-function StatusSlot({ theme, children }) {
-  return (
-    <div style={{
-      minHeight: '3.4rem', flexShrink: 0,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      color: `${theme.colors.text}d9`,
-      fontSize: 'clamp(1.6rem, 2vw, 2.3rem)',
-      fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
-    }}>
-      {children}
-    </div>
-  )
-}
-
-function CountLine({ n, total }) {
-  return (
-    <motion.span
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.3, ease: EASE_OUT }}
-      style={{ fontVariantNumeric: 'tabular-nums' }}
-    >
-      {total > 0 ? `${n} of ${total} teams submitted` : `${n} team${n === 1 ? '' : 's'} submitted`}
-    </motion.span>
   )
 }
 

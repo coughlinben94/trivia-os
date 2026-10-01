@@ -14,6 +14,7 @@ import { EASE_OUT } from '../../../lib/easings.js'
 import { SHINY_GOLD } from '../../../lib/shinyGold.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 import ShinySignal from '../ShinySignal.jsx'
+import { useFontsReady } from './shinyParts.jsx'
 
 // TV side of Pin It: prompt + the same map the phones have (waiting), a held
 // "locked" beat, then a reveal where the camera frames the true spot plus the
@@ -64,8 +65,7 @@ export default function ShinyPinQuestion({ slide, show, theme }) {
   const states = useUsMapData()
   const [teamCount, setTeamCount] = useState(0)
   const [colors, setColors] = useState({})
-  const [fontsReady, setFontsReady] = useState(false)
-  useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
+  const fontsReady = useFontsReady()
 
   // Own teams query below (also fetches color), so the hook skips its head-count.
   const { submitted } = usePhoneSubmitCounts(slide.id, show?.id, { pollStop: locked || revealed, teams: false })

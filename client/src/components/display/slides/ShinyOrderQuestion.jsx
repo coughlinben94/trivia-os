@@ -1,12 +1,13 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { usePhoneSubmitCounts } from '../../../hooks/usePhoneSubmitCounts.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
-import { EASE_PANEL, EASE_OUT } from '../../../lib/easings.js'
+import { EASE_PANEL } from '../../../lib/easings.js'
 import { seededShuffle } from '../../../lib/orderScoring.js'
 import { fitToBox, SHINY_CHOICE_Q_BOX } from '../../../lib/autoFitText.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 import ShinySignal from '../ShinySignal.jsx'
+import { StatusSlot, CountLine, useFontsReady } from './shinyParts.jsx'
 
 // The TV side of an Order Up question. Same two-beat pan mechanic as
 // ShinyMatchingQuestion.jsx (see that file's own comment for the
@@ -92,8 +93,7 @@ export default function ShinyOrderQuestion({ slide, show, theme }) {
 // 3.2rem cap there — but any real TV narrower than ~1600px computed a
 // smaller value live than the host ever saw in preview.
 function QuestionText({ text, theme }) {
-  const [fontsReady, setFontsReady] = useState(false)
-  useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
+  const fontsReady = useFontsReady()
   const size = useMemo(
     () => fitToBox(text ?? '', { ...SHINY_CHOICE_Q_BOX, family: theme.fonts.display }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -108,43 +108,6 @@ function QuestionText({ text, theme }) {
     }}>
       {text}
     </p>
-  )
-}
-
-// The fixed-height band under the row that holds whichever status line this
-// beat has — or nothing, in beat 2. Fixed height is the point: see the beat-2
-// comment above for why an omitted status line jumped the headline mid-pan.
-//
-// Typography lives here, not on the children, so the live count and the
-// locked-badge swap can't drift apart. Both were badly under-scaled for
-// a TV before (2026-08-25 design critique measured 21.6px at ~3.1:1 and 19.2px
-// at 27% alpha — unreadable from across a bar); `d9` alpha over a near-black
-// shinyBg clears 10:1, comfortably past the 3:1 large-text floor
-// contrast.js/ThemeProvider.jsx enforce on textMuted.
-function StatusSlot({ theme, children }) {
-  return (
-    <div style={{
-      minHeight: '3.4rem', flexShrink: 0,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      color: `${theme.colors.text}d9`,
-      fontSize: 'clamp(1.6rem, 2vw, 2.3rem)',
-      fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
-    }}>
-      {children}
-    </div>
-  )
-}
-
-function CountLine({ n, total }) {
-  return (
-    <motion.span
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.3, ease: EASE_OUT }}
-      style={{ fontVariantNumeric: 'tabular-nums' }}
-    >
-      {total > 0 ? `${n} of ${total} teams submitted` : `${n} team${n === 1 ? '' : 's'} submitted`}
-    </motion.span>
   )
 }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { usePhoneSubmitCounts } from '../../../hooks/usePhoneSubmitCounts.js'
 import { getHuesCuesCell } from '../../../lib/huesCuesGrid.js'
@@ -7,6 +7,7 @@ import { EASE_OUT, EASE_DROP } from '../../../lib/easings.js'
 import { fitToBox, SHINY_CHOICE_Q_BOX } from '../../../lib/autoFitText.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 import ShinySignal from '../ShinySignal.jsx'
+import { StatusSlot, useFontsReady } from './shinyParts.jsx'
 
 // The TV side of Hues and Cues. Mirrors ShinyWagerQuestion's beat structure
 // (waiting -> locked -> reveal), minus wager's separate blind-tier phase:
@@ -57,8 +58,7 @@ export default function ShinyHuesCuesQuestion({ slide, show, theme }) {
 // since the host's editor preview always measures a hard-pinned 1920x1080
 // iframe instead.
 function QuestionText({ text, theme }) {
-  const [fontsReady, setFontsReady] = useState(false)
-  useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
+  const fontsReady = useFontsReady()
   const size = useMemo(
     () => fitToBox(text ?? '', { ...SHINY_CHOICE_Q_BOX, family: theme.fonts.display }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -74,23 +74,6 @@ function QuestionText({ text, theme }) {
       }}>
         {text}
       </p>
-    </div>
-  )
-}
-
-// Same fixed-height reserved slot as ShinyChoiceQuestion/ShinyOrderQuestion's
-// StatusSlot — keeps the count line / locked badge from shifting anything
-// else when it disappears on reveal.
-function StatusSlot({ theme, children }) {
-  return (
-    <div style={{
-      minHeight: '3.4rem', flexShrink: 0,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      color: `${theme.colors.text}d9`,
-      fontSize: 'clamp(1.6rem, 2vw, 2.3rem)',
-      fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
-    }}>
-      {children}
     </div>
   )
 }
