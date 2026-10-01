@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Orbit road, three stations (throwaway prototype)</title>
+<title>Free flight, three stations (throwaway prototype)</title>
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   body{background:#0a0a0a;color:#d6d0c4;font-family:system-ui,-apple-system,sans-serif;padding:20px 24px 40px}
@@ -24,13 +24,13 @@
   #stage{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;overflow:hidden;background:#030207}
   #rig,#cam,.creep,.fill{position:absolute;inset:0}
   .bleed{position:absolute;inset:-48px}
-  #cam{transform-origin:960px 1400px}
-  .creep{transform-origin:960px 700px}
+  #cam{transform-origin:960px 540px}
+  .creep{transform-origin:960px 540px}
   .it{position:absolute}
   .it>svg{position:absolute;left:0;top:0;overflow:visible}
   /* idle: after the slow push-in the camera breathes so a long question never sits on a still image */
-  #rig{transform-origin:960px 1400px}
-  @keyframes idle{from{transform:translateY(-3px) rotate(-.12deg)}to{transform:translateY(3px) rotate(.12deg)}}
+  #rig{transform-origin:960px 540px}
+  @keyframes idle{from{transform:translate(-4px,-3px) rotate(-.2deg)}to{transform:translate(4px,3px) rotate(.2deg)}}
   #rig.idle{animation:idle 7.3s ease-in-out -3.65s infinite alternate}
   /* reduced motion: one declaration point, freezes, never vanishes */
   @media (prefers-reduced-motion: reduce){ #stage *{animation:none !important;transition:none !important} }
@@ -44,8 +44,8 @@
 </style>
 </head>
 <body>
-<h1>Orbit road, three stations (throwaway prototype)</h1>
-<div class="sub">One experiment: the same loop-of-stations idea, but the camera <b>travels forward along a debris road</b> instead of sliding sideways, and the next landmark is visible ahead before you reach it. Nothing here is wired into the app. Everything is drawn by code from one number, the station, so a refresh or jump always lands on the same picture. Motion is transform and opacity only, no animation loop. Press <b>Advance</b>. Query: <code>?duo=electric_bloom|mint_drift|neon_garden|purple_blue|amber_rose</code>, <code>?bare=1</code> for a clean 1920x1080 frame.</div>
+<h1>Free flight, three stations (throwaway prototype)</h1>
+<div class="sub">One experiment: the same loop-of-stations idea, but the camera <b>flies forward through open space</b> instead of sliding sideways. No ground, no horizon: asteroids tumble past, dust and stars stream by, and the next landmark is visible ahead before you reach it. Nothing here is wired into the app. Everything is drawn by code from one number, the station, so a refresh or jump always lands on the same picture. Motion is transform and opacity only, no animation loop. Press <b>Advance</b>. Query: <code>?duo=electric_bloom|mint_drift|neon_garden|purple_blue|amber_rose</code>, <code>?bare=1</code> for a clean 1920x1080 frame.</div>
 
 <div id="fit">
   <div id="stage" class="showSafe">
@@ -77,10 +77,10 @@
 (function(){
 'use strict';
 // ---------- constants (design px at 1920x1080, world in metres) ----------
-const W=1920, H=1080, VX=960, VY=700;        // vanishing point = horizon, low in frame
-const F=1371, E=1.7;                          // focal length px, eye height m
+const W=1920, H=1080, VX=960, VY=540;        // vanishing point = dead centre: open space has no horizon
+const F=1371, E=0;                            // focal length px; the camera sits on the flight axis
 const D=8, NS=3, L=NS*D, REST=9;              // metres per station, 3 stations, loop length, landmark rest distance
-const ZFAR=34, ZMIN=0.9, ZDRAW=2.4, STOPS=24;
+const ZFAR=36, ZMIN=0.9, ZDRAW=2.4, STOPS=24;
 const DUR=4000, AUTO_MS=7000, CREEP_MS=40000;
 const SAFE={x0:384,y0:302,x1:1536,y1:777};
 const NAMES=['ringed planet','pulsar','comet'];
@@ -115,22 +115,23 @@ function rngFor(...k){let h=2166136261;for(const v of k){h=Math.imul(h^(v+0x9e37
 function hex2rgb(h){const n=parseInt(h.slice(1),16);return[n>>16&255,n>>8&255,n&255]}
 const rgba=(h,a)=>{const c=hex2rgb(h);return `rgba(${c[0]},${c[1]},${c[2]},${a})`};
 
-// ---------- hand-authored rock silhouettes (u across, d down; base at d=0, tops negative) ----------
-const ROCKS=[
-  [[-1,0],[-.9,-.35],[-.6,-.7],[-.15,-.95],[.35,-.85],[.8,-.5],[1,-.12],[.9,0]],                            // chunky boulder
-  [[-.7,0],[-.6,-.5],[-.2,-1.15],[.05,-1.4],[.3,-.9],[.55,-.4],[.8,0]],                                      // leaning shard
-  [[-1.2,0],[-1,-.3],[-.3,-.45],[.5,-.5],[1.1,-.25],[1.3,0]],                                                // flat slab
-  [[-.8,0],[-.7,-.6],[-.5,-1.3],[-.3,-.7],[-.1,-.5],[.15,-.9],[.35,-1.7],[.55,-.8],[.8,-.3],[.9,0]],        // twin spire
-  [[-1,0],[-1,-.3],[-.75,-.65],[-.3,-.85],[.2,-.9],[.7,-.65],[.95,-.3],[1,0]]                               // rounded lump
+// ---------- hand-authored asteroid silhouettes (closed shapes about the origin, no ground contact) ----------
+const ASTS=[
+  [[-1,-.1],[-.8,-.6],[-.3,-.9],[.4,-.85],[.9,-.45],[1,.15],[.7,.7],[.1,.9],[-.5,.75],[-.9,.4]],
+  [[-1.1,0],[-.7,-.55],[-.1,-.7],[.6,-.6],[1.15,-.1],[.9,.45],[.3,.6],[-.4,.7],[-.85,.45]],
+  [[-.7,-.8],[0,-1],[.8,-.6],[1,.1],[.65,.8],[-.1,.95],[-.8,.55],[-1,-.15]],
+  [[-1.5,-.1],[-1,-.5],[0,-.55],[1.2,-.4],[1.6,.05],[1.1,.45],[0,.5],[-1,.4]],
+  [[-.9,-.3],[-.2,-.95],[.5,-.7],[1,0],[.6,.5],[.9,.9],[-.1,.7],[-.8,.5]],
+  [[-1,.2],[-.6,-.5],[.1,-.95],[.8,-.55],[1.05,.2],[.55,.8],[-.2,.95],[-.75,.7]]
 ];
-function rockPoly(r,size,mirror){
-  const T=ROCKS[Math.floor(r()*ROCKS.length)];
-  return T.map(p=>[(mirror?-p[0]:p[0])*size*(1+(r()-.5)*.06), p[1]*size*(1+(r()-.5)*.06)]);
+function asteroidPoly(r,size){
+  const T=ASTS[Math.floor(r()*ASTS.length)], a=r()*Math.PI*2, ca=Math.cos(a), sa=Math.sin(a), sx=.85+r()*.5, sy=.85+r()*.5;
+  return T.map(p=>{const x=p[0]*sx*size*(1+(r()-.5)*.05), y=p[1]*sy*size*(1+(r()-.5)*.05);return[x*ca-y*sa, x*sa+y*ca]});
 }
 function pathOf(pts){return 'M'+pts.map(p=>fm(p[0])+' '+fm(p[1])).join('L')+'Z'}
 function centroid(pts){let x=0,y=0;for(const p of pts){x+=p[0];y+=p[1]}return[x/pts.length,y/pts.length]}
-// edges facing the key light get a thin rim of the duo's key colour
-function rimEdges(pts){
+// the light is AHEAD of you (the glow at the vanishing point), so each rock's lit edge faces the centre of the frame
+function rimEdges(pts,lx,ly){
   const c=centroid(pts),out=[];
   for(let i=0;i<pts.length;i++){
     const a=pts[i],b=pts[(i+1)%pts.length];
@@ -138,51 +139,50 @@ function rimEdges(pts){
     let nx=dy/m,ny=-dx/m;
     const mx=(a[0]+b[0])/2-c[0],my=(a[1]+b[1])/2-c[1];
     if(nx*mx+ny*my<0){nx=-nx;ny=-ny}
-    const dot=nx*LIGHT[0]+ny*LIGHT[1];
-    if(dot>0.45&&!(a[1]===0&&b[1]===0))out.push({a,b,dot});
+    const dot=nx*lx+ny*ly;
+    if(dot>0.45)out.push({a,b,dot});
   }
   return out;
 }
 function bboxOf(pts,pad){let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;for(const p of pts){if(p[0]<x0)x0=p[0];if(p[0]>x1)x1=p[0];if(p[1]<y0)y0=p[1];if(p[1]>y1)y1=p[1]}return[x0-pad,y0-pad,x1+pad,y1+pad]}
 
-// ---------- item factories. Each returns {X,h,Z,body,light,bb} ----------
-// body/light: svg strings in item-local metres (u right, d down, origin = ground contact or centre)
+// ---------- item factories. Each returns {X,h,Z,body,light,bb}; (X,h) = across, up (metres); local svg: u right, d down ----------
 let uid=0;
-function rock(Z,X,size,seed,beacon){
-  const r=rngFor(seed,7), mirror=X<0, pts=rockPoly(r,size,mirror);
-  const id='rk'+(uid++), w=bboxOf(pts,0)[2]-bboxOf(pts,0)[0];
-  const rims=rimEdges(pts).map(e=>`<path d="M${fm(e.a[0])} ${fm(e.a[1])}L${fm(e.b[0])} ${fm(e.b[1])}" stroke="${KEY}" stroke-opacity="${fm((.16+e.dot*.36)*GAIN)}" stroke-width="${fm(Math.max(size*.011,.012))}" stroke-linecap="round" fill="none"/>`).join('');
-  const body=`<defs><linearGradient id="${id}" x1="${mirror?1:0}" y1="0" x2="${mirror?0:1}" y2="0"><stop offset="0" stop-color="#050408"/><stop offset="1" stop-color="#14111a"/></linearGradient></defs><path d="${pathOf(pts)}" fill="url(#${id})"/>${rims}`;
-  let light=null, bb=bboxOf(pts,size*.04);
+function asteroid(Z,X,h,size,seed,beacon){
+  const r=rngFor(seed,7), pts=asteroidPoly(r,size), id='as'+(uid++);
+  const vl=Math.hypot(X,h)||1, lx=-X/vl, ly=h/vl;                // unit vector toward the vanishing point, in (u,d)
+  const rims=rimEdges(pts,lx,ly).map(e=>`<path d="M${fm(e.a[0])} ${fm(e.a[1])}L${fm(e.b[0])} ${fm(e.b[1])}" stroke="${KEY}" stroke-opacity="${fm((.22+e.dot*.5)*GAIN)}" stroke-width="${fm(Math.max(size*.014,.014))}" stroke-linecap="round" fill="none"/>`).join('');
+  const body=`<defs><linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${fm(-lx*size)}" y1="${fm(-ly*size)}" x2="${fm(lx*size)}" y2="${fm(ly*size)}"><stop offset="0" stop-color="#030206"/><stop offset=".6" stop-color="#0d0a13"/><stop offset="1" stop-color="#241d2e"/></linearGradient></defs><path d="${pathOf(pts)}" fill="url(#${id})"/>${rims}`;
+  let bb=bboxOf(pts,size*.05), light=null;
   if(beacon){
-    const b=pts[Math.floor(pts.length*.4)], lx=b[0]*.7, ly=b[1]*.55;
-    const lid='bl'+(uid++);
-    light=`<defs><radialGradient id="${lid}"><stop offset="0" stop-color="#ffe8b8" stop-opacity=".95"/><stop offset=".25" stop-color="#ffb347" stop-opacity=".5"/><stop offset="1" stop-color="#ff8a2a" stop-opacity="0"/></radialGradient></defs><circle cx="${fm(lx)}" cy="${fm(ly)}" r="${fm(size*.55)}" fill="url(#${lid})"/><circle cx="${fm(lx)}" cy="${fm(ly)}" r="${fm(Math.max(size*.04,.03))}" fill="#fff4dc"/>`;
-    bb=[Math.min(bb[0],lx-size*.6),Math.min(bb[1],ly-size*.6),Math.max(bb[2],lx+size*.6),Math.max(bb[3],ly+size*.6)];
+    const b=pts[Math.floor(r()*pts.length)], lid='bl'+(uid++);
+    light=`<defs><radialGradient id="${lid}"><stop offset="0" stop-color="#ffe8b8" stop-opacity=".95"/><stop offset=".25" stop-color="#ffb347" stop-opacity=".5"/><stop offset="1" stop-color="#ff8a2a" stop-opacity="0"/></radialGradient></defs><circle cx="${fm(b[0]*.8)}" cy="${fm(b[1]*.8)}" r="${fm(size*.5)}" fill="url(#${lid})"/><circle cx="${fm(b[0]*.8)}" cy="${fm(b[1]*.8)}" r="${fm(Math.max(size*.04,.03))}" fill="#fff4dc"/>`;
+    bb=[Math.min(bb[0],b[0]*.8-size*.55),Math.min(bb[1],b[1]*.8-size*.55),Math.max(bb[2],b[0]*.8+size*.55),Math.max(bb[3],b[1]*.8+size*.55)];
   }
-  return {Z,X,h:0,body,light,bb,lift:0.0};
+  return {Z,X,h,body,light,bb,rot0:r()*360,rate:(r()-.5)*3,rock:true};
 }
-function dust(Z,X,h,wid,col,a,seed){
-  const id='du'+(uid++), rx=wid/2, ry=wid*.2;
+function dust(Z,X,h,wid,col,a){
+  const id='du'+(uid++), rx=wid/2, ry=wid*.3;
   const body=`<defs><radialGradient id="${id}"><stop offset="0" stop-color="${col}" stop-opacity="${fm(a*GAIN)}"/><stop offset=".55" stop-color="${col}" stop-opacity="${fm(a*GAIN*.4)}"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></radialGradient></defs><ellipse cx="0" cy="0" rx="${fm(rx)}" ry="${fm(ry)}" fill="url(#${id})"/>`;
   return {Z,X,h,body,light:null,bb:[-rx,-ry,rx,ry],dustItem:true};
 }
-function speck(Z,X,r){
-  const s=.04+r()*.17, lit=r()<.22, c=lit?KEY:'#3a3342', a=lit?.8*GAIN:.7;
-  const pts=[[-s,0],[-s*.6,-s*.7],[s*.2,-s*.9],[s,-s*.2],[s*.8,0]];
-  return {Z,X,h:0,body:`<path d="${pathOf(pts)}" fill="${c}" fill-opacity="${a}"/>`,light:null,bb:bboxOf(pts,s*.1),speck:true};
+// drifting space dust: soft points that stream past and give the speed of the flight
+function mote(Z,X,h,r){
+  const s=.012+r()*.03, warm=r()<.25, id='mo'+(uid++), c=warm?KEY:'#dcd6f0', a=(.45+r()*.4)*(warm?GAIN:1);
+  const body=`<defs><radialGradient id="${id}"><stop offset="0" stop-color="${c}" stop-opacity="${fm(a)}"/><stop offset=".35" stop-color="${c}" stop-opacity="${fm(a*.35)}"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></radialGradient></defs><circle cx="0" cy="0" r="${fm(s*3)}" fill="url(#${id})"/>`;
+  return {Z,X,h,body,light:null,bb:[-s*3,-s*3,s*3,s*3],mote:true};
 }
 // ringed planet (hand-built: dark body, lit limb, tilted ring split front/back)
 function ringedPlanet(Z,X,h){
   const R=1.65, id='pl'+(uid++);
   const back=`<defs><linearGradient id="${id}r" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${KEY}" stop-opacity="0"/><stop offset=".3" stop-color="${KEY}" stop-opacity="${fm(.55*GAIN)}"/><stop offset=".7" stop-color="${FILL}" stop-opacity="${fm(.5*Math.min(1,GAIN*1.4))}"/><stop offset="1" stop-color="${FILL}" stop-opacity="0"/></linearGradient>
-  <radialGradient id="${id}" cx=".66" cy=".3" r=".95"><stop offset="0" stop-color="#3a3044"/><stop offset=".35" stop-color="#17121e"/><stop offset=".75" stop-color="#07060a"/><stop offset="1" stop-color="#030207"/></radialGradient></defs>
+  <radialGradient id="${id}" cx=".3" cy=".62" r=".95"><stop offset="0" stop-color="#3a3044"/><stop offset=".35" stop-color="#17121e"/><stop offset=".75" stop-color="#07060a"/><stop offset="1" stop-color="#030207"/></radialGradient></defs>
   <g transform="rotate(-16)"><ellipse cx="0" cy="0" rx="${fm(R*2.5)}" ry="${fm(R*.62)}" fill="none" stroke="url(#${id}r)" stroke-width="${fm(R*.16)}" opacity=".7"/></g>
   <circle cx="0" cy="0" r="${R}" fill="url(#${id})"/>
-  <path d="M${fm(R*.55)} ${fm(-R*.84)}A${R} ${R} 0 0 1 ${fm(R*.98)} ${fm(-R*.15)}" fill="none" stroke="${KEY}" stroke-opacity="${fm(.75*GAIN)}" stroke-width="${fm(R*.05)}" stroke-linecap="round"/>
+  <path d="M${fm(-R*.98)} ${fm(R*.1)}A${R} ${R} 0 0 1 ${fm(-R*.55)} ${fm(-R*.82)}" fill="none" stroke="${KEY}" stroke-opacity="${fm(.75*GAIN)}" stroke-width="${fm(R*.05)}" stroke-linecap="round"/>
   <g transform="rotate(-16)"><path d="M${fm(-R*2.5)} 0A${fm(R*2.5)} ${fm(R*.62)} 0 0 0 ${fm(R*2.5)} 0" fill="none" stroke="url(#${id}r)" stroke-width="${fm(R*.16)}" opacity=".85"/></g>`;
   const gid='pg'+(uid++);
-  const light=`<defs><radialGradient id="${gid}" cx=".66" cy=".3" r=".7"><stop offset="0" stop-color="${KEY}" stop-opacity="${fm(.5*GAIN)}"/><stop offset="1" stop-color="${KEY}" stop-opacity="0"/></radialGradient></defs><circle cx="${fm(R*.3)}" cy="${fm(-R*.2)}" r="${fm(R*1.9)}" fill="url(#${gid})"/>`;
+  const light=`<defs><radialGradient id="${gid}" cx=".3" cy=".62" r=".7"><stop offset="0" stop-color="${KEY}" stop-opacity="${fm(.5*GAIN)}"/><stop offset="1" stop-color="${KEY}" stop-opacity="0"/></radialGradient></defs><circle cx="${fm(-R*.3)}" cy="${fm(R*.2)}" r="${fm(R*1.9)}" fill="url(#${gid})"/>`;
   return {Z,X,h,body:back,light,bb:[-R*2.7,-R*1.9,R*2.7,R*1.9],landmark:true};
 }
 function pulsar(Z,X,h){
@@ -197,41 +197,32 @@ function comet(Z,X,h){
   const gid='cm'+(uid++), tid=gid+'t';
   const tail=[[0,0],[-1.2,.35],[-2.8,.7],[-5.2,1.4],[-5.4,1.1],[-2.9,.2],[-1.2,-.12]];
   const body=`<defs><linearGradient id="${tid}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${KEY}" stop-opacity="0"/><stop offset=".8" stop-color="${FILL}" stop-opacity=".25"/><stop offset="1" stop-color="#fff" stop-opacity=".45"/></linearGradient></defs>
-    <path d="${pathOf(tail.map(p=>[p[0],p[1]]))}" fill="url(#${tid})"/><circle cx="0" cy="0" r=".16" fill="#f4fbff"/>`;
+    <path d="${pathOf(tail)}" fill="url(#${tid})"/><circle cx="0" cy="0" r=".16" fill="#f4fbff"/>`;
   const light=`<defs><radialGradient id="${gid}"><stop offset="0" stop-color="#fff" stop-opacity=".8"/><stop offset=".25" stop-color="${KEY}" stop-opacity="${fm(.45*GAIN)}"/><stop offset="1" stop-color="${FILL}" stop-opacity="0"/></radialGradient></defs><circle cx="0" cy="0" r="1.1" fill="url(#${gid})"/>`;
   return {Z,X,h,body,light,bb:[-5.6,-1.2,1.2,2.2],landmark:true};
 }
 
 // ---------- the world: a fixed list of items for one loop, rebuilt from nothing ----------
 const ITEMS=(function(){
-  const it=[];
-  // landmarks beside the road, one per station, resting outside the text box
-  it.push(ringedPlanet(0*D+REST, 4.7, 2.6));
-  it.push(pulsar(1*D+REST, -4.7, 3.0));
-  it.push(comet(2*D+REST, 4.7, 3.7));
-  // rocks lining both sides of the road, seeded
-  const r=rngFor(2026,10,1);
-  for(let side=-1;side<=1;side+=2){
-    for(let z=1.2;z<L;z+=2.3){
-      const Z=z+r()*1.6, X=side*(2.3+r()*3.4), size=.5+r()*1.1;
-      it.push(rock(Z,X,size,Math.floor(r()*1e9),r()<.14));
-    }
+  const it=[], r=rngFor(2026,10,2);
+  // landmarks float to the sides of the flight path, each resting outside the text box
+  it.push(ringedPlanet(0*D+REST,  5.2,  1.3));
+  it.push(pulsar(1*D+REST,       -5.0, -1.2));
+  it.push(comet(2*D+REST,         4.9, -1.5));
+  // tumbling asteroids all round the flight path, never on the axis
+  for(let i=0;i<30;i++){
+    const ang=r()*Math.PI*2, rad=4.6+r()*5.4, big=rad>8.2;
+    it.push(asteroid(r()*L, Math.cos(ang)*rad, Math.sin(ang)*rad*.8, big?2.4+r()*1.4:.5+r()*1.3, Math.floor(r()*1e9), r()<.12));
   }
-  // big boulders framing the edges (the near trunks of this world)
-  for(let k=0;k<4;k++){
-    const Z=k*(L/4)+r()*2, side=k%2?1:-1;
-    it.push(rock(Z,side*(6.2+r()*2.2),2.6+r()*1.4,Math.floor(r()*1e9),false));
+  // dust clouds: the fog of this world, tinted by the duo
+  for(let i=0;i<18;i++){
+    const ang=r()*Math.PI*2, rad=r()*9;
+    it.push(dust(r()*L, Math.cos(ang)*rad, Math.sin(ang)*rad*.7, 7+r()*9, r()<.6?FILL:KEY, .09+r()*.1));
   }
-  // dust banks: the fog of this world, tinted by the duo, sweeping past
-  for(let z=0;z<L;z+=1.7){
-    const side=r()<.5?-1:1, col=r()<.6?FILL:KEY;
-    it.push(dust(z+r()*1.2, side*(r()*7), .3+r()*2.6, 6+r()*8, col, .1+r()*.1, 0));
-  }
-  // the road itself: a faint dust lane and small debris
-  for(let z=0;z<L;z+=2.4) it.push(dust(z+r()*1.2, (r()-.5)*1.4, 0, 3.2, '#5a4e6a', .13, 0));
-  for(let z=.4;z<L;z+=.7){
-    const X=(r()<.5?-1:1)*(.3+r()*2.0);
-    it.push(speck(z+r()*.5, X, r));
+  // space dust streaming past
+  for(let i=0;i<70;i++){
+    const ang=r()*Math.PI*2, rad=1.6+Math.sqrt(r())*16;
+    it.push(mote(r()*L, Math.cos(ang)*rad, Math.sin(ang)*rad*.75, r));
   }
   return it;
 })();
@@ -243,8 +234,8 @@ function boxDim(X,h,z){
   const inX=p[0]>SAFE.x0-padX&&p[0]<SAFE.x1+padX, inY=p[1]>SAFE.y0-padY&&p[1]<SAFE.y1+padY;
   return (inX&&inY)?.45:1;
 }
-function fadeOf(z){ // depth haze, and a soft fade as something passes the camera
-  const haze=1-.62*fogAmt(z);
+function fadeOf(z,solid){ // depth haze, and a soft fade as something passes the camera
+  const haze=1-(solid?.3:.62)*fogAmt(z);                          // solid things (rocks) stay solid; only glows and dust thin out
   const near=clamp((z-ZMIN)/.8);
   return haze*near;
 }
@@ -263,22 +254,24 @@ function mountEl(it,z0,animate,kind){
   const left=ax+bx0*s, top=ay+by0*s, wpx=(bx1-bx0)*s, hpx=(by1-by0)*s;
   if(wpx<1||hpx<1)return null;
   const el=document.createElement('div'); el.className='it';
+  const rotAt=z=>it.rock?(it.rot0+it.rate*z):0;
   el.style.cssText=`left:${fm(left)}px;top:${fm(top)}px;width:${fm(wpx)}px;height:${fm(hpx)}px;transform-origin:${fm(VX-left)}px ${fm(VY-top)}px`;
-  el.innerHTML=`<svg width="${fm(wpx)}" height="${fm(hpx)}" viewBox="${fm(bx0)} ${fm(by0)} ${fm(bx1-bx0)} ${fm(by1-by0)}">${kind==='light'?it.light:it.body}</svg>`;
+  el.innerHTML=`<svg width="${fm(wpx)}" height="${fm(hpx)}" viewBox="${fm(bx0)} ${fm(by0)} ${fm(bx1-bx0)} ${fm(by1-by0)}" style="transform-origin:50% 50%;transform:rotate(${fm(rotAt(z0))}deg)">${kind==='light'?it.light:it.body}</svg>`;
   const isLight=kind==='light';
   const opAt=z=>{
-    let o=fadeOf(z);
+    let o=fadeOf(z,it.rock||it.landmark);
     if(isLight)o*=lightOp(it.Z,0,z)*boxDim(it.X,it.h,z);        // glows come on as you arrive, dim over the text box
     else if(it.landmark)o*=boxDim(it.X,it.h,z);                   // the bright parts of a landmark (core, beams, tail) dim too
     return o;
   };
   if(!animate){ el.style.opacity=fm(opAt(z0)); return el; }
-  const kfs=[];
+  const kfs=[], rk=[];
   for(let i=0;i<=STOPS;i++){
     const t=i/STOPS, z=z0-D*EASE(t), k=zd/Math.max(z,ZMIN*.5);
     kfs.push({offset:t,transform:`scale(${k.toFixed(5)})`,opacity:fm(opAt(Math.max(z,ZMIN*.5)))});
+    if(it.rock)rk.push({offset:t,transform:`rotate(${fm(rotAt(z))}deg)`});
   }
-  el.__anim=()=>el.animate(kfs,{duration:DUR,easing:'linear',fill:'forwards'});
+  el.__anim=()=>{ if(it.rock)el.firstChild.animate(rk,{duration:DUR,easing:'linear',fill:'forwards'}); return el.animate(kfs,{duration:DUR,easing:'linear',fill:'forwards'}); };
   el.style.opacity=fm(opAt(z0));
   return el;
 }
@@ -309,22 +302,20 @@ function build(c,animate){
   for(const el of anims) el.__anim();
 }
 
-// ---------- scene shell: sky, vanishing-point glow, hush, top darkness, vignette ----------
+// ---------- scene shell: far stars (at infinity, static), the light ahead, symmetric vignette ----------
 function paintShell(){
-  // far sky: static stars (they sit at infinity) over a faint nebula behind the vanishing point
   const r=rngFor(99,3); let stars='';
-  for(let i=0;i<150;i++){
-    const x=r()*W,y=r()*(VY+60),s=.5+r()*1.4,a=.25+r()*.55;
-    stars+=`<circle cx="${fm(x)}" cy="${fm(y)}" r="${fm(s)}" fill="${r()<.2?KEY:'#e8e4f8'}" fill-opacity="${fm(a*.7)}"/>`;
+  for(let i=0;i<260;i++){
+    const x=r()*W,y=r()*H,s=.5+r()*1.5,a=.25+r()*.55, warm=r()<.18;
+    stars+=`<circle cx="${fm(x)}" cy="${fm(y)}" r="${fm(s)}" fill="${warm?KEY:'#e8e4f8'}" fill-opacity="${fm(a*.7)}"/>`;
   }
   $('sky').innerHTML=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><defs>
-    <radialGradient id="neb" gradientUnits="userSpaceOnUse" cx="${VX}" cy="${VY}" r="900"><stop offset="0" stop-color="${KEY}" stop-opacity="${fm(.26*GAIN)}"/><stop offset=".45" stop-color="${FILL}" stop-opacity="${fm(.14*GAIN)}"/><stop offset="1" stop-color="${FILL}" stop-opacity="0"/></radialGradient>
-    <linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#030207"/><stop offset="1" stop-color="#0a0710"/></linearGradient></defs>
-    <rect width="${W}" height="${H}" fill="url(#sg)"/><rect width="${W}" height="${H}" fill="url(#neb)"/>${stars}</svg>`;
-  // quiet but full centre: a low, even veil in the middle of the frame so the text area reads as place, not void
-  $('hush').innerHTML=`<svg width="${W}" height="${H}"><defs><radialGradient id="hu" gradientUnits="userSpaceOnUse" cx="${VX}" cy="560" r="780" gradientTransform="translate(${VX} 560) scale(1 .62) translate(${-VX} -560)"><stop offset="0" stop-color="#0d0a14" stop-opacity=".0"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs></svg>`;
-  $('topdark').style.background='linear-gradient(180deg,rgba(2,1,6,.78) 0%,rgba(2,1,6,.38) 14%,rgba(2,1,6,0) 30%)';
-  $('vig').style.background='radial-gradient(ellipse 78% 74% at 50% 52%,rgba(0,0,0,0) 58%,rgba(0,0,0,.55) 100%)';
+    <radialGradient id="neb" gradientUnits="userSpaceOnUse" cx="${VX}" cy="${VY}" r="1000"><stop offset="0" stop-color="${KEY}" stop-opacity="${fm(.16*GAIN)}"/><stop offset=".4" stop-color="${FILL}" stop-opacity="${fm(.1*GAIN)}"/><stop offset="1" stop-color="${FILL}" stop-opacity="0"/></radialGradient>
+    <radialGradient id="sun" gradientUnits="userSpaceOnUse" cx="${VX}" cy="${VY}" r="300"><stop offset="0" stop-color="#fff" stop-opacity="${fm(.3*GAIN)}"/><stop offset=".25" stop-color="${KEY}" stop-opacity="${fm(.2*GAIN)}"/><stop offset="1" stop-color="${KEY}" stop-opacity="0"/></radialGradient></defs>
+    <rect width="${W}" height="${H}" fill="#030207"/><rect width="${W}" height="${H}" fill="url(#neb)"/>${stars}<rect width="${W}" height="${H}" fill="url(#sun)"/></svg>`;
+  $('hush').innerHTML='';
+  $('topdark').style.background='none';
+  $('vig').style.background='radial-gradient(ellipse 80% 80% at 50% 50%,rgba(0,0,0,0) 56%,rgba(0,0,0,.6) 100%)';
 }
 
 // ---------- walking ----------
@@ -332,7 +323,7 @@ function clearTimers(){timers.forEach(clearTimeout);timers=[]}
 function setCreep(on){
   const c=$('creepW');
   if(!on){c.style.transition='none';c.style.transform='scale(1)';$('rig').classList.remove('idle');void c.offsetWidth;return}
-  c.style.transition=`transform ${CREEP_MS}ms ease-out`;c.style.transform='scale(1.045)';
+  c.style.transition=`transform ${CREEP_MS}ms ease-out`;c.style.transform='scale(1.06)';
   timers.push(setTimeout(()=>$('rig').classList.add('idle'),CREEP_MS));
 }
 function render(){build(station,false);ui()}
@@ -343,8 +334,8 @@ function advance(){
   if(rm){ station=(station+1)%NS; render(); const w=$('creepW'); w.animate([{opacity:0},{opacity:1}],{duration:400,easing:'ease-in-out'}); timers.push(setTimeout(()=>setCreep(true),30)); return }
   walking=true;
   build(station,true);
-  // a slight bank and settle through the walk: a craft turning, not a sheet sliding
-  $('cam').animate([{transform:'translate(0,0) rotate(0deg)'},{transform:'translate(0,5px) rotate(.3deg)',offset:.35},{transform:'translate(0,2px) rotate(-.2deg)',offset:.75},{transform:'translate(0,0) rotate(0deg)'}],{duration:DUR,easing:'ease-in-out'});
+  // the craft banks and drifts through each leg of the flight
+  $('cam').animate([{transform:'translate(0,0) rotate(0deg)'},{transform:'translate(7px,-4px) rotate(1.1deg)',offset:.35},{transform:'translate(-5px,3px) rotate(-.7deg)',offset:.75},{transform:'translate(0,0) rotate(0deg)'}],{duration:DUR,easing:'ease-in-out'});
   timers.push(setTimeout(()=>{station=(station+1)%NS;walking=false;render();setCreep(true)},DUR+60));
 }
 function jump(s){if(walking)return;clearTimers();station=((s%NS)+NS)%NS;setCreep(false);render();timers.push(setTimeout(()=>setCreep(true),30))}
