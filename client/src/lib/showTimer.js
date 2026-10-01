@@ -21,14 +21,23 @@ export const TIMES_UP = 'Time’s up!'
 export const DONE_VISIBLE_MS = 8000 // "Time's up" stays this long, then clears
 export const CHIME_WINDOW_MS = 3000 // a TV that loads later than this after zero stays silent
 
-// "1.5" / "2" / ".5" / "1,5" minutes -> whole-second ms, or null if not usable.
-export function parseMinutes(text) {
-  const s = String(text ?? '').trim().replace(',', '.')
-  if (!/^(\d+\.?\d*|\.\d+)$/.test(s)) return null
-  const ms = Math.round(parseFloat(s) * 60) * 1000
+// What the laptop box accepts, as whole-second ms, or null if not usable:
+//   "1.5" / "2" / ".5" / "1,5"  minutes
+//   "1:30" / "0:30"             m:ss (seconds 00-59)
+//   "90s" / "30 sec" / "45 seconds"
+export function parseDuration(text) {
+  const s = String(text ?? '').trim().toLowerCase().replace(',', '.')
+  let sec
+  let m
+  if ((m = s.match(/^(\d+):([0-5]\d)$/))) sec = Number(m[1]) * 60 + Number(m[2])
+  else if ((m = s.match(/^(\d+)\s*(?:s|secs?|seconds?)$/))) sec = Number(m[1])
+  else if (/^(\d+\.?\d*|\.\d+)$/.test(s)) sec = Math.round(parseFloat(s) * 60)
+  else return null
+  const ms = sec * 1000
   if (!Number.isFinite(ms) || ms < MIN_MS || ms > MAX_MS) return null
   return ms
 }
+export const parseMinutes = parseDuration // old name, still imported by hostCommands and tests
 
 const newId = now => `t${now.toString(36)}${Math.random().toString(36).slice(2, 6)}`
 
@@ -51,7 +60,7 @@ export function resumeTimer(t, now) {
   return { ...t, state: 'running', endsAt: now + t.remainingMs, sentAt: now }
 }
 
-// +1 minute. On a timer that already hit zero it starts a fresh minute (new id,
+// +30 s or +1 min (ms). On a timer that already hit zero it starts a fresh minute (new id,
 // so the chime can play again).
 export function addTime(t, ms, now) {
   const left = remainingAt(t, now)

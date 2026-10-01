@@ -149,25 +149,30 @@ describe('stub host + relay + iPad', () => {
     const s = stub()
     const p = await ipad()
     expect('timer' in p.state).toBe(false)
-    expect(await p.tap('timer.start', { minutes: 5 })).toMatchObject({ received: true })
+    expect(await p.tap('timer.start', { seconds: 90 })).toMatchObject({ received: true })
     await until(() => p.state.timer?.state === 'running')
     const id = p.state.timer.id
-    expect(p.state.timer.totalMs).toBe(300000)
+    expect(p.state.timer.totalMs).toBe(90000)
     // A second Start is refused unless it is an explicit replace.
-    expect(await p.tap('timer.start', { minutes: 2 })).toMatchObject({ refused: 'timer-running' })
+    expect(await p.tap('timer.start', { seconds: 120 })).toMatchObject({ refused: 'timer-running' })
     expect(await p.tap('timer.pause', { timerId: 'stale' })).toMatchObject({ refused: 'timer-changed' })
     expect(await p.tap('timer.pause', { timerId: id })).toMatchObject({ received: true })
     await until(() => p.state.timer?.state === 'paused')
     expect(await p.tap('timer.resume', { timerId: id })).toMatchObject({ received: true })
     await until(() => p.state.timer?.state === 'running')
-    expect(await p.tap('timer.add', { timerId: id })).toMatchObject({ received: true })
-    await until(() => p.state.timer?.totalMs === 360000)
+    expect(await p.tap('timer.add', { timerId: id, seconds: 30 })).toMatchObject({ received: true })
+    await until(() => p.state.timer?.totalMs === 120000)
+    expect(await p.tap('timer.add', { timerId: id, seconds: 45 })).toMatchObject({ refused: 'bad-add' })
+    expect(await p.tap('timer.add', { timerId: id })).toMatchObject({ received: true }) // old page: no seconds means 1 min
+    await until(() => p.state.timer?.totalMs === 180000)
+    // An iPad page cached from before seconds still sends whole minutes.
     expect(await p.tap('timer.start', { minutes: 2, replace: true })).toMatchObject({ received: true })
     await until(() => p.state.timer?.totalMs === 120000 && p.state.timer.id !== id)
+    expect(await p.tap('timer.start', { seconds: 45 })).toMatchObject({ refused: 'bad-minutes' })
     expect(await p.tap('timer.start', { minutes: 0.5 })).toMatchObject({ refused: 'bad-minutes' })
     expect(await p.tap('timer.cancel', { timerId: p.state.timer.id })).toMatchObject({ received: true })
     await until(() => !('timer' in p.state))
-    expect(s.ran.filter(r => r.startsWith('timer-'))).toEqual(['timer-start', 'timer-pause', 'timer-resume', 'timer-add', 'timer-start', 'timer-cancel'])
+    expect(s.ran.filter(r => r.startsWith('timer-'))).toEqual(['timer-start', 'timer-pause', 'timer-resume', 'timer-add', 'timer-add', 'timer-start', 'timer-cancel'])
   })
 
   it('timer commands obey Pause on the laptop', async () => {
@@ -175,7 +180,7 @@ describe('stub host + relay + iPad', () => {
     const p = await ipad()
     s.setPaused(true)
     await until(() => p.state.paused)
-    expect(await p.tap('timer.start', { minutes: 5 })).toMatchObject({ refused: 'paused' })
+    expect(await p.tap('timer.start', { seconds: 300 })).toMatchObject({ refused: 'paused' })
   })
 
   it('relay restart: the host resends its unchanged snapshot and a fresh iPad gets it', async () => {

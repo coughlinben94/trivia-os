@@ -101,80 +101,125 @@ describe('/remote timer tile', () => {
 })
 
 describe('/remote timer drawer: idle', () => {
-  it('preset chips are 1, 2, 3, 5, 10 and every control is at least 56px tall', () => {
+  it('preset chips read 0:30, 1:00, 2:00, 3:00, 5:00, 10:00 and are tall enough to tap', () => {
     setup()
     const d = openDrawer()
-    for (const m of [1, 2, 3, 5, 10]) {
-      const chip = d.querySelector(`[data-k="preset-${m}"]`)
-      expect(chip, `preset ${m}`).toBeTruthy()
-      expect(chip.className).toMatch(/min-h-\[(7\d|8\d)px\]|h-(16|20)/)
+    const want = { 30: '0:30', 60: '1:00', 120: '2:00', 180: '3:00', 300: '5:00', 600: '10:00' }
+    for (const [n, label] of Object.entries(want)) {
+      const chip = d.querySelector(`[data-k="preset-${n}"]`)
+      expect(chip, `preset ${n}`).toBeTruthy()
+      expect(chip.textContent).toBe(label)
+      expect(chip.className).toMatch(/min-h-\[(7\d|8\d)px\]/)
     }
-    expect(d.querySelector('[data-k="preset-4"]')).toBeNull()
+    expect(d.querySelector('[data-k="preset-240"]')).toBeNull()
   })
-  it('Start is off until minutes are picked; then one tap on Start sends timer.start', () => {
+  it('Start is off until a time is picked; then one tap on Start sends timer.start in seconds', () => {
     setup()
     const d = openDrawer()
     expect(d.querySelector('[data-k="timer-start"]').disabled).toBe(true)
-    click(d.querySelector('[data-k="preset-5"]'))
-    expect(d.querySelector('[data-k="timer-start"]').textContent).toContain('Start 5 min')
+    click(d.querySelector('[data-k="preset-300"]'))
+    expect(d.querySelector('[data-k="timer-start"]').textContent).toBe('Start 5:00')
     click(d.querySelector('[data-k="timer-start"]'))
-    expect(lastCmd()).toMatchObject({ type: 'cmd', cmd: 'timer.start', args: { minutes: 5 } })
+    expect(lastCmd()).toMatchObject({ type: 'cmd', cmd: 'timer.start', args: { seconds: 300 } })
     expect(lastCmd().args.replace).toBeUndefined()
+    expect(lastCmd().args.minutes).toBeUndefined()
     expect(cmds()).toHaveLength(1)
   })
-  it('the number pad builds a custom number, caps at 180, and backspace works', () => {
+  it('the 30 second preset sends 30', () => {
     setup()
     const d = openDrawer()
-    click(d.querySelector('[data-k="preset-custom"]'))
-    const press = n => click(d.querySelector(`[data-k="pad-${n}"]`))
-    press(4); press(5)
-    expect(d.querySelector('[data-k="timer-start"]').textContent).toContain('Start 45 min')
-    click(d.querySelector('[data-k="pad-back"]'))
-    expect(d.querySelector('[data-k="timer-start"]').textContent).toContain('Start 4 min')
-    press(0); press(0) // 400 is over 180: the last 0 is ignored
-    expect(d.querySelector('[data-k="timer-start"]').textContent).toContain('Start 40 min')
-    press(0)
-    expect(d.querySelector('[data-k="timer-start"]').textContent).toContain('Start 40 min')
-    press(9)
-    expect(d.querySelector('[data-k="timer-start"]').textContent).toContain('Start 40 min')
+    click(d.querySelector('[data-k="preset-30"]'))
+    expect(d.querySelector('[data-k="timer-start"]').textContent).toBe('Start 0:30')
     click(d.querySelector('[data-k="timer-start"]'))
-    expect(lastCmd().args).toEqual({ minutes: 40 })
+    expect(lastCmd().args).toEqual({ seconds: 30 })
   })
-  it('a leading zero or an empty pad never sends 0', () => {
+  it('Adjust opens a stepper at 1:00 when nothing is chosen; plus and minus move 30 seconds', () => {
     setup()
     const d = openDrawer()
+    const val = () => d.querySelector('[data-k="step-value"]').textContent
+    expect(d.querySelector('[data-k="step-up"]')).toBeNull()
     click(d.querySelector('[data-k="preset-custom"]'))
-    click(d.querySelector('[data-k="pad-0"]'))
-    expect(d.querySelector('[data-k="timer-start"]').disabled).toBe(true)
+    expect(val()).toBe('1:00')
+    expect(d.querySelector('[data-k="timer-start"]').textContent).toBe('Start 1:00')
+    click(d.querySelector('[data-k="step-up"]'))
+    expect(val()).toBe('1:30')
+    click(d.querySelector('[data-k="step-up"]'))
+    expect(val()).toBe('2:00')
+    click(d.querySelector('[data-k="step-down"]'))
+    click(d.querySelector('[data-k="step-down"]'))
+    click(d.querySelector('[data-k="step-down"]'))
+    expect(val()).toBe('0:30')
+    click(d.querySelector('[data-k="step-up"]'))
+    click(d.querySelector('[data-k="step-up"]'))
+    click(d.querySelector('[data-k="step-up"]'))
+    expect(d.querySelector('[data-k="timer-start"]').textContent).toBe('Start 2:00')
+    click(d.querySelector('[data-k="step-up"]'))
     click(d.querySelector('[data-k="timer-start"]'))
-    expect(cmds()).toHaveLength(0)
+    expect(lastCmd().args).toEqual({ seconds: 150 })
   })
-  it('a preset replaces a typed number; tapping a preset then Other starts fresh', () => {
+  it('the stepper starts from the chosen preset', () => {
+    setup()
+    const d = openDrawer()
+    click(d.querySelector('[data-k="preset-120"]'))
+    click(d.querySelector('[data-k="preset-custom"]'))
+    expect(d.querySelector('[data-k="step-value"]').textContent).toBe('2:00')
+    click(d.querySelector('[data-k="step-up"]'))
+    expect(d.querySelector('[data-k="timer-start"]').textContent).toBe('Start 2:30')
+  })
+  it('the stepper stops at 0:30 and at 3:00:00 (the TV clock style for 180 minutes) and never sends anything out of range', () => {
     setup()
     const d = openDrawer()
     click(d.querySelector('[data-k="preset-custom"]'))
-    click(d.querySelector('[data-k="pad-7"]'))
-    click(d.querySelector('[data-k="preset-2"]'))
-    expect(d.querySelector('[data-k="timer-start"]').textContent).toContain('Start 2 min')
+    click(d.querySelector('[data-k="step-down"]')) // 1:00 -> 0:30
+    expect(d.querySelector('[data-k="step-value"]').textContent).toBe('0:30')
+    expect(d.querySelector('[data-k="step-down"]').disabled).toBe(true)
+    click(d.querySelector('[data-k="step-down"]'))
+    expect(d.querySelector('[data-k="step-value"]').textContent).toBe('0:30')
+    click(d.querySelector('[data-k="preset-600"]'))
+    click(d.querySelector('[data-k="preset-custom"]'))
+    for (let i = 0; i < 400; i++) { if (!d.querySelector('[data-k="step-up"]').disabled) click(d.querySelector('[data-k="step-up"]')) }
+    expect(d.querySelector('[data-k="step-value"]').textContent).toBe('3:00:00')
+    expect(d.querySelector('[data-k="step-up"]').disabled).toBe(true)
+    click(d.querySelector('[data-k="timer-start"]'))
+    expect(lastCmd().args).toEqual({ seconds: 10800 })
+  })
+  it('stepper buttons are at least 56px tall and have press feedback', () => {
+    setup()
+    const d = openDrawer()
+    click(d.querySelector('[data-k="preset-custom"]'))
+    for (const key of ['step-up', 'step-down']) {
+      expect(d.querySelector(`[data-k="${key}"]`).className).toMatch(/min-h-\[80px\]/)
+      expect(d.querySelector(`[data-k="${key}"]`).className).toContain('active:scale-[0.97]')
+    }
+  })
+  it('a preset closes the stepper and replaces the stepped value', () => {
+    setup()
+    const d = openDrawer()
+    click(d.querySelector('[data-k="preset-custom"]'))
+    click(d.querySelector('[data-k="step-up"]'))
+    click(d.querySelector('[data-k="preset-120"]'))
+    expect(d.querySelector('[data-k="step-up"]')).toBeNull()
+    expect(d.querySelector('[data-k="timer-start"]').textContent).toBe('Start 2:00')
   })
   it('is blocked while the laptop is not ready', () => {
     setup()
     openDrawer()
     act(() => ws.drop(1006))
     const d = host.querySelector('[role="dialog"]')
-    click(d.querySelector('[data-k="preset-5"]'))
+    click(d.querySelector('[data-k="preset-300"]'))
     expect(d.querySelector('[data-k="timer-start"]').disabled).toBe(true)
   })
 })
 
 describe('/remote timer drawer: a timer exists', () => {
-  it('running: shows the clock, Pause, +1 min, Cancel, Restart; no plain Start', () => {
+  it('running: shows the clock, Pause, +30 s, +1 min, Replace, Cancel; no plain Start', () => {
     setup({ timer: running() })
     const d = openDrawer()
     expect(d.textContent).toContain('3:12')
     expect(d.querySelector('[data-k="timer-start"]')).toBeNull()
     expect(d.querySelector('[data-k="timer-pause"]').textContent).toContain('Pause')
-    expect(d.querySelector('[data-k="timer-add"]')).toBeTruthy()
+    expect(d.querySelector('[data-k="timer-add30"]').textContent).toBe('+30 s')
+    expect(d.querySelector('[data-k="timer-add"]').textContent).toBe('+1 min')
     expect(d.querySelector('[data-k="timer-cancel"]')).toBeTruthy()
     expect(d.querySelector('[data-k="timer-restart"]').disabled).toBe(true)
   })
@@ -190,21 +235,27 @@ describe('/remote timer drawer: a timer exists', () => {
     click(d.querySelector('[data-k="timer-pause"]'))
     expect(lastCmd()).toMatchObject({ cmd: 'timer.resume', args: { timerId: 't1' } })
   })
-  it('+1 min sends timer.add with the id', () => {
+  it('+30 s and +1 min send timer.add with the id and the seconds', () => {
     setup({ timer: running() })
     const d = openDrawer()
+    click(d.querySelector('[data-k="timer-add30"]'))
+    expect(lastCmd()).toMatchObject({ cmd: 'timer.add', args: { timerId: 't1', seconds: 30 } })
+    act(() => vi.advanceTimersByTime(400)) // the tap guard drops a repeat of the same command inside 300 ms
     click(d.querySelector('[data-k="timer-add"]'))
-    expect(lastCmd()).toMatchObject({ cmd: 'timer.add', args: { timerId: 't1' } })
+    expect(lastCmd()).toMatchObject({ cmd: 'timer.add', args: { timerId: 't1', seconds: 60 } })
   })
-  it('Replace needs minutes, says it replaces the running timer, and sends replace:true', () => {
+  it('Replace needs a time, says it replaces the running timer, and sends replace:true', () => {
     setup({ timer: running() })
     const d = openDrawer()
-    click(d.querySelector('[data-k="preset-3"]'))
+    click(d.querySelector('[data-k="preset-custom"]'))
+    click(d.querySelector('[data-k="step-up"]'))
+    click(d.querySelector('[data-k="step-up"]'))
     const r = d.querySelector('[data-k="timer-restart"]')
-    expect(r.textContent).toContain('Replace with 3 min')
-    expect(r.textContent).not.toContain('Restart')
+    expect(r.textContent).toBe('Replace with 2:00')
+    click(d.querySelector('[data-k="step-up"]'))
+    expect(r.textContent).toBe('Replace with 2:30')
     click(r)
-    expect(lastCmd()).toMatchObject({ cmd: 'timer.start', args: { minutes: 3, replace: true } })
+    expect(lastCmd()).toMatchObject({ cmd: 'timer.start', args: { seconds: 150, replace: true } })
   })
   it('Cancel takes two taps: the first arms, the second sends, and it disarms itself after 3s', () => {
     setup({ timer: running() })
@@ -220,13 +271,15 @@ describe('/remote timer drawer: a timer exists', () => {
     expect(cmds()).toHaveLength(1)
     expect(lastCmd()).toMatchObject({ cmd: 'timer.cancel', args: { timerId: 't1' } })
   })
-  it('finished: Clear takes one tap and +1 min starts a fresh minute; a new Start needs no Restart', () => {
+  it('finished: Clear takes one tap; +30 s and +1 min are there; a new Start needs no Restart', () => {
     setup({ timer: running({ endsAt: T0 - 1000 }) })
     const d = openDrawer()
     expect(d.textContent).toContain('Time')
     expect(d.querySelector('[data-k="timer-pause"]')).toBeNull()
-    click(d.querySelector('[data-k="preset-1"]'))
-    expect(d.querySelector('[data-k="timer-start"]').textContent).toContain('Start 1 min')
+    click(d.querySelector('[data-k="preset-60"]'))
+    expect(d.querySelector('[data-k="timer-start"]').textContent).toBe('Start 1:00')
+    expect(d.querySelector('[data-k="timer-add30"]')).toBeTruthy()
+    expect(d.querySelector('[data-k="timer-add"]')).toBeTruthy()
     click(d.querySelector('[data-k="timer-cancel"]'))
     expect(lastCmd()).toMatchObject({ cmd: 'timer.cancel' })
     expect(d.querySelector('[data-k="timer-cancel"]').textContent).toContain('Clear')
@@ -235,7 +288,7 @@ describe('/remote timer drawer: a timer exists', () => {
     setup({ timer: running() })
     const d = openDrawer()
     push({ paused: true, timer: running() })
-    for (const key of ['timer-pause', 'timer-add', 'timer-cancel']) expect(d.querySelector(`[data-k="${key}"]`).disabled, key).toBe(true)
+    for (const key of ['timer-pause', 'timer-add30', 'timer-add', 'timer-cancel']) expect(d.querySelector(`[data-k="${key}"]`).disabled, key).toBe(true)
   })
 })
 
@@ -243,7 +296,7 @@ describe('/remote timer refusals and look', () => {
   it('a refusal shows plain English in the amber bar', () => {
     setup({ timer: running() })
     const d = openDrawer()
-    click(d.querySelector('[data-k="timer-add"]'))
+    click(d.querySelector('[data-k="timer-add30"]'))
     const id = lastCmd().id
     act(() => ws.msg({ type: 'result', id, refused: 'timer-changed' }))
     expect(text()).toContain('The timer changed on the laptop')

@@ -1,20 +1,39 @@
 import { describe, it, expect } from 'vitest'
 import {
-  parseMinutes, startTimer, pauseTimer, resumeTimer, addTime, timerView, shouldChime,
+  parseMinutes, parseDuration, startTimer, pauseTimer, resumeTimer, addTime, timerView, shouldChime,
   calibrateOffset, clockLabel, MAX_MS,
   TIMES_UP,
 } from './showTimer.js'
 
-describe('parseMinutes', () => {
+describe('parseMinutes / parseDuration', () => {
   it('reads whole and decimal minutes', () => {
     expect(parseMinutes('5')).toBe(300000)
     expect(parseMinutes('1.5')).toBe(90000)
     expect(parseMinutes(' .5 ')).toBe(30000)
     expect(parseMinutes('1,5')).toBe(90000)
+    expect(parseMinutes).toBe(parseDuration)
   })
-  it('rejects junk, zero, negatives, too small and too big', () => {
-    for (const bad of ['', 'abc', '0', '-2', '1e3', '0.01', '181', '1.2.3', null, undefined]) expect(parseMinutes(bad)).toBeNull()
-    expect(parseMinutes('180')).toBe(MAX_MS)
+  it('reads m:ss', () => {
+    expect(parseDuration('1:30')).toBe(90000)
+    expect(parseDuration('0:30')).toBe(30000)
+    expect(parseDuration(' 10:00 ')).toBe(600000)
+    expect(parseDuration('180:00')).toBe(MAX_MS)
+    expect(parseDuration('0:03')).toBe(3000)
+  })
+  it('reads seconds with s, sec, secs, second, seconds', () => {
+    expect(parseDuration('90s')).toBe(90000)
+    expect(parseDuration('30 sec')).toBe(30000)
+    expect(parseDuration('45 seconds')).toBe(45000)
+    expect(parseDuration('1 second')).toBeNull() // under the 3 s minimum
+    expect(parseDuration('3S')).toBe(3000)
+    expect(parseDuration('10800s')).toBe(MAX_MS)
+  })
+  it('rejects junk, zero, negatives, too small, too big and bad seconds', () => {
+    for (const bad of ['', '  ', 'abc', '0', '-2', '1e3', '0.01', '181', '1.2.3', null, undefined,
+      '1:75', '1:60', '1:5', ':30', '1:', '1:30:00', '0:00', '0:02', '180:01', '0s', '2s', '10801s', '-30s', '1.5s', 's', '30 secz', '30 min', '1:30s']) {
+      expect(parseDuration(bad), String(bad)).toBeNull()
+    }
+    expect(parseDuration('180')).toBe(MAX_MS)
   })
 })
 

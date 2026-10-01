@@ -16,9 +16,9 @@
 //
 // Returns { run: step, ... } or { refuse: reason }. run 'noop' = received,
 // nothing to do (an end-state command that already matches).
-import { COMMAND_TTL_MS } from './remoteProtocol.js'
+import { COMMAND_TTL_MS, TIMER_STEP_SECONDS, TIMER_MIN_SECONDS, TIMER_MAX_SECONDS, TIMER_LEGACY_MAX_MINUTES, TIMER_ADD_SECONDS } from './remoteProtocol.js'
 import { validScoreValue } from './scoreCellWrite.js'
-import { parseMinutes, timerView } from './showTimer.js'
+import { timerView } from './showTimer.js'
 
 // Commands whose meaning depends on which slide the sender was looking at.
 const SLIDE_BOUND = new Set(['next', 'prev', 'answer', 'jump', 'unlock', 'rescore'])
@@ -30,9 +30,14 @@ const BUSY_GATED = new Set(['next', 'prev', 'jump', 'unlock', 'rescore', 'scores
 export const TIMER_COMMANDS = new Set(['timer.start', 'timer.pause', 'timer.resume', 'timer.add', 'timer.cancel'])
 const REMOTE_ONLY = new Set(['jump', 'unlock', 'rescore', 'scores.get', 'score.set', 'scores.hide', ...TIMER_COMMANDS])
 
-// The iPad sends whole minutes only, and only ones the laptop's own
-// parseMinutes accepts (so it can never start a timer the laptop box would refuse).
-const timerMs = m => (Number.isInteger(m) ? parseMinutes(String(m)) : null)
+// The iPad sends whole seconds, a multiple of 30 (args.seconds). An iPad page
+// cached from before seconds still sends whole minutes (args.minutes): accepted.
+const okSeconds = n => Number.isInteger(n) && n % TIMER_STEP_SECONDS === 0 && n >= TIMER_MIN_SECONDS && n <= TIMER_MAX_SECONDS
+function timerMs(args) {
+  if (args.seconds !== undefined) return okSeconds(args.seconds) ? args.seconds * 1000 : null
+  const m = args.minutes
+  return Number.isInteger(m) && m >= 1 && m <= TIMER_LEGACY_MAX_MINUTES ? m * 60000 : null
+}
 
 // timer.* (show-level, not slide-bound or busy-gated, and a laptop modal does
 // not matter to a clock). ctx.timer is shows.special_event.timer. pause, resume,
@@ -43,7 +48,7 @@ function planTimer(cmd, args, ctx) {
   const phase = timerView(t, ctx.now).phase
   const live = phase === 'running' || phase === 'urgent' || phase === 'paused'
   if (cmd === 'timer.start') {
-    const ms = timerMs(args.minutes)
+    const ms = timerMs(args)
     if (ms == null) return { refuse: 'bad-minutes' }
     if (live && args.replace !== true) return { refuse: 'timer-running' }
     return { run: 'timer-start', ms }
@@ -57,8 +62,11 @@ function planTimer(cmd, args, ctx) {
     case 'timer.resume':
       if (phase === 'running' || phase === 'urgent') return { run: 'noop' }
       return phase === 'paused' ? { run: 'timer-resume' } : { refuse: 'no-timer' }
-    case 'timer.add':
-      return phase === 'idle' ? { refuse: 'no-timer' } : { run: 'timer-add', ms: 60000 }
+    case 'timer.add': {
+      const sec = args.seconds === undefined ? 60 : args.seconds // old pages send no seconds
+      if (!TIMER_ADD_SECONDS.includes(sec)) return { refuse: 'bad-add' }
+      return phase === 'idle' ? { refuse: 'no-timer' } : { run: 'timer-add', ms: sec * 1000 }
+    }
     default: // timer.cancel
       return { run: 'timer-cancel' }
   }
