@@ -37,29 +37,44 @@ describe('<DropBoard>', () => {
 
   it('starts with the whole pool unplaced and Lock In off', () => {
     render()
-    expect(container.textContent).toContain('30')
+    expect(container.textContent).toContain('25')
     expect(container.textContent).toContain('left to place')
     expect(lockBtn().disabled).toBe(true)
-    expect(lockBtn().textContent).toContain('Place 30 more')
+    expect(lockBtn().textContent).toContain('Place 25 more')
   })
 
   it('each tap places 5 points and − takes them back', () => {
     render()
     tap(addBtn(0)); tap(addBtn(0)); tap(addBtn(1))
-    expect(lockBtn().textContent).toContain('Place 15 more')
+    expect(lockBtn().textContent).toContain('Place 10 more')
     tap(subBtn(0))
-    expect(lockBtn().textContent).toContain('Place 20 more')
+    expect(lockBtn().textContent).toContain('Place 15 more')
   })
 
   it('cannot place more than the pool, and Lock In turns on at exactly 0 left', () => {
     render()
-    for (let i = 0; i < 6; i++) tap(addBtn(2))
+    for (let i = 0; i < 5; i++) tap(addBtn(2))
     expect(container.textContent).toContain('all placed')
     expect(lockBtn().disabled).toBe(false)
     tap(addBtn(0)) // pool empty — ignored
     tap(addBtn(3))
     expect(container.textContent).toContain('all placed')
     expect(lockBtn().textContent).toContain('Lock In My Split')
+  })
+
+  it('All in puts the whole pool on that tile and replaces any split', () => {
+    render()
+    tap(addBtn(0)); tap(addBtn(1))
+    const allIn = i => container.querySelectorAll('button[aria-label^="All in"]')[i]
+    tap(allIn(2))
+    expect(container.textContent).toContain('all placed')
+    expect(lockBtn().textContent).toContain('Lock In My Split')
+    // the 25 sits on tile C and nowhere else: C's number is 25, the rest 0
+    const nums = () => [...container.querySelectorAll('button[aria-label^="Add"] span')].map(n => n.textContent).filter(t => /^\d+$/.test(t))
+    expect(nums()).toEqual(['0', '0', '25', '0'])
+    // no minimum per tile: swinging back to a different tile works the same way
+    tap(allIn(0))
+    expect(nums()).toEqual(['25', '0', '0', '0'])
   })
 
   it('uses 1-point taps when the pool is not a multiple of 5', () => {
@@ -89,19 +104,19 @@ describe('<DropBoard>', () => {
   })
 
   it('ignores a saved split that no longer fits the pool (host changed the total) instead of showing a negative counter', async () => {
-    saved.row = { answer: { a: 30, b: 0, c: 0, d: 0 } }
+    saved.row = { answer: { a: 25, b: 0, c: 0, d: 0 } }
     await act(async () => {
-      root.render(<DropBoard theme={theme} team={{ id: 't', showId: 's' }} slide={{ id: 'sl', data: { ...baseData, dropTotal: 20 } }} />)
+      root.render(<DropBoard theme={theme} team={{ id: 't', showId: 's' }} slide={{ id: 'sl', data: { ...baseData, dropTotal: 15 } }} />)
     })
     expect(container.textContent).not.toContain('-10')
-    expect(container.textContent).toContain('20')
+    expect(container.textContent).toContain('15')
     expect(container.textContent).toContain('left to place')
-    expect(lockBtn().textContent).toContain('Place 20 more')
+    expect(lockBtn().textContent).toContain('Place 15 more')
     saved.row = null
   })
 
   it('restores a saved split that still fits', async () => {
-    saved.row = { answer: { a: 10, b: 20, c: 0, d: 0 } }
+    saved.row = { answer: { a: 10, b: 15, c: 0, d: 0 } }
     await act(async () => {
       root.render(<DropBoard theme={theme} team={{ id: 't', showId: 's' }} slide={{ id: 'sl', data: baseData }} />)
     })

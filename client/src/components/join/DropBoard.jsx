@@ -52,6 +52,13 @@ export default function DropBoard({ slide, team, theme, preview = false, onAnswe
     setAlloc(a => ({ ...a, [id]: a[id] - chip }))
   }
 
+  // All in: the whole pool on one tile, replacing whatever was placed. There is
+  // deliberately no per-tile minimum — a team that is sure should be able to say so.
+  function allIn(id) {
+    if (locked) return
+    setAlloc(Object.fromEntries(optionIds.map(o => [o, o === id ? total : 0])))
+  }
+
   const saveChainRef = useRef(Promise.resolve())
   const submit = useCallback((next) => {
     if (preview) return Promise.resolve(true)
@@ -158,6 +165,8 @@ export default function DropBoard({ slide, team, theme, preview = false, onAnswe
               chip={chip}
               onAdd={() => tapAdd(opt.id)}
               onSub={() => tapSub(opt.id)}
+              onAllIn={() => allIn(opt.id)}
+              isAllIn={(alloc[opt.id] ?? 0) === total}
               textColor={text}
               highlight={highlight}
             />
@@ -213,7 +222,7 @@ function normalize(alloc, optionIds) {
   return out
 }
 
-function DropTile({ opt, letter, points, locked, dropped, winner, canAdd, canSub, chip, onAdd, onSub, textColor, highlight }) {
+function DropTile({ opt, letter, points, locked, dropped, winner, canAdd, canSub, chip, onAdd, onSub, onAllIn, isAllIn, textColor, highlight }) {
   const [imgFailed, setImgFailed] = useState(false)
   useEffect(() => { setImgFailed(false) }, [opt.image])
   const active = points > 0
@@ -277,6 +286,21 @@ function DropTile({ opt, letter, points, locked, dropped, winner, canAdd, canSub
           }}
         >
           −
+        </button>
+      )}
+      {!locked && (
+        <button
+          onClick={onAllIn}
+          disabled={isAllIn}
+          aria-label={`All in on ${opt.label || `option ${letter}`}`}
+          style={{
+            position: 'absolute', right: 8, bottom: 8, height: 36, padding: '0 0.7rem', borderRadius: 10,
+            border: `1px solid ${isAllIn ? highlight : `${textColor}30`}`, background: isAllIn ? `${highlight}33` : 'rgba(0,0,0,0.25)',
+            color: isAllIn ? highlight : textColor, fontSize: '0.8rem', fontWeight: 700, fontFamily: 'DM Sans, sans-serif',
+            cursor: isAllIn ? 'default' : 'pointer', WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          All in
         </button>
       )}
     </div>

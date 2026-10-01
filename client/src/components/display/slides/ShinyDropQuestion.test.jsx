@@ -69,6 +69,14 @@ describe('<QuestionSlide> — The Drop on the TV', () => {
     expect(container.textContent).toContain('2 teams went all-in')
   })
 
+  it('shows what the room put on each tile once locked, and nothing before', () => {
+    const results = { totals: { a: 40, b: 85, c: 0, d: 30 }, allIn: 1, teams: 6 }
+    render(slide({ dropResults: results })) // not locked yet: no totals leak
+    expect(container.textContent).not.toContain('85 pts')
+    render(slide({ dropLocked: true, dropResults: results }))
+    for (const t of ['40 pts', '85 pts', '0 pts', '30 pts']) expect(container.textContent).toContain(t)
+  })
+
   it('says so when no correct tile was set', () => {
     render(slide({ dropLocked: true, correctId: null }))
     expect(container.textContent).toContain('No correct tile was set')

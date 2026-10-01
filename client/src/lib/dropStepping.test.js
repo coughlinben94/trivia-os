@@ -39,7 +39,7 @@ describe('registry', () => {
   })
   it('unlock rewinds the drops and clears the stored results', () => {
     expect(unlockPatch('drop', dropSlide().data)).toEqual({
-      dropLocked: false, dropRevealed: false, dropStep: null, dropResults: null,
+      dropLocked: false, dropRevealed: false, dropStep: null, dropResults: null, dropSeed: null,
     })
   })
   it('refuses to lock with no correct tile set', () => {

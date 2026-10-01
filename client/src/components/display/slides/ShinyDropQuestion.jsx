@@ -75,6 +75,9 @@ export default function ShinyDropQuestion({ slide, show, theme }) {
   }, [show?.id, locked])
 
   const results = data.dropResults
+  // What the whole room put on each tile — aggregate only, shown from the lock
+  // on so the room sees where everyone went before the tiles start to fall.
+  const roomTotals = locked ? results?.totals : null
   const noAnswerSet = locked && !options.some(o => o.id === data.correctId)
 
   return (
@@ -92,6 +95,7 @@ export default function ShinyDropQuestion({ slide, show, theme }) {
             letter={String.fromCharCode(65 + i)}
             index={i}
             dropped={droppedIds.includes(opt.id)}
+            roomTotal={roomTotals?.[opt.id]}
             shiftPx={shifts[i] * pitch}
             winner={revealed && opt.id === data.correctId}
             theme={theme}
@@ -185,7 +189,7 @@ function AllInLine({ results }) {
 // a quick Prev/Next retargets mid-fall instead of restarting. A dropped tile
 // keeps its slot (it falls, it doesn't collapse), so the survivors never
 // shift sideways.
-function DropTile({ opt, letter, index, dropped, shiftPx, winner, theme, reduce }) {
+function DropTile({ opt, letter, index, dropped, roomTotal, shiftPx, winner, theme, reduce }) {
   const tilt = index % 2 === 0 ? -5 : 5
   return (
     <motion.div
@@ -232,6 +236,20 @@ function DropTile({ opt, letter, index, dropped, shiftPx, winner, theme, reduce 
               </span>
             )}
         </div>
+        {roomTotal != null && (
+          <span style={{
+            position: 'absolute', left: '50%', bottom: '1.1rem', zIndex: 2,
+            transform: 'translateX(-50%)', whiteSpace: 'nowrap',
+            padding: '0.35rem 1.1rem', borderRadius: 999,
+            background: winner ? SHINY_GOLD : 'rgba(0,0,0,0.6)',
+            color: winner ? '#1a1a1a' : `${theme.colors.text}e6`,
+            fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`, fontWeight: 700,
+            fontSize: 'clamp(1.2rem, 1.9vw, 2.2rem)', fontVariantNumeric: 'tabular-nums',
+            border: winner ? 'none' : `1px solid ${SHINY_GOLD}55`,
+          }}>
+            {roomTotal} pts
+          </span>
+        )}
         <span style={{
           position: 'absolute', top: '-1rem', left: '-1rem', zIndex: 2,
           display: 'flex', alignItems: 'center', justifyContent: 'center',

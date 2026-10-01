@@ -5,7 +5,7 @@ import { applyPhoneScoreUpdates } from './scoreboardMath.js'
 // question; points on any other option are lost. The submission must place
 // every point (the phone enforces it; scoring re-checks, since phone_answers
 // is client-written).
-export const DEFAULT_DROP_TOTAL = 30
+export const DEFAULT_DROP_TOTAL = 25
 
 // One tap on the phone moves this many points. 5 when it divides the total
 // (a 30-point pool is exactly 6 taps), else 1 so any total stays reachable.
@@ -37,10 +37,32 @@ export function scoreDropSubmission(alloc, correctId, optionIds, total) {
   return alloc[correctId] ?? 0
 }
 
-// The tiles that fall off the TV, in order: authored option order, correct
-// tile skipped. With no correct tile set every tile is a candidate.
+// Small seeded PRNG (mulberry32) so the same seed always shuffles the same
+// way on the TV, on phones and across Prev/Next — Math.random would not.
+function seededRandom(seed) {
+  let a = seed | 0
+  return () => {
+    a = (a + 0x6D2B79F5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+// The tiles that fall off the TV, in order. The correct tile is never in it.
+// With data.dropSeed (stamped at lock by LiveMode) the order is a seeded
+// shuffle, so the room can't read the answer off a left-to-right conveyor;
+// without one it is the authored order (nothing falls before a lock anyway).
+// With no correct tile set every tile is a candidate.
 export function dropSequence(data) {
-  return dropOptions(data).map(o => o.id).filter(id => id !== data?.correctId)
+  const wrong = dropOptions(data).map(o => o.id).filter(id => id !== data?.correctId)
+  if (data?.dropSeed == null) return wrong
+  const rand = seededRandom(Number(data.dropSeed))
+  for (let i = wrong.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1))
+    ;[wrong[i], wrong[j]] = [wrong[j], wrong[i]]
+  }
+  return wrong
 }
 
 export function dropStepCount(data) {

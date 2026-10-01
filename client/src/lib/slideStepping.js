@@ -385,7 +385,7 @@ export const PHONE_MECHANICS = {
   // flips true on the last drop so the re-entry/unlock logic treats a finished
   // drop like every other revealed mechanic. dropStep/dropResults are cleared
   // on fresh entry and on Unlock (rescoring rebuilds the results).
-  drop:     { guard: isDropShiny,     lockFields: ['dropLocked'], revealField: 'dropRevealed', clearFields: ['dropStep', 'dropResults'] },
+  drop:     { guard: isDropShiny,     lockFields: ['dropLocked'], revealField: 'dropRevealed', clearFields: ['dropStep', 'dropResults', 'dropSeed'] },
   huesCues: { guard: isHuesCuesShiny, lockFields: ['huesCuesLocked'], revealField: 'huesCuesRevealed' },
   pin:      { guard: isPinShiny,      lockFields: ['pinLocked'], revealField: 'pinRevealed', clearFields: ['pinRoomSize', 'pinResults'],
             // fresh entry only (withEntryState); Unlock keeps the host's override

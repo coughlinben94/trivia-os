@@ -58,6 +58,22 @@ describe('dropSequence / dropStepCount', () => {
     expect(dropSequence(data)).toEqual(['a', 'c', 'd'])
     expect(dropStepCount(data)).toBe(3)
   })
+  it('with a seed the order is a deterministic shuffle of the wrong tiles', () => {
+    const seeded = { ...data, dropSeed: 12345 }
+    const once = dropSequence(seeded)
+    expect([...once].sort()).toEqual(['a', 'c', 'd'])
+    expect(dropSequence(seeded)).toEqual(once) // same seed, same order, every call
+    expect(dropSequence({ ...seeded, correctId: 'a' }).includes('a')).toBe(false)
+  })
+  it('different seeds give different orders for at least some seeds, and never drop the correct tile', () => {
+    const orders = new Set()
+    for (let seed = 1; seed <= 40; seed++) {
+      const o = dropSequence({ ...data, dropSeed: seed })
+      expect(o).not.toContain('b')
+      orders.add(o.join(''))
+    }
+    expect(orders.size).toBeGreaterThan(3)
+  })
   it('with no correct tile every tile is a drop candidate', () => {
     expect(dropSequence({ ...data, correctId: null })).toEqual(['a', 'b', 'c', 'd'])
   })
@@ -108,7 +124,7 @@ describe('computeDropScoreUpdates', () => {
   })
 })
 
-it('default total is 30', () => expect(DEFAULT_DROP_TOTAL).toBe(30))
+it('default total is 25', () => expect(DEFAULT_DROP_TOTAL).toBe(25))
 
 describe('survivorShifts', () => {
   it('moves nothing while every tile is still up', () => {

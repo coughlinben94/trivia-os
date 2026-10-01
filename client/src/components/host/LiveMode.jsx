@@ -754,6 +754,10 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
           // revealed the moment it is scored.
           extraData: {
             dropResults: summarizeDrop(answers, optionIds, correctId, total),
+            // Stamped once, on the first lock: the fall order is a shuffle
+            // seeded from this, so retries and fix-correct keep it stable and
+            // an Unlock (which clears it) gives a fresh order next time.
+            dropSeed: slide.data.dropSeed ?? Math.floor(Math.random() * 2 ** 31),
             dropStep: slide.data.dropStep ?? 0,
             dropRevealed: dropStepCount(slide.data) === 0 ? true : !!slide.data.dropRevealed,
           },
