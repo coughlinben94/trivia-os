@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { JUKEBOX_LIBRARIES } from './jukeboxLibraries.js'
 import { supabase } from './supabase.js'
 
@@ -27,4 +28,15 @@ export async function fetchJukeboxLibraries() {
   } catch {
     return null
   }
+}
+
+// Host-side hook: fallback list first, swapped for the live list once fetched.
+export function useJukeboxLibraries() {
+  const [libs, setLibs] = useState(JUKEBOX_LIBRARIES)
+  useEffect(() => {
+    let alive = true
+    fetchJukeboxLibraries().then(l => { if (alive && l) setLibs(l) })
+    return () => { alive = false }
+  }, [])
+  return libs
 }

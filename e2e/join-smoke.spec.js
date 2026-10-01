@@ -39,10 +39,10 @@
  */
 
 import { test, expect } from '@playwright/test'
+import { SHOW_ID } from './constants.js'
 
 // show_fQtKIq7M no longer exists in the DB (2026-09-02) — was silently breaking
 // global-setup.js for every spec in this suite. show_NyRe6x2Q is real, verified.
-const SHOW_ID = process.env.PLAYWRIGHT_SHOW_ID || 'show_NyRe6x2Q'
 
 // Pinned to a specific real team, NOT the SHOW_ID above — the drawer regression test
 // needs a team that actually exists for the show it navigates to. If PLAYWRIGHT_SHOW_ID

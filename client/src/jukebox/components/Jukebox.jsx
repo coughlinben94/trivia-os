@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { searchTracks, logout } from '../lib/spotify'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../../lib/supabase.js'
+import { normalizeTeamName } from '../../lib/teamColors.js'
 import { slimTrack, slimSavedSong, songGain, songNeedsSlim, hasTrim, uid, totalSongs } from '../lib/track'
 import { shuffleArray, resolveNext, resolveUpcoming, buildSessionOrder } from '../lib/shuffle'
 import { loadPlayed, savePlayed } from '../lib/playedStore'
@@ -1237,7 +1238,7 @@ export default function Jukebox({ onLogout, initialLib, onExitToShow, ringMode =
     // Block duplicate names (case-insensitive) — covers 'Main Library' too,
     // since the default library is a real entry in sets.items.
     const duplicate = Object.values(sets.items).some(
-      s => s.name.trim().toLowerCase() === name.toLowerCase()
+      s => normalizeTeamName(s.name) === normalizeTeamName(name)
     )
     if (duplicate) {
       addToast(`A set named “${name}” already exists`)
