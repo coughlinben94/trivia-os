@@ -24,6 +24,12 @@ export function normalizeClip(c) {
       // null (never 0/undefined) so warm and claim agree on the pool key videoId:start:end
       end: Number.isFinite(c.end) && c.end > 0 ? c.end : null,
       volume: num(c.volume, 100),
+      // Out-point behavior for walkout songs (the player's own `end` is NOT used, so the pool
+      // key stays videoId:start:): 'end' (default), 'fade' (ramp to silence over fadeMs,
+      // finishing at outPoint, then stop) or 'loop' (seek back to start at outPoint).
+      outPoint: Number.isFinite(c.outPoint) && c.outPoint > 0 ? c.outPoint : null,
+      onOut: c.onOut === 'fade' || c.onOut === 'loop' ? c.onOut : 'end',
+      fadeMs: Number.isFinite(c.fadeMs) && c.fadeMs > 0 ? c.fadeMs : 2500,
       part,
     }
   }

@@ -252,6 +252,7 @@ export function createDirector(overrides = {}) {
       setRetry(fn) { retryImpl = fn },
       setOnEnded(fn) { onEndedImpl = fn },
       level: () => level,
+      setLevel(x, ms) { level = x; safe(levelImpl, x, ms) }, // the director's own fades (walkout out-points)
       setLevelImpl(fn) { levelImpl = fn },
       setGainImpl(fn) { gainImpl = fn },
       setOnPlaying(fn) { onPlayingImpl = fn },
@@ -469,7 +470,34 @@ export function createDirector(overrides = {}) {
       })
     }
 
-    ctl.setOnPlaying(armBackstop)
+    // Walkout out-points, polled every 250ms ONLY while sound is really playing (a blocked
+    // clip must not loop or fade silently). Without an outPoint the loaded duration is used;
+    // while duration is still 0 (not loaded, or embedding disabled) nothing happens, which is
+    // what stops an untrimmed clip from looping every tick.
+    let outTimer = null
+    const stopOutPoll = () => { if (outTimer != null) d.clearTimer(outTimer); outTimer = null }
+    const outTick = () => {
+      outTimer = null
+      if (!player) return
+      const t = safe(() => player.getCurrentTime?.()) ?? 0
+      const dur = safe(() => player.getDuration?.()) ?? 0
+      const out = clip.outPoint ?? (dur > 0 ? dur : Infinity)
+      if (out !== Infinity) {
+        if (clip.onOut === 'loop' && t >= out) safe(() => player.seekTo(clip.start, true))
+        else if (clip.onOut === 'fade' && t >= out - clip.fadeMs / 1000) {
+          // one-shot: the poll is not re-armed after this (the end timer below replaces it)
+          ctl.setLevel(0, clip.fadeMs)
+          outTimer = d.setTimer(() => ctl.ended(), clip.fadeMs + 100) // ended() parks (pauses) the player
+          return
+        }
+      }
+      outTimer = d.setTimer(outTick, 250)
+    }
+    const startOutPoll = () => {
+      if (clip.onOut === 'end' || outTimer != null) return
+      outTimer = d.setTimer(outTick, 250)
+    }
+    ctl.setOnPlaying(() => { armBackstop(); startOutPoll() })
     ctl.setLevelImpl((x, ms) => {
       if (rampTimer != null) d.clearTimer(rampTimer)
       rampTimer = null
@@ -490,6 +518,7 @@ export function createDirector(overrides = {}) {
     // takes no pool slot); release() is what destroys it.
     ctl.setStop(() => {
       live = false
+      stopOutPoll()
       if (rampTimer != null) d.clearTimer(rampTimer)
       rampTimer = null
       if (endTimer != null) d.clearTimer(endTimer)

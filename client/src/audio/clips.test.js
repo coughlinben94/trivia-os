@@ -18,12 +18,19 @@ describe('dbToGain', () => {
 describe('normalizeClip', () => {
   it('fills youtube defaults and keeps end null when absent or 0', () => {
     expect(normalizeClip({ kind: 'youtube', videoId: 'abc' })).toEqual({
-      kind: 'youtube', videoId: 'abc', start: 0, end: null, volume: 100, part: 0,
+      kind: 'youtube', videoId: 'abc', start: 0, end: null, volume: 100, outPoint: null, onOut: 'end', fadeMs: 2500, part: 0,
     })
     expect(normalizeClip({ kind: 'youtube', videoId: 'abc', start: 12.5, end: 0 }).end).toBeNull()
     expect(normalizeClip({ kind: 'youtube', videoId: 'abc', start: 10, end: 40, volume: 80, part: 2 })).toEqual({
-      kind: 'youtube', videoId: 'abc', start: 10, end: 40, volume: 80, part: 2,
+      kind: 'youtube', videoId: 'abc', start: 10, end: 40, volume: 80, outPoint: null, onOut: 'end', fadeMs: 2500, part: 2,
     })
+  })
+
+  it('keeps walkout out-point fields and drops junk', () => {
+    const c = normalizeClip({ kind: 'youtube', videoId: 'w', outPoint: 30, onOut: 'fade', fadeMs: 1800 })
+    expect([c.outPoint, c.onOut, c.fadeMs]).toEqual([30, 'fade', 1800])
+    const j = normalizeClip({ kind: 'youtube', videoId: 'w', outPoint: -4, onOut: 'explode', fadeMs: 0 })
+    expect([j.outPoint, j.onOut, j.fadeMs]).toEqual([null, 'end', 2500])
   })
 
   it('keeps a numeric loopTo and drops a junk one', () => {

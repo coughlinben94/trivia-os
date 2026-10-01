@@ -74,7 +74,7 @@ export class FakeElement {
 // A fake lib/youtubeWarmAudio.js. `yt.state` / `yt.muted` drive what every claimed
 // player reports; set yt.neverReady = true to model a YouTube API that never loads.
 export function fakeYoutube({ state = 1, muted = false } = {}) {
-  const yt = { state, muted, neverReady: false, claims: [] }
+  const yt = { state, muted, neverReady: false, claims: [], time: 0, duration: 0 }
   yt.warm = vi.fn()
   yt.claim = vi.fn((videoId, start, end) => {
     const player = {
@@ -85,6 +85,8 @@ export function fakeYoutube({ state = 1, muted = false } = {}) {
       pauseVideo: vi.fn(),
       getPlayerState: () => yt.state,
       isMuted: () => yt.muted,
+      getCurrentTime: () => yt.time,
+      getDuration: () => yt.duration,
     }
     const h = {
       videoId, start, end, player, destroyed: false, readyCbs: [], stateCb: null,

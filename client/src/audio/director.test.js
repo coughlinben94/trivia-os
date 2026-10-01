@@ -1037,4 +1037,120 @@ describe('review fixes (2026-10-01)', () => {
       expect(h.state).toBe('ended')
     })
   })
+
+  describe('YouTube out-points: fade and loop (plan 3)', () => {
+    const walk = extra => ({ kind: 'youtube', videoId: 'w', start: 10, volume: 100, ...extra })
+    const setup = () => {
+      const yt = fakeYoutube({ state: 1 })
+      const f = runningFakes({ youtube: yt })
+      const d = createDirector(f.deps)
+      return { yt, f, d, p: () => yt.claims[0].player }
+    }
+
+    it('onOut loop: at the out-point the player seeks back to the start and keeps playing', () => {
+      const { yt, d, p } = setup()
+      const h = d.play(walk({ outPoint: 30, onOut: 'loop' }), { slideId: 's' })
+      vi.advanceTimersByTime(2000) // sounding
+      const seeks = p().seekTo.mock.calls.length
+      yt.time = 29
+      vi.advanceTimersByTime(250)
+      expect(p().seekTo.mock.calls.length).toBe(seeks)
+      yt.time = 30.1
+      vi.advanceTimersByTime(250)
+      expect(p().seekTo.mock.calls.length).toBe(seeks + 1) // a NEW seek, not the initial one
+      expect(p().seekTo).toHaveBeenLastCalledWith(10, true)
+      expect(h.state).toBe('playing')
+    })
+
+    it('onOut fade: ramps to silence over fadeMs ending at the out-point, then pauses and ends', () => {
+      const { yt, d, p } = setup()
+      const h = d.play(walk({ outPoint: 30, onOut: 'fade', fadeMs: 2000 }), { slideId: 's' })
+      vi.advanceTimersByTime(2000)
+      yt.time = 27.9 // fade starts at outPoint - fadeMs = 28
+      vi.advanceTimersByTime(250)
+      expect(p().setVolume).toHaveBeenLastCalledWith(100)
+      yt.time = 28.1
+      vi.advanceTimersByTime(250)
+      vi.advanceTimersByTime(1000)
+      const mid = p().setVolume.mock.calls.at(-1)[0]
+      expect(mid).toBeGreaterThan(0)
+      expect(mid).toBeLessThan(100)
+      vi.advanceTimersByTime(1200)
+      expect(p().setVolume).toHaveBeenLastCalledWith(0)
+      expect(p().pauseVideo).toHaveBeenCalled()
+      expect(h.state).toBe('ended')
+    })
+
+    it('the fade starts once, not on every poll tick', () => {
+      const { yt, d, p } = setup()
+      d.play(walk({ outPoint: 30, onOut: 'fade', fadeMs: 2000 }), { slideId: 's' })
+      vi.advanceTimersByTime(2000)
+      yt.time = 29
+      vi.advanceTimersByTime(250)
+      const calls = p().setVolume.mock.calls.length
+      yt.time = 29.3
+      vi.advanceTimersByTime(250) // a second tick inside the fade window: no restart from full volume
+      const after = p().setVolume.mock.calls.slice(calls).map(c => c[0])
+      expect(after.every(v => v < 100)).toBe(true)
+    })
+
+    it('an untrimmed clip (duration not loaded yet: 0) never fades or loops early', () => {
+      const { yt, d, p } = setup()
+      const h = d.play(walk({ onOut: 'loop' }), { slideId: 's' }) // no outPoint
+      vi.advanceTimersByTime(2000)
+      const seeks = p().seekTo.mock.calls.length
+      yt.time = 5
+      yt.duration = 0
+      vi.advanceTimersByTime(1000)
+      expect(p().seekTo.mock.calls.length).toBe(seeks)
+      expect(h.state).toBe('playing')
+    })
+
+    it('with no outPoint the loaded duration is the out-point', () => {
+      const { yt, d, p } = setup()
+      d.play(walk({ onOut: 'loop' }), { slideId: 's' })
+      vi.advanceTimersByTime(2000)
+      const seeks = p().seekTo.mock.calls.length
+      yt.duration = 200
+      yt.time = 200.2
+      vi.advanceTimersByTime(250)
+      expect(p().seekTo.mock.calls.length).toBe(seeks + 1)
+      expect(p().seekTo).toHaveBeenLastCalledWith(10, true)
+    })
+
+    it('does not poll an out-point while the clip is blocked (silent)', () => {
+      const yt = fakeYoutube({ state: 1, muted: true })
+      const f = runningFakes({ youtube: yt })
+      const d = createDirector(f.deps)
+      d.play(walk({ outPoint: 30, onOut: 'loop' }), { slideId: 's' })
+      vi.advanceTimersByTime(2100) // blocked
+      const seeks = yt.claims[0].player.seekTo.mock.calls.length
+      yt.time = 31
+      vi.advanceTimersByTime(1000)
+      expect(yt.claims[0].player.seekTo.mock.calls.length).toBe(seeks)
+    })
+
+    it('stop() ends the out-point polling', () => {
+      const { d } = setup()
+      const h = d.play(walk({ outPoint: 30, onOut: 'loop' }), { slideId: 's' })
+      vi.advanceTimersByTime(2000)
+      h.stop()
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('a walkout clip has no player end: warm and claim share the key videoId:start:', () => {
+      const { yt, d } = setup()
+      d.warm(walk({ outPoint: 30, onOut: 'fade', fadeMs: 2500 }))
+      d.play(walk({ outPoint: 30, onOut: 'fade', fadeMs: 2500 }), { slideId: 's' })
+      expect(yt.warm).toHaveBeenCalledWith('w', 10, null)
+      expect(yt.claim).toHaveBeenCalledWith('w', 10, null)
+    })
+
+    it('onOut defaults to end: today\'s behavior, no polling at all', () => {
+      const { d } = setup()
+      d.play(walk({}), { slideId: 's' })
+      vi.advanceTimersByTime(2000)
+      expect(vi.getTimerCount()).toBe(0)
+    })
+  })
 })
