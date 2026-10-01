@@ -769,7 +769,10 @@ async function selftest() {
 // ---------------------------------------------------------------- main
 const CMDS = { 'probe-api': probeApi, safebox, census, perf, 'covered-cut': coveredCut, 'reduced-motion': reducedMotion, strobe, selftest }
 const cmd = process.argv[2]
-const run = cmd === 'all' ? ['probe-api', 'safebox', 'census', 'perf', 'covered-cut', 'reduced-motion', 'strobe'] : [cmd]
+// strobe is OFF in `all` (Ben, 2026-10-01: "turn it off for now"): the forest fails it with 7 dark layers (worst 8.57 px/frame,
+// Michelson 0.287) and he will judge it by eye on the real TV. Still runnable on its own: `strobe [--walk A>B]`; selftest still
+// proves the gate itself works. Put 'strobe' back here when the decision is made.
+const run = cmd === 'all' ? ['probe-api', 'safebox', 'census', 'perf', 'covered-cut', 'reduced-motion'] : [cmd]
 if (!run.every(c => CMDS[c])) { console.error('usage: node scripts/forest-verify.mjs probe-api|safebox|census [--freeze-baseline]|perf|covered-cut|reduced-motion|strobe [--walk A>B]|all|selftest'); process.exit(2) }
 let code = 0
 try {
