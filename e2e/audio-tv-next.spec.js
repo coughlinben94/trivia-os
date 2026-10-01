@@ -30,10 +30,18 @@ const slides = [
     data: { text: 'e2e audio question', answer: 'x', mediaUrl: '/drum-roll.mp3', mediaType: 'audio/mpeg', audioTrigger: 'click' },
   },
   { id: 'q2', type: 'title', order: 2, data: { title: 'e2e end' } },
+  // Multi-part audio series: ONE slide.id for all three parts.
+  {
+    id: 'm1', type: 'question', order: 3,
+    data: {
+      isShiny: true, shinyType: 'audio', introDone: true, currentPart: 0,
+      parts: [0, 1, 2].map(n => ({ text: `part ${n}`, answer: `a${n}`, mediaSlots: [{ type: 'audio/mpeg', url: '/drum-roll.mp3' }] })),
+    },
+  },
 ]
 
 async function row() {
-  const { data, error } = await sb.from('shows').select('current_slide_id, audio_playing').eq('id', ID).single()
+  const { data, error } = await sb.from('shows').select('current_slide_id, audio_playing, slides').eq('id', ID).single()
   if (error) throw new Error(error.message)
   return data
 }
@@ -47,9 +55,12 @@ async function waitFor(pred, ms = 8000, label = 'condition') {
   }
   throw new Error(`timed out waiting for ${label}; last row = ${JSON.stringify(last)}`)
 }
-const reset = (slideId, audio_playing = null) => {
+const partNow = r => r.slides.find(s => s.id === 'm1').data.currentPart ?? 0
+const reset = async (slideId, audio_playing = null) => {
   const i = slides.findIndex(s => s.id === slideId)
-  return updateShowVerified(sb, ID, { current_slide_id: slideId, current_slide_index: i, audio_playing })
+  // a series always starts at part 0 on a fresh run
+  const fresh = slides.map(s => s.id === 'm1' ? { ...s, data: { ...s.data, currentPart: 0 } } : s)
+  return updateShowVerified(sb, ID, { slides: fresh, current_slide_id: slideId, current_slide_index: i, audio_playing })
 }
 const audioState = page => page.evaluate(() => {
   const a = document.querySelector('audio')
@@ -146,4 +157,51 @@ test('7 a play started from the host side is not replayed by a TV Next (advances
   await openTv(page)
   await page.keyboard.press('ArrowRight')
   await waitFor(x => x.current_slide_id === 'q2', 8000, 'advance')
+})
+
+test('8 multi-part series: Next plays part 0, steps to part 1, PLAYS part 1, steps to part 2, plays it, then stays on the last one', async ({ page }) => {
+  await reset('m1')
+  await openTv(page)
+  await expect(page.locator('audio')).toHaveCount(1, { timeout: 8000 })
+
+  await page.keyboard.press('ArrowRight') // plays part 0
+  let r = await waitFor(x => x.audio_playing?.slideId === 'm1' && (x.audio_playing.part ?? 0) === 0, 8000, 'play part 0')
+  expect(partNow(r)).toBe(0)
+  await expect.poll(async () => (await audioState(page)).paused, { timeout: 8000 }).toBe(false)
+
+  await page.waitForTimeout(500)
+  await page.keyboard.press('ArrowRight') // steps to part 1, mark kept, audio stops
+  r = await waitFor(x => partNow(x) === 1, 8000, 'step to part 1')
+  expect(r.current_slide_id).toBe('m1')
+  expect(r.audio_playing).toMatchObject({ slideId: 'm1', part: 0 })
+  await expect.poll(async () => (await audioState(page)).paused, { timeout: 5000 }).toBe(true)
+
+  await page.waitForTimeout(500)
+  await page.keyboard.press('ArrowRight') // THE FIX: plays part 1, no click on the TV
+  r = await waitFor(x => x.audio_playing?.part === 1, 8000, 'play part 1')
+  expect(partNow(r)).toBe(1)
+  await expect.poll(async () => (await audioState(page)).paused, { timeout: 8000 }).toBe(false)
+
+  await page.waitForTimeout(500)
+  await page.keyboard.press('ArrowRight') // step to part 2
+  await waitFor(x => partNow(x) === 2, 8000, 'step to part 2')
+  await page.waitForTimeout(500)
+  await page.keyboard.press('ArrowRight') // play part 2
+  await waitFor(x => x.audio_playing?.part === 2, 8000, 'play part 2')
+  await expect.poll(async () => (await audioState(page)).paused, { timeout: 8000 }).toBe(false)
+  await page.waitForTimeout(500)
+  await page.keyboard.press('ArrowRight') // last part played: leaves the slide (nothing after it -> stays)
+  r = await row()
+  console.log('[e2e] after the last part played, Next ->', JSON.stringify({ slide: r.current_slide_id, part: partNow(r), mark: r.audio_playing }))
+})
+
+test('9 multi-part series: ArrowLeft back to an earlier part does not autoplay it', async ({ page }) => {
+  await reset('m1', { slideId: 'm1', playing: true, part: 1 })
+  await updateShowVerified(sb, ID, { slides: slides.map(s => s.id === 'm1' ? { ...s, data: { ...s.data, currentPart: 1 } } : s) })
+  await openTv(page)
+  await expect(page.locator('audio')).toHaveCount(1, { timeout: 8000 })
+  await page.keyboard.press('ArrowLeft')
+  await waitFor(x => partNow(x) === 0, 8000, 'back to part 0')
+  await page.waitForTimeout(1500)
+  expect((await audioState(page)).paused).toBe(true)
 })

@@ -6,6 +6,16 @@
 import { resolveShinyPart, isAudioShiny, isBendleShiny } from './shinySeries.js'
 import { computeNextStep, computePrevStep } from './slideStepping.js'
 
+// Which part of a multi-part series is current (0 for everything else),
+// clamped the same way resolveShinyPart clamps it. A series keeps ONE slide.id
+// across all its parts, so a mark naming only the slide could not say WHICH
+// part had played: Next played part 0 and parts 1..N needed a click on the TV.
+export function audioPartOf(data) {
+  const n = Array.isArray(data?.parts) ? data.parts.length : 0
+  if (n === 0) return 0
+  return Math.min(Math.max(data.currentPart ?? 0, 0), n - 1)
+}
+
 // True when the next Next press should PLAY this slide's clip instead of
 // advancing. Checked off show.audio_playing itself, not local state, so it
 // reads the same no matter which window's press fired it.
@@ -27,7 +37,9 @@ export function audioPlayPending(slide, audioPlaying) {
   const part = resolveShinyPart(data)
   const hasAudio = !!part.youtubeId || (!!part.mediaUrl && String(part.mediaType ?? '').startsWith('audio'))
   if (!hasAudio) return false
-  return audioPlaying?.slideId !== slide.id
+  // Owes the clip unless THIS part already played. A mark with no part (older
+  // writers) means part 0.
+  return audioPlaying?.slideId !== slide.id || (audioPlaying.part ?? 0) !== audioPartOf(data)
 }
 
 // What /display's own Next should do on a raw `shows` row: when the current
@@ -36,7 +48,7 @@ export function audioPlayPending(slide, audioPlaying) {
 export function tvAudioStepPatch(showRow) {
   const slide = showRow?.slides?.find?.(s => s.id === showRow.current_slide_id)
   if (!audioPlayPending(slide, showRow?.audio_playing)) return null
-  return { audio_playing: { slideId: slide.id, playing: true } }
+  return { audio_playing: { slideId: slide.id, playing: true, part: audioPartOf(slide.data) } }
 }
 
 // A slide change must leave audio_playing either matching the new slide or

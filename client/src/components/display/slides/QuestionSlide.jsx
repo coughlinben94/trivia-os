@@ -1,3 +1,4 @@
+import { audioPartOf } from '../../../lib/audioPending.js'
 import { Fragment, useState, useRef, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
@@ -821,6 +822,11 @@ function ShinyAudioQuestion({ slide, show, theme, isPreview }) {
     if (isPreview) return
     const ap = show?.audio_playing
     if (ap?.slideId !== slide.id || !ap?.playing) return
+    // A series keeps one slide.id across its parts: only the part the mark
+    // names plays. A stale mark for another part must not autoplay on arrival.
+    // data.currentPart is read at run time, NOT a dependency — a part step
+    // alone never replays; only a fresh mark does.
+    if ((ap.part ?? 0) !== audioPartOf(data)) return
     if (isYoutubeSource) setPlaying(true)
     else if (audioRef.current) playWithGain().catch(() => {})
   }, [show?.audio_playing, slide.id, isYoutubeSource, isPreview])

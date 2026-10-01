@@ -3,7 +3,7 @@
 // the /display window stepped past an audio question with no sound (confirmed
 // live 2026-08-24 for the team-picker; the prime suspect for 2026-09-29).
 import { describe, it, expect } from 'vitest'
-import { audioPlayPending, tvAudioStepPatch, computeTvNextStep, computeTvPrevStep, withAudioReset } from './audioPending.js'
+import { audioPlayPending, tvAudioStepPatch, computeTvNextStep, computeTvPrevStep, withAudioReset, audioPartOf } from './audioPending.js'
 
 const yt = (over = {}) => ({
   id: 'q1',
@@ -62,7 +62,7 @@ describe('tvAudioStepPatch', () => {
   })
 
   it('returns the audio_playing write instead of a step when audio is pending', () => {
-    expect(tvAudioStepPatch(row(yt()))).toEqual({ audio_playing: { slideId: 'q1', playing: true } })
+    expect(tvAudioStepPatch(row(yt()))).toEqual({ audio_playing: { slideId: 'q1', playing: true, part: 0 } })
   })
 
   it('returns null (plain step) when the clip already played', () => {
@@ -91,7 +91,7 @@ describe('computeTvNextStep (what /display Next does on a raw shows row)', () =>
 
   it('plays the clip and does NOT advance when the current slide owes its audio', async () => {
     const patch = await computeTvNextStep(at(1), noTeams)
-    expect(patch).toEqual({ audio_playing: { slideId: 'q1', playing: true } })
+    expect(patch).toEqual({ audio_playing: { slideId: 'q1', playing: true, part: 0 } })
     expect(patch.current_slide_index).toBeUndefined()
     expect(patch.current_slide_id).toBeUndefined()
   })
@@ -145,6 +145,63 @@ describe('TV step clears a stale audio mark when it leaves the slide', () => {
   })
 })
 
+// Multi-part audio series (2026-10-01): a series keeps ONE slide.id across its
+// parts, so a slide-id-only mark meant Next played part 0 and parts 1..N needed
+// a click on the TV (audit finding; confirmed in code). The mark now carries
+// the part it played, and a part step leaves the slide "owing" its next clip.
+describe('multi-part audio series', () => {
+  const part = n => ({ text: `p${n}`, mediaSlots: [{ type: 'audio/mpeg', url: `/p${n}.mp3` }] })
+  const series = (currentPart = 0, parts = [part(0), part(1), part(2)]) => ({
+    id: 's1', type: 'question', data: { isShiny: true, shinyType: 'audio', parts, currentPart },
+  })
+
+  it('audioPartOf: 0 for single-part slides, currentPart for series, clamped', () => {
+    expect(audioPartOf({})).toBe(0)
+    expect(audioPartOf({ parts: [part(0)] })).toBe(0)
+    expect(audioPartOf(series(2).data)).toBe(2)
+    expect(audioPartOf(series(9).data)).toBe(2)
+    expect(audioPartOf(series(-3).data)).toBe(0)
+  })
+
+  it('a played part 0 does not cover part 1: Next owes the next clip', () => {
+    const mark0 = { slideId: 's1', playing: true, part: 0 }
+    expect(audioPlayPending(series(0), mark0)).toBe(false)
+    expect(audioPlayPending(series(1), mark0)).toBe(true)
+    expect(audioPlayPending(series(1), { slideId: 's1', playing: true, part: 1 })).toBe(false)
+  })
+
+  it('a mark without a part (older writers) means part 0', () => {
+    expect(audioPlayPending(series(0), { slideId: 's1', playing: true })).toBe(false)
+    expect(audioPlayPending(series(1), { slideId: 's1', playing: true })).toBe(true)
+  })
+
+  it('stepping back to an earlier part owes its clip again', () => {
+    expect(audioPlayPending(series(0), { slideId: 's1', playing: true, part: 1 })).toBe(true)
+  })
+
+  it('a part with no audio of its own is not pending', () => {
+    const mixed = series(1, [part(0), { text: 'silent' }, part(2)])
+    expect(audioPlayPending(mixed, { slideId: 's1', playing: true, part: 0 })).toBe(false)
+  })
+
+  it('TV Next: play p0, step to p1 (mark kept), play p1, step to p2', async () => {
+    const mk = (cp, ap) => ({
+      id: 'sh', current_slide_index: 0, current_slide_id: 's1', audio_playing: ap,
+      slides: [{ ...series(cp), order: 0 }, { id: 'end', type: 'title', order: 1, data: {} }],
+    })
+    const noTeams = async () => 0
+    let p = await computeTvNextStep(mk(0, null), noTeams)
+    expect(p).toEqual({ audio_playing: { slideId: 's1', playing: true, part: 0 } })
+    p = await computeTvNextStep(mk(0, { slideId: 's1', playing: true, part: 0 }), noTeams)
+    expect(p.slides.find(s => s.id === 's1').data.currentPart).toBe(1)
+    expect(p.audio_playing).toBeUndefined() // a part step keeps the mark; the slide did not change
+    p = await computeTvNextStep(mk(1, { slideId: 's1', playing: true, part: 0 }), noTeams)
+    expect(p).toEqual({ audio_playing: { slideId: 's1', playing: true, part: 1 } })
+    p = await computeTvNextStep(mk(1, { slideId: 's1', playing: true, part: 1 }), noTeams)
+    expect(p.slides.find(s => s.id === 's1').data.currentPart).toBe(2)
+  })
+})
+
 // Wiring guard: stepShow lives inside Display.jsx (a 2000-line view with no
 // test harness), so a revert to the ungated computeNextStep there would pass
 // every pure test above. These read the source so that revert fails loudly.
@@ -157,6 +214,9 @@ describe('wiring (source guards)', () => {
     expect(display).toMatch(/await computeTvPrevStep\(showRow, fetchTeamCount\)/)
     expect(display).not.toMatch(/await computeNextStep\(/)
     expect(display).not.toMatch(/await computePrevStep\(/)
+  })
+  it('/host writes the part with its play mark', () => {
+    expect(live).toMatch(/part: audioPartOf\(currentSlide\.data\)/)
   })
   it('/host uses the shared gate, not a private copy', () => {
     expect(live).toMatch(/audioPlayPendingFor\(currentSlide, show\.audio_playing\)/)

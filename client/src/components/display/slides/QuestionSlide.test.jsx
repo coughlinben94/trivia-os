@@ -365,4 +365,39 @@ describe('<QuestionSlide> — shiny audio question, remote play via show.audio_p
 
     expect(mediaPlay).not.toHaveBeenCalled()
   })
+
+  // Multi-part series: one slide.id for every part, so the mark names the part.
+  describe('multi-part series — the mark names the part it plays', () => {
+    const part = n => ({ text: `p${n}`, mediaSlots: [{ type: 'audio/mpeg', url: `https://example.test/p${n}.mp3` }] })
+    const series = currentPart => shinySlide({ parts: [part(0), part(1), part(2)], currentPart })
+
+    it('plays the current part when the mark names that part', () => {
+      const slide = series(1)
+      render(slide, { slides: [slide], audio_playing: { slideId: 'shiny-1', playing: true, part: 1 } })
+      expect(mediaPlay).toHaveBeenCalled()
+    })
+
+    it('does NOT autoplay on arrival when the mark is for a different part', () => {
+      const slide = series(0)
+      render(slide, { slides: [slide], audio_playing: { slideId: 'shiny-1', playing: true, part: 1 } })
+      expect(mediaPlay).not.toHaveBeenCalled()
+    })
+
+    it('a mark without a part (older writers) still plays part 0', () => {
+      const slide = series(0)
+      render(slide, { slides: [slide], audio_playing: { slideId: 'shiny-1', playing: true } })
+      expect(mediaPlay).toHaveBeenCalled()
+    })
+
+    it('a new mark for the next part plays it without remounting', () => {
+      const s0 = series(0)
+      render(s0, { slides: [s0], audio_playing: { slideId: 'shiny-1', playing: true, part: 0 } })
+      expect(mediaPlay).toHaveBeenCalledTimes(1)
+      const s1 = series(1)
+      render(s1, { slides: [s1], audio_playing: { slideId: 'shiny-1', playing: true, part: 0 } })
+      expect(mediaPlay).toHaveBeenCalledTimes(1) // the part step alone must not replay
+      render(s1, { slides: [s1], audio_playing: { slideId: 'shiny-1', playing: true, part: 1 } })
+      expect(mediaPlay).toHaveBeenCalledTimes(2)
+    })
+  })
 })

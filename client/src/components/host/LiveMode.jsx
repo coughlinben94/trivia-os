@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { getTheme, THEMES } from '../../themes/index.js'
 import { resolveShinyPart } from '../../lib/shinySeries.js'
-import { audioPlayPending as audioPlayPendingFor } from '../../lib/audioPending.js'
+import { audioPlayPending as audioPlayPendingFor, audioPartOf } from '../../lib/audioPending.js'
 import ScorePanel from './ScorePanel.jsx'
 import FocusWarning from './FocusWarning.jsx'
 import LateTeamPopover from './LateTeamPopover.jsx'
@@ -1433,7 +1433,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     switch (plan.run) {
       case 'start-lock-countdown': startLockCountdown(plan.phase); break
       case 'play-audio':
-        guardNav(() => actions.setAudioPlaying({ slideId: currentSlide.id, playing: true }))
+        guardNav(() => actions.setAudioPlaying({ slideId: currentSlide.id, playing: true, part: audioPartOf(currentSlide.data) }))
         break
       case 'hide-answer-then-next':
         actions.setAnswerReveal(false)
