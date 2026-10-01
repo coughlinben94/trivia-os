@@ -33,6 +33,7 @@
 // prediction anyone makes); a claim removes the entry from the pool, so a
 // long show never accumulates iframes.
 
+import * as Sentry from '@sentry/react'
 import { loadYoutubeIframeApi } from '../components/host/YoutubeClipEditor.jsx'
 
 const POOL_CAP = 2
@@ -50,6 +51,29 @@ const CLAIM_READY_TIMEOUT_MS = 1500
 
 const keyOf = (videoId, start, end) => `${videoId}:${start ?? 0}:${end ?? ''}`
 
+// Fail loud (2026-10-01, audio pipeline spec): every stall or cold rebuild
+// leaves a Sentry trail tagged area:audio — the 2026-09-29 "Next did not
+// start sound" night left none. Once per distinct problem per clip per page
+// load, however many times a slide remounts; the console logs every time.
+const reported = new Set()
+function report(message, videoId, start, end, level, more) {
+  console.warn(`[youtube audio] ${message}`, { videoId, start, end, ...more })
+  const key = `${message}|${keyOf(videoId, start, end)}`
+  if (reported.has(key)) return
+  reported.add(key)
+  try {
+    Sentry.captureMessage(`youtube audio: ${message}`, { level, tags: { area: 'audio' }, extra: { videoId, start, end, ...more } })
+  } catch { /* never let telemetry break the show */ }
+}
+
+// A real browser never rejects loadYoutubeIframeApi() (a blocked script just
+// hangs forever), so the claim timeout below is the stall signal that
+// actually fires in production; the rejection branch only covers a missing
+// window. The cold rebuild reuses the same hung promise, so it gets its own
+// last-chance check (REBUILD_GRACE_MS) instead of going quiet after one
+// warning that reads like a recovery.
+const REBUILD_GRACE_MS = 3000
+
 function createEntry(videoId, start, end) {
   const container = document.createElement('div')
   container.style.cssText =
@@ -58,6 +82,7 @@ function createEntry(videoId, start, end) {
 
   const entry = {
     key: keyOf(videoId, start, end),
+    _container: container, // the CURRENT hidden holder — a cold rebuild swaps it, destroy() must remove whichever is live
     claimed: false,
     destroyed: false,
     _player: null, // set once onReady has fired — the only time it's safe to drive
@@ -86,9 +111,15 @@ function createEntry(videoId, start, end) {
     _armReadyTimeout() {
       this._readyTimer = setTimeout(() => {
         if (this.destroyed || this._player) return
+        report('claim timeout, rebuilding cold', videoId, start, end, 'warning', { wasWarm: this.wasWarm })
         try { this._player?.destroy() } catch { /* never got that far */ }
         if (container.parentNode) container.parentNode.removeChild(container)
-        buildPlayer(this, videoId, start, end, freshContainer())
+        this._container = freshContainer()
+        buildPlayer(this, videoId, start, end, this._container)
+        this._readyTimer = setTimeout(() => {
+          if (this.destroyed || this._player) return
+          report('still not ready after cold rebuild', videoId, start, end, 'error', { wasWarm: this.wasWarm })
+        }, REBUILD_GRACE_MS)
       }, CLAIM_READY_TIMEOUT_MS)
     },
     destroy() {
@@ -101,7 +132,8 @@ function createEntry(videoId, start, end) {
       try { this._player?.destroy() } catch { /* already gone */ }
       this._player = null
       this._readyCbs = []
-      if (container.parentNode) container.parentNode.removeChild(container)
+      const live = this._container
+      if (live?.parentNode) live.parentNode.removeChild(live)
     },
   }
 
@@ -169,7 +201,9 @@ function buildPlayer(entry, videoId, start, end, container) {
   }).catch(() => {
     // API load failed — the ready-timeout (armed only once claimed) is what
     // actually recovers this; an unclaimed warm attempt just stays stuck
-    // until evicted, which is fine, nothing is waiting on it.
+    // until evicted, which is fine, nothing is waiting on it. Only a claimed
+    // clip has a listener waiting, so only that one is worth a Sentry event.
+    if (entry.claimed && !entry.destroyed) report('iframe api failed to load', videoId, start, end, 'error')
   })
 }
 
@@ -193,8 +227,10 @@ export function warmYoutubeAudio(videoId, start, end) {
 export function claimYoutubeAudio(videoId, start, end) {
   const key = keyOf(videoId, start, end)
   let entry = pool.get(key)
+  const wasWarm = !!entry
   if (entry) pool.delete(key)
   else entry = createEntry(videoId, start, end)
+  entry.wasWarm = wasWarm
   entry.claimed = true
   claimedKeys.add(key)
   if (!entry._player) entry._armReadyTimeout()

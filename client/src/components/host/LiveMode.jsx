@@ -2,7 +2,8 @@ import { useEffect, useCallback, useState, useRef, useReducer } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { getTheme, THEMES } from '../../themes/index.js'
-import { resolveShinyPart, isAudioShiny, isBendleShiny } from '../../lib/shinySeries.js'
+import { resolveShinyPart } from '../../lib/shinySeries.js'
+import { audioPlayPending as audioPlayPendingFor, audioPartOf } from '../../lib/audioPending.js'
 import ScorePanel from './ScorePanel.jsx'
 import FocusWarning from './FocusWarning.jsx'
 import LateTeamPopover from './LateTeamPopover.jsx'
@@ -1114,27 +1115,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // True when the next press should play the clip; runHostCommand then
   // bails instead of advancing.
   function audioPlayPending() {
-    if (!currentSlide || currentSlide.type !== 'question') return false
-    // Bendle's audio isn't mediaUrl-shaped (it's a Tone.js stem mix keyed
-    // by bendleSongId) — resolveShinyPart/hasAudio below don't apply to
-    // it, so it's handled as its own branch ahead of the generic checks.
-    if (isBendleShiny(currentSlide.data)) {
-      return show.audio_playing?.slideId !== currentSlide.id
-    }
-    if (currentSlide.data?.isShiny) {
-      // A shiny audio question (2026-09-01, P1 live, Round 2's "One Hit
-      // Unwonder": "hitting next skips to next question, doesnt play
-      // audio"). No introDone gate any more: the announce card is its own
-      // `shiny-title` slide, so a shiny content slide shows its content from
-      // its first frame and the first Next on it is the play press.
-      if (!isAudioShiny(currentSlide.data)) return false
-    } else if ((currentSlide.data?.audioTrigger ?? 'click') !== 'click') {
-      return false
-    }
-    const part = resolveShinyPart(currentSlide.data)
-    const hasAudio = !!part.youtubeId || (!!part.mediaUrl && String(part.mediaType ?? '').startsWith('audio'))
-    if (!hasAudio) return false
-    return show.audio_playing?.slideId !== currentSlide.id
+    return audioPlayPendingFor(currentSlide, show.audio_playing)
   }
 
   // The A press, for a phone-scored question that's locked but still holding
@@ -1452,7 +1433,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     switch (plan.run) {
       case 'start-lock-countdown': startLockCountdown(plan.phase); break
       case 'play-audio':
-        guardNav(() => actions.setAudioPlaying({ slideId: currentSlide.id, playing: true }))
+        guardNav(() => actions.setAudioPlaying({ slideId: currentSlide.id, playing: true, part: audioPartOf(currentSlide.data) }))
         break
       case 'hide-answer-then-next':
         actions.setAnswerReveal(false)

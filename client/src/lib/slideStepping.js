@@ -21,7 +21,7 @@
 // Callers own the write + their own local-state update; nothing here
 // touches the network or React.
 
-import { isMatchingShiny, isWagerShiny, isOrderShiny, isChoiceShiny, isHuesCuesShiny, isPinShiny, isMovieChainShiny, isConcurrentShiny, isConcurrentMediaShiny } from './shinySeries.js'
+import { isMatchingShiny, isWagerShiny, isOrderShiny, isChoiceShiny, isHuesCuesShiny, isPinShiny, isMovieChainShiny, isConcurrentShiny, isConcurrentMediaShiny, audioMarkForPart } from './shinySeries.js'
 
 // Chunks `parts` into fixed-size reveal groups of `groupSize`, in authored
 // order — the single implementation both revealStepCount's Next/Prev step
@@ -491,6 +491,15 @@ export function unlockPatch(mechanicKey, data) {
  * One Next press. `show` is { slides, currentSlideIndex, currentSlideId }.
  * Returns a shows-row patch, or null when the press is a no-op.
  */
+// A part step of a multi-part series: move currentPart and, for an audio series
+// whose new part has a clip, write the audio_playing mark for it so the part
+// plays on arrival (see audioMarkForPart for why this is explicit now).
+function partStepPatch(slides, curSlide, newPart) {
+  const newSlides = patchSlideData(slides, curSlide.id, { currentPart: newPart })
+  const mark = audioMarkForPart(curSlide.id, newSlides.find(s => s.id === curSlide.id)?.data)
+  return { slides: newSlides, answer_reveal: false, ...(mark ? { audio_playing: mark } : {}) }
+}
+
 export async function computeNextStep(show, fetchTeamCount) {
   const slides = show?.slides ?? []
   const sorted = sortSlides(slides)
@@ -547,7 +556,7 @@ export async function computeNextStep(show, fetchTeamCount) {
   if (isMultiPart) {
     const curPart = data.currentPart ?? 0
     if (curPart < stepCount - 1) {
-      return { slides: patchSlideData(slides, curSlide.id, { currentPart: curPart + 1 }), answer_reveal: false }
+      return partStepPatch(slides, curSlide, curPart + 1)
     }
   }
   // Last part reached (or no parts at all) — advance to the next slide.
@@ -605,7 +614,7 @@ export async function computePrevStep(show, fetchTeamCount) {
   if (Array.isArray(parts) && stepCountBack > 1) {
     const curPart = data.currentPart ?? 0
     if (curPart > 0) {
-      return { slides: patchSlideData(slides, curSlide.id, { currentPart: curPart - 1 }), answer_reveal: false }
+      return partStepPatch(slides, curSlide, curPart - 1)
     }
   }
 
