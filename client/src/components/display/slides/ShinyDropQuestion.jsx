@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../../lib/supabase.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { fitToBox, SHINY_CHOICE_Q_BOX } from '../../../lib/autoFitText.js'
-import { dropOptions, dropSequence } from '../../../lib/dropScoring.js'
+import { dropOptions, dropSequence, survivorShifts } from '../../../lib/dropScoring.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 import ShinySignal from '../ShinySignal.jsx'
 
@@ -25,6 +25,29 @@ export default function ShinyDropQuestion({ slide, show, theme }) {
   const step = locked ? (data.dropStep ?? 0) : 0
   const droppedIds = useMemo(() => dropSequence(data).slice(0, step), [data, step])
   const reduce = useReducedMotion()
+
+  // Survivors close up into a centred row. The shift is in tile pitches; the
+  // pitch (tile width + gap) is measured off the live row so it stays right at
+  // any TV size, and 0 until measured, so nothing moves before it is known.
+  const rowRef = useRef(null)
+  const [pitch, setPitch] = useState(0)
+  useLayoutEffect(() => {
+    const row = rowRef.current
+    if (!row) return
+    const measure = () => {
+      const [a, b] = row.children
+      if (a && b) setPitch(b.offsetLeft - a.offsetLeft)
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return undefined // jsdom
+    const ro = new ResizeObserver(measure)
+    ro.observe(row)
+    return () => ro.disconnect()
+  }, [options.length])
+  const shifts = useMemo(
+    () => survivorShifts(options.map(o => droppedIds.includes(o.id))),
+    [options, droppedIds]
+  )
 
   const [submittedCount, setSubmittedCount] = useState(0)
   const [teamCount, setTeamCount] = useState(0)
@@ -58,7 +81,7 @@ export default function ShinyDropQuestion({ slide, show, theme }) {
     <div className="w-full h-full relative overflow-hidden flex flex-col items-center justify-center gap-8 px-12 py-12" style={{ background: theme.colors.shinyBg }}>
       <ShinySignal />
       <QuestionText text={data.text} theme={theme} />
-      <div style={{
+      <div ref={rowRef} style={{
         display: 'flex', gap: '1.6vw', width: '100%', maxWidth: 1500,
         flex: '1 1 0', minHeight: 0, alignItems: 'stretch', justifyContent: 'center',
       }}>
@@ -69,6 +92,7 @@ export default function ShinyDropQuestion({ slide, show, theme }) {
             letter={String.fromCharCode(65 + i)}
             index={i}
             dropped={droppedIds.includes(opt.id)}
+            shiftPx={shifts[i] * pitch}
             winner={revealed && opt.id === data.correctId}
             theme={theme}
             reduce={reduce}
@@ -161,7 +185,7 @@ function AllInLine({ results }) {
 // a quick Prev/Next retargets mid-fall instead of restarting. A dropped tile
 // keeps its slot (it falls, it doesn't collapse), so the survivors never
 // shift sideways.
-function DropTile({ opt, letter, index, dropped, winner, theme, reduce }) {
+function DropTile({ opt, letter, index, dropped, shiftPx, winner, theme, reduce }) {
   const tilt = index % 2 === 0 ? -5 : 5
   return (
     <motion.div
@@ -172,6 +196,13 @@ function DropTile({ opt, letter, index, dropped, winner, theme, reduce }) {
         : { type: 'spring', duration: 0.55, bounce: 0.22, delay: index * 0.12 }}
       style={{ flex: '1 1 0', minWidth: 0, maxWidth: 400, display: 'flex' }}
     >
+      <div style={{
+        display: 'flex', width: '100%',
+        // Survivors slide to the middle AFTER the fall has started clearing
+        // the row (450ms lead). Under reduced motion they just re-centre, no travel.
+        transform: shiftPx ? `translateX(${shiftPx}px)` : 'none',
+        transition: reduce ? 'none' : 'transform 650ms cubic-bezier(0.23, 1, 0.32, 1) 450ms',
+      }}>
       <div style={{
         position: 'relative', width: '100%',
         transform: dropped ? (reduce ? 'none' : `translateY(70vh) rotate(${tilt}deg)`) : 'none',
@@ -214,6 +245,7 @@ function DropTile({ opt, letter, index, dropped, winner, theme, reduce }) {
         }}>
           {winner ? '✓' : letter}
         </span>
+      </div>
       </div>
     </motion.div>
   )

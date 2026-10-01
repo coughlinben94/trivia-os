@@ -73,3 +73,21 @@ export function computeDropScoreUpdates({ answers, teams, scoreboardTeams, round
   }))
   return applyPhoneScoreUpdates({ results, teams, scoreboardTeams, roundKey, slideId })
 }
+
+// Where each tile slides once others have fallen, in tile-pitches (one tile
+// width plus its gap) along the row: survivors close up into a centred row,
+// so a lone survivor ends up in the middle instead of stranded in its slot.
+// `dropped` is one flag per tile, in row order. A dropped tile gets 0 (it
+// falls, it does not slide). Pure so it can be tested without a layout engine.
+export function survivorShifts(dropped) {
+  const n = dropped.length
+  const alive = dropped.filter(d => !d).length
+  if (n === 0 || alive === 0) return dropped.map(() => 0)
+  let rank = 0
+  return dropped.map((d, i) => {
+    if (d) return 0
+    const shift = (rank - (alive - 1) / 2) - (i - (n - 1) / 2)
+    rank += 1
+    return shift
+  })
+}

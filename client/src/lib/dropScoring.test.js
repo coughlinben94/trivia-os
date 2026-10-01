@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   DEFAULT_DROP_TOTAL, dropChip, isValidAlloc, scoreDropSubmission,
-  dropSequence, dropStepCount, summarizeDrop, computeDropScoreUpdates,
+  dropSequence, dropStepCount, summarizeDrop, computeDropScoreUpdates, survivorShifts,
 } from './dropScoring.js'
 
 const ids = ['a', 'b', 'c', 'd']
@@ -109,3 +109,25 @@ describe('computeDropScoreUpdates', () => {
 })
 
 it('default total is 30', () => expect(DEFAULT_DROP_TOTAL).toBe(30))
+
+describe('survivorShifts', () => {
+  it('moves nothing while every tile is still up', () => {
+    expect(survivorShifts([false, false, false, false])).toEqual([0, 0, 0, 0])
+  })
+  it('a lone survivor slides to the middle of the row', () => {
+    // 4 slots, tile B (index 1) is the only one left: its slot is 0.5 pitches left of centre
+    expect(survivorShifts([true, false, true, true])).toEqual([0, 0.5, 0, 0])
+    // tile D alone: 1.5 pitches right of centre, slides left
+    expect(survivorShifts([true, true, true, false])).toEqual([0, 0, 0, -1.5])
+  })
+  it('two survivors close up around the middle', () => {
+    // survivors B (1) and D (3) -> a centred pair at -0.5 / +0.5 pitches; they sit at -0.5 / +1.5
+    expect(survivorShifts([true, false, true, false])).toEqual([0, 0, 0, -1])
+    // survivors A and B are already centred as a pair at -1.5/-0.5 -> shift +1 each
+    expect(survivorShifts([false, false, true, true])).toEqual([1, 1, 0, 0])
+  })
+  it('a full row, or an empty one, has no shifts', () => {
+    expect(survivorShifts([true, true, true, true])).toEqual([0, 0, 0, 0])
+    expect(survivorShifts([])).toEqual([])
+  })
+})
