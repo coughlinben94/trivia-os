@@ -157,7 +157,7 @@ export function createDirector(overrides = {}) {
 
   // One handle per playing clip. `ctl` is the private control surface the start
   // functions use; callers only ever see the handle.
-  function createHandle(clip, slideId) {
+  function createHandle(clip, slideId, initialLevel = 1) {
     const key = clipKey(slideId, clip)
     const t0 = d.now()
     let state = 'pending'
@@ -173,6 +173,10 @@ export function createDirector(overrides = {}) {
     const endedCbs = []
     const failedCbs = []
     let heard = false // true once sound really started
+    let level = initialLevel // animated 0..1 multiplier (fades, ducks)
+    let levelImpl = () => {}
+    let gainImpl = () => {}
+    const blockedCbs = []
     const label = clip.kind === 'file' ? 'upload' : clip.kind // 'upload' keeps the name the old slide code gave the Sentry issue
     const done = () => state === 'stopped' || state === 'ended'
     const stopTimers = () => {
@@ -188,6 +192,19 @@ export function createDirector(overrides = {}) {
       get reason() { return reason },
       onEnded(cb) { endedCbs.push(cb) },
       onFailed(cb) { failedCbs.push(cb) },
+      onBlocked(cb) { blockedCbs.push(cb) },
+      // Fades and ducks: ramp the 0..1 level over rampMs (instant when 0). Independent of the
+      // static loudness correction, so a late setGainDb never jumps a fade in progress.
+      setLevel(x, rampMs = 0) {
+        if (done()) return
+        level = x
+        safe(levelImpl, x, rampMs)
+      },
+      // Static loudness correction (dB), applied after the fact (e.g. once an analysis resolves).
+      setGainDb(db) {
+        if (done()) return
+        safe(gainImpl, db)
+      },
       stop() {
         if (done()) return
         state = 'stopped'
@@ -234,6 +251,9 @@ export function createDirector(overrides = {}) {
       setStop(fn) { stopImpl = fn },
       setRetry(fn) { retryImpl = fn },
       setOnEnded(fn) { onEndedImpl = fn },
+      level: () => level,
+      setLevelImpl(fn) { levelImpl = fn },
+      setGainImpl(fn) { gainImpl = fn },
       setOnPlaying(fn) { onPlayingImpl = fn },
       setRelease(fn) { releaseImpl = fn },
       // Start (or restart) the 2s "is it really sounding?" check. Call BEFORE anything
@@ -274,6 +294,7 @@ export function createDirector(overrides = {}) {
         reportBlockedOnce()
         startPoll()
         emit()
+        blockedCbs.forEach(cb => safe(cb))
       },
       // The clip can never play (dead file, load error): a Sentry event of its own and NO cue,
       // since clicking would fail the same way forever.
@@ -323,19 +344,43 @@ export function createDirector(overrides = {}) {
     warmedFiles.delete(clip.url)
     el.loop = clip.loop
     let src = null
+    let staticGain = null
+    let levelNode = null
+    let gainLin = dbToGain(clip.gainDb)
     if (c) {
       try {
         src = c.createMediaElementSource(el)
-        const gain = c.createGain()
-        gain.gain.value = dbToGain(clip.gainDb)
-        src.connect(gain)
-        gain.connect(c.destination)
+        staticGain = c.createGain()
+        staticGain.gain.value = gainLin
+        levelNode = c.createGain()
+        levelNode.gain.value = ctl.level()
+        src.connect(staticGain)
+        staticGain.connect(levelNode)
+        levelNode.connect(c.destination)
       } catch { src = null }
     }
     // No context (or the graph failed): fall back to the element's own volume, which cannot boost.
-    if (!src) el.volume = Math.min(1, dbToGain(clip.gainDb))
+    const applyVolume = () => { el.volume = Math.max(0, Math.min(1, Math.min(1, gainLin) * ctl.level())) }
+    if (!src) applyVolume()
+    ctl.setGainImpl(db => {
+      gainLin = dbToGain(db)
+      if (staticGain) staticGain.gain.value = gainLin
+      else applyVolume()
+    })
+    ctl.setLevelImpl((x, ms) => {
+      if (!levelNode) { applyVolume(); return }
+      const prm = levelNode.gain
+      const now = c.currentTime
+      prm.cancelScheduledValues?.(now)
+      if (ms > 0) { prm.setValueAtTime?.(prm.value, now); prm.linearRampToValueAtTime(x, now + ms / 1000) }
+      else prm.value = x
+    })
     if (clip.start) el.currentTime = clip.start
-    el.addEventListener('ended', () => ctl.ended())
+    el.addEventListener('ended', () => {
+      if (clip.loopTo == null) { ctl.ended(); return }
+      el.currentTime = clip.loopTo // loop from a mid-track start, not from 0:00
+      safe(() => el.play()?.catch?.(() => {}))
+    })
     el.addEventListener('error', () => ctl.fail('media-error')) // 404, bad file, dropped network
 
     const check = () => mediaIsSounding(el, c)
@@ -360,10 +405,10 @@ export function createDirector(overrides = {}) {
     go()
   }
 
-  function play(rawClip, { slideId = null } = {}) {
+  function play(rawClip, { slideId = null, level = 1 } = {}) {
     const clip = normalizeClip(rawClip) // a malformed clip throws to the CALLER, never into the show
     handles.get(clipKey(slideId, clip))?.stop()
-    const { handle, ctl } = createHandle(clip, slideId)
+    const { handle, ctl } = createHandle(clip, slideId, level)
     handles.set(handle.key, handle)
     d.breadcrumb('audio requested', { kind: clip.kind, slideId, part: clip.part })
     try {
@@ -389,6 +434,9 @@ export function createDirector(overrides = {}) {
     let player = null
     let live = false // false once stopped: a player that becomes ready LATER must not start
     let endTimer = null
+    let rampTimer = null
+    let shown = ctl.level() // the level the player currently has
+    const volFor = x => Math.round(clip.volume * x)
     const check = () => !!player && youtubeIsSounding(player)
     // Backstop for a clip with an end: the player's own `end` normally stops it and
     // reports ENDED; if it never does, end the handle ourselves shortly after. Armed when
@@ -412,7 +460,8 @@ export function createDirector(overrides = {}) {
         if (!live) return
         player = p
         safe(() => {
-          p.setVolume(clip.volume)
+          p.setVolume(volFor(ctl.level()))
+          shown = ctl.level()
           p.unMute()
           p.seekTo(clip.start, true)
           p.playVideo()
@@ -421,11 +470,28 @@ export function createDirector(overrides = {}) {
     }
 
     ctl.setOnPlaying(armBackstop)
+    ctl.setLevelImpl((x, ms) => {
+      if (rampTimer != null) d.clearTimer(rampTimer)
+      rampTimer = null
+      if (!(ms > 0)) { shown = x; safe(() => player?.setVolume(volFor(x))); return }
+      const from = shown
+      const steps = Math.max(1, Math.ceil(ms / 50))
+      let i = 0
+      const tick = () => {
+        i += 1
+        shown = from + (x - from) * (i / steps)
+        safe(() => player?.setVolume(volFor(shown)))
+        rampTimer = i < steps ? d.setTimer(tick, 50) : null
+      }
+      rampTimer = d.setTimer(tick, 50)
+    })
     ctl.setRetry(() => { unlock(); go() })
     // Stop and natural end both PARK the player at the clip start (replay is instant and
     // takes no pool slot); release() is what destroys it.
     ctl.setStop(() => {
       live = false
+      if (rampTimer != null) d.clearTimer(rampTimer)
+      rampTimer = null
       if (endTimer != null) d.clearTimer(endTimer)
       endTimer = null
       safe(() => { player?.pauseVideo(); player?.seekTo(clip.start, true) })

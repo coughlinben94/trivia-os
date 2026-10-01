@@ -26,12 +26,17 @@ describe('normalizeClip', () => {
     })
   })
 
+  it('keeps a numeric loopTo and drops a junk one', () => {
+    expect(normalizeClip({ kind: 'file', url: '/a.mp3', loopTo: 181 }).loopTo).toBe(181)
+    expect(normalizeClip({ kind: 'file', url: '/a.mp3', loopTo: 'x' }).loopTo).toBe(null)
+  })
+
   it('fills file defaults', () => {
     expect(normalizeClip({ kind: 'file', url: '/a.mp3' })).toEqual({
-      kind: 'file', url: '/a.mp3', gainDb: 0, loop: false, start: 0, part: 0,
+      kind: 'file', url: '/a.mp3', gainDb: 0, loop: false, start: 0, loopTo: null, part: 0,
     })
     expect(normalizeClip({ kind: 'file', url: '/a.mp3', gainDb: 6, loop: true, start: 181, part: 1 })).toEqual({
-      kind: 'file', url: '/a.mp3', gainDb: 6, loop: true, start: 181, part: 1,
+      kind: 'file', url: '/a.mp3', gainDb: 6, loop: true, start: 181, loopTo: null, part: 1,
     })
   })
 

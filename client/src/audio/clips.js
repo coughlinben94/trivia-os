@@ -29,7 +29,9 @@ export function normalizeClip(c) {
   }
   if (c.kind === 'file') {
     if (!c.url) throw new Error('file clip needs a url')
-    return { kind: 'file', url: String(c.url), gainDb: num(c.gainDb, 0), loop: !!c.loop, start: num(c.start, 0), part }
+    // loopTo: on a natural end, seek here and play again (native `loop` would restart at 0:00,
+    // undoing a mid-track start such as the team-intro theme's 3:01).
+    return { kind: 'file', url: String(c.url), gainDb: num(c.gainDb, 0), loop: !!c.loop, start: num(c.start, 0), loopTo: Number.isFinite(c.loopTo) ? c.loopTo : null, part }
   }
   throw new Error(`unsupported audio clip kind: ${c.kind}`)
 }

@@ -12,6 +12,7 @@ export class FakeContext {
     this.listeners = new Set()
     this.resumeCalls = 0
     this.resumeMode = 'ok'
+    this.currentTime = 10 // audio clock, seconds
     this.gains = []
     this.sources = []
   }
@@ -19,7 +20,11 @@ export class FakeContext {
   removeEventListener(type, cb) { this.listeners.delete(cb) }
   _set(state) { this.state = state; this.listeners.forEach(cb => cb()) }
   createGain() {
-    const g = { gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() }
+    const g = {
+      gain: { value: 1, linearRampToValueAtTime: vi.fn(), cancelScheduledValues: vi.fn(), setValueAtTime: vi.fn() },
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+    }
     this.gains.push(g)
     return g
   }

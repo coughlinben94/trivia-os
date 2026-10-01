@@ -165,7 +165,7 @@ describe('director plays file clips', () => {
     expect(el.playCalls).toBe(1)
     expect(f.ctx.sources[0].el).toBe(el)
     expect(f.ctx.gains[0].gain.value).toBeCloseTo(1.9953, 3)
-    expect(f.ctx.gains[0].connect).toHaveBeenCalledWith(f.ctx.destination)
+    expect(f.ctx.gains[1].connect).toHaveBeenCalledWith(f.ctx.destination) // static gain -> level node -> out
     expect(h.state).toBe('playing')
   })
 
@@ -900,5 +900,141 @@ describe('review fixes (2026-10-01)', () => {
     await flush()
     f.elements[0].emit('ended')
     expect(f.events).toHaveLength(0)
+  })
+
+  describe('levels, loudness and loops (plan 3)', () => {
+    it('file graph is source -> static gain -> level node -> destination', () => {
+      const f = runningFakes()
+      const d = createDirector(f.deps)
+      d.play({ kind: 'file', url: '/a.mp3', gainDb: 6 }, { slideId: 's' })
+      const [staticGain, level] = f.ctx.gains
+      expect(f.ctx.sources[0].connect).toHaveBeenCalledWith(staticGain)
+      expect(staticGain.connect).toHaveBeenCalledWith(level)
+      expect(level.connect).toHaveBeenCalledWith(f.ctx.destination)
+      expect(staticGain.gain.value).toBeCloseTo(Math.pow(10, 6 / 20), 5)
+      expect(level.gain.value).toBe(1)
+    })
+
+    it('play({level}) starts at that level (a fade-in starts at 0)', () => {
+      const f = runningFakes()
+      const d = createDirector(f.deps)
+      d.play(fileClip, { slideId: 's', level: 0 })
+      expect(f.ctx.gains[1].gain.value).toBe(0)
+    })
+
+    it('setLevel(x, ms) ramps the level node on the audio clock; setLevel(x) is instant', () => {
+      const f = runningFakes()
+      const d = createDirector(f.deps)
+      const h = d.play(fileClip, { slideId: 's' })
+      const level = f.ctx.gains[1].gain
+      h.setLevel(0.5, 1000)
+      expect(level.cancelScheduledValues).toHaveBeenCalled()
+      expect(level.linearRampToValueAtTime).toHaveBeenCalledWith(0.5, 11) // currentTime 10 + 1s
+      h.setLevel(0.25)
+      expect(level.value).toBe(0.25)
+    })
+
+    it('setGainDb corrects loudness later WITHOUT touching a fade in progress', () => {
+      const f = runningFakes()
+      const d = createDirector(f.deps)
+      const h = d.play(fileClip, { slideId: 's', level: 0 })
+      h.setLevel(1, 4000)
+      const levelBefore = f.ctx.gains[1].gain.linearRampToValueAtTime.mock.calls.length
+      h.setGainDb(-5)
+      expect(f.ctx.gains[0].gain.value).toBeCloseTo(Math.pow(10, -5 / 20), 5)
+      expect(f.ctx.gains[1].gain.linearRampToValueAtTime.mock.calls.length).toBe(levelBefore)
+      expect(f.ctx.gains[1].gain.cancelScheduledValues).toHaveBeenCalledTimes(1) // only setLevel's own
+    })
+
+    it('with no AudioContext the level and gain fall back to the element volume', () => {
+      const f = makeFakes({ ctx: null })
+      f.deps.makeContext = vi.fn(() => null)
+      const d = createDirector(f.deps)
+      const h = d.play({ kind: 'file', url: '/a.mp3', gainDb: -6 }, { slideId: 's' })
+      h.setLevel(0.5)
+      expect(f.elements[0].volume).toBeCloseTo(Math.pow(10, -6 / 20) * 0.5, 5)
+      h.setGainDb(0)
+      expect(f.elements[0].volume).toBeCloseTo(0.5, 5)
+    })
+
+    it('YouTube: setLevel scales the clip volume, and a ramp steps down to the target', () => {
+      const f = runningFakes({ youtube: fakeYoutube({ state: 1 }) })
+      const d = createDirector(f.deps)
+      const h = d.play({ kind: 'youtube', videoId: 'v', volume: 80 }, { slideId: 's' })
+      const p = f.youtube.claims[0].player
+      h.setLevel(0.5)
+      expect(p.setVolume).toHaveBeenLastCalledWith(40)
+      h.setLevel(0, 1000)
+      vi.advanceTimersByTime(500)
+      const mid = p.setVolume.mock.calls.at(-1)[0]
+      expect(mid).toBeGreaterThan(0)
+      expect(mid).toBeLessThan(40)
+      vi.advanceTimersByTime(600)
+      expect(p.setVolume).toHaveBeenLastCalledWith(0)
+    })
+
+    it('YouTube: play({level}) starts the player at clip volume x level', () => {
+      const f = runningFakes({ youtube: fakeYoutube({ state: 1 }) })
+      const d = createDirector(f.deps)
+      d.play({ kind: 'youtube', videoId: 'v', volume: 80 }, { slideId: 's', level: 0.5 })
+      expect(f.youtube.claims[0].player.setVolume).toHaveBeenCalledWith(40)
+    })
+
+    it('a new setLevel cancels the previous YouTube ramp (no two ramps fighting)', () => {
+      const f = runningFakes({ youtube: fakeYoutube({ state: 1 }) })
+      const d = createDirector(f.deps)
+      const h = d.play({ kind: 'youtube', videoId: 'v', volume: 100 }, { slideId: 's' })
+      const p = f.youtube.claims[0].player
+      h.setLevel(0, 2000)
+      vi.advanceTimersByTime(500)
+      h.setLevel(1) // back out
+      vi.advanceTimersByTime(3000)
+      expect(p.setVolume).toHaveBeenLastCalledWith(100)
+    })
+
+    it('setLevel/setGainDb after stop never throw', () => {
+      const f = runningFakes()
+      const d = createDirector(f.deps)
+      const h = d.play(fileClip, { slideId: 's' })
+      h.stop()
+      expect(() => { h.setLevel(0.3, 500); h.setGainDb(3) }).not.toThrow()
+    })
+
+    it('onBlocked fires on every transition into blocked, not for a late-ok clip', async () => {
+      const f = makeFakes()
+      f.ctx.resumeMode = 'hang'
+      f.deps.makeElement = vi.fn(() => { const el = new FakeElement(); el.playMode = 'reject'; f.elements.push(el); return el })
+      const d = createDirector(f.deps)
+      const h = d.play(fileClip, { slideId: 's' })
+      const cb = vi.fn()
+      h.onBlocked(cb)
+      await flush()
+      expect(cb).toHaveBeenCalledTimes(1)
+      d.retryBlocked()
+      await flush()
+      expect(cb).toHaveBeenCalledTimes(2)
+    })
+
+    it('loopTo: a natural end seeks to loopTo and plays again instead of ending; stop() ends it for good', () => {
+      const f = runningFakes()
+      const d = createDirector(f.deps)
+      const h = d.play({ kind: 'file', url: '/long.mp3', start: 181, loopTo: 181 }, { slideId: 's' })
+      const el = f.elements[0]
+      el.currentTime = 900
+      el.emit('ended')
+      expect(el.currentTime).toBe(181)
+      expect(el.playCalls).toBe(2)
+      expect(h.state).not.toBe('ended')
+      h.stop()
+      expect(h.state).toBe('stopped')
+    })
+
+    it('without loopTo a natural end still ends the handle', () => {
+      const f = runningFakes()
+      const d = createDirector(f.deps)
+      const h = d.play(fileClip, { slideId: 's' })
+      f.elements[0].emit('ended')
+      expect(h.state).toBe('ended')
+    })
   })
 })
