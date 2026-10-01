@@ -22,6 +22,7 @@ import { warmYoutubeAudio, claimYoutubeAudio } from '../lib/youtubeWarmAudio.js'
 
 export const SOUND_CHECK_MS = 2000 // a clip asked to play must be sounding by now
 export const BLOCKED_RECHECK_MS = 1000 // while blocked, keep looking
+export const WARM_FILES_CAP = 4
 export const NOT_READY_EXTRA_MS = 4000 // extra wait when the YouTube player has not even loaded yet
 
 function browserDeps() {
@@ -68,12 +69,12 @@ export function createDirector(overrides = {}) {
   const d = { ...raw, breadcrumb: (...a) => safe(raw.breadcrumb, ...a), event: (...a) => safe(raw.event, ...a) }
   let ctx = null
   let gestureSeen = false
-  let preview = false
   const listeners = new Set()
   const handles = new Map() // clipKey -> live handle
   const reported = new Set() // clipKeys already sent to Sentry
+  const warmedFiles = new Map() // file url -> preloaded <audio> waiting for its play()
   const parked = new Map() // youtube pool key -> claimed player kept warm after stop/end (instant replay)
-  let snapshot = { status: 'locked', blocked: [], playing: [] }
+  let snapshot = { status: 'locked', blocked: [] }
 
   function status() {
     if (ctx) return ctx.state === 'running' ? 'unlocked' : 'locked'
@@ -86,11 +87,8 @@ export function createDirector(overrides = {}) {
     const blocked = [...handles.values()]
       .filter(h => h.state === 'blocked')
       .map(h => ({ key: h.key, slideId: h.slideId, kind: h.clip.kind, part: h.clip.part, reason: h.reason }))
-    const playing = [...handles.values()]
-      .filter(h => h.state === 'playing' || h.state === 'paused')
-      .map(h => ({ key: h.key, slideId: h.slideId, part: h.clip.part, paused: h.state === 'paused' }))
-    const next = { status: status(), blocked, playing }
-    if (next.status === snapshot.status && sameList(next.blocked, snapshot.blocked) && sameList(next.playing, snapshot.playing)) return
+    const next = { status: status(), blocked }
+    if (next.status === snapshot.status && sameList(next.blocked, snapshot.blocked)) return
     snapshot = next
     listeners.forEach(l => safe(l))
   }
@@ -130,18 +128,31 @@ export function createDirector(overrides = {}) {
     return () => listeners.delete(cb)
   }
 
-  function setPreview(on) {
-    preview = !!on
-  }
-
+  // Pre-fetch before the press (the old slides mounted <audio preload> with the slide; without
+  // this every upload would be fetched over bar wifi at the Next press).
   function warm(rawClip) {
-    if (preview) return
     const clip = safe(() => normalizeClip(rawClip))
     if (clip?.kind === 'youtube') safe(d.youtube.warm, clip.videoId, clip.start, clip.end)
+    else if (clip?.kind === 'file' && !warmedFiles.has(clip.url)) {
+      while (warmedFiles.size >= WARM_FILES_CAP) {
+        const [oldUrl, oldEl] = warmedFiles.entries().next().value
+        warmedFiles.delete(oldUrl)
+        safe(() => oldEl.remove?.())
+      }
+      const el = safe(() => prepareElement(clip))
+      if (el) warmedFiles.set(clip.url, el)
+    }
   }
 
-  function previewHandle(clip, slideId) {
-    return { key: clipKey(slideId, clip), slideId, clip, state: 'preview', reason: null, onEnded() {}, stop() {}, release() {}, retry() {}, pause() {}, resume() {} }
+  function prepareElement(clip) {
+    const el = d.makeElement()
+    el.preload = 'auto'
+    // A cross-origin file (Supabase storage) routed through Web Audio plays SILENT unless
+    // the element is CORS-enabled; storage sends access-control-allow-origin: *. Set it
+    // BEFORE src, and only when cross-origin (a same-origin file needs nothing).
+    if (isCrossOrigin(clip.url)) el.crossOrigin = 'anonymous'
+    el.src = clip.url
+    return el
   }
 
   // One handle per playing clip. `ctl` is the private control surface the start
@@ -158,10 +169,11 @@ export function createDirector(overrides = {}) {
     let retryImpl = () => {}
     let onEndedImpl = () => {} // runs only on a NATURAL end (not on stop()), e.g. re-warm for an instant replay
     let onPlayingImpl = () => {} // runs each time sound actually starts (e.g. arm the YouTube end backstop)
-    let pauseImpl = () => {}
-    let resumeImpl = () => {}
     let releaseImpl = () => {} // destroys what stop() only parks (a YouTube player)
     const endedCbs = []
+    const failedCbs = []
+    let heard = false // true once sound really started
+    const label = clip.kind === 'file' ? 'upload' : clip.kind // 'upload' keeps the name the old slide code gave the Sentry issue
     const done = () => state === 'stopped' || state === 'ended'
     const stopTimers = () => {
       if (watch != null) d.clearTimer(watch)
@@ -175,6 +187,7 @@ export function createDirector(overrides = {}) {
       get state() { return state },
       get reason() { return reason },
       onEnded(cb) { endedCbs.push(cb) },
+      onFailed(cb) { failedCbs.push(cb) },
       stop() {
         if (done()) return
         state = 'stopped'
@@ -188,22 +201,9 @@ export function createDirector(overrides = {}) {
         handle.stop()
         safe(releaseImpl)
       },
-      // Park the clip (player stays warm) and bring it back. Only a sounding clip pauses.
-      pause() {
-        if (state !== 'playing') return
-        state = 'paused'
-        safe(pauseImpl)
-        emit()
-      },
-      resume() {
-        if (state !== 'paused') return
-        state = 'playing'
-        safe(resumeImpl)
-        emit()
-      },
       // From the "Click for sound" button (a real gesture): clear the block and try again.
       retry() {
-        if (done()) return
+        if (done() || state === 'failed') return
         if (state === 'blocked') {
           state = 'pending'
           reason = null
@@ -217,8 +217,7 @@ export function createDirector(overrides = {}) {
       d.breadcrumb('audio blocked', { kind: clip.kind, slideId, part: clip.part, reason })
       if (reported.has(key)) return
       reported.add(key)
-      // 'upload' (not 'file') so the issue keeps the name the old slide code gave it in Sentry.
-      d.event('warning', `audio: play blocked (${clip.kind === 'file' ? 'upload' : clip.kind})`, { slideId, part: clip.part, reason })
+      d.event('warning', `audio: play blocked (${label})`, { slideId, part: clip.part, reason })
     }
 
     function startPoll() {
@@ -236,9 +235,7 @@ export function createDirector(overrides = {}) {
       setRetry(fn) { retryImpl = fn },
       setOnEnded(fn) { onEndedImpl = fn },
       setOnPlaying(fn) { onPlayingImpl = fn },
-      setPause(fn) { pauseImpl = fn },
       setRelease(fn) { releaseImpl = fn },
-      setResume(fn) { resumeImpl = fn },
       // Start (or restart) the 2s "is it really sounding?" check. Call BEFORE anything
       // that can hang (resume(), play()).
       arm(check, whyNot = () => 'not-sounding') {
@@ -258,9 +255,10 @@ export function createDirector(overrides = {}) {
         watch = d.setTimer(tick, SOUND_CHECK_MS)
       },
       playing() {
-        if (done() || state === 'playing' || state === 'paused') return
+        if (done() || state === 'playing') return
         const afterBlock = state === 'blocked'
         state = 'playing'
+        heard = true
         reason = null
         stopTimers()
         d.breadcrumb('audio started', { kind: clip.kind, slideId, part: clip.part, ms: d.now() - t0, afterBlock })
@@ -269,7 +267,7 @@ export function createDirector(overrides = {}) {
       },
       block(why) {
         // A late rejection (say an AbortError) must not undo a clip that is already sounding.
-        if (done() || state === 'blocked' || state === 'playing' || state === 'paused') return
+        if (done() || state === 'blocked' || state === 'playing' || state === 'failed') return
         state = 'blocked'
         reason = why
         if (watch != null) { d.clearTimer(watch); watch = null }
@@ -277,8 +275,32 @@ export function createDirector(overrides = {}) {
         startPoll()
         emit()
       },
+      // The clip can never play (dead file, load error): a Sentry event of its own and NO cue,
+      // since clicking would fail the same way forever.
+      fail(why) {
+        if (done() || state === 'failed' || state === 'playing') return
+        state = 'failed'
+        reason = why
+        stopTimers()
+        d.breadcrumb('audio failed', { kind: clip.kind, slideId, part: clip.part, reason: why })
+        const fkey = `fail|${key}`
+        if (!reported.has(fkey)) {
+          reported.add(fkey)
+          d.event('warning', `audio: clip failed (${label})`, { slideId, part: clip.part, reason: why })
+        }
+        failedCbs.forEach(cb => safe(cb))
+        emit()
+      },
       ended() {
         if (done()) return
+        if (!heard) {
+          d.breadcrumb('audio ended unheard', { kind: clip.kind, slideId, part: clip.part })
+          const ukey = `unheard|${key}`
+          if (!reported.has(ukey)) {
+            reported.add(ukey)
+            d.event('warning', `audio: clip ended unheard (${label})`, { slideId, part: clip.part })
+          }
+        }
         state = 'ended'
         stopTimers()
         safe(stopImpl)
@@ -297,14 +319,9 @@ export function createDirector(overrides = {}) {
   // loudness normalization can boost (gain > 1) and one context serves the whole tab.
   function startFile(clip, ctl) {
     const c = ensureContext()
-    const el = d.makeElement()
-    el.preload = 'auto'
+    const el = warmedFiles.get(clip.url) ?? prepareElement(clip)
+    warmedFiles.delete(clip.url)
     el.loop = clip.loop
-    // A cross-origin file (Supabase storage) routed through Web Audio plays SILENT unless
-    // the element is CORS-enabled; storage sends access-control-allow-origin: *. Set it
-    // BEFORE src, and only when cross-origin (a same-origin file needs nothing).
-    if (isCrossOrigin(clip.url)) el.crossOrigin = 'anonymous'
-    el.src = clip.url
     let src = null
     if (c) {
       try {
@@ -319,21 +336,21 @@ export function createDirector(overrides = {}) {
     if (!src) el.volume = Math.min(1, dbToGain(clip.gainDb))
     if (clip.start) el.currentTime = clip.start
     el.addEventListener('ended', () => ctl.ended())
+    el.addEventListener('error', () => ctl.fail('media-error')) // 404, bad file, dropped network
 
     const check = () => mediaIsSounding(el, c)
     const go = () => {
-      ctl.arm(check) // FIRST: resume() and play() can each hang forever without a gesture
+      ctl.arm(check, () => (el.readyState < 3 ? 'not-ready' : 'not-sounding')) // FIRST: resume() and play() can each hang forever without a gesture
       if (c && c.state !== 'running') safe(() => c.resume()?.catch?.(() => {}))
       let p
       try { p = el.play() } catch { ctl.block('play-threw'); return }
       p?.then?.(
         () => { if (!c || c.state === 'running') ctl.playing() },
-        err => ctl.block(err?.name === 'NotAllowedError' ? 'not-allowed' : 'play-rejected'),
+        // Only an autoplay refusal gets the "Click for sound" cue; a dead file would fail the same way on every click.
+        err => (err?.name === 'NotAllowedError' ? ctl.block('not-allowed') : ctl.fail(`play-rejected:${err?.name ?? 'error'}`)),
       )
     }
     ctl.setRetry(() => { unlock(); go() })
-    ctl.setPause(() => safe(() => el.pause()))
-    ctl.setResume(() => safe(() => el.play()?.catch?.(() => {})))
     ctl.setStop(() => {
       safe(() => el.pause())
       safe(() => src?.disconnect())
@@ -345,7 +362,6 @@ export function createDirector(overrides = {}) {
 
   function play(rawClip, { slideId = null } = {}) {
     const clip = normalizeClip(rawClip) // a malformed clip throws to the CALLER, never into the show
-    if (preview) return previewHandle(clip, slideId)
     handles.get(clipKey(slideId, clip))?.stop()
     const { handle, ctl } = createHandle(clip, slideId)
     handles.set(handle.key, handle)
@@ -405,13 +421,6 @@ export function createDirector(overrides = {}) {
     }
 
     ctl.setOnPlaying(armBackstop)
-    // Parked, not destroyed: resume is instant. The player's own ENDED covers the end.
-    ctl.setPause(() => {
-      if (endTimer != null) d.clearTimer(endTimer)
-      endTimer = null
-      safe(() => player?.pauseVideo())
-    })
-    ctl.setResume(() => safe(() => { player?.unMute(); player?.playVideo() }))
     ctl.setRetry(() => { unlock(); go() })
     // Stop and natural end both PARK the player at the clip start (replay is instant and
     // takes no pool slot); release() is what destroys it.
@@ -434,10 +443,6 @@ export function createDirector(overrides = {}) {
     return ensureContext()
   }
 
-  function stopSlide(slideId) {
-    for (const h of [...handles.values()]) if (h.slideId === slideId) h.release()
-  }
-
   function stopAll() {
     for (const h of [...handles.values()]) h.release()
     for (const [k, h] of [...parked]) { parked.delete(k); safe(() => h.destroy()) } // players parked by clips that already ended
@@ -451,8 +456,9 @@ export function createDirector(overrides = {}) {
     parked.clear()
     ctx = null
     gestureSeen = false
-    preview = false
-    snapshot = { status: status(), blocked: [], playing: [] }
+    for (const el of warmedFiles.values()) safe(() => el.remove?.())
+    warmedFiles.clear()
+    snapshot = { status: status(), blocked: [] }
   }
 
   function retryBlocked() {
@@ -460,13 +466,12 @@ export function createDirector(overrides = {}) {
     for (const h of [...handles.values()]) if (h.state === 'blocked') h.retry()
   }
 
-  snapshot = { status: status(), blocked: [], playing: [] }
+  snapshot = { status: status(), blocked: [] }
 
   return {
     status, unlock, installGestureUnlock, subscribe, getSnapshot: () => snapshot,
-    setPreview, warm, play, retryBlocked, getContext, stopSlide, stopAll,
-    // internals shared with later tasks in this file
-    _internals: { reset, d, handles, reported, emit, ensureContext, previewHandle, isPreview: () => preview, dbToGain, mediaIsSounding, youtubeIsSounding },
+    warm, play, retryBlocked, getContext, stopAll,
+    _internals: { reset, handles }, // test seams only
   }
 }
 

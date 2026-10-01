@@ -23,5 +23,7 @@ export function mediaIsSounding(audioEl, audioCtx) {
   if (!audioEl) return false
   if (audioEl.ended) return true // a clip shorter than the check delay still played
   if (audioEl.paused) return false
+  // play() flips paused at once, before any sound: a file still buffering is not sounding yet.
+  if (audioEl.readyState !== undefined && audioEl.readyState < 3) return false
   return !audioCtx || audioCtx.state !== 'suspended'
 }

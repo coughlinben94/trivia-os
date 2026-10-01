@@ -36,6 +36,13 @@ describe('youtubeIsSounding', () => {
   })
 })
 
+describe('mediaIsSounding readiness', () => {
+  it('an element that is not paused but has not buffered (readyState < 3) is not sounding yet', () => {
+    expect(mod.mediaIsSounding({ paused: false, ended: false, readyState: 1 }, { state: 'running' })).toBe(false)
+    expect(mod.mediaIsSounding({ paused: false, ended: false, readyState: 3 }, { state: 'running' })).toBe(true)
+  })
+})
+
 describe('mediaIsSounding', () => {
   it('is sounding only when not paused and the context is running', () => {
     expect(mod.mediaIsSounding({ paused: false }, { state: 'running' })).toBe(true)

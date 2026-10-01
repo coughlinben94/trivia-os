@@ -17,7 +17,7 @@ describe('director status and unlock', () => {
     const f = makeFakes()
     const d = createDirector(f.deps)
     expect(d.status()).toBe('locked')
-    expect(d.getSnapshot()).toEqual({ status: 'locked', blocked: [], playing: [] })
+    expect(d.getSnapshot()).toEqual({ status: 'locked', blocked: [] })
   })
 
   it('is unlocked with no context when the page already has user activation', () => {
@@ -144,29 +144,6 @@ describe('installGestureUnlock', () => {
       target.dispatchEvent(new Event(type))
       expect(f.ctx.resumeCalls).toBe(1)
     }
-  })
-})
-
-describe('preview mode', () => {
-  it('play() in preview returns a no-op handle: no context, no element, no claim, no breadcrumb', () => {
-    const f = makeFakes()
-    const d = createDirector(f.deps)
-    d.setPreview(true)
-    const h = d.play({ kind: 'file', url: '/a.mp3' }, { slideId: 's1' })
-    expect(h.state).toBe('preview')
-    expect(() => { h.stop(); h.retry(); h.onEnded(() => {}) }).not.toThrow()
-    expect(f.deps.makeContext).not.toHaveBeenCalled()
-    expect(f.deps.makeElement).not.toHaveBeenCalled()
-    expect(f.deps.breadcrumb).not.toHaveBeenCalled()
-    expect(d.getSnapshot().blocked).toEqual([])
-  })
-
-  it('warm() is a no-op in preview', () => {
-    const f = makeFakes()
-    const d = createDirector(f.deps)
-    d.setPreview(true)
-    d.warm({ kind: 'youtube', videoId: 'v' })
-    expect(f.youtube.warm).not.toHaveBeenCalled()
   })
 })
 
@@ -368,14 +345,6 @@ describe('director plays file clips', () => {
     expect(h.state).toBe('playing')
   })
 
-  it('leaving preview makes play() live again', () => {
-    const f = makeFakes({ ctx: new FakeContext('running') })
-    const d = createDirector(f.deps)
-    d.setPreview(true)
-    d.setPreview(false)
-    expect(d.play({ kind: 'file', url: '/a.mp3' }, { slideId: 's1' }).state).not.toBe('preview')
-  })
-
   it('a bad clip throws a clear error to the caller (it never reaches the TV)', () => {
     const f = makeFakes({ ctx: new FakeContext('running') })
     const d = createDirector(f.deps)
@@ -555,15 +524,12 @@ describe('director plays YouTube clips', () => {
     expect(h2.state).not.toBe('stopped')
   })
 
-  it('stopSlide() and stopAll() release (destroy) YouTube players, not just stop them', () => {
+  it('stopAll() releases (destroys) YouTube players, not just stops them', () => {
     const f = makeFakes({ ctx: new FakeContext('running'), youtube: fakeYoutube({ state: 1 }) })
     const d = createDirector(f.deps)
     d.play(clip, { slideId: 'a' })
-    d.stopSlide('a')
-    expect(f.youtube.claims[0].destroyed).toBe(true)
-    d.play(clip, { slideId: 'b' })
     d.stopAll()
-    expect(f.youtube.claims[1].destroyed).toBe(true)
+    expect(f.youtube.claims[0].destroyed).toBe(true)
   })
 
   it('warm() forwards to the pool; a malformed clip to warm() is ignored, not thrown', () => {
@@ -659,7 +625,7 @@ describe('director never throws into the show', () => {
 describe('module hygiene', () => {
   it('the app singleton exists and has the public API', async () => {
     const mod = await import('./director.js')
-    for (const k of ['status', 'unlock', 'installGestureUnlock', 'subscribe', 'getSnapshot', 'setPreview', 'warm', 'play', 'retryBlocked', 'getContext', 'stopSlide', 'stopAll']) {
+    for (const k of ['status', 'unlock', 'installGestureUnlock', 'subscribe', 'getSnapshot', 'warm', 'play', 'retryBlocked', 'getContext', 'stopAll']) {
       expect(typeof mod.director[k]).toBe('function')
     }
   })
@@ -678,7 +644,7 @@ describe('review fixes (2026-10-01)', () => {
     f.elements[0].emit('ended')
     expect(second).not.toBeNull()
     expect(d._internals.handles.get(second.key)).toBe(second)
-    d.stopSlide('s')
+    d.stopAll()
     expect(f.elements[1].paused).toBe(true) // the new copy really stops; no double playback
   })
 
@@ -738,54 +704,6 @@ describe('review fixes (2026-10-01)', () => {
     expect(f.events).toHaveLength(0)
   })
 
-  it('pause() and resume() park and restart a file clip, and the snapshot follows', async () => {
-    const f = runningFakes()
-    const d = createDirector(f.deps)
-    const h = d.play(fileClip, { slideId: 's' })
-    await flush()
-    expect(h.state).toBe('playing')
-    expect(d.getSnapshot().playing).toEqual([{ key: h.key, slideId: 's', part: 0, paused: false }])
-    h.pause()
-    expect(h.state).toBe('paused')
-    expect(f.elements[0].paused).toBe(true)
-    expect(d.getSnapshot().playing[0].paused).toBe(true)
-    h.resume()
-    expect(h.state).toBe('playing')
-    expect(f.elements[0].paused).toBe(false)
-    expect(d.getSnapshot().playing[0].paused).toBe(false)
-  })
-
-  it('pause() and resume() keep a YouTube player parked, not destroyed', () => {
-    const f = runningFakes()
-    const d = createDirector(f.deps)
-    const h = d.play({ kind: 'youtube', videoId: 'v' }, { slideId: 's' })
-    vi.advanceTimersByTime(2000)
-    h.pause()
-    expect(f.youtube.claims[0].player.pauseVideo).toHaveBeenCalled()
-    expect(f.youtube.claims[0].destroyed).toBe(false)
-    h.resume()
-    expect(f.youtube.claims[0].player.playVideo).toHaveBeenCalledTimes(2)
-    expect(h.state).toBe('playing')
-  })
-
-  it('pause() on a clip that is not playing does nothing', () => {
-    const f = makeFakes()
-    f.ctx.resumeMode = 'hang'
-    const d = createDirector(f.deps)
-    const h = d.play(fileClip, { slideId: 's' })
-    expect(() => h.pause()).not.toThrow()
-    expect(h.state).not.toBe('paused')
-  })
-
-  it('stopping removes the clip from the playing list', async () => {
-    const f = runningFakes()
-    const d = createDirector(f.deps)
-    const h = d.play(fileClip, { slideId: 's' })
-    await flush()
-    h.stop()
-    expect(d.getSnapshot().playing).toEqual([])
-  })
-
   it('getContext() returns the one shared context', () => {
     const f = runningFakes()
     const d = createDirector(f.deps)
@@ -794,15 +712,13 @@ describe('review fixes (2026-10-01)', () => {
     expect(f.deps.makeContext).toHaveBeenCalledTimes(1)
   })
 
-  it('stopSlide() stops only that slide; stopAll() stops everything', async () => {
+  it('stopAll() stops every clip and empties the live set', () => {
     const f = runningFakes()
     const d = createDirector(f.deps)
     const a = d.play(fileClip, { slideId: 'a' })
     const b = d.play(fileClip, { slideId: 'b' })
-    d.stopSlide('a')
-    expect(a.state).toBe('stopped')
-    expect(b.state).not.toBe('stopped')
     d.stopAll()
+    expect(a.state).toBe('stopped')
     expect(b.state).toBe('stopped')
     expect(d._internals.handles.size).toBe(0)
   })
@@ -887,5 +803,102 @@ describe('review fixes (2026-10-01)', () => {
     expect(h.state).toBe('playing')
     expect(f.events).toHaveLength(0)
     expect(d.getSnapshot().blocked).toEqual([])
+  })
+
+  it('warm(file) preloads one element per URL, and play() reuses it instead of fetching at the press', () => {
+    const f = runningFakes()
+    const d = createDirector(f.deps)
+    d.warm(fileClip)
+    expect(f.deps.makeElement).toHaveBeenCalledTimes(1)
+    expect(f.elements[0].src).toBe('/a.mp3')
+    expect(f.elements[0].preload).toBe('auto')
+    expect(f.elements[0].playCalls).toBe(0)
+    d.warm(fileClip) // idempotent
+    expect(f.deps.makeElement).toHaveBeenCalledTimes(1)
+    d.play(fileClip, { slideId: 's' })
+    expect(f.deps.makeElement).toHaveBeenCalledTimes(1)
+    expect(f.elements[0].playCalls).toBe(1)
+  })
+
+  it('a warmed element is CORS-enabled before src, like a cold one', () => {
+    const f = runningFakes()
+    const d = createDirector(f.deps)
+    d.warm({ kind: 'file', url: 'https://abc.supabase.co/storage/v1/object/public/a/b.mp3' })
+    expect(f.elements[0].crossOrigin).toBe('anonymous')
+  })
+
+  it('a file still buffering is NOT sounding: not-ready gets the longer window, then blocks as not-ready', () => {
+    const f = runningFakes()
+    const d = createDirector(f.deps)
+    const h = d.play(fileClip, { slideId: 's' })
+    f.elements[0].readyState = 1
+    vi.advanceTimersByTime(2100)
+    expect(h.state).toBe('pending')
+    vi.advanceTimersByTime(4000)
+    expect(h.state).toBe('blocked')
+    expect(h.reason).toBe('not-ready')
+  })
+
+  it('a slow file that finishes buffering inside the window never raises a cue or an event', () => {
+    const f = runningFakes()
+    const d = createDirector(f.deps)
+    const h = d.play(fileClip, { slideId: 's' })
+    f.elements[0].readyState = 1
+    vi.advanceTimersByTime(3000)
+    f.elements[0].readyState = 4
+    vi.advanceTimersByTime(3200)
+    expect(h.state).toBe('playing')
+    expect(f.events).toHaveLength(0)
+  })
+
+  it('a clip that can never play (play() rejects with NotSupportedError) FAILS: no cue, its own Sentry event, once', async () => {
+    const f = runningFakes()
+    f.deps.makeElement = vi.fn(() => {
+      const el = new FakeElement()
+      el.play = () => { el.playCalls++; return Promise.reject(new DOMException('no source', 'NotSupportedError')) }
+      f.elements.push(el)
+      return el
+    })
+    const d = createDirector(f.deps)
+    const h = d.play(fileClip, { slideId: 's' })
+    await flush()
+    expect(h.state).toBe('failed')
+    expect(d.getSnapshot().blocked).toEqual([])
+    expect(f.events).toHaveLength(1)
+    expect(f.events[0].message).toBe('audio: clip failed (upload)')
+    d.retryBlocked()
+    h.retry() // a gesture or a button press never hammers a dead file
+    vi.advanceTimersByTime(10000)
+    expect(f.elements[0].playCalls).toBe(1)
+    expect(f.events).toHaveLength(1)
+    expect(h.state).toBe('failed')
+  })
+
+  it('a media error event (404, bad file) fails the clip with no cue', () => {
+    const f = runningFakes()
+    const d = createDirector(f.deps)
+    const h = d.play(fileClip, { slideId: 's' })
+    f.elements[0].emit('error')
+    expect(h.state).toBe('failed')
+    expect(d.getSnapshot().blocked).toEqual([])
+    expect(f.events[0].message).toBe('audio: clip failed (upload)')
+  })
+
+  it('a clip that ENDS without ever having sounded is reported (nobody heard it)', () => {
+    const f = makeFakes() // context stays suspended
+    f.ctx.resumeMode = 'hang'
+    const d = createDirector(f.deps)
+    d.play(fileClip, { slideId: 's' })
+    f.elements[0].emit('ended')
+    expect(f.events.map(e => e.message)).toContain('audio: clip ended unheard (upload)')
+  })
+
+  it('a clip that sounded and then ended reports nothing', async () => {
+    const f = runningFakes()
+    const d = createDirector(f.deps)
+    d.play(fileClip, { slideId: 's' })
+    await flush()
+    f.elements[0].emit('ended')
+    expect(f.events).toHaveLength(0)
   })
 })

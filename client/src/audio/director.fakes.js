@@ -46,6 +46,7 @@ export class FakeElement {
     this.loop = false
     this.src = ''
     this.preload = ''
+    this.readyState = 4 // HAVE_ENOUGH_DATA; tests lower it to model a file still buffering
     this.volume = 1
     this.playMode = 'ok'
     this.playCalls = 0

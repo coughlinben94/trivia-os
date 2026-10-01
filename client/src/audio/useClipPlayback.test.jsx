@@ -16,7 +16,7 @@ function fakeDirector() {
     warm: vi.fn(),
     retryBlocked: vi.fn(),
     play: vi.fn((clip, { slideId }) => {
-      const h = { key: slideId, state: 'pending', ended: [], stop: vi.fn(() => { h.state = 'stopped' }), release: vi.fn(() => { h.state = 'stopped' }), onEnded(cb) { h.ended.push(cb) } }
+      const h = { key: slideId, state: 'pending', ended: [], failed: [], stop: vi.fn(() => { h.state = 'stopped' }), release: vi.fn(() => { h.state = 'stopped' }), onEnded(cb) { h.ended.push(cb) }, onFailed(cb) { h.failed.push(cb) } }
       d.handles.push(h)
       return h
     }),
@@ -92,6 +92,16 @@ describe('useClipPlayback', () => {
     expect(last.active).toBe(true)
   })
 
+  it('a clip that fails to load clears active (no pause icon over a dead clip)', () => {
+    const dir = fakeDirector()
+    render({ dir, clip: clipA })
+    act(() => { last.play() })
+    act(() => { dir.handles[0].state = 'failed'; dir.handles[0].failed.forEach(cb => cb()) })
+    expect(last.active).toBe(false)
+    act(() => { last.toggle() }) // a press tries again
+    expect(dir.play).toHaveBeenCalledTimes(2)
+  })
+
   it('a different clip (next series part) releases the old handle and resets active', () => {
     const dir = fakeDirector()
     render({ dir, clip: clipA })
@@ -107,6 +117,21 @@ describe('useClipPlayback', () => {
     act(() => { last.play() })
     render({ dir, clip: { ...clipA, part: 1 } })
     expect(dir.handles[0].release).toHaveBeenCalled()
+  })
+
+  it('a gain or volume edit is a different clip (it takes effect without a remount)', () => {
+    const dir = fakeDirector()
+    render({ dir, clip: clipA })
+    act(() => { last.play() })
+    render({ dir, clip: { ...clipA, gainDb: 6 } })
+    expect(dir.handles[0].release).toHaveBeenCalled()
+    const dir2 = fakeDirector()
+    act(() => root.unmount()); root = createRoot(container)
+    const yt = { kind: 'youtube', videoId: 'v', start: 0, end: null, volume: 100, part: 0 }
+    render({ dir: dir2, clip: yt })
+    act(() => { last.play() })
+    render({ dir: dir2, clip: { ...yt, volume: 60 } })
+    expect(dir2.handles[0].release).toHaveBeenCalled()
   })
 
   it('unmounting releases the handle', () => {
@@ -150,13 +175,6 @@ describe('useClipPlayback', () => {
     expect(dir.retryBlocked).toHaveBeenCalled()
   })
 
-  it('a director-side stop clears active', () => {
-    const dir = fakeDirector()
-    render({ dir, clip: clipA })
-    act(() => { last.play() })
-    act(() => { dir.handles[0].state = 'stopped'; dir.set({ ...dir.snap, playing: [] }) })
-    expect(last.active).toBe(false)
-  })
 
   it('a clip that throws in play() is swallowed (the show keeps running)', () => {
     const dir = fakeDirector()

@@ -46,6 +46,8 @@ describe('<QuestionSlide> — audio on a plain question', () => {
     // jsdom implements neither of these; the 'advance' (autoplay) path calls
     // both the moment the slide mounts.
     HTMLMediaElement.prototype.play = mediaPlay
+    // jsdom never loads media (readyState stays 0); a real element that is playing has buffered.
+    Object.defineProperty(HTMLMediaElement.prototype, 'readyState', { get: () => 4, configurable: true })
     globalThis.AudioContext = class {
       state = 'running'
       createGain() { return { gain: {}, connect() {} } }
@@ -496,6 +498,8 @@ describe('<QuestionSlide> — shiny audio question, remote play via show.audio_p
       measureText(s) { return { width: s.length * 8 } },
     })
     HTMLMediaElement.prototype.play = mediaPlay
+    // jsdom never loads media (readyState stays 0); a real element that is playing has buffered.
+    Object.defineProperty(HTMLMediaElement.prototype, 'readyState', { get: () => 4, configurable: true })
     globalThis.AudioContext = class {
       state = 'running'
       createGain() { return { gain: {}, connect() {} } }

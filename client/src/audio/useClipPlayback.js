@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { director } from './director.js'
 
 // Value-stable identity for a clip: callers build a fresh clip object every render.
-const idOf = c => (c ? `${c.kind}|${c.part ?? 0}|${c.videoId ?? c.url}|${c.start ?? 0}|${c.end ?? ''}` : '')
+const idOf = c => (c ? `${c.kind}|${c.part ?? 0}|${c.videoId ?? c.url}|${c.start ?? 0}|${c.end ?? ''}|${c.gainDb ?? ''}|${c.volume ?? ''}` : '')
 
 export function useClipPlayback(clip, { slideId, autoPlay = false, isPreview = false, dir = director } = {}) {
   const snap = useSyncExternalStore(dir.subscribe, dir.getSnapshot)
@@ -35,6 +35,7 @@ export function useClipPlayback(clip, { slideId, autoPlay = false, isPreview = f
     handleRef.current = h
     setActive(true)
     h.onEnded(() => { if (handleRef.current === h) setActive(false) })
+    h.onFailed?.(() => { if (handleRef.current === h) setActive(false) }) // a dead clip is not "playing"
     return h
   }, [dir, slideId])
 
@@ -48,16 +49,10 @@ export function useClipPlayback(clip, { slideId, autoPlay = false, isPreview = f
   // and a stop here would turn a recovered clip back into silence.
   const toggle = useCallback(() => {
     const h = handleRef.current
-    if (!h || !active) return play()
+    if (!h || !active || h.state === 'failed') return play()
     if (h.state === 'playing' || h.state === 'paused') return stop()
     return dir.retryBlocked()
   }, [active, play, stop, dir])
-
-  // Director-side stops (stopSlide, stopAll) clear the button too.
-  useEffect(() => {
-    const st = handleRef.current?.state
-    if (active && (st === 'stopped' || st === 'ended')) setActive(false)
-  }, [snap, active])
 
   // Plain-question 'advance' mode: start as the slide mounts (mount-only on purpose; a
   // Prev back into the slide remounts it and plays again).
