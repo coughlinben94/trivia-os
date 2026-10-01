@@ -18,6 +18,7 @@ import {
   REVEAL_CROWN_SETTLE,
 } from '../../../lib/scoreboardMath.js'
 import { EASE_OUT, EASE_BAR } from '../../../lib/easings.js'
+import { colorsByName, normalizeTeamName } from '../../../lib/teamColors.js'
 
 // Everything here is sized in cq units off the stage (a `container-type: size`
 // box — see StageFrame) and off the team count, never rem/px. Ben runs 21
@@ -103,7 +104,8 @@ function ScoreRow({ team, rank, isLeader, maxScore, theme, m, delay, reduce }) {
         <p
           className="font-bold truncate"
           style={{
-            color: isLeader ? theme.colors.shinyAccent : theme.colors.text,
+            color: team.color || (isLeader ? theme.colors.shinyAccent : theme.colors.text),
+            textShadow: team.color ? '0 0 0.12em rgba(0,0,0,0.55), 0 0.04em 0.08em rgba(0,0,0,0.6)' : undefined,
             fontSize: `${m.name}cqh`,
             lineHeight: 1.15,
             margin: 0,
@@ -167,8 +169,12 @@ export default function ScoreboardRevealSlide({ slide, show }) {
       const { data: sbTeams } = await supabase
         .from('scoreboard_teams').select('id, name, scores').eq('show_id', show.id)
       if (sbTeams?.length) {
+        // scoreboard_teams has no color column; the pick lives on teams.color.
+        const { data: colorRows } = await supabase
+          .from('teams').select('name, color').eq('show_id', show.id)
+        const byName = colorsByName(colorRows ?? [])
         const sorted = sbTeams
-          .map(t => ({ ...t, total: computeTotal(t.scores, cols) }))
+          .map(t => ({ ...t, color: byName.get(normalizeTeamName(t.name)), total: computeTotal(t.scores, cols) }))
           .sort((a, b) => b.total - a.total)
         const places = computePlaces(sorted)
         setRanked(sorted.map((t, i) => ({ ...t, place: places[i] })))
