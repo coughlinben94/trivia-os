@@ -73,7 +73,7 @@ export default function MovieChainEditor({ data, onChange }) {
       <label className="mb-1 block text-sm font-semibold text-gray-800" htmlFor="movie-chain-count">Shortest chain — movies</label>
       <input id="movie-chain-count" type="number" min="2" max="12" value={data.movieChainCount ?? ''}
         onChange={event => onChange('movieChainCount', event.target.value === '' ? null : Number(event.target.value))}
-        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900" />
+        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900" />
       <p className="mt-1 text-xs text-gray-500">15 points at this length or shorter, 10 one movie longer, 0 beyond.</p>
     </div>
     {issue && <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{issue}</p>}

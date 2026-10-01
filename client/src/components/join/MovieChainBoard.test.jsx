@@ -76,4 +76,10 @@ describe('MovieChainBoard', () => {
     expect(host.textContent).toContain('Chains just locked')
     expect(host.textContent).not.toContain('Could not save your chain')
   })
+  it('announces status changes to screen readers', async () => {
+    host = document.createElement('div'); document.body.append(host); root = createRoot(host)
+    await act(async () => root.render(<MovieChainBoard slide={{ ...slide, data: { ...slide.data, movieChainLocked: true } }} team={team} />))
+    const status = host.querySelector('[role="status"]')
+    expect(status?.textContent).toContain('Chains are locked')
+  })
 })

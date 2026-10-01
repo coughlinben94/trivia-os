@@ -26,6 +26,7 @@
 
 .movie-chain-board input {
   min-height: 48px;
+  font-size: 16px; /* under 16px, iOS Safari zooms the page on focus */
 }
 
 .movie-chain-board .movie-chain-path {
