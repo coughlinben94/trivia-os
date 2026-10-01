@@ -196,12 +196,13 @@ describe('/remote timer drawer: a timer exists', () => {
     click(d.querySelector('[data-k="timer-add"]'))
     expect(lastCmd()).toMatchObject({ cmd: 'timer.add', args: { timerId: 't1' } })
   })
-  it('Restart needs minutes, is labelled Restart, and sends replace:true', () => {
+  it('Replace needs minutes, says it replaces the running timer, and sends replace:true', () => {
     setup({ timer: running() })
     const d = openDrawer()
     click(d.querySelector('[data-k="preset-3"]'))
     const r = d.querySelector('[data-k="timer-restart"]')
-    expect(r.textContent).toContain('Restart 3 min')
+    expect(r.textContent).toContain('Replace with 3 min')
+    expect(r.textContent).not.toContain('Restart')
     click(r)
     expect(lastCmd()).toMatchObject({ cmd: 'timer.start', args: { minutes: 3, replace: true } })
   })
@@ -255,5 +256,13 @@ describe('/remote timer refusals and look', () => {
     const fams = [...host.innerHTML.matchAll(/font-family:\s*([^;"]+)/g)].map(m => m[1])
     expect(fams.length).toBeGreaterThan(0)
     for (const f of fams) expect(f).toMatch(/^var\(--rl-(display|body)\)$/)
+  })
+
+  it('Cancel sits on its own row, apart from Replace, so a thumb aimed at one cannot hit the other', () => {
+    setup({ timer: running() })
+    const d = openDrawer()
+    const replace = d.querySelector('[data-k="timer-restart"]')
+    const cancel = d.querySelector('[data-k="timer-cancel"]')
+    expect(replace.parentElement).not.toBe(cancel.parentElement)
   })
 })

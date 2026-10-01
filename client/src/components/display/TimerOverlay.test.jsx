@@ -55,7 +55,7 @@ describe('<TimerOverlay>', () => {
     expect(container.textContent).toContain('0:09')
     await act(async () => { vi.advanceTimersByTime(9000) })
     expect(phase()).toBe('done')
-    expect(container.textContent).toContain('Time’s up')
+    expect(container.textContent).toContain('Time’s up!')
     expect(chime).toHaveBeenCalledTimes(1)
     await act(async () => { vi.advanceTimersByTime(2000) }) // more ticks, same timer
     expect(chime).toHaveBeenCalledTimes(1)
@@ -140,6 +140,43 @@ describe('<TimerOverlay> design details', () => {
     render({ id: 'p', state: 'paused', totalMs: 60000, remainingMs: 42000, endsAt: 0, sentAt: 1 })
     const paused = [...container.querySelectorAll('div')].find(d => d.textContent === 'PAUSED')
     expect(parseFloat(paused.style.fontSize)).toBeGreaterThanOrEqual(4)
+  })
+})
+
+describe('<TimerOverlay> clock offset', () => {
+  let container, root
+  beforeEach(() => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true
+    globalThis.FontFace = class { load() { return Promise.resolve(this) } }
+    if (!document.fonts) document.fonts = { add() {}, delete() {}, ready: Promise.resolve() }
+    sessionStorage.clear()
+    vi.useFakeTimers(); vi.setSystemTime(10_000_000)
+    container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container)
+  })
+  afterEach(() => { act(() => root.unmount()); container.remove(); vi.useRealTimers() })
+  const render = timer => act(() => { root.render(<ThemeProvider><TimerOverlay show={{ id: 's', special_event: timer ? { timer } : null }} /></ThemeProvider>) })
+  const label = () => container.querySelector('[data-timer-overlay]')?.textContent ?? ''
+
+  const tick = () => act(async () => { vi.advanceTimersByTime(300) })
+
+  it('a stale write delivered late (a reconnect refetch) does not poison the clock offset', async () => {
+    // This TV runs 7s ahead of the host. Host clock = TV clock - 7000.
+    const hostNow = () => Date.now() - 7000
+    render(null)
+    render(startTimer(600000, hostNow())) // a live write: the TV learns offset ~7000
+    await tick()
+    // The TV's wifi blipped; meanwhile the host pressed Restart 20s ago. The refetch hands over that old write.
+    render(startTimer(300000, hostNow() - 20000))
+    await tick()
+    // Truth: started 20s ago with 300s on it -> 4:40 left in HOST time. A poisoned offset (27s) would show 5:00.
+    expect(label()).toContain('4:40')
+  })
+
+  it('the first live write sets the offset even when the clocks are far apart', async () => {
+    render(null)
+    render(startTimer(300000, Date.now() - 7000)) // host clock 7s behind this TV, started just now
+    await tick()
+    expect(label()).toContain('5:00')
   })
 })
 

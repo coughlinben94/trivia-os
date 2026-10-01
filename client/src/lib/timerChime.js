@@ -40,8 +40,10 @@ export async function playTimerChime() {
     const ac = getCtx()
     if (!ac) return false
     if (ac.state !== 'running') {
-      // Without a gesture resume() can hang forever, so only wait a moment for it.
-      await Promise.race([ac.resume(), new Promise(r => setTimeout(r, 400))])
+      // Without a gesture resume() can hang forever, so only wait a moment for it
+      // (1.5s: a busy TV tab can take a while to resume, and giving up early shows
+      // the click-for-sound cue on a context that is about to run).
+      await Promise.race([ac.resume(), new Promise(r => setTimeout(r, 1500))])
     }
     if (ac.state !== 'running') return false
     const t0 = ac.currentTime + 0.05

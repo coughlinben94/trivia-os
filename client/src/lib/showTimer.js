@@ -16,6 +16,8 @@
 export const MIN_MS = 3000
 export const MAX_MS = 180 * 60 * 1000 // 3 hours
 export const URGENT_MS = 10000 // last 10 seconds
+// One wording for the finished state on the TV, the laptop card and the iPad.
+export const TIMES_UP = 'Time’s up!'
 export const DONE_VISIBLE_MS = 8000 // "Time's up" stays this long, then clears
 export const CHIME_WINDOW_MS = 3000 // a TV that loads later than this after zero stays silent
 
@@ -73,6 +75,8 @@ export function clockLabel(ms) {
 export function timerView(t, now, offset = 0) {
   if (!t || typeof t !== 'object' || !t.id) return { phase: 'idle', remainingMs: 0, label: '', sinceEndMs: 0 }
   const remainingMs = remainingAt(t, now - offset)
+  // A hand-edited or damaged row (no endsAt, text, NaN) must read as no timer, not "Time's up" forever.
+  if (!Number.isFinite(remainingMs)) return { phase: 'idle', remainingMs: 0, label: '', sinceEndMs: 0 }
   if (t.state === 'paused') return { id: t.id, phase: 'paused', remainingMs, label: clockLabel(remainingMs), sinceEndMs: 0 }
   if (remainingMs > 0) {
     return { id: t.id, phase: remainingMs <= URGENT_MS ? 'urgent' : 'running', remainingMs, label: clockLabel(remainingMs), sinceEndMs: 0 }

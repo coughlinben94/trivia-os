@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { timerView } from '../lib/showTimer.js'
+import { timerView, TIMES_UP } from '../lib/showTimer.js'
 import { TIMER_PRESETS, TIMER_MAX_MINUTES } from '../lib/remoteProtocol.js'
 
 // The iPad's timer: a tile on the main screen that shows the clock, and a
@@ -21,7 +21,7 @@ export function useTimerView(timer, offsetMs) {
   return timerView(timer, now, -offsetMs)
 }
 
-const WORD = { running: 'Running', urgent: 'Running', paused: 'Paused', done: 'Time’s up' }
+const WORD = { running: 'Running', urgent: 'Running', paused: 'Paused', done: TIMES_UP }
 
 // A shape as well as words: dot = running, bars = paused, ring = finished.
 function PhaseMark({ phase, className = 'w-5 h-5' }) {
@@ -135,7 +135,7 @@ export function TimerPanel({ timer, offsetMs, block, send }) {
 
       <div>
         <p className="text-[1rem] leading-6 font-semibold text-[color:var(--rl-text-75)] mb-2">
-          {live ? 'Restart with a new time' : 'Minutes'}
+          {live ? 'Replace with a new time' : 'Minutes'}
         </p>
         <div className="grid grid-cols-6 gap-2">
           {TIMER_PRESETS.map(m => (
@@ -185,12 +185,14 @@ export function TimerPanel({ timer, offsetMs, block, send }) {
               +1 min
             </button>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3">
             <button data-k="timer-restart" disabled={!canStart}
               onClick={() => { send('timer.start', { minutes, replace: true }); clearPick() }}
               className={`${big} ${go}`}>
-              {minutes != null ? `Restart ${minutes} min` : 'Restart'}
+              {minutes != null ? `Replace with ${minutes} min` : 'Replace timer'}
             </button>
+          </div>
+          <div className="grid grid-cols-1 gap-3 mt-2">
             <button data-k="timer-cancel" disabled={!can}
               onClick={() => (cancelArmed ? sendCancel() : setCancelArmed(true))}
               className={`${big} border-[3px] ${off} ${cancelArmed ? 'border-[color:var(--rl-red-bright)] bg-[color:var(--rl-red)] text-[color:var(--rl-text)]' : 'border-[color:var(--rl-text-30)] text-[color:var(--rl-text)]'}`}>
