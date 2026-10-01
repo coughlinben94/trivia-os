@@ -1,5 +1,6 @@
 const API_URL = 'https://www.wikidata.org/w/api.php'
-const FILM_ID = 'Q11424'
+// film, animated film, short film, feature film, silent film, documentary film
+const FILM_IDS = ['Q11424', 'Q202866', 'Q24862', 'Q24869', 'Q226730', 'Q93204']
 const QID = /^Q[1-9]\d*$/
 
 export function isQid(value) {
@@ -23,7 +24,7 @@ function movieYear(entity) {
 }
 
 function isFilm(entity) {
-  return claimIds(entity, 'P31').includes(FILM_ID)
+  return claimIds(entity, 'P31').some(id => FILM_IDS.includes(id))
 }
 
 async function request(params, fetcher) {
@@ -44,12 +45,12 @@ async function request(params, fetcher) {
   }
 }
 
-async function entities(ids, fetcher) {
+async function entities(ids, fetcher, props = 'claims|labels|descriptions') {
   if (ids.length === 0) return {}
   const merged = {}
   for (let i = 0; i < ids.length; i += 50) {
     const batch = ids.slice(i, i + 50)
-    const data = await request({ action: 'wbgetentities', ids: batch.join('|'), props: 'claims|labels|descriptions', languages: 'en' }, fetcher)
+    const data = await request({ action: 'wbgetentities', ids: batch.join('|'), props, languages: 'en' }, fetcher)
     Object.assign(merged, data.entities ?? {})
   }
   return merged
@@ -73,7 +74,7 @@ export async function getMovieCast(movieId, fetcher = fetch) {
   const film = (await entities([movieId], fetcher))[movieId]
   if (!film || !isFilm(film)) throw new Error('Movie not found')
   const ids = [...new Set([...claimIds(film, 'P161'), ...claimIds(film, 'P725')])]
-  const people = await entities(ids, fetcher)
+  const people = await entities(ids, fetcher, 'labels')
   return {
     movie: movieSummary(film),
     performers: ids.map(id => ({ id, name: englishLabel(people[id] ?? { id }) })),

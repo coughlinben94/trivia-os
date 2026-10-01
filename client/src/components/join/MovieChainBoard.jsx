@@ -125,7 +125,12 @@ export default function MovieChainBoard({ slide, team, theme, preview = false, o
       ])
       if (saveError) throw saveError
       setSavedChain({ movies, performers })
-    } catch { setError('Could not save your chain. Check your connection and try again.') }
+    } catch (caught) {
+      // The database refuses writes once the host locks; the earlier saved chain still counts.
+      setError(String(caught?.message ?? '').includes('movie_chain_locked')
+        ? 'Chains just locked. Your last saved chain still counts.'
+        : 'Could not save your chain. Check your connection and try again.')
+    }
     finally { setBusy(false) }
   }
 
