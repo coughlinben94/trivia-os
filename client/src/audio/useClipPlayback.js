@@ -28,10 +28,11 @@ export function useClipPlayback(clip, { slideId, autoPlay = false, isPreview = f
     setActive(false)
   }, [clipId, slideId])
 
-  const play = useCallback(() => {
+  // opts: extra director play options, e.g. { level: 0 } for a fade-in.
+  const play = useCallback((opts) => {
     if (!clipRef.current) return null
     let h
-    try { h = dir.play(clipRef.current, { slideId }) } catch { return null } // a malformed clip is a report, not a crash
+    try { h = dir.play(clipRef.current, { slideId, ...(opts && typeof opts === 'object' && !opts.nativeEvent ? opts : null) }) } catch { return null } // a malformed clip is a report, not a crash
     handleRef.current = h
     setActive(true)
     h.onEnded(() => { if (handleRef.current === h) setActive(false) })

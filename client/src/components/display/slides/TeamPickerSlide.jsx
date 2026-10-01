@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { supabase } from '../../../lib/supabase.js';
 import { analyzeAudioGain } from '../../../lib/audioNormalize.js';
+import { useTeamIntroAudio } from '../../../audio/useTeamIntroAudio.js';
+import AudioBlockedCue from '../AudioBlockedCue.jsx';
 import { useTheme } from '../../shared/ThemeProvider.jsx';
 import { EASE_OUT, EASE_PANEL } from '../../../lib/easings.js';
 import { nextSlideAfter, TEAM_PICKER_HOLD_MS } from '../../../lib/slideStepping.js';
@@ -184,146 +186,6 @@ export default function TeamPickerSlide({ slide, show, isPreview }) {
   const [teams, setTeams] = useState([]);
   const [fontsReady, setFontsReady] = useState(false);
 
-  // Background theme (loop lives in public/, not bundled — a fixed 45s
-  // native-loop AAC clip, same "always the same ceremony" reasoning as the
-  // fixed BG_FIXED/STAR_*_FIXED colors above). Starts on mount; fades out
-  // over REVEAL_S once the ring-world reveal begins so the music finishes
-  // exactly as the wipe does, not with a hard cut. Autoplay-with-sound can
-  // be blocked by the browser without a prior user gesture — this is a
-  // kiosk `/display` page a host has already navigated to, so the common
-  // case has one, but `.play()` rejection is swallowed either way rather
-  // than surfaced, since there's no UI here to show an error in.
-  const audioRef = useRef(null);
-  const audioCtxRef = useRef(null);
-  const gainNodeRef = useRef(null);
-  // Was a hand-picked 0.55 (the element's own linear volume, no loudness
-  // analysis behind it) — that's what let this track play louder than
-  // every other audio source in the show. Now unity: the actual level
-  // correction lives in gainNodeRef, computed from the real file (see
-  // getTeamIntroGainDb above), so this constant is just the fade
-  // ceiling — a.volume swings 0..1, the GainNode does the dB correction
-  // on top.
-  const AUDIO_VOL = 1;
-  // 2026-08-25 (Ben: swap the ceremony theme, start at 3:01, fade in, run
-  // until he advances past it — same fade-in/fade-out this slide already
-  // had, just a different clip and a mid-track start). Playback starts at
-  // 3:01, not 3:04 — the source track has its OWN built-in fade-in from
-  // 3:01 to 3:04 (the "real" start), so starting at 3:01 lets that fade
-  // play out naturally; this app's own FADE_IN_MS volume ramp below just
-  // rides on top of it. Native `loop` would restart at 0:00, undoing the
-  // mid-track start, so looping (below, on the audio element's `onEnded`)
-  // re-seeks to AUDIO_START_S instead of 0. The file is ~17min, far longer
-  // than any real team-intro roll, so that loop is a safety net, not
-  // something a real show should ever actually reach.
-  const AUDIO_START_S = 3 * 60 + 1
-  // Synced to the first item's "approach" (the words' zoom/grow-in), not a
-  // flat timer (2026-08-17, Ben: "should start as the words get bigger" /
-  // "the fade in starts just before" — two corrections to what was
-  // originally a plain 3s delay). `covered` flips at REVEAL_S*1000 (see the
-  // entrance-hold effect below) — that's the exact moment the first item
-  // starts growing. START_LEAD_MS gets the fade audibly under way just
-  // before that instant instead of starting flush with it.
-  const FADE_IN_MS = 4000;
-  const START_LEAD_MS = 200;
-  // Single ref for whichever timer/rAF is currently driving a.volume — fed
-  // by both the fade-in below and the fade-out further down, so starting
-  // one always cancels the other first. Before this, the fade-out effect's
-  // `[settled]` dependency fired on MOUNT too (settled starts false) and
-  // unconditionally snapped volume to AUDIO_VOL, racing the fade-in's own
-  // rAF loop (never cancelled except on unmount) for control of a.volume —
-  // two independent loops writing it every frame, occasionally computing a
-  // value just outside [0,1] from the timing skew between them, which
-  // HTMLMediaElement.volume's setter throws on rather than clamps.
-  const volAnimRef = useRef({ timeout: null, raf: null });
-  function stopVolAnim() {
-    clearTimeout(volAnimRef.current.timeout);
-    cancelAnimationFrame(volAnimRef.current.raf);
-    volAnimRef.current = { timeout: null, raf: null };
-  }
-  // HTMLMediaElement.volume THROWS (doesn't clamp) outside [0,1] — confirmed
-  // live even with the single-owner rAF handle above still occasionally
-  // computing a few-ten-thousandths negative right at the fade-out's tail
-  // (startVol * (1-p) with p pinned to exactly 1 by Math.min, but startVol
-  // itself sampled mid-fade-in from the OTHER effect can carry a sliver of
-  // float error through). Clamping here is the actual fix for the crash;
-  // the single-owner handle above is still correct and worth keeping since
-  // it's what stops the two loops fighting over which value wins.
-  function setVol(a, v) { a.volume = Math.max(0, Math.min(1, v)); }
-  useEffect(() => {
-    const a = audioRef.current;
-    // isPreview: SlideCanvasEditor mounts this same component, with the
-    // slide's REAL live currentPart (BuildMode has no reason to reset it),
-    // inside an audible unsandboxed iframe (CanvasIframe.jsx) any time a
-    // host selects an already-progressed team-picker slide to edit text —
-    // without this guard every one of the two branches below plays the
-    // ceremony theme out loud on the host's own machine mid-edit, and the
-    // currentPart>0 branch (added for reload-resume, below) is worse than
-    // the fresh-entry one since it has no fade at all: full volume,
-    // immediately (found by code-review's adversarial pass, 2026-09-14 —
-    // real gap this component never had, every other audio-playing slide
-    // already guards its play effect on isPreview, see QuestionSlide.jsx/
-    // PreShowSlide.jsx).
-    if (!a || isPreview) return;
-    stopVolAnim();
-    // Gain graph built once per mount (createMediaElementSource throws if
-    // called twice on the same element — this effect has an empty dep
-    // array, so it only runs once, same guard shape as QuestionSlide.jsx's
-    // audioCtxRef). Starts at unity and corrects itself once the analysis
-    // (fetched once, cached at module scope — see getTeamIntroGainDb above)
-    // resolves, rather than blocking playback on it.
-    if (!audioCtxRef.current) {
-      const ctx = new AudioContext();
-      const gainNode = ctx.createGain();
-      ctx.createMediaElementSource(a).connect(gainNode);
-      gainNode.connect(ctx.destination);
-      audioCtxRef.current = ctx;
-      gainNodeRef.current = gainNode;
-      getTeamIntroGainDb().then((gainDb) => {
-        if (gainNodeRef.current) gainNodeRef.current.gain.value = Math.pow(10, gainDb / 20);
-      });
-    }
-    if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume().catch(() => {});
-    // Fresh entry (currentPart 0 — the opening text, before the host's first
-    // Next) plays the real intro: silent hold, fade up from 0 in step with
-    // the reveal. A MOUNT that starts mid-ceremony (currentPart > 0) is not
-    // a fresh entry — it's this component remounting while teams are
-    // already rolling (a page reload, main.jsx's stale-chunk safety net
-    // firing on a flaky chunk fetch, anything that tears down and rebuilds
-    // this slide). Reseeking to AUDIO_START_S and fading up from silence in
-    // that case read as the music clipping and restarting from the
-    // beginning (2026-09-14, Ben, live: "clipping then looping weird" /
-    // "restarts from the beginning" — reproduced by forcing a mid-roll
-    // remount). Estimate roughly where the roll would have the music by now
-    // (each auto-rolled part is TEAM_PICKER_HOLD_MS apart) and resume there
-    // at full volume, no fade — an estimate, not a synced clock, but
-    // "already playing" reads far less broken than "restarting."
-    if (currentPart > 0) {
-      a.currentTime = AUDIO_START_S + (currentPart * TEAM_PICKER_HOLD_MS) / 1000;
-      setVol(a, AUDIO_VOL);
-      a.play().catch(() => {});
-      return;
-    }
-    a.volume = 0;
-    const t = setTimeout(() => {
-      a.currentTime = AUDIO_START_S;
-      a.play().catch(() => {});
-      const t0 = performance.now();
-      const step = (now) => {
-        const p = Math.min(1, (now - t0) / FADE_IN_MS);
-        setVol(a, AUDIO_VOL * p);
-        if (p < 1) volAnimRef.current.raf = requestAnimationFrame(step);
-      };
-      volAnimRef.current.raf = requestAnimationFrame(step);
-    }, Math.max(0, REVEAL_S * 1000 - START_LEAD_MS));
-    volAnimRef.current.timeout = t;
-    return () => {
-      stopVolAnim();
-      audioCtxRef.current?.close();
-      audioCtxRef.current = null;
-      gainNodeRef.current = null;
-    };
-  }, []);
-
   // live from teams table, baked on mount (everyone who scanned the QR).
   // Shuffled, not registration order — reading them off in signup order
   // isn't the point, a shuffle is. Seeded off slide.id so the order is
@@ -396,34 +258,15 @@ export default function TeamPickerSlide({ slide, show, isPreview }) {
   const [settled, setSettled] = useState(false);
   const [revealed, setRevealed] = useState(false);
 
-  // Fades the loop out in step with REVEAL_VARIANTS' wipe (REVEAL_S) rather
-  // than a fixed timer — settled flipping back to false (Stream Deck back
-  // out of 'landed') cancels the fade and snaps volume back up instead of
-  // leaving the music silent for a resumed sequence.
-  const everSettledRef = useRef(false);
-  useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    if (!settled) {
-      // Only a real back-out (was settled, now isn't) snaps volume back to
-      // full — on initial mount settled is ALSO false, but nothing has
-      // happened yet, so leave the fade-in effect above alone to ramp up
-      // from 0 on its own schedule instead of stomping it here.
-      if (everSettledRef.current) { stopVolAnim(); a.volume = AUDIO_VOL; }
-      return;
-    }
-    everSettledRef.current = true;
-    stopVolAnim();
-    const startVol = a.volume, t0 = performance.now();
-    const step = (now) => {
-      const p = Math.min(1, (now - t0) / (REVEAL_S * 1000));
-      setVol(a, startVol * (1 - p));
-      if (p < 1) volAnimRef.current.raf = requestAnimationFrame(step);
-      else a.pause();
-    };
-    volAnimRef.current.raf = requestAnimationFrame(step);
-    return stopVolAnim;
-  }, [settled]);
+  // Background theme: the ~16 min ceremony track (public/audio/team-intro-theme.mp3), on the
+  // audio director via useTeamIntroAudio (audio/useTeamIntroAudio.js carries the whole story:
+  // starts at 3:01, fades in with the reveal, fades out over REVEAL_S as the ring-world wipe
+  // lands, resumes mid-roll after a remount, loudness-corrected from the real file). The shared
+  // "Click for sound" cue appears if the tab is locked.
+  const intro = useTeamIntroAudio({
+    slideId: slide?.id, isPreview, currentPart, settled,
+    getGainDb: getTeamIntroGainDb, holdMs: TEAM_PICKER_HOLD_MS, revealMs: REVEAL_S * 1000,
+  });
 
   // Hold the first item's approach until the entrance wipe has landed.
   // SlideRenderer drops this whole panel in from the top edge over REVEAL_S
@@ -639,12 +482,7 @@ export default function TeamPickerSlide({ slide, show, isPreview }) {
 
   return (
     <div className="absolute inset-0 overflow-hidden">
-      <audio
-        ref={audioRef}
-        src="/audio/team-intro-theme.mp3"
-        preload="auto"
-        onEnded={(e) => { e.currentTarget.currentTime = AUDIO_START_S; e.currentTarget.play().catch(() => {}) }}
-      />
+      <AudioBlockedCue show={intro.blocked && !isPreview} onRetry={intro.retry} theme={theme} />
       {/* The canvas keeps its own fixed 1920x1080 backing store and CSS
           fill — the wrapper only ever moves/fades, so none of that sizing
           logic is disturbed. */}
