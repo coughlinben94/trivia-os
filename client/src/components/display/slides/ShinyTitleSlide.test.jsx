@@ -118,3 +118,55 @@ describe('<ShinyTitleSlide> explainer beat', () => {
     expect(skipsLockedBackground(slideAt(1))).toBe(false)
   })
 })
+
+describe('<ShinyTitleSlide> rules cards', () => {
+  let container, root
+  beforeEach(() => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true
+    globalThis.FontFace = class { load() { return Promise.resolve(this) } }
+    if (!document.fonts) document.fonts = { add() {}, delete() {}, ready: Promise.resolve() }
+    if (!Range.prototype.getClientRects) Range.prototype.getClientRects = () => [{}]
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+  afterEach(() => { act(() => root.unmount()); container.remove() })
+
+  const cardFor = inputType => ({
+    id: 'slide-title', type: 'shiny-title', roundId: 'round-1',
+    data: { isShiny: true, shinyGroupId: 'sgrp_x', shinyFormatId: 'fmt_generated_x', shinyInputType: inputType, seriesTheme: 'X', parts: [{}, {}], currentPart: 1 },
+  })
+  const render = slide => act(() => {
+    root.render(<ThemeProvider><ShinyTitleSlide slide={slide} show={{ slides: [slide] }} /></ThemeProvider>)
+  })
+
+  it('wager card shows action, scoring and the scored sample room', async () => {
+    const { SAMPLE_WAGER_RESULTS } = await import('../explainers/WagerExplainer.jsx')
+    render(cardFor('wager'))
+    const el = container.querySelector('[data-testid="shiny-explainer"]')
+    expect(el.textContent).toContain('Pick a wager before you see the question')
+    expect(el.textContent).toContain('Example')
+    expect(el.textContent).toContain('Beat 2 of 4 teams to win')
+    expect(SAMPLE_WAGER_RESULTS.map(r => r.points)).toEqual([20, 0, 10, 0, 0])
+    expect(el.textContent).toContain('B beat 3 of 4 but wagered Fly Close To The Sun, which needs 4.')
+  })
+
+  it('order card shows one scoring answer and one zero', async () => {
+    const { SAMPLE_ORDER_ANSWERS } = await import('../explainers/OrderExplainer.jsx')
+    render(cardFor('order'))
+    const el = container.querySelector('[data-testid="shiny-explainer"]')
+    expect(el.textContent).toContain('Tap the pictures on your phone in order')
+    expect(SAMPLE_ORDER_ANSWERS[0].points).toBeGreaterThan(0)
+    expect(SAMPLE_ORDER_ANSWERS[1].points).toBe(0)
+    expect(el.textContent).toContain('Scores')
+    expect(el.textContent).toContain('Cat and Horse swapped')
+  })
+
+  it('hues-cues sample points come from the real scorer (distance-1 band)', async () => {
+    const { SAMPLE_GUESS_POINTS } = await import('../explainers/HuesCuesExplainer.jsx')
+    const { HUES_CUES_SCORE_BANDS } = await import('../../../lib/huesCuesScoring.js')
+    expect(SAMPLE_GUESS_POINTS).toBe(HUES_CUES_SCORE_BANDS[1].points)
+    render(cardFor('hues-cues'))
+    expect(container.textContent).toContain(`+${HUES_CUES_SCORE_BANDS[1].points} points`)
+  })
+})

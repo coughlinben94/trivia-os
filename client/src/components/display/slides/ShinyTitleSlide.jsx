@@ -10,6 +10,8 @@ import ShinyRulesCard from '../explainers/ShinyRulesCard.jsx'
 import BendleExplainer from '../explainers/BendleExplainer.jsx'
 import PinItExplainer from '../explainers/PinItExplainer.jsx'
 import HuesCuesExplainer from '../explainers/HuesCuesExplainer.jsx'
+import WagerExplainer from '../explainers/WagerExplainer.jsx'
+import OrderExplainer from '../explainers/OrderExplainer.jsx'
 
 // Renderer keys are defined by the shared format registry; this map has no
 // format IDs, so eligibility remains in one place.
@@ -18,6 +20,8 @@ const EXPLAINER_RENDERERS = {
   bendle: BendleExplainer,
   pinIt: PinItExplainer,
   huesCues: HuesCuesExplainer,
+  wager: WagerExplainer,
+  order: OrderExplainer,
 }
 
 // The standalone title card that opens every shiny series (type
@@ -29,7 +33,10 @@ const EXPLAINER_RENDERERS = {
 // "already landed" repeat case for a slide that exists exactly once.
 //
 // data: { isShiny: true, shinyGroupId, seriesTheme, shinyFormatName,
-//         shinyFormatId, shinyFormatIcon, introSubtitle?, hostPhotoUrl? }
+//         shinyFormatId, shinyFormatIcon, shinyInputType?, introSubtitle?,
+//         hostPhotoUrl?, parts?, currentPart? }
+// parts/currentPart exist only when the format has a rules card
+// (shinyExplainers.js): beat 0 = announce, beat 1 = explainer.
 // — see buildShinyTitleSlide in lib/shinySeries.js for the one place that
 // stamps this shape.
 export default function ShinyTitleSlide({ slide, show }) {

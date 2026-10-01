@@ -1,6 +1,7 @@
 import { BENDLE_STEP_POINTS } from './bendleScoring.js'
 import { HUES_CUES_SCORE_BANDS } from './huesCuesScoring.js'
 import { PIN_MIN_ROOM_FOR_FRACTION, PIN_POINTS, PIN_WINNER_FRACTION } from './pinScoring.js'
+import { WAGER_TIERS } from './wagerScoring.js'
 
 // The title card becomes a two-beat slide: announce, then explain. Existing
 // title slides stay unchanged; buildShinyTitleSlide stamps these parts only
@@ -9,6 +10,9 @@ export const EXPLAINER_BEAT_PARTS = [{}, {}]
 
 const notSoDifferentPhotos = ['harry', 'niall', 'louis', 'zayn']
   .map(name => `/explainers/not-so-different/${name}.jpg`)
+
+const wagerPercents = WAGER_TIERS.map(tier => `${Math.round(tier.threshold * 100)}%`).join(' / ')
+const wagerPoints = WAGER_TIERS.map(tier => `+${tier.points}`).join(' / ')
 
 const pinPercent = Math.round(100 * PIN_WINNER_FRACTION.numerator / PIN_WINNER_FRACTION.denominator)
 
@@ -50,6 +54,30 @@ export const SHINY_EXPLAINERS = Object.freeze([
     scoring: [
       `Exact +${HUES_CUES_SCORE_BANDS[0].points} · one square +${HUES_CUES_SCORE_BANDS[1].points} · two squares +${HUES_CUES_SCORE_BANDS[2].points}.`,
       'Diagonal neighbors count as one square.',
+    ],
+    assets: [],
+  }),
+  Object.freeze({
+    inputType: 'wager',
+    mode: 'rules',
+    rendererKey: 'wager',
+    action: 'Pick a wager before you see the question, then enter a number on your phone and lock it in.',
+    scoring: [
+      `Be closer than ${wagerPercents} of the other teams to win ${wagerPoints}.`,
+      'Miss your bar and score 0. Your phone shows how many teams you need to beat.',
+    ],
+    assets: [],
+  }),
+  // Points per Order slide are host-set (pointsForOrder), so the card states
+  // the all-or-nothing rule, never a number.
+  Object.freeze({
+    inputType: 'order',
+    mode: 'rules',
+    rendererKey: 'order',
+    action: 'Tap the pictures on your phone in order, then lock it in.',
+    scoring: [
+      'All or nothing: every item in the right spot scores.',
+      'One out of place scores 0.',
     ],
     assets: [],
   }),

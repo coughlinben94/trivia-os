@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { chebyshevDistance, getHuesCuesGrid, HUES_CUES_COLS, HUES_CUES_ROWS } from '../../../lib/huesCuesGrid.js'
+import { scoreHuesCuesRound } from '../../../lib/huesCuesScoring.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { SHINY_GOLD } from '../../../lib/shinyGold.js'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
@@ -8,6 +9,11 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 const TARGET = { col: 'H', row: 15 }
 const GUESS = { col: 'I', row: 16 }
 const COL_LETTERS = Array.from({ length: HUES_CUES_COLS }, (_, index) => String.fromCharCode(65 + index))
+// Scored by the real scorer so the card's points can't drift from the game's.
+export const SAMPLE_GUESS_POINTS = scoreHuesCuesRound({
+  entries: [{ teamId: 'sample', guess: GUESS }],
+  correctAnswer: `${TARGET.col}${TARGET.row}`,
+})[0].points
 const COLUMN_RADIUS = 4
 const ROW_RADIUS = 4
 
@@ -107,7 +113,7 @@ export default function HuesCuesExplainer() {
           Guess <strong style={{ color: '#fff' }}>I16</strong> lands diagonally beside target <strong style={{ color: SHINY_GOLD }}>H15</strong>.
         </span>
         <span style={{ color: SHINY_GOLD, fontFamily: `'${theme.fonts.display}', 'Boogaloo', sans-serif`, fontSize: 'clamp(1.7rem, 2.7vmin, 2.8rem)' }}>
-          +20 points
+          +{SAMPLE_GUESS_POINTS} points
         </span>
         <span style={{ color: `${theme.colors.text}a8`, fontSize: 'clamp(0.95rem, 1.45vmin, 1.45rem)', lineHeight: 1.3 }}>
           T = exact target · G = guess. Solid outlines are one square away; dashed outlines are two.
