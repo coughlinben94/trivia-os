@@ -55,12 +55,12 @@ describe('Wikidata movie lookup', () => {
     await expect(getMovieCast('Q1', fetcher)).rejects.toThrow('Wikidata unavailable')
   })
 
-  it('accepts film subtypes like animated and short films', async () => {
-    const sub = type => ({ ...film(), claims: { ...film().claims, P31: [value(type)] } })
+  it.each(['Q11424', 'Q202866', 'Q24862', 'Q24869', 'Q226730', 'Q93204', 'Q20650540', 'Q506240'])('accepts film type %s', async type => {
+    const entity = { ...film(), claims: { ...film().claims, P31: [value(type)] } }
     const fetcher = vi.fn()
-      .mockResolvedValueOnce(response({ search: [{ id: 'Q1' }, { id: 'Q2' }] }))
-      .mockResolvedValueOnce(response({ entities: { Q1: sub('Q202866'), Q2: { ...sub('Q24862'), id: 'Q2' } } }))
-    expect((await searchMovies('Toy', fetcher)).map(m => m.id)).toEqual(['Q1', 'Q2'])
+      .mockResolvedValueOnce(response({ search: [{ id: 'Q1' }] }))
+      .mockResolvedValueOnce(response({ entities: { Q1: entity } }))
+    expect((await searchMovies('Toy', fetcher)).map(m => m.id)).toEqual(['Q1'])
   })
 
   it('asks only for labels when fetching performers', async () => {
