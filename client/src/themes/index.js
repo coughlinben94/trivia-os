@@ -190,7 +190,7 @@ export const THEMES = [
   },
   // Second ring world (docs/superpowers/specs/2026-09-28-halloween-ring-world-design.md
   // §4.11 Tier 1). Separate from the bespoke `halloween` theme above, which is untouched.
-  // Not offered in the host pickers until its world is approved (hauntedOctober.ring.js).
+  // Not offered in the host pickers until its world is approved (hauntedOctober.world.js).
   {
     id: 'haunted-october',
     name: 'Haunted October',

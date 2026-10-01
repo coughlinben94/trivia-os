@@ -4,7 +4,7 @@
 // ringWorldFor test existed before this file. See design doc §7.1:
 // docs/superpowers/plans/2026-09-05-ring-unified-noun-color-draw-design.md
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
-import { hauntedOctoberRing } from '../worlds/hauntedOctober.ring.js'
+import { makeHauntedWorld } from '../worlds/hauntedOctober.world.js'
 import { RING_POOL } from '../worlds/ringPool.js'
 import { resolveStations } from './drawWorld.js'
 import { drawStations } from './ringDraw.js'
@@ -21,8 +21,12 @@ import { hash32 } from './ringEngine.js'
 // geometry is a RingAmbient.jsx change, not just a registry entry.
 export const RING_WORLDS = {
   'midnight-galaxy': midnightGalaxyRing,
-  'haunted-october': hauntedOctoberRing,
 }
+// Forest world (Halloween forest spec §2.4): registered only when its THEMES
+// entry exists — makeHauntedWorld() returns null (and logs) instead of
+// throwing, so a missing entry never takes the space world down at import.
+const hauntedWorld = makeHauntedWorld()
+if (hauntedWorld) RING_WORLDS['haunted-october'] = hauntedWorld
 
 // What the host theme pickers offer: registered ring worlds not flagged
 // `approved: false` (a world still being built stays routable, just not
@@ -108,9 +112,12 @@ function autoDrawWorld(base, showId) {
 export function ringWorldFor(theme, showId) {
   const base = RING_WORLDS[theme.id]
   if (!base) return base
-  // `autoDraw: false` (haunted-october): fixed authored order only — no
-  // per-show draw and no saved station arrangement (spec §3; the draw pool
-  // and every saved ringWorld are space-only).
+  // A forest world has no station hues, pool or ring palette: it skips
+  // paletteOnly, theme.ringWorld and auto-draw entirely (forest spec §2.4;
+  // recolorWorld would rewrite sky/tints assuming station hues).
+  if (base.renderer === 'forest') return base
+  // `autoDraw: false`: fixed authored order only — no per-show draw and no
+  // saved station arrangement.
   const drawable = base.autoDraw !== false
 
   if (drawable && theme.ringWorld && theme.ringWorld.ringVersion === RING_VERSION) {

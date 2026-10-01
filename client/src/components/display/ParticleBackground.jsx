@@ -3,6 +3,7 @@ import ErrorBoundary from '../ErrorBoundary.jsx'
 import { getTheme } from '../../themes/index.js'
 import BreathingGradient from './BreathingGradient'
 import RingAmbient from './RingAmbient.jsx'
+import ForestAmbient from './ForestAmbient.jsx'
 import { RING_WORLDS, ringWorldFor } from '../../lib/ringWorldFor.js'
 import { deriveTint, hexToRgba } from '../../lib/colorTint.js'
 
@@ -1254,7 +1255,9 @@ function ParticleBackgroundInner({ theme, showId, slideIndex, stationOverride, s
           {gradientMood
             ? <BreathingGradient palette={theme.colors} mood={gradientMood} />
             : ringWorld
-              ? <RingAmbient worldData={ringWorld} showId={showId} slideIndex={slideIndex} stationOverride={stationOverride} showStationDebug={showStationDebug} forceSnap={forceSnap} />
+              ? (ringWorld.renderer === 'forest'
+                ? <ForestAmbient worldData={ringWorld} showId={showId} slideIndex={slideIndex} stationOverride={stationOverride} showStationDebug={showStationDebug} forceSnap={forceSnap} />
+                : <RingAmbient worldData={ringWorld} showId={showId} slideIndex={slideIndex} stationOverride={stationOverride} showStationDebug={showStationDebug} forceSnap={forceSnap} />)
               : AmbientComponent && <AmbientComponent tint={tint} />}
         </ErrorBoundary>
         <Vignette

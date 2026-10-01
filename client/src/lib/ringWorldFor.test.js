@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ringWorldFor, RING_WORLDS } from './ringWorldFor.js'
+import { ringWorldFor, RING_WORLDS, isPickableWorld } from './ringWorldFor.js'
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
 import { RING_VERSION } from './ringCertification.js'
 import { RING_POOL } from '../worlds/ringPool.js'
@@ -217,5 +217,43 @@ describe('ringWorldFor — auto-draw (no explicit ringWorld, showId present)', (
     expect(() => ringWorldFor(BASE_THEME, '')).not.toThrow()
     const world = ringWorldFor(BASE_THEME, '')
     expect(world.stations.length).toBeGreaterThan(0)
+  })
+})
+
+// Forest spec §2.4: a forest world returns before paletteOnly, theme.ringWorld
+// and auto-draw — a saved ring palette/arrangement on that theme is ignored.
+describe('ringWorldFor — forest world (haunted-october)', () => {
+  const forest = RING_WORLDS['haunted-october']
+  const snapshot = JSON.stringify(forest)
+  const HAUNTED = { id: 'haunted-october', colors: { text: '#fff1dc', textMuted: '#a07a5a' } }
+  const PALETTE = { colors: ['#ff2200', '#ffd400'], weights: [0.55, 0.45] }
+
+  it('is registered as a forest world and is not pickable', () => {
+    expect(forest.renderer).toBe('forest')
+    expect(isPickableWorld('haunted-october')).toBe(false)
+  })
+
+  it('a saved worldPalette leaves the forest world unchanged and does not throw', () => {
+    for (const showId of [undefined, 'show-1']) {
+      expect(ringWorldFor({ ...HAUNTED, worldPalette: PALETTE }, showId)).toBe(forest)
+    }
+    expect(JSON.stringify(forest)).toBe(snapshot)
+  })
+
+  it('a saved ringWorld (current ringVersion, with or without a worldPalette) leaves it unchanged and does not throw', () => {
+    const ringWorld = { ringVersion: RING_VERSION, stations: SWAPPED_KEYS, palette: PALETTE }
+    expect(ringWorldFor({ ...HAUNTED, ringWorld }, 'show-1')).toBe(forest)
+    expect(ringWorldFor({ ...HAUNTED, ringWorld, worldPalette: PALETTE }, 'show-1')).toBe(forest)
+    expect(JSON.stringify(forest)).toBe(snapshot)
+  })
+
+  it('a showId never auto-draws it', () => {
+    expect(ringWorldFor(HAUNTED, 'show-1')).toBe(forest)
+    expect(ringWorldFor(HAUNTED)).toBe(forest)
+  })
+
+  it('space resolution is unchanged alongside it', () => {
+    expect(ringWorldFor(BASE_THEME)).toBe(midnightGalaxyRing)
+    expect(isPickableWorld('midnight-galaxy')).toBe(true)
   })
 })

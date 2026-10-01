@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { THEMES, getTheme } from '../themes/index.js'
 import ParticleBackground from '../components/display/ParticleBackground.jsx'
 import RingAmbient from '../components/display/RingAmbient.jsx'
+import ForestAmbient from '../components/display/ForestAmbient.jsx'
 import EvolvingRingAmbient from '../components/display/EvolvingRingAmbient.jsx'
 import { midnightGalaxyRing } from '../worlds/midnightGalaxy.ring.js'
 import { RING_POOL } from '../worlds/ringPool.js'
@@ -114,7 +115,9 @@ export default function AmbientAudit() {
   if (ringMode) {
     return (
       <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
-        <RingAmbient ref={ringRef} worldData={ringWorldData} showId={params.get('showId') ?? undefined} />
+        {ringWorldData.renderer === 'forest'
+          ? <ForestAmbient ref={ringRef} worldData={ringWorldData} showId={params.get('showId') ?? undefined} />
+          : <RingAmbient ref={ringRef} worldData={ringWorldData} showId={params.get('showId') ?? undefined} />}
         <div style={{ position: 'absolute', top: 24, left: 24, zIndex: 30, display: 'flex', gap: 10, alignItems: 'center' }}>
           <button
             onClick={() => {

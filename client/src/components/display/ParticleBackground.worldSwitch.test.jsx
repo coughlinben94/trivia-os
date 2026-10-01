@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 //
-// Halloween spec §4.8: a live theme switch between ring worlds must rebuild
-// the ring (ParticleBackground keyed by ring world id) and the new ring must
-// land on slideIndex % 13 before first paint. Slide advances must never
+// Halloween spec §4.8 / forest spec §2.4 + gate 7: a live theme switch
+// between registered worlds (space ring <-> haunted-october forest) must
+// rebuild the ambient (ParticleBackground keyed by world id) and the new one
+// must land on slideIndex % 13 before first paint. Slide advances must never
 // remount (Critical Rule 1), and switching between two non-ring themes must
-// not remount either. Station read straight off the far layer's transform —
-// the on-screen truth — not just the component's own station counter.
+// not remount either. Space station read straight off the far layer's
+// transform — the on-screen truth — not just the component's own station
+// counter; forest station read off its stage's data-forest-station.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -37,13 +39,24 @@ const rootNode = () => container.querySelector(':scope > div')
 function onScreenStation() {
   const stages = container.querySelectorAll('.ring-stage')
   expect(stages).toHaveLength(1)
+  expect(container.querySelectorAll('.forest-stage')).toHaveLength(0)
   const far = stages[0].querySelectorAll('.ring-surge')[1]
   const m = far.style.transform.match(/translate3d\((-?[\d.]+)px/)
   return (Math.round(-Number(m[1]) / FAR_SURGE) % PANES + PANES) % PANES
 }
+function forestStation() {
+  const stages = container.querySelectorAll('.forest-stage')
+  expect(stages).toHaveLength(1)
+  expect(container.querySelectorAll('.ring-stage')).toHaveLength(0)
+  return Number(stages[0].dataset.forestStation)
+}
+// [renderer, on-screen station]: ring rows also carry the ring's own world id.
+const onScreen = (themeId) => themeId === 'haunted-october'
+  ? ['forest', forestStation()]
+  : ['ring', onScreenStation(), window.__world.WORLD.id]
 
 describe('ParticleBackground world switch', () => {
-  it('space -> haunted -> space mid-show: one remount per switch, none on advances, station follows the slide', async () => {
+  it('space -> haunted (forest) -> space mid-show: one remount per switch, none on advances, station follows the slide', async () => {
     let themeId = 'midnight-galaxy'
     let mounts = 0, last = null
     const log = []
@@ -54,7 +67,7 @@ describe('ParticleBackground world switch', () => {
       const node = rootNode()
       if (node !== last) { mounts++; last = node }
       // Checked immediately after the commit: the switch must not paint station 0 first.
-      log.push([themeId, slideIndex, onScreenStation(), window.__world.WORLD.id])
+      log.push([themeId, slideIndex, ...onScreen(themeId)])
       await act(async () => { vi.advanceTimersByTime(SETTLE_MS) })
     }
 
@@ -69,24 +82,32 @@ describe('ParticleBackground world switch', () => {
 
     expect(mounts).toBe(3)   // initial + 2 switches; zero on the 7 advances
     expect(log).toEqual([
-      ['midnight-galaxy', 5, 5, 'midnight-galaxy'],
-      ['midnight-galaxy', 6, 6, 'midnight-galaxy'],
-      ['haunted-october', 6, 6, 'haunted-october'],
-      ['haunted-october', 7, 7, 'haunted-october'],
-      ['haunted-october', 8, 8, 'haunted-october'],
-      ['haunted-october', 9, 9, 'haunted-october'],
-      ['midnight-galaxy', 9, 9, 'midnight-galaxy'],
-      ['midnight-galaxy', 10, 10, 'midnight-galaxy'],
-      ['midnight-galaxy', 11, 11, 'midnight-galaxy'],
-      ['midnight-galaxy', 12, 12, 'midnight-galaxy'],
+      ['midnight-galaxy', 5, 'ring', 5, 'midnight-galaxy'],
+      ['midnight-galaxy', 6, 'ring', 6, 'midnight-galaxy'],
+      ['haunted-october', 6, 'forest', 6],
+      ['haunted-october', 7, 'forest', 7],
+      ['haunted-october', 8, 'forest', 8],
+      ['haunted-october', 9, 'forest', 9],
+      ['midnight-galaxy', 9, 'ring', 9, 'midnight-galaxy'],
+      ['midnight-galaxy', 10, 'ring', 10, 'midnight-galaxy'],
+      ['midnight-galaxy', 11, 'ring', 11, 'midnight-galaxy'],
+      ['midnight-galaxy', 12, 'ring', 12, 'midnight-galaxy'],
     ])
   }, 120_000)
 
-  it('mount past a full lap aligns to slideIndex % 13', async () => {
+  it('mount past a full lap aligns to slideIndex % 13 (space)', async () => {
     await act(async () => {
-      root.render(<ParticleBackground theme={getTheme('haunted-october')} showId="show-x" slideIndex={17} stationOverride={null} />)
+      root.render(<ParticleBackground theme={getTheme('midnight-galaxy')} showId="show-x" slideIndex={17} stationOverride={null} />)
     })
     expect(onScreenStation()).toBe(17 % PANES)
+  }, 60_000)
+
+  it('forest first paint: slideIndex 20 -> station 7, read in the same commit (before any timer runs)', async () => {
+    await act(async () => {
+      root.render(<ParticleBackground theme={getTheme('haunted-october')} showId="show-x" slideIndex={20} stationOverride={null} />)
+    })
+    expect(forestStation()).toBe(7)
+    expect(container.querySelector('.fs-stage').dataset.scene).toBe('rest:7')
   }, 60_000)
 
   it('two non-ring themes and slide advances on them never remount', async () => {

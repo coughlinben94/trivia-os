@@ -56,23 +56,25 @@ describe('world identity (both passes)', () => {
   })
 })
 
+// Per-world dispatch fixtures are built from the space world: the forest
+// world (renderer 'forest') has no ring prims for this scan to read.
 describe('static primitive parity (per-world dispatch)', () => {
+  const ring = { ...space, id: 'fixture' }
   it('the shared-kind scan finds every space prim', () => {
     expect(shared.has('eclipse')).toBe(true)
     expect(missingPrims(space, shared)).toEqual([])
-    expect(missingPrims(haunted, shared)).toEqual([])
   })
   it('bad: a kind with no branch and no world dispatch fails', () => {
-    const bad = { ...haunted, prims: {}, stations: [{ key: 'x', prim: 'stubKind' }, ...haunted.stations.slice(1)] }
-    expect(missingPrims(bad, shared)).toEqual(['haunted-october:st0(stubKind)'])
+    const bad = { ...ring, prims: {}, stations: [{ key: 'x', prim: 'stubKind' }, ...ring.stations.slice(1)] }
+    expect(missingPrims(bad, shared)).toEqual(['fixture:st0(stubKind)'])
   })
   it('good: the same kind passes once the world dispatches it', () => {
-    const good = { ...haunted, prims: { stubKind: () => null }, stations: [{ key: 'x', prim: 'stubKind' }, ...haunted.stations.slice(1)] }
+    const good = { ...ring, prims: { stubKind: () => null }, stations: [{ key: 'x', prim: 'stubKind' }, ...ring.stations.slice(1)] }
     expect(missingPrims(good, shared)).toEqual([])
   })
   it('a prototype key is not a dispatch', () => {
-    const bad = { ...haunted, prims: {}, stations: [{ key: 'x', prim: 'constructor' }] }
-    expect(missingPrims(bad, shared)).toEqual(['haunted-october:st0(constructor)'])
+    const bad = { ...ring, prims: {}, stations: [{ key: 'x', prim: 'constructor' }] }
+    expect(missingPrims(bad, shared)).toEqual(['fixture:st0(constructor)'])
   })
 })
 
