@@ -4,7 +4,7 @@ Status: DRAFT for Ben's review, 2026-09-29. Next show: week of 2026-10-06.
 
 ## Status update, 2026-10-01
 
-Shipped since this draft (main, PR #7, `e8c93fe`): Bendle-only fix for the
+Shipped since this draft (main, PR #7 merge `f8e3468`, Bendle commit `e8c93fe`): Bendle-only fix for the
 2026-09-22 stall. Range-loads only the played ~30 s of each stem, starts once
 when the beat is ready AND the host pressed Next, aborts/retries fetches, and
 reports slow loads and a suspended audio context to Sentry (`area:audio`).
@@ -41,7 +41,7 @@ report failure.
 
 | Path | Files | Trigger |
 |---|---|---|
-| YouTube warm/claim player | `lib/youtubeWarmAudio.js`; used by `PreShowSlide`, `StateOfUnionSlide`, `CustomSlide`, `QuestionSlide` (x2 copies: plain `QuestionAudio`, shiny `ShinyAudioQuestion`), `Display.jsx` | mount, `audio_playing`, on-screen button |
+| YouTube warm/claim player | `lib/youtubeWarmAudio.js`; used by `PreShowSlide`, `StateOfUnionSlide`, `QuestionSlide` (x2 copies: plain `QuestionAudio`, shiny `ShinyAudioQuestion`), `Display.jsx` | mount, `audio_playing`, on-screen button |
 | Uploaded file + gain graph | `QuestionSlide` (own `AudioContext` per clip), `TeamPickerSlide` | same |
 | Short effects | `RulesSlide`, `LastCallSlide`, `WinnerRevealSlide` (`/drum-roll.mp3`), `RaceSlide` (3 x `new Audio`) | slide mount / phase |
 | Bendle stems | `ShinyBendleQuestion` (Tone.js, own transport) | `audio_playing` |
@@ -177,3 +177,15 @@ Not audio, but found in the same audit and not yet fixed or confirmed fixed:
 - A realtime `fx:` authorization migration is written but not applied.
 - About 30 applied DB migrations are not in the repo; the PIN function is
   missing from the repo.
+
+## Corrections from review of the first telemetry commit (2026-10-01)
+
+- `CustomSlide` does NOT use `youtubeWarmAudio`; it plays through a plain
+  `youtubeEmbedUrl` iframe (`CustomSlide.jsx:6,27`). That is a separate audio
+  path the inventory missed, and it has no telemetry. Stage 3 must cover it.
+- `loadYoutubeIframeApi()` (`YoutubeClipEditor.jsx:16-28`) never rejects in a
+  browser: a blocked or stalled script just hangs. So the claim timeout, not a
+  load error, is the real stall signal, and the cold rebuild reuses the same
+  hung promise (it cannot succeed). Candidate 2 therefore has two outcomes:
+  rebuilt player blocked by autoplay (candidate 1), OR rebuilt player never
+  loads at all. `c8a260b` + its follow-up report both.

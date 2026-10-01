@@ -10,7 +10,9 @@ const H = vi.hoisted(() => ({ apiMode: 'ok', players: [] }))
 vi.mock('@sentry/react', () => ({ captureMessage: vi.fn() }))
 vi.mock('../components/host/YoutubeClipEditor.jsx', () => ({
   loadYoutubeIframeApi: () =>
-    H.apiMode === 'reject'
+    H.apiMode === 'hang'
+      ? new Promise(() => {}) // a blocked/stalled script never settles in a real browser
+      : H.apiMode === 'reject'
       ? Promise.reject(new Error('iframe api blocked'))
       : Promise.resolve({
           Player: class {
@@ -97,6 +99,70 @@ describe('youtubeWarmAudio telemetry', () => {
     expect(sent().filter(c => c[0] === 'youtube audio: claim timeout, rebuilding cold')).toHaveLength(1)
     expect(sent().filter(c => c[0] === 'youtube audio: iframe api failed to load')).toHaveLength(1)
     b.destroy()
+  })
+
+  // Review of c8a260b (2026-10-01): the loader never rejects in a real
+  // browser (a blocked script just hangs), so the claim timeout is the real
+  // stall signal — and the cold rebuild reuses the same hung promise, so it
+  // must not go quiet after one warning.
+  it('reports an error if the cold rebuild is still not ready (stall never recovers)', async () => {
+    H.apiMode = 'hang'
+    const entry = mod.claimYoutubeAudio('vid6', 5, 35)
+    await flush()
+    vi.advanceTimersByTime(1500)
+    await flush()
+    expect(sent().filter(c => c[0] === 'youtube audio: claim timeout, rebuilding cold')).toHaveLength(1)
+    expect(sent().filter(c => c[0] === 'youtube audio: still not ready after cold rebuild')).toHaveLength(0)
+    vi.advanceTimersByTime(3000)
+    await flush()
+    const final = sent().filter(c => c[0] === 'youtube audio: still not ready after cold rebuild')
+    expect(final).toHaveLength(1)
+    expect(final[0][1]).toMatchObject({ level: 'error', tags: { area: 'audio' }, extra: { videoId: 'vid6', start: 5, end: 35 } })
+    entry.destroy()
+  })
+
+  it('does not report the final error if the rebuild does become ready', async () => {
+    H.apiMode = 'hang'
+    const entry = mod.claimYoutubeAudio('vid7', 0, 30)
+    await flush()
+    vi.advanceTimersByTime(1500)
+    await flush()
+    entry.destroy()
+    vi.advanceTimersByTime(5000)
+    await flush()
+    expect(sent().filter(c => c[0] === 'youtube audio: still not ready after cold rebuild')).toHaveLength(0)
+  })
+
+  it('says whether the clip had been warmed ahead (a slow cold load is not a broken one)', async () => {
+    H.apiMode = 'hang'
+    mod.warmYoutubeAudio('vidW', 0, 30)
+    const warmed = mod.claimYoutubeAudio('vidW', 0, 30)
+    const cold = mod.claimYoutubeAudio('vidC', 0, 30)
+    await flush()
+    vi.advanceTimersByTime(1500)
+    await flush()
+    const t = sent().filter(c => c[0] === 'youtube audio: claim timeout, rebuilding cold')
+    expect(t.find(c => c[1].extra.videoId === 'vidW')[1].extra.wasWarm).toBe(true)
+    expect(t.find(c => c[1].extra.videoId === 'vidC')[1].extra.wasWarm).toBe(false)
+    warmed.destroy(); cold.destroy()
+  })
+
+  it('does not report a failed load for a clip nobody has claimed yet', async () => {
+    H.apiMode = 'reject'
+    mod.warmYoutubeAudio('vidU', 0, 30)
+    await flush()
+    expect(sent()).toHaveLength(0)
+  })
+
+  it('reports different clips separately (dedupe is per clip, not global)', async () => {
+    H.apiMode = 'hang'
+    const a = mod.claimYoutubeAudio('vidA', 0, 30)
+    const b = mod.claimYoutubeAudio('vidB', 0, 30)
+    await flush()
+    vi.advanceTimersByTime(1500)
+    await flush()
+    expect(sent().filter(c => c[0] === 'youtube audio: claim timeout, rebuilding cold')).toHaveLength(2)
+    a.destroy(); b.destroy()
   })
 
   it('never throws if Sentry itself throws', async () => {
