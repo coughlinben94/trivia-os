@@ -229,6 +229,22 @@ describe('fit to the stage height', () => {
     expect(cells().guess.dataset.lines).toBe('3')
     expect(scaleNow()).toBe(1)
   })
+  it('a line added to the slide column after mount (late answer line) re-runs the fit', async () => {
+    Object.assign(sizes, { avail: 460, n3: 450, n2: 330 })
+    render(Array.from({ length: 16 }, (_, i) => team(i, 0, sweet)))
+    expect(cells().guess.dataset.lines).toBe('3')
+    expect(scaleNow()).toBe(1)
+    // The column itself keeps its size; only a new child takes 160px of room.
+    const answerLine = document.createElement('p')
+    Object.defineProperty(answerLine, 'offsetHeight', { configurable: true, value: 160 })
+    await act(async () => { host.prepend(answerLine); await new Promise(r => setTimeout(r, 0)) })
+    expect(cells().guess.dataset.lines).toBe('2') // room 300: 300/450 < 0.8
+    expect(scaleNow()).toBeCloseTo(300 / 330, 3)
+    // ...and it is re-decided from 3 lines when the line goes away (no latch).
+    await act(async () => { answerLine.remove(); await new Promise(r => setTimeout(r, 0)) })
+    expect(cells().guess.dataset.lines).toBe('3')
+    expect(scaleNow()).toBe(1)
+  })
   it('one column scales with the 0.7 floor and keeps its 10/11 boundary', () => {
     Object.assign(sizes, { avail: 420, n3: 543, n2: 543 })
     render(Array.from({ length: 10 }, (_, i) => team(i, 0, sweet)))

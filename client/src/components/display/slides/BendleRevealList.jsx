@@ -114,11 +114,23 @@ export default function BendleRevealList({ results, theme }) {
     ro.observe(content)
     // The stage and its other lines (heading, answer, a status line) set the room.
     const parent = outer.parentElement
-    if (parent) { ro.observe(parent); for (const child of parent.children) if (child !== outer) ro.observe(child) }
-    else ro.observe(outer)
+    let mo = null
+    if (parent) {
+      ro.observe(parent)
+      for (const child of parent.children) if (child !== outer) ro.observe(child)
+      // A line that mounts later (the answer line after a slow song fetch)
+      // leaves the column's own size alone, so watch its children too.
+      if (typeof MutationObserver !== 'undefined') {
+        mo = new MutationObserver(records => {
+          for (const r of records) for (const n of r.addedNodes) if (n.nodeType === 1) ro.observe(n)
+          recompute()
+        })
+        mo.observe(parent, { childList: true })
+      }
+    } else ro.observe(outer)
     // Web fonts change every height: forget them and decide again from 3 lines.
     document.fonts?.ready?.then(() => { naturals.current = { key: '' }; recompute() })
-    return () => { dead = true; ro.disconnect() }
+    return () => { dead = true; ro.disconnect(); mo?.disconnect() }
   }, [rows.length, twoCol, lines])
   const stepCol = rows.some(r => r.overridden) ? '6.5em' : '4.2em'
   return (
