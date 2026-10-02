@@ -3,7 +3,7 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest'
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
-import BendleRevealList, { fitStep, MIN_FIT_SCALE } from './BendleRevealList.jsx'
+import BendleRevealList, { fitTier, fitScale, roomFor, TWO_COLUMN_FLOOR, ONE_COLUMN_FLOOR } from './BendleRevealList.jsx'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 const theme = { colors: { text: '#ffffff' }, fonts: { display: 'Boogaloo', body: 'DM Sans' } }
@@ -80,15 +80,16 @@ describe('<BendleRevealList>', () => {
     expect(guess.dataset.lines).toBe('2')
     expect(name.dataset.lines).toBe('2')
   })
-  // Changed deliberately (round 4): the guess also gets 3 lines up to 8 rows.
-  it('two columns: name and guess get 3 lines up to 8 rows per column, 2 above', () => {
-    render(Array.from({ length: 16 }, (_, i) => team(i, 0, sweet)))
-    expect(cells().guess.style.whiteSpace).toBe('normal')
-    expect(cells().guess.dataset.lines).toBe('3')
-    expect(cells().name.dataset.lines).toBe('3')
-    act(() => root.render(<BendleRevealList results={Array.from({ length: 17 }, (_, i) => team(i, 0, sweet))} theme={theme} />))
-    expect(cells().name.dataset.lines).toBe('2')
-    expect(cells().guess.dataset.lines).toBe('2')
+  // Changed deliberately (round 5): 3-line cells at any two-column count; the
+  // fit decides when to drop to 2 (see 'fit to the stage height').
+  it('two columns start with 3-line name and guess cells at any team count', () => {
+    for (const n of [11, 16, 17, 20]) {
+      act(() => root?.unmount()); host?.remove()
+      render(Array.from({ length: n }, (_, i) => team(i, 0, sweet)))
+      expect(cells().guess.style.whiteSpace).toBe('normal')
+      expect(cells().guess.dataset.lines).toBe('3')
+      expect(cells().name.dataset.lines).toBe('3')
+    }
   })
   it('one column caps the name column at 30% (fit-content), leaving the guess the room', () => {
     render([team(1, 0)])
@@ -118,26 +119,72 @@ describe('<BendleRevealList>', () => {
 describe('fit to the stage height', () => {
   const sweet = { title: 'Sweet Dreams (Are Made of This)', artist: 'Eurythmics' }
   const cells = () => { const [, name, guess] = host.querySelector('[role="listitem"]').children; return { name, guess } }
-  it('fitStep: fits as is, tightens first when it can, then scales with a 0.7 floor', () => {
-    expect(fitStep({ avail: 500, natural: 400, tight: false, canTighten: true })).toEqual({ tight: false, scale: 1 })
-    expect(fitStep({ avail: 420, natural: 510, tight: false, canTighten: true })).toEqual({ tight: true, scale: 1 })
-    expect(fitStep({ avail: 420, natural: 543, tight: false, canTighten: false }).scale).toBeCloseTo(420 / 543)
-    expect(fitStep({ avail: 420, natural: 435, tight: true, canTighten: true }).scale).toBeCloseTo(420 / 435)
-    expect(fitStep({ avail: 100, natural: 1000, tight: true, canTighten: true }).scale).toBe(MIN_FIT_SCALE)
-    expect(MIN_FIT_SCALE).toBe(0.7)
-    expect(fitStep({ avail: 0, natural: 400, tight: false, canTighten: true })).toEqual({ tight: false, scale: 1 })
+
+  it('floors: two columns 0.8 (2.2vmin -> 1.76), one column 0.7 (2.8vmin -> 1.96)', () => {
+    expect(TWO_COLUMN_FLOOR).toBe(0.8)
+    expect(ONE_COLUMN_FLOOR).toBe(0.7)
+  })
+  // Numbers from the round-4 browser measurements (room = px left under the answer line).
+  it('fitTier: scales the 3-line list first (1080p, 16 teams: 699px in 690px)', () => {
+    const t = fitTier({ avail: 690, natural3: 699, natural2: 560 })
+    expect(t.lines).toBe(3)
+    expect(t.scale).toBeCloseTo(690 / 699, 3)
+  })
+  it('fitTier: fits as is -> 3 lines, scale 1', () => {
+    expect(fitTier({ avail: 420, natural3: 402 })).toEqual({ lines: 3, scale: 1 })
+  })
+  it('fitTier: 3 lines would need < 0.8 -> 2-line tier (720p 17 teams needs 0.74; 1080p 20 needs 0.78)', () => {
+    expect(fitTier({ avail: 420, natural3: 568, natural2: 391 })).toEqual({ lines: 2, scale: 1 })
+    expect(fitTier({ avail: 690, natural3: 885, natural2: 623 })).toEqual({ lines: 2, scale: 1 })
+  })
+  it('fitTier: asks to measure 2 lines when it has only the 3-line height', () => {
+    expect(fitTier({ avail: 420, natural3: 568 })).toEqual({ lines: 2, scale: 1 })
+  })
+  it('fitTier: 2 lines scaled, then the floor (documented overflow past it)', () => {
+    const t = fitTier({ avail: 420, natural3: 590, natural2: 435 })
+    expect(t.lines).toBe(2)
+    expect(t.scale).toBeCloseTo(420 / 435, 3)
+    expect(fitTier({ avail: 420, natural3: 900, natural2: 700 })).toEqual({ lines: 2, scale: 0.8 })
+  })
+  it('fitTier: no 3-line height yet (new width or fonts) -> measure 3 lines first', () => {
+    expect(fitTier({ avail: 420, natural2: 391 })).toEqual({ lines: 3, scale: 1 })
+    expect(fitTier({ avail: 0, natural3: 500 })).toEqual({ lines: 3, scale: 1 })
+  })
+  it('fitTier: no latch: the same heights with more room go back to 3 lines', () => {
+    expect(fitTier({ avail: 300, natural3: 402, natural2: 330 }).lines).toBe(2)
+    expect(fitTier({ avail: 420, natural3: 402, natural2: 330 })).toEqual({ lines: 3, scale: 1 })
+  })
+  it('fitScale: one column, never above 1, floor 0.7', () => {
+    expect(fitScale(690, 814)).toBeCloseTo(690 / 814, 3)
+    expect(fitScale(420, 543)).toBeCloseTo(420 / 543, 3)
+    expect(fitScale(900, 300)).toBe(1)
+    expect(fitScale(100, 1000)).toBe(0.7)
+    expect(fitScale(0, 300)).toBe(1)
   })
 
-  // jsdom has no layout: stub the two sizes the fit reads and a ResizeObserver.
-  const sizes = { avail: 420, natural: 600 }
-  let restore
+  // jsdom has no layout: stub the room, the natural height per rendered line
+  // mode, and a ResizeObserver whose callback the test can fire.
+  const sizes = { avail: 420, n3: 600, n2: 400 }
+  let restore, fire
   beforeEach(() => {
     const ro = globalThis.ResizeObserver
     const oh = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')
     const ch = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight')
-    globalThis.ResizeObserver = class { observe() {} disconnect() {} }
-    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, get() { return this.dataset?.fit === 'content' ? sizes.natural : 0 } })
-    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get() { return this.dataset?.fit === 'outer' ? sizes.avail : 0 } })
+    const cbs = new Set()
+    fire = () => act(() => { cbs.forEach(cb => cb([])) })
+    globalThis.ResizeObserver = class { constructor(cb) { this.cb = cb } observe() { cbs.add(this.cb) } disconnect() { cbs.delete(this.cb) } }
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, get() {
+      if (this.dataset?.fit !== 'content') return 0
+      return this.querySelector('[data-lines]')?.dataset.lines === '3' ? sizes.n3 : sizes.n2
+    } })
+    // The room is read from the list's parent (here the test host). Like a real
+    // browser, the list's own flex item is only as tall as the list when it
+    // fits, so reading the item instead would hide spare room (the old latch).
+    const natural = el => (el.querySelector('[data-lines]')?.dataset.lines === '3' ? sizes.n3 : sizes.n2)
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get() {
+      if (this.dataset?.fit === 'outer') return Math.min(sizes.avail, natural(this))
+      return [...this.children].some(c => c.dataset?.fit === 'outer') ? sizes.avail : 0
+    } })
     restore = () => {
       globalThis.ResizeObserver = ro
       if (oh) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', oh)
@@ -145,27 +192,53 @@ describe('fit to the stage height', () => {
     }
   })
   afterEach(() => restore())
+  const scaleNow = () => Number(host.querySelector('[data-fit="content"]').dataset.scale)
 
-  it('two columns that overflow drop to 2-line cells, then scale down (origin top center)', () => {
-    Object.assign(sizes, { avail: 420, natural: 600 })
-    render(Array.from({ length: 16 }, (_, i) => team(i, 0, sweet)))
-    expect(cells().name.dataset.lines).toBe('2')
-    expect(cells().guess.dataset.lines).toBe('2')
-    const content = host.querySelector('[data-fit="content"]')
-    expect(content.dataset.scale).toBe('0.7')
-    expect(content.style.transformOrigin).toBe('top center')
-    expect(content.style.transform).toBe('scale(0.7)')
+  it('roomFor: parent height minus padding, other in-flow children and gaps', () => {
+    const parent = document.createElement('div')
+    parent.style.paddingTop = '10px'; parent.style.paddingBottom = '10px'; parent.style.rowGap = '5px'
+    const heading = document.createElement('h2'); const outer = document.createElement('div')
+    const badge = document.createElement('div'); badge.style.position = 'absolute'
+    outer.dataset.fit = 'outer'
+    parent.append(badge, heading, outer); document.body.append(parent)
+    Object.defineProperty(heading, 'offsetHeight', { configurable: true, value: 72 })
+    try {
+      expect(roomFor(outer)).toBe(sizes.avail - 20 - 72 - 5)
+    } finally { parent.remove() }
   })
-  it('one column that overflows scales and keeps its 10/11 boundary', () => {
-    Object.assign(sizes, { avail: 420, natural: 543 })
+  it('two columns slightly too tall keep 3 lines and scale (origin top center)', () => {
+    Object.assign(sizes, { avail: 690, n3: 699, n2: 560 })
+    render(Array.from({ length: 16 }, (_, i) => team(i, 0, sweet)))
+    expect(cells().guess.dataset.lines).toBe('3')
+    expect(scaleNow()).toBeCloseTo(690 / 699, 3)
+    const content = host.querySelector('[data-fit="content"]')
+    expect(content.style.transformOrigin).toBe('top center')
+  })
+  it('two columns far too tall drop to 2 lines, and come back when the room grows', () => {
+    // n2/n3 < 0.8 on purpose: reading the shrunken list item (330px) instead of
+    // the room would keep it at 2 lines forever.
+    Object.assign(sizes, { avail: 375, n3: 450, n2: 330 })
+    render(Array.from({ length: 14 }, (_, i) => team(i, 0, sweet)))
+    expect(cells().guess.dataset.lines).toBe('3') // 375/450 = 0.83: still 3 lines, scaled
+    Object.assign(sizes, { avail: 300 })
+    fire()
+    expect(cells().guess.dataset.lines).toBe('2') // 300/450 = 0.67 < 0.8
+    expect(scaleNow()).toBeCloseTo(300 / 330, 3)
+    Object.assign(sizes, { avail: 460 }) // a transient line gone: more room
+    fire()
+    expect(cells().guess.dataset.lines).toBe('3')
+    expect(scaleNow()).toBe(1)
+  })
+  it('one column scales with the 0.7 floor and keeps its 10/11 boundary', () => {
+    Object.assign(sizes, { avail: 420, n3: 543, n2: 543 })
     render(Array.from({ length: 10 }, (_, i) => team(i, 0, sweet)))
     expect(host.querySelector('[role="list"]').dataset.columns).toBe('1')
-    expect(Number(host.querySelector('[data-fit="content"]').dataset.scale)).toBeCloseTo(420 / 543, 3)
+    expect(scaleNow()).toBeCloseTo(420 / 543, 3)
   })
   it('a list that fits is never scaled up', () => {
-    Object.assign(sizes, { avail: 900, natural: 300 })
+    Object.assign(sizes, { avail: 900, n3: 300, n2: 250 })
     render(Array.from({ length: 16 }, (_, i) => team(i, 0, sweet)))
-    expect(host.querySelector('[data-fit="content"]').dataset.scale).toBe('1')
+    expect(scaleNow()).toBe(1)
     expect(cells().name.dataset.lines).toBe('3')
   })
 })

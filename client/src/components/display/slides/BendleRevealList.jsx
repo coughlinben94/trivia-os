@@ -2,19 +2,20 @@
 // Every team's Bendle guess on the TV after the host's A on step 3. Drawn
 // from bendleResults on the step-3 slide (already sorted: points, then
 // teams with a guess, then name). One column up to 10 teams, then two; text
-// never below 2.2vmin (~16px at 1280x720) before fitting. Names and guesses
-// wrap instead of being cut: 2 lines, or 3 in two columns with at most 8 rows
-// per column. One column shares its tracks across rows (subgrid) so the name
-// column fits the longest name, capped at 30%.
+// 2.2vmin (two columns) / 2.8vmin (one column) before fitting. Names and
+// guesses wrap instead of being cut. One column shares its tracks across rows
+// (subgrid) so the name column fits the longest name, capped at 30%.
 //
 // Fit to the stage: the list gets the height left under the heading and answer
-// line (a flex item that may shrink). When its natural height is taller, it
-// first drops the 3-line cells to 2 lines (two columns), then scales down
-// (transform only, origin top center, never above 1, floor 0.7). Worst cases
-// at 720p with ~420px left: 10 teams all 2-line ~543px -> 0.77; 20 teams all
-// 2-line ~435px -> 0.97; 16 teams 3-line ~510px -> 2-line ~350px, no scale.
-// The floor is reached at ~600px natural (~27 teams all 2-line at 720p);
-// past that the list overflows the stage.
+// line (a flex item that may shrink) and is scaled (transform only, origin top
+// center, never above 1) to fit it. Two columns try, in order:
+//   a. 3-line cells as they are;  b. 3-line cells scaled, if scale >= 0.8;
+//   c. 2-line cells scaled, if scale >= 0.8;  d. 2-line cells at 0.8 (the list
+//   then runs past the stage edge instead of the text shrinking further).
+// 0.8 keeps two-column text >= 1.76vmin. One column has 2-line cells and only
+// scales, floor 0.7 (2.8vmin -> 1.96vmin). The decision re-runs from the
+// 3-line tier on every resize of the room or the list, so a short-lived
+// squeeze (e.g. a loading line) never locks in the 2-line tier.
 import { useLayoutEffect, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { EASE_OUT } from '../../../lib/easings.js'
@@ -23,14 +24,44 @@ import { guessLabel } from '../../../lib/bendleGuessScoring.js'
 
 const ONE_COLUMN_MAX = 10
 const NAME_COLUMN = 'fit-content(30%)'
-const THREE_LINE_MAX_ROWS = 8
-export const MIN_FIT_SCALE = 0.7
+export const TWO_COLUMN_FLOOR = 0.8
+export const ONE_COLUMN_FLOOR = 0.7
 
-// One fit decision from the measured sizes: as is, else tighten (once), else scale.
-export function fitStep({ avail, natural, tight, canTighten }) {
-  if (!avail || !natural || natural <= avail) return { tight, scale: 1 }
-  if (!tight && canTighten) return { tight: true, scale: 1 }
-  return { tight, scale: Math.max(MIN_FIT_SCALE, avail / natural) }
+// One column: scale only.
+export function fitScale(avail, natural, floor = ONE_COLUMN_FLOOR) {
+  if (!avail || !natural || natural <= avail) return 1
+  return Math.max(floor, avail / natural)
+}
+
+// The room the list may use: the parent column's inner height minus its other
+// in-flow children and gaps. Measured from the parent, not from this flex item,
+// because the item is only as tall as the list when the list fits, and that
+// would hide spare room (the old 2-line latch).
+export function roomFor(outer) {
+  const parent = outer.parentElement
+  if (!parent) return outer.clientHeight
+  const cs = getComputedStyle(parent)
+  let room = parent.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0)
+  let inFlow = 0
+  for (const child of parent.children) {
+    const c = getComputedStyle(child)
+    if (c.position === 'absolute' || c.position === 'fixed' || c.display === 'none') continue
+    inFlow += 1
+    if (child !== outer) room -= child.offsetHeight
+  }
+  return room - (parseFloat(cs.rowGap) || 0) * Math.max(0, inFlow - 1)
+}
+
+// Two columns: the tier from the room and the natural heights measured so far
+// for 3-line and 2-line cells. A missing height means "render that tier and
+// measure it" (the caller re-runs once it has the number).
+export function fitTier({ avail, natural3, natural2 }) {
+  if (!avail || !natural3) return { lines: 3, scale: 1 }
+  const s3 = avail / natural3
+  if (s3 >= 1) return { lines: 3, scale: 1 }
+  if (s3 >= TWO_COLUMN_FLOOR) return { lines: 3, scale: s3 }
+  if (!natural2) return { lines: 2, scale: 1 }
+  return { lines: 2, scale: fitScale(avail, natural2, TWO_COLUMN_FLOOR) }
 }
 
 const wrap = lines => ({ overflow: 'hidden', whiteSpace: 'normal', overflowWrap: 'anywhere', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: lines })
@@ -52,15 +83,15 @@ export default function BendleRevealList({ results, theme }) {
   const perCol = Math.max(twoCol ? Math.ceil(rows.length / 2) : rows.length, 1)
   const text = theme?.colors?.text ?? '#ffffff'
   const bodyFont = `'${theme?.fonts?.body ?? 'DM Sans'}', 'DM Sans', sans-serif`
-  const canTighten = twoCol && perCol <= THREE_LINE_MAX_ROWS
   const outerRef = useRef(null)
   const contentRef = useRef(null)
-  // tight is per team count: a new count starts from 3-line cells again.
-  const [fit, setFit] = useState({ count: rows.length, tight: false, scale: 1 })
-  const tight = fit.count === rows.length && fit.tight
-  const scale = fit.count === rows.length ? fit.scale : 1
-  const tightRef = useRef(tight)
-  tightRef.current = tight
+  const [fit, setFit] = useState({ lines: 3, scale: 1 })
+  const lines = twoCol ? fit.lines : 2
+  const scale = fit.scale
+  const linesRef = useRef(lines)
+  linesRef.current = lines
+  // Natural (unscaled) height per line tier, valid for one team count and width.
+  const naturals = useRef({ key: '' })
   // Same pattern as ShinyExampleFrame's useFitScale: measure, then transform.
   useLayoutEffect(() => {
     const outer = outerRef.current
@@ -69,17 +100,26 @@ export default function BendleRevealList({ results, theme }) {
     let dead = false
     const recompute = () => {
       if (dead) return
-      const next = fitStep({ avail: outer.clientHeight, natural: content.offsetHeight, tight: tightRef.current, canTighten })
-      setFit(f => (f.count === rows.length && f.tight === next.tight && f.scale === next.scale ? f : { count: rows.length, ...next }))
+      const key = `${rows.length}|${outer.clientWidth}`
+      if (naturals.current.key !== key) naturals.current = { key }
+      naturals.current[linesRef.current] = content.offsetHeight // transform does not change it
+      const avail = roomFor(outer)
+      const next = twoCol
+        ? fitTier({ avail, natural3: naturals.current[3], natural2: naturals.current[2] })
+        : { lines: 2, scale: fitScale(avail, naturals.current[2]) }
+      setFit(f => (f.lines === next.lines && f.scale === next.scale ? f : next))
     }
     recompute()
     const ro = new ResizeObserver(recompute)
-    ro.observe(outer)
     ro.observe(content)
-    document.fonts?.ready?.then(recompute)
+    // The stage and its other lines (heading, answer, a status line) set the room.
+    const parent = outer.parentElement
+    if (parent) { ro.observe(parent); for (const child of parent.children) if (child !== outer) ro.observe(child) }
+    else ro.observe(outer)
+    // Web fonts change every height: forget them and decide again from 3 lines.
+    document.fonts?.ready?.then(() => { naturals.current = { key: '' }; recompute() })
     return () => { dead = true; ro.disconnect() }
-  }, [rows.length, canTighten, tight])
-  const lines = canTighten && !tight ? 3 : 2
+  }, [rows.length, twoCol, lines])
   const stepCol = rows.some(r => r.overridden) ? '6.5em' : '4.2em'
   return (
     // Flex item of the slide's column: may shrink (minHeight 0) to the space left.
