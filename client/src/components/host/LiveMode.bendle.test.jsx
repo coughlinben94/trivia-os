@@ -208,6 +208,14 @@ describe('Bendle host flows', () => {
     expect(id).toBe('s3')
     expect(data).toMatchObject({ bendleLocked: false, bendleRevealed: false, bendleResults: null, bendleLockedAt: null, bendleAnswer: null, bendleOverrides: { p3: 20 } })
   })
+  it('a blank artist on the song row gives a title-only Answer label', async () => {
+    responses['bendle_songs.select'] = { data: { title: 'Mr. Brightside', answer: 'Mr. Brightside', aliases: [], artist: '   ' }, error: null }
+    const a = actions()
+    render([step(0), step(1), step(2, LOCKED)], 2, a)
+    await act(async () => button('Reveal & Score').click())
+    await tick(20)
+    expect(a.updateSlide.mock.calls[0][1].data.bendleAnswer).toBe('Mr. Brightside')
+  })
   it('A after the reveal still toggles the answer after Prev back to step 1', async () => {
     const a = actions()
     render([step(0), step(1), step(2, { ...LOCKED, bendleRevealed: true, bendleResults: [] })], 0, a)

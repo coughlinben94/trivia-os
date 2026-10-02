@@ -170,7 +170,7 @@ export default function BendleBoard({ slide, slides, team, theme, preview = fals
         </div>
       ) : saved ? (
         <div style={box} role="status" tabIndex={-1} ref={lockedBoxRef}>
-          <p style={{ margin: 0, fontFamily: display, fontSize: '1.3rem' }}>✓ Locked in at step {saved.stepIndex + 1}</p>
+          <p style={{ margin: 0, fontFamily: display, fontSize: '1.3rem' }}><BendleMark right /> Locked in at step {saved.stepIndex + 1}</p>
           <p style={{ margin: '0.4rem 0 0' }}>Your guess: {guessLabel(saved.guess)}</p>
           <p style={{ margin: '0.4rem 0 0', opacity: 0.8 }}>Waiting for the reveal.</p>
         </div>
@@ -193,14 +193,14 @@ export default function BendleBoard({ slide, slides, team, theme, preview = fals
             return (
               <button type="button" key={`${i}|${r.title}|${r.artist}`} aria-pressed={picked} onClick={() => pick({ source: 'catalog', title: r.title, artist: r.artist })}
                 style={{ ...rowBtn, borderColor: picked ? accent : `${ink}44`, borderWidth: picked ? 2 : 1 }}>
-                {picked && <span aria-hidden="true">✓ </span>}<strong>{r.title}</strong>{r.artist ? <span style={{ opacity: 0.8 }}> - {r.artist}</span> : null}
+                {picked && <><BendleMark right />{' '}</>}<strong>{r.title}</strong>{r.artist ? <span style={{ opacity: 0.8 }}> - {r.artist}</span> : null}
               </button>
             )
           })}
           {query.trim() && (
             <button type="button" aria-pressed={choice?.source === 'typed'} onClick={() => pick({ source: 'typed' })}
               style={{ ...rowBtn, borderStyle: 'dashed', borderColor: choice?.source === 'typed' ? accent : `${ink}66`, borderWidth: choice?.source === 'typed' ? 2 : 1 }}>
-              {choice?.source === 'typed' && <span aria-hidden="true">✓ </span>}Use what I typed: “{query.trim()}”
+              {choice?.source === 'typed' && <><BendleMark right />{' '}</>}Use what I typed: “{query.trim()}”
             </button>
           )}
         </div>

@@ -93,6 +93,10 @@ describe('<BendleHostPanel>', () => {
     expect(host.querySelector('.truncate')).toBeNull()
     expect(host.querySelector('.max-h-72')).toBeNull()
     const rows = [...host.querySelectorAll('[data-bendle-result]')]
+    // Drawn marks, not the ✓/✗ font characters (they render as √ in the theme fonts).
+    expect(host.textContent).not.toMatch(/[✓✗]/)
+    expect(rows[0].querySelector('svg[data-mark="right"]')).not.toBeNull()
+    expect(rows[1].querySelector('svg[data-mark="wrong"]')).not.toBeNull()
     expect(rows[0].textContent).toContain('(changed)')
     expect(rows[1].textContent).not.toContain('(changed)')
   })

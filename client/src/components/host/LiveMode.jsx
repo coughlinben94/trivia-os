@@ -1375,7 +1375,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         // From the row that was graded, never the slide's build-time `answer`
         // (stale once the song is changed or edited).
         const { title, artist } = songRes.data
-        reveal.bendleAnswer = artist ? `${title} — ${artist}` : title
+        reveal.bendleAnswer = artist?.trim() ? `${title} — ${artist.trim()}` : title
       }
       await writeBendleScores(slide, results, teams ?? [], reveal)
       refreshScoresView()

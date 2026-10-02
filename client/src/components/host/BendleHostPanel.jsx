@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import { BENDLE_OVERRIDE_POINTS, guessLabel } from '../../lib/bendleGuessScoring.js'
+import { BendleMark } from '../display/slides/BendleRevealList.jsx'
 
 const POLL_MS = 3000
 const CONFIRM_MS = 4000
@@ -87,7 +88,7 @@ export default function BendleHostPanel({ slide, lockData = {}, stepIds = [], sh
           {results.map(r => (
             <div key={r.teamId} data-bendle-result className="flex items-center justify-between gap-2 text-xs text-gray-700">
               <span className="min-w-0 break-words">
-                {r.points > 0 ? '✓' : '✗'} {r.teamName}: {guessLabel(r.guess)}{r.guess && r.stepIndex != null ? ` · step ${r.stepIndex + 1}` : ''}
+                <BendleMark right={r.points > 0} /> {r.teamName}: {guessLabel(r.guess)}{r.guess && r.stepIndex != null ? ` · step ${r.stepIndex + 1}` : ''}
                 {r.overridden && <span className="text-gray-500"> (changed)</span>}
               </span>
               <select
