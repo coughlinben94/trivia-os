@@ -8,7 +8,7 @@
 // client/src/lib/bendleCatalogVersion.js at the new file. Rerun a few times a year.
 import { createHash } from 'node:crypto'
 import { gzipSync } from 'node:zlib'
-import { readdirSync, unlinkSync, writeFileSync } from 'node:fs'
+import * as realFs from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { normalizeText } from '../client/src/lib/bendleGuessScoring.js'
 
@@ -84,9 +84,13 @@ async function runQuery(type, ua, fetcher) {
       body: new URLSearchParams({ query: sparqlFor(type) }).toString(),
       signal: AbortSignal.timeout(90_000),
     })
-    if (res.ok) return (await res.json()).results.bindings
+    if (res.ok) {
+      const bindings = (await res.json())?.results?.bindings
+      if (!Array.isArray(bindings)) throw new Error(`${type}: HTTP 200 but the response has no results.bindings`)
+      return bindings
+    }
     if ((res.status === 429 || res.status >= 500) && attempt < 3) {
-      const wait = Number(res.headers?.get?.('retry-after')) || 30 * attempt
+      const wait = Math.min(Number(res.headers?.get?.('retry-after')) || 30 * attempt, 300)
       console.warn(`${type}: HTTP ${res.status}, waiting ${wait}s`)
       await new Promise(r => setTimeout(r, wait * 1000))
       continue
@@ -95,13 +99,15 @@ async function runQuery(type, ua, fetcher) {
   }
 }
 
-export async function main({ argv = process.argv.slice(2), env = process.env, fetcher = globalThis.fetch } = {}) {
+// publicDir, versionFile and fs are injectable so tests never touch the real public/.
+export async function main({ argv = process.argv.slice(2), env = process.env, fetcher = globalThis.fetch, publicDir = PUBLIC_DIR, versionFile = VERSION_FILE, fs = realFs } = {}) {
   const dryRun = argv.includes('--dry-run')
   const ua = userAgent(env.BENDLE_CATALOG_CONTACT)
   const bindings = []
   for (const type of ITEM_TYPES) { // one request at a time, never in parallel
     const rows = await runQuery(type, ua, fetcher)
     console.log(`${type}: ${rows.length} rows`)
+    if (!rows.length) console.warn(`warning: ${type} returned 0 rows`)
     bindings.push(...rows)
   }
   const rows = buildRows(bindings)
@@ -110,9 +116,24 @@ export async function main({ argv = process.argv.slice(2), env = process.env, fe
   const problems = checkCatalog({ rows, gzipBytes: file.gzipBytes })
   if (problems.length) throw new Error(`Catalog check failed: ${problems.join('; ')}`)
   if (dryRun) { console.log('--dry-run: nothing written'); return file }
-  for (const old of readdirSync(PUBLIC_DIR).filter(f => /^bendle-catalog\..+\.json$/.test(f))) unlinkSync(new URL(old, PUBLIC_DIR))
-  writeFileSync(new URL(file.name, PUBLIC_DIR), file.json)
-  writeFileSync(VERSION_FILE, versionModule(file.name))
+  // Write new files under temp names, rename into place, and only then delete old
+  // catalogs (never the new file's own name), so a failure leaves the old pair intact.
+  fs.mkdirSync(publicDir, { recursive: true })
+  const finalUrl = new URL(file.name, publicDir)
+  const catTmp = new URL(`${file.name}.tmp`, publicDir)
+  const verTmp = new URL(`${versionFile.href}.tmp`)
+  const preExisting = fs.existsSync(finalUrl)
+  try {
+    fs.writeFileSync(catTmp, file.json)
+    fs.renameSync(catTmp, finalUrl)
+    fs.writeFileSync(verTmp, versionModule(file.name))
+    fs.renameSync(verTmp, versionFile)
+  } catch (e) {
+    for (const t of [catTmp, verTmp]) fs.rmSync(t, { force: true })
+    if (!preExisting) fs.rmSync(finalUrl, { force: true })
+    throw e
+  }
+  for (const old of fs.readdirSync(publicDir).filter(f => /^bendle-catalog\..+\.json$/.test(f) && f !== file.name)) fs.unlinkSync(new URL(old, publicDir))
   return file
 }
 
