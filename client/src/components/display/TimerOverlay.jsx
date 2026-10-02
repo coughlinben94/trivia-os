@@ -107,6 +107,7 @@ export default function TimerOverlay({ show }) {
   const phase = view.phase
   const urgent = phase === 'urgent'
   const done = phase === 'done'
+  const paused = phase === 'paused'
   const long = view.label.length > 5
 
   // The pulses are CSS animations (index.css: transform/opacity only, still under
@@ -122,7 +123,7 @@ export default function TimerOverlay({ show }) {
             data-timer-overlay
             data-phase={phase}
             role="timer"
-            aria-label={done ? TIMES_UP : `Timer ${view.label}`}
+            aria-label={`${view.title ? `${view.title}. ` : ''}${done ? TIMES_UP : `Timer ${view.label}`}`}
             initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.94 }}
             animate={{ opacity: 1, scale: 1, transition: { duration: 0.22, ease: EASE_OUT } }}
             exit={{ opacity: 0, transition: { duration: 0.2, ease: EASE_EXIT } }}
@@ -143,6 +144,13 @@ export default function TimerOverlay({ show }) {
             }}
           >
             <div className={pulseClass} style={{ transformOrigin: 'center' }}>
+              {/* Label line: one line above the clock; "PAUSED" joins it so the panel stays short
+                  (it must end above the question safe area, y 27.5%). */}
+              {view.title && (
+                <div data-timer-title style={{ fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`, fontSize: '4cqh', lineHeight: 1, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: theme.colors.text, marginBottom: '0.4cqh' }}>
+                  {view.title}{paused ? ' · PAUSED' : ''}
+                </div>
+              )}
               {done ? (
                 <div style={{ fontFamily: `'${theme.fonts.display}', sans-serif`, fontSize: '10cqh', lineHeight: 1.05, color: theme.colors.highlight }}>
                   {TIMES_UP}
@@ -160,7 +168,7 @@ export default function TimerOverlay({ show }) {
                   <FixedDigits label={view.label} />
                 </div>
               )}
-              {phase === 'paused' && (
+              {paused && !view.title && (
                 <div style={{ fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`, fontSize: '4cqh', lineHeight: 1, fontWeight: 700, letterSpacing: '0.2em', color: theme.colors.textMuted, marginTop: '0.6cqh' }}>
                   PAUSED
                 </div>

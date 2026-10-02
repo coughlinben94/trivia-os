@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import {
-  parseDuration, startTimer, pauseTimer, resumeTimer, addTime, timerView, TIMES_UP,
+  parseDuration, startTimer, TIMER_TITLES, DEFAULT_TIMER_TITLE, pauseTimer, resumeTimer, addTime, timerView, TIMES_UP,
 } from '../../lib/showTimer.js'
 
 // Live Mode's countdown timer card. Writes shows.special_event.timer through
@@ -12,6 +12,7 @@ import {
 export default function TimerControl({ show, actions }) {
   const timer = show?.special_event?.timer ?? null
   const [text, setText] = useState('')
+  const [title, setTitle] = useState(DEFAULT_TIMER_TITLE) // '' = no label; kept across Starts
   const [now, setNow] = useState(() => Date.now())
   // Cancel kills a live countdown on every TV, so while one is running it takes two
   // taps (same arm-then-confirm the phone boards use for "Clear all"); it disarms itself.
@@ -42,7 +43,7 @@ export default function TimerControl({ show, actions }) {
   }
   function start() {
     if (!canStart) return
-    send(startTimer(ms, Date.now()))
+    send(startTimer(ms, Date.now(), title))
     setText('')
   }
 
@@ -56,6 +57,7 @@ export default function TimerControl({ show, actions }) {
             className={`text-2xl font-bold tabular-nums ${view.phase === 'urgent' ? 'text-red-600' : view.phase === 'done' ? 'text-red-600' : 'text-gray-900'}`}
             data-timer-readout
           >
+            {view.title && <span className="text-xs font-semibold text-gray-400 mr-2" data-timer-readout-title>{view.title}</span>}
             {view.phase === 'done' ? TIMES_UP : view.label}
             {view.phase === 'paused' && <span className="text-xs font-semibold text-gray-400 ml-2">paused</span>}
           </span>
@@ -81,6 +83,20 @@ export default function TimerControl({ show, actions }) {
         >
           {live ? 'Restart' : 'Start'}
         </button>
+      </div>
+      <div className="flex items-center gap-1.5 mt-2" role="group" aria-label="Timer label on the TV">
+        {[...TIMER_TITLES, ''].map(t => (
+          <button
+            key={t || 'none'}
+            type="button"
+            data-timer-title-chip={t || 'none'}
+            aria-pressed={title === t}
+            onClick={() => { setTitle(t); inputRef.current?.blur() }}
+            className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.97] ${title === t ? 'bg-baynes-forest text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+          >
+            {t || 'None'}
+          </button>
+        ))}
       </div>
       {text.trim() !== '' && !canStart && (
         <p className="text-xs text-red-600 mt-2">Type a time like 1:30, 90s or 1.5 (minutes). From 3 seconds to 3 hours.</p>
