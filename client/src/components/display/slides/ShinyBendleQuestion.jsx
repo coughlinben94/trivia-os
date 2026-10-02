@@ -14,6 +14,7 @@ import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { clampBendleOffset, buildBendleTiers } from '../../../lib/bendleScoring.js'
 import ShinySignal from '../ShinySignal.jsx'
+import BendleRevealList from './BendleRevealList.jsx'
 
 // 'guitar' is optional per-song (only songs reprocessed through
 // worker/bendle/guitar_stem.py have a guitar_url) — the loader skips any stem
@@ -175,9 +176,10 @@ function getClip(song, url, fromSec, toSec) {
 // (2026-09-08 rebuild). Each slide plays its own cumulative stem mix — step 0
 // is the first instrument alone, step 1 adds the second, step 2 the third.
 //
-// Scoring is MANUAL; pressing "A" (show.answer_reveal) both shows the answer
-// via the generic AnswerRevealOverlay and swaps this component's audio to
-// the full mix, vocals included.
+// Teams lock one guess on their phones (BendleBoard). The reveal is the
+// host's A on step 3 (LiveMode writes bendleRevealed + bendleResults on the
+// step-3 slide); the older show-level answer_reveal still counts. Revealed
+// swaps the audio to the full mix, vocals included, and lists every team.
 export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
   const { data } = slide
   const tiers = buildBendleTiers(data.bendleTierOrder)
@@ -186,7 +188,9 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
   // but NEW bendleTierOrder array, which used to restart the beat mid-song.
   const tierKey = JSON.stringify(data.bendleTierOrder ?? null)
   const stepIndex = Math.min(Math.max(data.bendleStepIndex ?? 0, 0), tiers.length - 1)
-  const revealed = !!(show?.answer_reveal ?? show?.showState?.answerReveal)
+  const answerReveal = !!(show?.answer_reveal ?? show?.showState?.answerReveal)
+  const revealed = answerReveal || !!data.bendleRevealed
+  const listShown = !!data.bendleRevealed && Array.isArray(data.bendleResults) && data.bendleResults.length > 0
   const shouldReduceMotion = useReducedMotion()
 
   const [song, setSong] = useState(null)
@@ -323,7 +327,7 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
     <div style={{
       position: 'relative',
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      width: '100%', height: '100%', padding: '4rem', gap: '2.5rem',
+      width: '100%', height: '100%', padding: listShown ? '3vmin 4vmin' : '4rem', gap: listShown ? '2vmin' : '2.5rem',
     }}>
       <ShinySignal />
       <motion.h2
@@ -338,7 +342,7 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
         Bendle
       </motion.h2>
 
-      {data.text && (
+      {data.text && !listShown && (
         <p style={{ margin: 0, color: `${text}80`, fontSize: '1.4rem', fontFamily: bodyFont, textAlign: 'center', maxWidth: 1200 }}>
           {data.text}
         </p>
@@ -358,7 +362,10 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
         </motion.p>
       )}
 
-      {loadState === 'loading' && !isPreview && (
+      {listShown && <BendleRevealList results={data.bendleResults} theme={theme} />}
+
+      {/* Not under the reveal list: it would only take room from it for a moment. */}
+      {loadState === 'loading' && !isPreview && !listShown && (
         <p style={{ margin: 0, color: `${text}60`, fontSize: '1.3rem', fontFamily: bodyFont }}>Loading song…</p>
       )}
       {loadState === 'error' && (
@@ -367,7 +374,7 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
         </p>
       )}
 
-      <StepIndicator tiers={tiers} stepIndex={stepIndex} text={text} bodyFont={bodyFont} />
+      {!listShown && <StepIndicator tiers={tiers} stepIndex={stepIndex} text={text} bodyFont={bodyFont} />}
     </div>
   )
 }

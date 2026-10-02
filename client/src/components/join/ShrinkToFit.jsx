@@ -2,7 +2,9 @@ import { useRef } from 'react'
 import { useShrinkToFit } from '../../hooks/useShrinkToFit.js'
 
 // Height-fit wrapper for the /join answer boards (Wager/Choice/Matching/
-// Order/Bendle). The outer box takes whatever height the carousel hands it
+// Order/HuesCues/Drop/HorseRace). BendleBoard is NOT wrapped: Join renders it
+// bare and it scrolls inside .join-content, so search results and the
+// keyboard never shrink the text. The outer box takes whatever height the carousel hands it
 // (the flex chain from .join-content down in Join.jsx's LiveView); the
 // content is pulled out of flow so its natural height can never prop the
 // outer box open, then scaled down to fit — WYSIWYG by construction, the

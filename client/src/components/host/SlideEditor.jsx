@@ -1070,10 +1070,9 @@ function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, up
           )}
 
           {schema.type === 'bendle' && (
-            // No phone preview — Bendle is manually graded (2026-09-08
-            // rebuild: teams write the answer down, Ben walks around and
-            // enters points via Quick Entry), so there's nothing for a
-            // team's phone to show.
+            // No phone preview yet: BendleBoard needs the three sibling
+            // slides and the song list (Join.jsx passes them). Phones search
+            // and lock one guess (spec 2026-10-02).
             //
             // song/order must stay identical across all 3 sibling step-slides
             // (same shinyGroupId) — they're one song, one guess. Editing
