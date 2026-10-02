@@ -1,0 +1,1238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Haunted Route v4</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0a0a0a;color:#d6d0c4;font-family:system-ui,-apple-system,sans-serif;padding:20px 24px 40px}
+  h1{font-size:1.05rem;font-weight:700;margin-bottom:4px}
+  .sub{font-size:.82rem;color:#9a9488;max-width:1100px;line-height:1.55;margin-bottom:12px}
+  #fit{position:relative;width:min(100%, calc((100vh - 190px) * 16 / 9));aspect-ratio:16/9;margin:0 auto;overflow:hidden;border-radius:8px;box-shadow:0 0 0 1px #2a2a2a,0 24px 60px rgba(0,0,0,.7)}
+  .controls{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;justify-content:center;margin:12px auto 6px;font-size:.82rem}
+  button{background:#1f1b16;color:#e8dcc4;border:1px solid #5a4a36;border-radius:7px;padding:8px 16px;font-size:.84rem;font-weight:600;cursor:pointer}
+  button:hover{background:#2c251d}
+  button.on{background:#5a4a36}
+  label{display:flex;gap:6px;align-items:center;cursor:pointer;color:#a8a196}
+  #stLabel{font-variant-numeric:tabular-nums;color:#f0e2c4;font-weight:700;min-width:170px;text-align:center}
+  #legend{max-width:1100px;margin:10px auto 0;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:2px 16px;font-size:.78rem;color:#8a8478}
+  #legend div{cursor:pointer;padding:2px 4px;border-radius:4px}
+  #legend div.cur{background:#2a241c;color:#f0e2c4}
+  #legend b{color:#c8b890;font-weight:600}
+  body.bare{padding:0;background:#000;overflow:hidden}
+  body.bare h1,body.bare .sub,body.bare .controls,body.bare #legend{display:none}
+  /* bare: the 16:9 frame letterboxed into any window (1366x768, portrait, 4K), scaled like the normal view */
+  body.bare #fit{position:absolute;inset:0;margin:auto;width:min(100vw,calc(100vh * 16 / 9));height:auto;border-radius:0;box-shadow:none}
+
+  /* ---- stage: 1920x1080 design frame, scaled to fit ---- */
+  #stage{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;overflow:hidden;background:#060708}
+  #stage.far30{filter:blur(2.9px)}            /* static: 30 ft on an 80in TV, never animated */
+  #rig,#cam,.creep,.fill{position:absolute;inset:0}
+  .bleed{position:absolute;inset:-48px}       /* screen layers overhang the frame so the bob never shows an edge */
+  #cam{transform-origin:960px 1400px}         /* bob pivots near the feet */
+  .creep{transform-origin:960px 700px}
+  #ground{transform-origin:0 0}          /* the floor homography is written about the screen origin */
+  .it{position:absolute}
+  .it>svg,.it>.ly,.ly>svg,.ly>.ly{position:absolute;left:0;top:0;width:100%;height:100%;overflow:hidden}
+  .drift{animation:drift var(--d) ease-in-out var(--dl) infinite alternate}
+  @keyframes drift{from{transform:translateX(calc(var(--dx) * -1))}to{transform:translateX(var(--dx))}}
+  /* footstep bob: 4 footfalls, softer first and last step (the walk eases in and out) */
+  @keyframes bob{
+    0%{transform:translate(0,0) rotate(0deg)}
+    12.5%{transform:translate(3px,6px) rotate(.2deg)}
+    25%{transform:translate(0,1px) rotate(0deg)}
+    37.5%{transform:translate(-5px,10px) rotate(-.35deg)}
+    50%{transform:translate(0,1px) rotate(0deg)}
+    62.5%{transform:translate(5px,10px) rotate(.35deg)}
+    75%{transform:translate(0,1px) rotate(0deg)}
+    87.5%{transform:translate(-3px,5px) rotate(-.18deg)}
+    100%{transform:translate(0,0) rotate(0deg)}}
+  @keyframes bob2{0%{transform:translate(0,0) rotate(0deg)}12.5%{transform:translate(3px,6px) rotate(.2deg)}25%{transform:translate(0,1px) rotate(0deg)}37.5%{transform:translate(-5px,10px) rotate(-.35deg)}50%{transform:translate(0,1px) rotate(0deg)}62.5%{transform:translate(5px,10px) rotate(.35deg)}75%{transform:translate(0,1px) rotate(0deg)}87.5%{transform:translate(-3px,5px) rotate(-.18deg)}100%{transform:translate(0,0) rotate(0deg)}}
+  /* two names for the same motion: swapping them restarts it without forcing a synchronous layout */
+  #cam.bobA{animation:bob var(--walk) ease-in-out}#cam.bobB{animation:bob2 var(--walk) ease-in-out}
+  /* the flashlight is held, not bolted to the eye: it lags the footfalls a little */
+  @keyframes beamSway{0%{transform:translateX(0);opacity:1}12.5%{transform:translateX(-6px);opacity:.985}37.5%{transform:translateX(12px);opacity:.97}62.5%{transform:translateX(-12px);opacity:.99}87.5%{transform:translateX(6px);opacity:.975}100%{transform:translateX(0);opacity:1}}
+  #light{position:absolute;inset:0}
+  @keyframes beamSway2{0%{transform:translateX(0);opacity:1}12.5%{transform:translateX(-6px);opacity:.985}37.5%{transform:translateX(12px);opacity:.97}62.5%{transform:translateX(-12px);opacity:.99}87.5%{transform:translateX(6px);opacity:.975}100%{transform:translateX(0);opacity:1}}
+  #light.swayA{animation:beamSway var(--walk) ease-in-out}#light.swayB{animation:beamSway2 var(--walk) ease-in-out}
+  /* lantern flame: small (<=12%), slow (under 3 Hz) and eased, never a strobe */
+  @keyframes flick{0%{opacity:1}22%{opacity:.88}46%{opacity:.97}72%{opacity:.9}100%{opacity:1}}
+  .flick{animation:flick 2.7s ease-in-out infinite}
+  /* idle: after the 40 s creep the camera breathes, so a long question never sits on a still image */
+  #rig{transform-origin:960px 1400px}
+  @keyframes idle{from{transform:translateY(-3px) rotate(-.12deg)}to{transform:translateY(3px) rotate(.12deg)}}
+  #rig.idle{animation:idle 7.3s ease-in-out -3.65s infinite alternate}
+  @keyframes fIn{from{opacity:0}to{opacity:1}}
+  @keyframes fOut{from{opacity:1}to{opacity:0}}
+  .fIn{animation:fIn var(--walk) cubic-bezier(.45,.05,.25,1) forwards}
+  .fOut{animation:fOut var(--walk) cubic-bezier(.45,.05,.25,1) forwards}
+  /* reduced motion: one declaration point, freezes, never vanishes */
+  @media (prefers-reduced-motion: reduce){ #stage *:not(.rmx){animation:none !important;transition:none !important} }
+  #stage.rm *:not(.rmx){animation:none !important;transition:none !important}
+  .rmx{position:absolute;inset:0;transition:opacity 400ms ease-in-out}
+  /* one static grain tile breaks gradient banding on the TV; never animated */
+  #grain{position:absolute;inset:0;pointer-events:none;mix-blend-mode:overlay;opacity:.035;background:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAAAAAB5Gfe6AABOa0lEQVR42lWdi5UkOY4EU1nIABkoA5TtSroZmP127nanuz6REQwScPjnU9Vnus/pmjNT/fef6e9/3785f3/698fn7w/6+yV///X3T//94bl/9veV9ffn36/6ftnf//p+3dTfX94//P7B+fvn7+f8/ay/f++Z+fvX7//+fuvfb/j78+/vrPv3f990/9ffD/37ur9/+/tJ5/7Kv6v8+1/3R/79sPsrv39a33+9v+bvx9a5l/79+7+f/vdTKhf/92/fX5//uz/pfpTv332+H6POvQvfi//+1u/HzVV9f0R+8P0Ifz/u3J9+/zZfWvcHfC/l3L//fsG5H36+n/37kb8/Phd2f9T9kPfTfj/89/Pez/L9FCcXMnM/xb3H93PP9xHl/937ff/zfTb3sr/f9fcbvtf195/vP9/HVPcJNvc8F/L3v3he873Y7w/4zP0l35/+/eL7cL7X8v1594d/r+/7X/eh5iHdOz/33uRX3580ufL7fedexvDBv/fjexP6/t77M/t7Sd/V8/25lf/d3+f1XT6dizz38X5/4N/P6u7cuu83fy+g86Xfz/X9wmJpfK/j+4m/F3mf6bn//y7cyUK9f/+9/vnex8/9qMUayQXf5fe9WH7rya/8fkdn5X+vadqnlMVady1X5wffX1D3pbmv1v0tdwl+f3tn2d33Lnfu3I+aBXZ/312GnZfj+1Xf3/C9cXU/2H337pLNxy8v6nufs4bvfzUf4v70+zLeZz8nq/rv+z53kWUFzV2UeY9yBX0fJn87POe56+ouvL7vxV1h94nfleGGcr/33PU5JyvmXsNdF9/bcG/C+M+91efuOrzy594TlvH3Q94VNnN4/N8L6fvafe9w+RrdhX7X/P3qPPgsjfte3L/8Lst7iz99r/Tc589rf7edXMl3udxt5G5Ee0vuEr5P5f7C/My7rO+qvs/4LsQ8+OyFuZL2Xco2dW8Ef3A/jHeps9C/z75307q7W+cx5SHcJcn+PSyUeyH3j743MVd53+aTr8g+WFmkn/t5vl94n9zdaO4un0d/v/Yu+7uX3s998mPvU8oH7skmfb+83BHzL/e2H76apZQT5/tK972mw7Mptpa7b7Bk75K5l50X+q7Qu4/mAOns8yfPqnKdd4e9S6jvg74r/rtess3dzeb7N39/98n/uCfSvfashO+Tves7G0he3rPbOLvpudth37//ror7o+revZyLnQ8webb3l87dtu6PY2llg7kLo3n98hKPX5UH1nf3ui9GDuTDevV8/S7zetsfp3JVdrXKObLf1znHP3mE93iZHDvZoO8vmhwu2auzL9x7cs+fe3E54POC83J878Xdy7NB3L3zPvasoRyu9+vy1hze31sv5HDKtfSwoeX1aF6ru0fmk7HS+26e7Q6Vj3j/61T2svEMuGXKXbl3f66/U+BeWnGw5fvu2d9ZTb4At3Dp3EnWx11HKYnurjJ5SfLaZB+arJfKY7vPPpVQdsd72yfbdeVsv9VLHuHd2+/r745zN+icJncz4jTPlp8HnTOXBXoPnfsgsqA48POJc8h+UsLlTLnP5H7PPcuyMfMunKyu/WX3iVZ+33BIVM67+/X5JXfzum+C5cR9K9iEc4Z1Hvj9wnyaw4otD0OrrMmvr5QTbjp3k91X7X6Cw5/1PSPYayaLde4uRY1zPrfCvRuL190p/vqe0PeXpqa5jzgfKRVfPs594fvuS3minZO0U2oe3qDOg051kJ0q19++7tlm7s6UsyTPMFvHyd1PVZgHvG9EZelmt8zlWF1lQ+ycFvnYOVhSLP99zyf38lZKfGU262YJU8ne9+quxuwgRT17F9Jd382/Dhvs/Zx5iTqlb17FYVtJjZYXLBXevR33ZcwHzCHSzUnPTTtpVu6BeTxSuAe0B7lzJ31NKr+UTJNS7+5UOa7+ToFJYXjP1eyIqSx5xe+94Qg9WdTZpXLBHPqVWrKzG+zRx+vnFmElmgbhpL+Zpu3JVVCyVnbYoTC6e33qqxwoqYj4w6y+nLn341m3pm1qinA2WCv+lFGfu0TuZxseP/v2fWHvhdIMNqXZHHbi7P3ZafMrKGrvJefO3gOl7Q3y11ma9fO07rffGimle7PsJ5/V5pMKIWffbQ3u4chXDv1cyudsV1lVKSbrrqjc2cpG9ffjPnlpU2XR7d5b20VV2dkHPLKzEXfKfV7xkyYoZ3hetqzevOd5bVIgc/pQ8hdPJXeI3jerIydjDkGK5MltSm9dh8I3F37yvM+0Rfd9RW7/VPmBd0PqPAKW898n+Ry6mmEjuYdymqhut/37ienhvZK7490Xr1Ng0GKlm8jfpUpO55KVk5rY1jY1y10Hd03fJ9u5H7Zo7rrp0+g4izMp50en8M8hll0xx0oK65yl5/hSZF87OSQ+la4sJT77ez5hpeCka80OkYP/Hgw5b+8CTe102GruJsmrTAUcPOGwdu9aTeMQZCRdRHa4dPWsgbLEYl/J0kx7UK7c++hO+o2AI8Onvet4xks5LO3s4mng+pP9rZqLSXFCJ5RdKW9fjqm74HOE8MLRqFBZgjvk7M1Hy4PIFdIvUaelgsqJNPnhDd6RHf3QKTbn4Tlv/WbtVLPvNOeqWEyglfvhs+sDydz3Jcdsbu0n20gwimKXKw6jHBunPWkmR1AWcPpc8SPrxqBA90nWnk0s3GA1hwU56ccpa/P61CId9k35VRTzk126Asml/87b39SJVMM85/stKRxyKlY6/xnLjC8kdm9PNgFAgluGp7PtFP3c6ROwg65x0qfeV2zSS6RcuLs4jU22sVtagj7SCfLuBllLYT9BO05eJ6tu3pZb4GUzLy5vFg9L+067FLDmvNNu0gpQu96XMZjh9wd88pgmOFua4lTsh0Ls3pdKy5vPO8fzNXVOznL6/3zZgobZ+Fit2ZV5FPZJlR+WosL3wr2/yxeweSOGXRNgMjVaVidwVKpefnPKiZzmxS7XOeTzqD8nJ5y35v758BT78KwPd3Cytu69yXINopwCZ2zgs19zWPC3tx2i1BdLC4BltXbvGAhuB1go0JyAEfeiOMkEJ9lo2W5LPCvdpFXIOfQdabWbDvb+0SeVdwfNys6RNqLpB7KX3CeQw/kdNK8TSg9gF1g2CQDHldP3dnIn52VO2grGkK5/9my920fKnwJdTV+Y/jfFYGqpyoE02bUDXU0QMGCi3qY5hXIHFMs2VH+nQO/tTyFRHPlC5AH0sp1n5wXJGFZXBgLU1zaSAJW8SO0x1LSCbduR55UzCfzh0I3mnLrvTDredL/pH3gQvBGpF9I3BAM/bDmzOxIlUXbz3LXv0/iwpw6dEl0vp0S+UUA4NU2nceS1YgICTnIvGFTJFX/XSVrau8bcqtIspDH5aaa7QRA8we4d2aor4Om9kwMQB0K7eEYeS7oCapDJDjS2Q6kd7o77aeYvqfHy5FNRV8Yt998tKrMRpGJxi82LBvp/yuKlU+5SsAXkLzD1zJI4U36XQHMS321rGP4E+ZgccrYm/NsEfk6PNeNOzbMChwjsysdgl7d6+sxeZg6tvLr0nPlAC8/wHClUgdhoLodeheHY4RZnnwxSkV9QqRkB1RqAlelZRjANLJ0itstTjFY8B2IAizSEucnl+Ielm98fMMtqJn2V07vJYCSr9u62WVi+54ClOY06t/hw8DIFascsuaXpntLeBmHMmglucl+fEe/O65olnM1maBmzSDMcCLx1f7GjvqzlHLF+ttxZoN4Kipaa9+yJmJNalIzF9xG8undIPDrrlP068HYKoW2kUzXmkNtRzX2HmWVS1GUZnNmjBCwkZ2zv7CgY+6KqeWc4QJu77G7LFhloqT3RDtAQwHg7fjx2mA1um+r1cMZ/8jNSG+bpnHmnGcO7YOGpHW8xl46donsAQtmX00EXG0gdB0M0osfB26tji67gPoqAPAB+gs8pDdIueg9ODoFhfwo+lEWRqU82YguQ7GN9dve61/0djJxMJPKq5T0LelyeYWnBaFA4ttOUbG3BSZUTO0VzRuOp7zlgmLwE08jrHHBLuIdqha64GHFbRPQBRnJ0kfuef035m1UZ2O/2jXRaw/DTs7nBvebTGZpRt+ZK/KK7fvNMMyus9rzt+el2eJ+ZaNDM5sjP8d2A9gfuwREAL87QETlfXGhsc3P7nb7lhpYQxgIRwR6LEQptWibmgZ/vFWTUQCMTzOMzoColjkbx9KYTwR9/pr3Zkzl2c5vvXxZlGCA9/UVeGcbYA/hxet9oUfa8rM6Ph+HEGfHuFCZUTyJlgQXYP8tJLXMjTng7K8r2YwV6n9nfKVDZnDNlTbdAY5G9NpjKEYi6G35m6DsU7fkZ0rOFAHnlfM5+2Xx12lvAkDrHYdIOyW8/fni1mwP5HlrggE3VymQSIJ2WYRyMsjEF8LAcDVWEumW+gxHGqoEInCdku86x0cxCWIiLphzGEHV88wLeZpKdOWD6fYYyeV+panMQhDSQBsdtIyVLXut0zQFXFqvJKcssy32whdJTk+RlYrDKR272HUYhWb2ftmo+JfUis7+85T2W5Nn7DmMO1/ZhNuUMvqlGsqeC7NGxNYN7PiJFCzhWigypLT4sgOWzT/Dwi9Nwd0axTQ+d/iDzmNmjZRypjqAGh+TdeD6MkUIzSv2QIr6hqDAEDDYmQYj+LPh3aqaQHTLoSMXNWddjn50OtF0DnAQnzcj5YX6kKU4TweiT5hywplnyS0ZqZjXptPlBTvuHod8yGJh0fK/yU868Tv6TrWmxae/FLCJNP8KoN6eu0MZsJbbkEcYaQfJz852NzXApgYEy08gM5TAjCriWMjtVbUEuexU+LYMgwPZteXv6LGh+sqfRIVI3foC/qcIDB6b2aYgcHPgNKEEpwZmc/XbBqlS5VP8DY0y8ejylgP2EFZnxscvxJ9lTeKzwwHq7GB5KUXhI45IWtlOQGQZeDPcD3jrL+H7vp6iinH5zTjOaXZ4IQ+aG2ZR6Ip821QGlUQo3BkMpcXN8AZGVsAhXeoBXnHycHTctsyYDlMAj8pMoJxinOFMPI625kGIZj/Q/MTUWYW7u53D3gW7d/gNiCmpWO2eDwWitN947jnyoQHROGWoWlWrqcMcj+ddlZhbLcHYR8dfueDv5B27NrLEDSpW/N7UHE7m8oIHy6cwsZN+w51PlxpJuivnmwGRz9jIORVNvnrQ9drwcVrWPlVdqKYtOY1KI7MP3hubWQIVys2Obz5tAWw32MPBL8j5mGy7e0VuKF90k0ErNwgvFgJfhWH0OfWYm10wFKZ/onVLNB7bN7s4A8fVCteygjP3ym23mTzpWivSMtVL7vmKhoTQBHeXrwlxhSHR406S1pdrefWI8tbLnt8ObFKkFRgxwNGyfdzASmHjEeWnLl586VkTdlupwCn0rUw0HzszHeO1tgCTO2j5OC8Gf3MmKRSkJBkJbWxbDhc0QR1JnuuWw26TwVi08EPgzHyw9TrY+Zq6M776DERiVjm9kQW7JDPbJrMpOSXA/UJGHdtYbKNxZrsnhKWQMcM4rGRbTfJt0VvGIcCxxwlkOo1dGRe51DLig1YLApGU6HHotSVuC8neJfvIBSmYgJBLm5Utptcz2tjY0K3727OY3DorSfQRszhmQQtkWzZ50hJ52NdiqFZzpHKCpiXI8bDMTYgzliqTGsqZjrgdZhL4drsGI/33yHoPwz85rc3nZomA9wB6gAss+TKHlZOOcxXM5riAtBesqG8x0IyF4AsGmt+ItovrPxpgyFNZFOxCjAesQ1jqlKljAorPtKdqivrfKYlZw//azXxaiEC1Afn7xvW/BMnxu+a1hqhxHUROo1y3qyPfPvjaUYGfL6hRS6e9lNHJgFQO+bOZZSdY/S+gBck/3Nva0gLnlDAWYIGfE8HaGAf4djJzA68DLDR4jrf04ns9KLF4ISfr285zZy+Qr0VFrEpmdzDbzFmWRDiz/9LS5bZNioyQEZV4McTyLNxhlLa0vmxo8kYLAWkDLw9PKlLnFTb8MESZlJb80NTjdLHOhYGTU1zsjA8AcGEsFqBLkr5ni5f/CWTksiiwrAE/g+kaDkNpiOeJIKlrerDKBcv4q2yWHeMnimX15x4EExOs07We8/g8t6VmOuWO3kqyHlALKDxBvhjBQRlm71NnjfNUJPxR3eKTv3YYTzOAqF5JroIgBKU0PynUzdFnSTSgVA/LCp6Er35fMyScoT06xcJ4+42iHoo3ziH5qtpTfVwxY6TiPVPJx5M4VQ/TwH0EYczpRiJypJSulOA5olXfgDK899AvKiqyjtwY7T11MZFAYFJPp7cUzQMnMlVqg5IWf72Dk7IYLMQ+aFHVOL3stY5yDJqGPWKLsx+PuSTfXkk9Sy0HSc76akwtgYhlREI8CeMMZ5WOzK94iBrBhOCmpKRuphKUGMN3uULT4qZoZN54P9ImzVW+Wta97CJaBAcYmOGV5dlFA8rzmTpjysxbVPZK2z242OfEQk8FxPCLrICx5dQsCkLuQLc4brmbvBxrLSWl/mD2yGZE0pVSjlPv+/08YjqNCrlAAMd2XFnp2/Ap33b4UxiBfSx9n98bwWlJJ+cOZULCNBYHvDD44z5kzL0OK+i9Ij/vtOMEAyAXDL+tC96TsKZzxDvkH4OwTJnojcsn3ygXxxYaNwiwidQ14rFOvjALkZmc3ZqYP2iVYHOyIiXG7JluG1im3oOHggkB+9tRwIB6ej52Ar3vwzsUHUi0Bx4W5kSFsQOq/UyAXrRYFTRbNMcBoqWZihNE/y4Yj6SymxBb5MIjDa5wbeaSr/dwxmgu6UV5adFMOdsJbKvWJ4GShONYScxydMJupna77trU3Ry7AJ03X7RyjDRmq3oWh07+m2h+4d8PW0Lvj2kKAffMmZE29IW23cGbG1TadSAJzC3ZqMKFqpu0FM43ahGpQOFlOL3M9LhVuPiU9s6zxRMrWdgcjPp/Mfgti+lk28jDL+ZEUMNMAFmtIYKiLXlEOewdOkmqYtlqgrTt+28BshJC/aOthkgr1H+r3o/3BWm0h71pJa/ZquAFHRcMPWPodjJRkZrq6oIoUo8tMle81EqU6VFwLhjSfQHIpoAbGtEVvTu4w6grAoLKEnbeMTIGiGCyrLaBNxvwFw4et81ANNbe7QeH4zam2j6j8AR+5m8GnF7ZAkQBHU5mfWoDUuABvJ+0hPxi1YP49BEXoBBl2w82rFcWKl0hwBdeUjTW9xEEZXRmaRZ5X9AmuZBQ7VOWUEyltT5Cns+XjgcwIfjt3MEKHKiAMNe2sugoJzPEdBMmlfypuyRmVDvmHqV+pWAHob+Xo9s7cToqj4fBQYSO5Khv4MGdm4MsBB9eYetTSGVFmKo53IapDW8r7x5epLEPH5k/9nfRTRoPtLgr6EZLXtIieJ4zLcMWzh6MJ6hd92kGYMeKeFQxSQshRE3ycewnJNaVbHkGqtlphELKSeiK8zAms+eHhf9niogaW6giYGYmsaKOluwExwGqXg9zMLSLjamRY8ttHwiE98/Fccq/OK0XvxxFhaRnMVmFFahxlQmVhbScB3jRMJ3mHhoEhve2iLXcw4ha/iIejfSSZP+oBJAGKxx1Kq5I40vl9muAZQX9WmHPGkehxfs4mlM77Xch5grVazrsb3TgzhC6hgDUCEt4x1Z2R2PbO0vPWfMfjOc3UFKtoPYwcg4oUaO/QwZXUMoaiUoOD4ZVVdzYdSGJQ6SSu9Y+y9uymABy+d3R+WL68YGwS+dXA8G8Qk7XNlIwjKN2Tw36wPOG181GveVRGsvzEr/bfeEOACnKungxDc8Zgl1HKksvxH2zCeSYbzZzUH6+QiCYtpZ9t/HbZoZDk2Freey4oL2DDrxhP/3Ne/4YiLKtrdo/9RKZNh3zgq6IEFxk7LR8unXpBMS/GNP7K6GV4ZgyxrG/OykuWyo0IuTFHyJfmEMLmQ1VgFo+UAwhn1rlPvCiCk2aR9ZlN2hqSujnvyjVQKIdKWWcH1loKQA0s6LHyEgbFcSyagU1JIFC4Csm1IY6njswsJmMCySyOu7jRDswBGaCF8YYx668jUzOzK3lLjv+PpJwcHu0wCCUahyxb8yd47Xk1agvqr01IraSKOSvzCFeJhgW9olBtZJxRRUccve9R13hKHQsE5UDo5QuDgCWSkYFFoK7tnBWrCvQs/Mxhm2oqhep/RJcaDTXueFzx8DmP386EYbwb6o4PZW9BUopwAcYcxJhB5g/lHrg9TgRV9p45IyG97YbN4BH5DrpHiasRiJRsFbf7vIbsaggSU0wHqmDOl+rniOenlvgaKITtwLACJmTYDtZbmLIU6BKHeMNMw6DiSDEuHXtUtBfSoj1ulMdQZSGekGPEXrYuOVl80EgYYDzTgbGbZvwrgKu1A+WeXgwH6m/Qj1uwflBMzrg3DqxMWSfPFygbgI4WhzIP5SAt1OBLlNmG+mVO/92JGsIoiOM49pVo3CP0P7aoSvtLYDrnQ6/+HoZudtBsz6BQjyGc1pI+OmTAD0cP/LFsnDJl4XYGQkjbvk40R16SisFRKJEClXoHKQWKmLNmQWX1JcSfchD+nfstrKPVvb2hoMU15jFnbWJ652bnCBt58iF0UCc6MVBgfqP+BpLw9jo8xVLTwJJOJZeaNxoNNcsHG4xskrVeRkJF7BOIPNIRosA/tQR6SIBnB/lZRcfzoJ2oDVNJlAXZkbNxlocNnEkOpV4MOAYKEgTSR9DEj8Nsjm+lLj8SBAWqBee0V3itgwGvZjndPWspsN4UYLpaOrjLpBM7Og9Z8njHBqXYltJHF5vgLs1n1jxAElBtre/IMYMRXBZGXxRJvpRoufEHhwvQKuZvgR5qJASEFMUoHtsSSjjmGOoZWU9Mv5jjySkr6immxuHejxRwvm/AKsKSqaXbtxJlFAo12k8VrC5bghgo0FvJlM5fgdWwWbf1BMpQzuKmOw1LhlPGesjhdy/9GOl6xsCMV+XQIKBGZcz0NGZOp9ZcbehToasxR/GH149GBBpqatPjuCCn6NhF3X8+Un4EuoeWOq1Fek9MjeDDuaUH6gInand/t/+z1kuIK/ASGSQrMsiozdAB0dVgXpOdHDcvyVa68DDCxcqnFPrN0pMs5hlQ02zIIilK+U+jeWytRXrJuiNOtqQmPC80uUL/DD6cn/FMS2BTL89LPQmKH0SZ6D3QHWGFIkbFgFReLp1+yFD85ra2Yco8a4uF04JuI6kjuR5aob6DkXfVo9gWEvzCiKA0gzT7PCoAku6Rcz9O6A+MmFoWMcTofPazYvWBeDAiw4uFAL0is8MzCliupPfhb4K2oEsngwVxBwIrR+GR2hno5w5GRIgxJQMXYm6VopSloPcT6q8p0X3kzABbQGr5tSNXXl3k0KpQ5oavwCw2O6R8HavC6rXFKGnc6duE4dM/HSZ3LYsx9QIT9F7yKgyeGCiM27jM1gEhlSq+ug62qlFSrHVc6j+cQh6+yibZcs882toWjnL9LLkbZEjJ+vLUyubtrL+hEItmBUv0BROS7QQZpDk+Kc6xsriH84f7sX5UeTmPFI4Vvlho6Wo1GEkqCkhLJ9l9RK7z5QNysbWWPCN5lgGzz6yxDmCGvGnkQYpYe2m8z1iQqeh553/pwVdaXgUkqmVcfBkijEoOkJpTzGGW7CpqOOcjD4ayYguO07g0UgHyepTzr+U/SVJcGxbu9crkqWVKYKd+rTXqrAvK6DEAdg4S06OXpzOruNYcbL/cFZilfUDYXPOluBaPhdIbAMYX9q1rkwqXQIrcKPNhwCLVamRz6V+qCkQyJnNNOkKYSvWmsvREp2QkaMnEy88WzDAMOQ78VM45MNF16gyZ7HM0dsRBDqg3nbWNBczFAkhAJbLg6mLhmGGEQpiDHQ8sCaqtlcnUto0/NjKZPSIYiUSCYaY13dkZMm/AD626nXtu+YcaZCwnWjMJ6ZbzCWBaUjVYDEsq+FWqooAq6r/MmGxGMTiFa18y2vKJu1cKa3mnUW02mdoejTHj0SrYZp7pfcFo1zzveUSOM2gMYLQNQQEv00uZudD2JxWmwlrYKpC0wmNo1p2WDoXGH5HVksgbEzvhHtbZU7dN6X9Hd8nZ5hgSwfgAekFBqVEod34oNVOLejlBBMFfGokPAnjqEXa4pnzHB1sclHPAGnV+bEigXpxlnYqT5xjGj3ZF9eVBePaSpQSNpHXYb1Zp2IqNtkIDZ3KcJHS6g9Km5PmEYJHMiUqLKnC2SleN4KgjC7z7+8k/iod+Z06yIuxybJTPir4k0LfgoUYx7fxw4LEV51QxCME+cnmDcDfhTZ7zdOKZtLao6uw23fNjRdy2TcMXYTkjS546hgnnrC8yGFl/Sg/n0aXmaKm21q3UCnhXPWJb+qf1mQjrItAiVCkIVqO1ziJRebhLtHdP11qS6+Cs0wMPlxcsSnvk776Ry7rgOH8/tRjxQeihMjAd4QeywE7WcjgI9XlQ67PHiFnVy+wgbOrdGy2BNP/NCz/weaDMlQDpFuYIp1BOtrp+a4h+nmDnx/drazuJePrQqIPdKUlrjUA/mAfw+RF/oIfEmhnu5Vph4l6BexnTHx2DS/7uElQeueVov41xhLw0rKpXM6DYvzCsxLl1oFU1t1OJD9zMHMYrp8uNKu3faw2QzxKLF4PCXd6pcEmxqXWwe55nDLIYexa76Gkb3GDWtDD4Jr/2gHoU9r/IKQwzVWQHjt1Rx+7MmCOBoqp6bamVIqgQR+yPJXuJNb2qOL2u3jghfH0wTufTnBUp9a6LQYc+llzaNChFdqW2AmWgIOqfY0e9pnc0H9hGsS8f2Cm9JCuc7Utbm9mxqxDPD7ZUkj+6dYtpO6uHXnBRbQ9zByNNKZc3mkk5eJAcuQYqZ2oEAAgysAKnV5jJnJEeiT0BFHRcmMCU8lR6qUT2fbZ+a0FjxWMlsC93aec9wjilUVTA17OELCzN0w19f+Dn0TdGkjHSYMbN7XBekFenctxJYL0Do9HHMpvFmJMJCF6QVH7YawYX6B9fqnV3n930epWetbyxHHK4LsBNPOtt+brJwpNwrQ1mniSuLlt8Bd9yOtn7GwmhZkkHhhTSBGxda5vg497oTFl3EFQXSIeg5B1ZJ7Xz6OWp0mNsp770J2p4KaAaL0Jwcmq41uJoZLKwdIYH6AY4/lAWtuSU1F9iD82D9leUI6R15FrfH8eBR5bjLBHfMiUl46yj/ipY5oeoW61xPgy+mVq09IjgYife676EmepZ5SEzKzyoQtiwyG4FLddZmgmtk/DTr4uq1QseHGLX/mCTC2RQs8Wh34fciSbqKBc8ui6ML5EWc/B9mLYTcuGenxmXbtsNaWYzW3QKyJdCRahnL4Un9uHpZSyEyesnX7OMpdQADZ1Lk2nPZ32xeTSy9VfId7SPwM/0OJuv1yZiNhsD+5fLUa01KHEJgk+j3AWSgj+3nXVSGsHVYaPQY5U9EI/P0A70jbq/4yNSiBejsnlBbCi8IAzHgvSsnQqdtDRjKJI7V4KzPcq4uyS+zEPxVuajgG5gPI2aS3xX+mneFhrC2C1MBI5gfYnTGZL/ofcKbEH0Rp+RkXt0SyjJL+u1YB8NoZquiOLXIIbRUXvcTGg/PO6ldmssaNGaLXllkE5DONugBGrEvN1JGT8w60FREDQeD1VJSy8u0C9pJ/P5DxzeNILMZ0Z6Ki5KSz7wE2eFV4mcY8FytD/DQ4HztEROl1umB2KyEgaIenecTXOKbQdyFpQ3P7jMSDaBOzK+7AIMrZ0/CnqIUf1jrvtZQ410U3mzAiOsjzVkH1j9eQR6gRWI7PPu1N0581/TqMrPdjSQHqQZsAZFzAQyB+8V02uOlB+yRZyD1fLkCmc7OkX1lgIyS0i0yrhP6KMov/X5E5pzrFsLkGJljaLxMJ3FMOys1v7sbSzg5R4FIDzadE47AQwoPzq0WJBkC1A9wxceOE4eOWtqgk3sUcyvuftCWGszpgnmXWqfcYwNBcekifWD26L+uDLKeC5gjHHwVs5ulI+DIbGXLrFl7dDbQmrK09fRt5E9eQTC9fLo1jt95qlmSue5xZxU9M0L98DBb5T4fiS+HArE8TMIJe9zIkwKC4dHZ6qVy7eMihzDRoScx6qQgfFamSP6iCnAvhTOqSwGywQhOdHZ8gkvcxdufFiOfIh1wBIUW7+w6FQ/muCdPYuhk/am1Ljo8QHVnJ25EY6uJfnHAAIUe2d+lHd2SNqrrOsRC1axnTlLjIJmfn670UNrwjFWVEq0EfjiXIhfzvMF1bA6hMmPhiA6JGd0Z+xMe3Od/zJIXAbMrB2cMw82nXo8Oi0U2VVr/VlX8CqnBAKC86vFgGGfhbuRm7xRRL6USlNTzgGoNE0Lu48EmQAE97l9jr8KTs7oO0OrOk43Wx8FX6ICKSln+TS7mtv0crORoG2W0FNGL1UqFQ4LebSh2ZSlHzfDcONHmepGuPQGeRktsHu4NCzMqRiShqX4ITNvHhi7qpeSvr+1XuyD9GScs03beRFHq/mseRRytkMj7JA49lKmoQcXwCYrEoK81Ez3EGY0cnTLvv88gczOmh3TbfDDjMVVXr3PkZEoDULyrb7ux6AvSj3ATPDHMvHDkezqBbUZwZFEtp420UEzD0XQ6HHUO2tvJZtVVrJbFui7sDV8K8LYCDx3XmzVYTlCLEALMDdjZDbckv4mN1d2o7a+Z+VNEPOKYAmif/LZSeXEnd2srdSRtUXu0RBu/QCxPkiN7kxmvSLLd7CXWQGsgFZDL2Pg6FLnw5jDF/XpCMbwhDsYYaujnD39I2NzKAcEtYQzFAVrm0dfNyoBer3OC60SpRuD1k0OfLyqUvGK9xevjV54KL7Rqh9Ox+ptlncszmR6eWaiIow+NEhFdPf5FYmc9ZN6duX1nCOsmZ9dPEyoehmaK4aqY9onSEEcvgwcKpWgkJkAXKFCZndUoHfUdpZNeT/f5H4xsUZZoEdmAmF+bD1C0mhn19/BSFuyw4MDgazFBTbwaJ00UXCtRacFyVHEQYka6ghUjG2tdhTYGoQD07KqtgeGpE4sy2yC249fHMox1JSrRnoWeozl3qRLtx6a469ucIUtfV6uwai6hQTkXSawanT8kHu4kRbPwEHavV7qP89cTkrI0GaUqpcYrEyNdYQid6QvPS9s2a/GDT0sbRQB6jqJdxqakEVavrrBNa3SW6hWZqQjD8Ocs23B2bVoLETrsYBgRXuAI+1oJA/MSjNfGXjMsMGfiu1m1hinzI1Zc8jzXKDXYUiTMJixaBRFtGdDvHCtuQYKjIn0b8f6EyDjgWQyFlnXO3KzCiizc/2iH17b8fPWNqhnDBXo9QpJ3wxppqX8lFaCa7k1EmOoHDZYY2OVzY2zfsQpu/W+HGliN2PkQfKtnkCA7fw4OUIT/pnZbjKcb4jJCMQDjU5AIuzm2UL053WWY1aPGK7LmNBwaUYGFL4CHy2dd8HqyAl1Dwp8yUGpNbka7Yo+P+IUVKKpF1tD5baW0ambqLBHwFrNJEpRdR30G06Z044MBGNv+hovADkhJzjrEbklg9lp5wVAjdAUxRSDGoX6i4G1vuurMXPX/kZuto531ORq2QzkMK9IrxIHoKrXMot0MpkhCiGy85MdE/C/NxCsF6lcnVrvYJoxGENeGS6wkl6MVlkWSh+jwE8DnD2zJHvuFu+vnhgoENbnmOKs//JjOeCJs3FsZBQfs3eW18hOdl6isk6YSLH6zZvH/CCk3/a58BrPumRpfVGtcImwELz8ysIcNH1NxfA8sq1njm3WGZaMHzRu6EeRHM3zRdTb7xxdqrFKgXydIlX5Hgf6rFzurCKljeudWT0+fd7BeG610MaNb77VWW9IUldTIp5td5iXnDevWnchI5oUBz5nxhgo8FbOWWEb3aUMeUwKR196Y7Ks/Ed61tEaUznVWVYY1okvd8BQ0bcIjLD4cQk4BtitnVGOMvYpzM9EnA+Uz7PCrFUHoIoy7UaFwjVQ6JVhL7V92nyto2IZDVXxgcoMG+FEAmJ+HSPMogHBoE97GQ1UNnYGgSK1gu+dS52z5gEF4ySbJjzM/nFKmzXOqs1bnRU3/ID3DgIng5HeXNfNUuHaFqLGnNKkklXI5Fuhq8DrJXfqrAUGutMNSgfGXHP2gM4bXdu6wdFeISV6oFxt4d6kLDOdeuybQyh6bbrvxjhrAk71+/FPnRzQlOODEHDBpMeHDflC4SI5YBZAZAhbCS45SyzTCLMsWGZp6sKpe7qzXVC26mgIwa7wRsUmGZZP68v069C8NjQ29F0/L3cGIy7g8FgPESYjS/NwKhjnkNnkrLoo5ZFY6tRTnCAkmnUI0C6u31DM0ahqQIReenLQBiFfNB0BHwn6FyMe8DgQjpwl4GziOJp3CIf39f24h5GxQwfbRiFb+U4/C+ez2V0wq1u//La3cdpxsHKjH5sfR9DzlExKaC2djraz5yc4B3ts8MMyqR0ziyNcccjDmQ1slxjaOB/9VC43Y+SsSWc2PgcNh/AWWaW8iG6UZbaRIsyjqkAiLaGFoDNnwzAeokSiFuSJdYFZI/ydLKzBtEQSHNhJ71ld+1mZ60+O9vnZiKDq63/85QluLHXhnbAezuqsy2wEetGdLRT2hZ6j55m8quf60YKtMshUZRr1kq0gLWopGTPr6bY+6YqR1lgDWwSp8uWEYkZLNCJKDRc+55mGfhkiIxfkzFnfBz05px/khHAYWBXFxXHGdP6L4zEEHGOuUqfknPjAvZMEW+uzt/YDbs21zRFYmJH2ZaBZyVYfzfvJorRv0gP1UCSplr6v68cj3fnSPOQG7SPmSl7pAtMb0jl6BhZhT/h7QNzE0RM7rVo8BOML7KZ5N8gnMKdCLhcn0wYoi0zXeiESiEk5ubx187wzXG+xVobF34yRs3jG476F1oHHQS+7G9fmB5dQtLWUCyepxL/1OiZsp/cCOZjTLdGx16VjgckySqw3biwMuvrJnVwrSuXlWnr2rpjz45S9tuwcuV9naVJbCSpRIdI/wE8JCkFFzmmf0+qsGpYwFcfKLxb4rAFnv25YJhcp7fZGy/I1ubW2NJ/N5zvrvFeed5K/GlYIACJcQgfSZ30SSo7L57gKm4kyyQKnzJ2H9P+Ue1JGGClX/5RKK875cf/EbZvcOzMTe4dBTJQw9zprdLVuraNNiHRytp0xNnKDfauff7cZ6ZgDWiv1SirvVv6pWtqjXm1nEzYgwB6FchJI7Z4386nEnmB66ihq9tQb0/cRUV1Pc9RchFAXiIbhYxm7tk+wn8tdr4kLla6MUeK6dYHv4ywdhd9ok3ttdNADBkU5lheOu19D5moVGB3UI8czba2P1phoAEUclrbZ3vTO+uPUxvihtJRxv6n1KkD7bP66jH6y+I5cTJmVzAJ6HbDMppvzQsTuYATUn0fIkdg9Wx+LcIgyyZx/RgueGaTw2IKV8W4PVViSGAK+mWdGhnU/cSWlULkUn9QqNLFA1X/sJ7gTjoH93k96msogDmQsvL+DkV4DuPBPZxkBNu9j1FNp+6M1h6xbbd6gsshNMO8FyspZosPRm0FNL773hsyNkVPYZi9hYR3UrP2xncT1qhaRxav49NNuuh2WSqfTGYyIQnngEvjhTd8YpmU0QUMRSdqJVaE3KuYQJrC/UCImRc+jq4yjVhnJW2qSHdi0bwgOONbE+GswWcl4ttZL+sjJHivEWhEHvN47GKn1XcBqCOhx80E1BsSeby0pR+OxZvSujcwLGQzZIWjwE4vRR4sY94/fnQ7n1Aw4eETrNUt40OgrYwbGb0dO/Oyqx5RvVn09xA50SU3+CEky8NVB8Qfi3KQ6L0V4pM5LNlr+nQ7KwQ4YmP4EvamYxJBTqfQRMtxvPM8Vdvngy1C2S8b7d93xm6NAo6JyAONMKeOgWXu8OxhprddbO+rt5V7POj9KiNozPZMGqodwAjWgOV43RvZrBZN99CdsmoO0FZeWrnbGsawPazu/MV4aqqkGsoPRxSaYm2JXzJrQPR3Oo2ugEC47BSVw7jyf5dMr+DI+hB6HpMUyhm0hH22O4HqqVjXosc8OZymkAF7Phhbzmrb7Kr6oakN00sb0qExH0o1xs7+edQXV0YpgU9h0BiO1WS3H0N/99uoNCxcr5hrYY00ZUoO/w2IcSHYmNfPDgu2XAjuS/5l20ClZ+K3TwpHDWYtzNF66tVmblNH5HGuPiGvBPEOKNVv9DkbWG4WRqF5ky59FWNbW1atUxSijNeuSDqLuG/tepZLzG19YqriWl+YkfUihMs6xnDWLfbQRKrOOJrrjM/aAarjpIWhNBqxnFlz7DkaOHBGi9Y5B10ptkOv2dsGzKUC1EkKFSF1a2LD/i67g+bTZSBjhMGXaRe292eGJ1jZQX5lAz+Z89H/TNe/VMVmAMSF+eVJSdZc+cZZuocvRpfKsdbf0F1RxLyfC/R7Vbb/ZoVK4I7rUP1LYUptnp4b781LQz2tL+7HZtC3r52ulTvN3HJ4x0zPx85UUKvoh+5md9YHtu1Zb7fOoDW+V7TQ/cXGz/hCccIeEoalHiWGGBmlBV37ZwZB4StcuqcFoPc7zXyJAY9OKyQPRpXgzWc+mDqoAqyP4J33nLGqQkvQTmPesO+roqlabIDmtF7MtzIrKkEUAzKbL2DRAUN3RmqQ3BR6LI8o6xDqlM8TurW2J+rokAMazwts+j9zYoo2tlAMnh9oYPGejOInNVzfIb+Ual8k1633ZL6R1jcdGblybX6sF9YJChigO6hAJcVbIK1GGVfFjJ4/L7VEnNFAPCJ7S0np9WfFocLq12da12tnwg/AnL6W4dzzeAJCGW2zUH3kimQeAMepx+7jB6700iwCMTR3AzuO7lQUa2vvZOZxIW61/Gr6frLWM2nD0JLVseZc4gx91SaL4Zy0uVH5xlVBcz80YsZD8SQJZcuj46p55CugRRtzQdfJWptcibpaRWTvC7TdZIph2+nmiKsMlgGW9KNa/p22xgBSgX55nUKz5+FkzTMkrHD7DrAozh07GiNqGY0HmbF2StSC9pKxRiT7SGvrnMNrZGDyFtTP7SROxBZxn7UfDi8TMMOdtEImmOX6f+YsMFVimG7S9Zu69ATYMlFtXS0go38GIsEyj78qye6zE2ZH6ObJ2BNmhtuEAzyBAxdMzJ+61xlHlyItQ0sLhHJyzUbZ6NGCLWbVKFQTZTyhydDsWRtY0EwZGdnaZOc8zJgYKjb3xj4XI1l47sji7OuCIcsA33r+B4nGDcDwHfy/FIPIQjMFpN+a9C5tj3Y621p2X3HXOaeaLszNoVcCtjayBJzB7AI4MMNhKJKv6szHsmwtAFc8MDU5JtTEuyz2hhV57ldAfDZ87zE2aWZi+R5j77zD1mcFlZ9QVAEOMzeJZUipTdJSVe36URT4Gq8hLMekWC5hXcIGTfpCVnudOrH7RNvK1ZsxGzCri5J358Y5D1a15NVSl0W5yXtwBsKdjULny8kScMS9jbrVhR8nNxjPJrd4jDmDFYG9MvTF+MwY4UOnHiJGHLB2Khcc+d6heVj6amrfYuQljz31hu8vzcrANvkYx/ryayxW+BrsYbytC20OsVU2WKRwLLECOe3J+mERjbnsbDcTGcxuID1PI+Yk/tFxxVeJWt0MM/QTg6NTOSHa7h691ykydRyVeOwYVJOLaGIq/JE/deJiQZfn0i1cFTZt3PqH4lGyiS1gbUniw59TsoyaDEexLyL8+51kByv96/HVpma2LAv6Qx9GNAesml2IlINbY6yXnEKrWB1MkXO/j3OyzRroaxMwS8V6SPKPxtkqHXCrukSnAqLer5yz6yemM8Y02uJTOZ+XizPsLW6ojeIgd+mxL+ISPP9lYxG2/vOINmfXY1SrOgE9NADYfGYcuQrOYm6yJC1OeWlXRrwmsaoktVceEj+/1f5w0zvPdq37RTXj2bVIz5Eer/DWy6tX2rWYDTBxr8eWUzw+tSU9EQuBgfNHmj9M6Dz7a+6NgIx3aDzTGfG2jrGfH0gx2bVS3qL6DkWfx9fySWs7TBmOS4aQJ5MDP7PU5VAramBEcHaAs0NDMjkESpeqr/sPiZ/1TNo88eMUqsRir6GEP2zkfrFVw4fsixVPTaYLwerOXPgvtzUsoXfo05sD12Cglo7ycReDsc+ByqSzf43jkSRrxzOArxYKZ4L8mZZrutRz6WgNHXErXuPxsXEiGwtSxAcHwuEwnCbHlbFoPKaIfeSS1yRo6qtMc+6ToBp0bntGiRf7osvB6ITV2rGNOj3anmz5Mak7Pa+5QNWxWlKTh5a1ol4JcTa3Jpo431Yuhi8D8bRiQ04NDxogRuIr/ZwwLazUZCms3Ouw5/YCDPsdkTf424nzjWYS0jAUJDrLRM+qkR0uXdVWgw6wX9zx76G3OChudMrLckaPKlXQwXeCrd+7+6c1IwT8f2WktxkUzQjdx1lgaje1ZZZi4hHk9Z70NoKSsvBmjO6G/POhjjIJQTm+qsJlODIyZn54N7G6RUOmd4gpMajGP0uXaSjwGCtQTDQSqQx3y0SZVzDcLZ916gRe1vDCRk+3mTu0n55TTv7aNJ/RKzItcyrNMnfUicw8RF+jHjF7/SUwJjp4NPK8X6FB4Y/YmAX12yqT7tXmc/RgntfLBMbGYRq2c7GRbX5in1PpqXJTDjZAaz4udxzvHLlyIikxce+P5qQ8Z36QdM3Y95S+dWjF8UIq91WDORfigGVXMB/67uBvaTblxrQfZC7rQhWLclX9EpmvwiqeJ5EozoXfm/hK7KIohpdDY/iYZl0HmzzlJuykiiQjZhApaUtwap9aWsjg+VUIr7gv36SWnprxbe3f5fNEhOitUDoSStjxiZic4g66+tI1eN2+6PHusWlr6Zsgwe9A/WKJhbW4cyn4IhkqA6BiPRhcr7HsEtq3im7g0/aA/BjojR4ZKbNTMhnS2/lUIwGaNEFLYAxiKPRqEYlDDcbD0/Kl2rTjsh1+qH9tsBQ5cZvzcKY2GqDWRyesF+4M3WboeXVGl7iMi7gxGFGSsPxYkL33fz+5KAqqcIsysGtlf9eNNbXbV0bOeCfwGWNMQ4wgo7cdIGGn1wA7nh7iJiYXQDjvAxsg8fwmzGdfYBVE7Cde5+Z/B1lseyNm0L6zItLQ86mlmDcpN0NQ2yDp2IHDrrNU/viXGLTXgg1lE8gFq7f2gYtlnL3/VgJ5Zu/KDUTrOUvVGz70UJ5m41T+ivM5gBCpQOvQ+T4grKHv6aXHAnoE3+6VtKVRW24NhUJgs2UapEWfM9ttGpIwl9+XlOZ415F1nqjP7NFMIL80rWwAYFFgbTGa12/pgMg2943FHzaOAWrP++pnESdeQn6quVXuhdcN26qW8CzPSfB/bIe7CsWz5QfaPbbsnZ5segJlGSrX+0YVJXGdJE0rywl49PfrHGHhp43dZf/o/ZHlnaWf13zUvIDPjQciwkFTgCmhxvZSzZQ4twb5mraKM991YngHL37zvbFgAiGOZuZEcGNM/9+ZBYtV7/3BhA6ee8yzqMEK8j/4zskvh66MASr0FyD6bIb1CcAdeA9viQCNA+g3AYDayGZwvnGwdudYs16inzIQ2u9Jxhf0d07jabD2E2vJym1JAXdSPkIGjHAMXDF4+WgzWjjPGi30ZyPPSC/A2J+SaePh5UYePkh23NblJzswQSDFkW6ZRr4ynVJZI8cNUdk3kjo5kK6zA+OWseSoviog3gMwKg1ZMde5ghN3OnPrM3vv5UB6tePVtbNn5mj6pHtE3Vg/TLb00gJv1k7QfP0/Se1bps1vvps8R3b4x8GaX7rjjORxSWi/t5ykeTOCBh54y+VNSo8u9S5DfLDhwUUZRPas4MpJIhw9j4u1n4OLJAqHIo62bn3Iin7Z/2Iln7fzK4dqGQ20VTFcLX2SNyTf4p1+A0Do8FhgtdrnXWRoqSd55GeunXh4NPPm1a8kn0cDbJOAV2+qDtpC/omHa6YIKWePky87KPf8Fjq9dMU47eshnKGmnt+ul13rrbOgE19jrrVWPYHl0lqauXIOLLLdB9kWEpN4j6/hpot1oH6Byhwtmvknd70Rb4gI0JEXxkiXJOV13XFvmRwgtj2FTOgAs1oyN32WGlV+2kcSIa0JH+JhA1kaQ/UiLQYfYuhs/H0YdpJEEB04tV2e7wFXNtnUhRfD2glPSmxQAxvPoKAd0AMgCn1ddYXdY2x8p6wqRYKzGWkcgXeq0Sl4j+usuj7O1I1RsaW1PzhvPhX5druepDfIcQ/sOwwztgLVH3mofvxGzeuQv62YrhIvCt/op+BVtEjJDG/lytJdpQ/Bc9wahLqmuDX0/Ru+dD8YsGx22sCgSodUVawRRLziCIYE8veAM2EivxP2BcvwWYlFGZnOtDWiWSZs+sE57tLoAf9DUjGVs2Q47ZV/7qpWfjhTmZwAl2PGBcTMvH66cPNrn2QqO0l40IegqIAx1/1ayOub43dqIkxVUyvK1g28HN4yUIH9h/TGr6Cx/P+Sxeej8hmTrZ171s5h5QgeLuOM85+PqnyO+ghe1FJWgKzIYN+yc3GO9HBYfPvWG3b3+itgXkd9S5zFtgEcZ3JrgbiySU1a1XL1BdGQfoekfI6bLCaE+EFQreDK0gZ8S07+DET2j4Gm1gximTjodj0IeTSYdyIwNWrUEvWwMvWFc7oNiJTDCmbkgSIEPv/A0iJn77rN3hMabyuVg7LHOldx9udGzVHIsEsyNQKP7OQuXk9Lkc1JqBtGmS7M4Ded1ToMuurXtEYuAVA15YH4Fexad+OxgpeJNUZ8H8s2Lo9OLQgBm4esiDRd+ZbdlsOdZ+j2m95TZdyP6CH2sDDCDEswxaoub2ek5IjaLvvFdhjlPdsycVf6tlekZky6t62kL8Yutp/FdHyjmuKfXh1sJmg1/adjJNHM57Zu+YcEOu1ZPqmSM9M/bgsTBKT5D2toCVAPlNv5OZ1cNrHMiAPPSM876opfe+PliRybiDxyQ5dGT44R5jwaWhYhnhe30/HSC5GSdWt1HaUyjEhVXBgurj5xth8LqJTBCru53rmsw5tAKZYGOmxsy0L9nhpQjlDSMsesnWVTG/9ExvXVagUHNXMIzZv1izUCvFy+ZvzwqnXe8Y0pCkAqHfDdjxEQfTF9XTQ+SD/aiHdDI1wJDh/LDwG7Exu2dtPxSusOET8vG49uDzpdsYFRzjFvVVo3iUVqjsUEsoh7Ijqzz40t8lrxJR1qrC4o84GOmrUnGRy+t5VWPKnE8dHZLQdVBH6WB9ahaPT9ZZyY5Ctanbnum8IXlg3wCtlLtAiHNgt0w60ReiQUN5Q/lmx3dGry2dZHUP96u/phe254cswy1NisPVzLXbGlBO+a5QVOBC/2jNedAx6brpW3U9uMLLsJH35Ji1o3ckcKe1aMJp/OSF8NSS7HlJ1HmQI7IFFVu+TVQeHJCtSJNeNFiHedYi77YNs7zNB4vv61FlbsekYxRJRYS66NUDoz33KnneIZax0EL2ymUqqZGZT/oR8Fc+4eCHzIa6s5SF7CwBKn9BOTi9o6OTrM2tge5Uumws2ElRelCebDCiyWyDApi7AIUtxxuG8ycXvGu1BFavaNr17GcKKC4HeStN54uwRslssFqhldgrXo2CR365OcnNdQcDi0VwW+GWB+GL1ikvameXvfHBCYJR2PUW9tPP6YAKcjaOG6WPBkGcvHPj7XyU24vHtq9EW5oFLLYwU1affaBHUavDbfj7lsfM+kOudEpghkvOWk3vKB3naMAMQF8VBthum+AKBsxaIdmdRsizRjJpK7S1QrXBu0xqqx5N6EJUOKU+ettuYaNGR6ceePq/IxbRrT6PoPPrIpK7Mtk2KUW5j0osRZ3VS1bS05HnKyMCJCarVyMXBOStqDP90/4Xp0fUt3Gz5Z28u8Owx4yraCEE+mnddJnFGJka8vZqSeNuxkjrZm7ER2b20rN9OLCmpGwfAhz6My5POsJj0gj7zkA1Y/GuTZ2heFL7d68tftWEgzqcZmbn/znJwBpFw/TWGdSS7QEVf3Jso7Yuj6zMe6O29fa/2yiAV21zkWbEQZxIptjrzSa+oGat58f1JjKtCE9YLMYGI+A6ex4HR8kuFJvyNVPGoBaBauOsYzFPHAH5ChtRmJqgPxPGfi04XXQo7LUegXcvTbO4sov10bwqOT8Y/v9xKRvqzvCS88025BYw6jbVm8ME3IwCmv4kZANerIuh6u6rItl4UMeUht0DOz7HBO+h9BlkD/M9V5xS0PDmcjrN3K/NpQYckdxYx3gLTkGAdWm1b2wTx3LSk7O2VjxWnnYUkRC3s+Sjj7ZU5pjH48KREg2NlIw2ob7A/O6LUtwJT8tqLhWCStM/Q2kHHOMe90/dbY/axUMieRgKzC1QlvTMTYfYsXrKkzKD8+bwsAGN4l5MsE6y6M/513IWfNfuLM7dc+Xf/AM3CuU+X8kpDU0VvL+8LYqM++O58fsKwnu3VQsbfNop1GbDdz1eGKHBgtK+kvq/OHoP3KQQncUSs/0lqd+RnkjTi+DVzv24mOu2MeRKtKvJduuVERLS0FCKpiC6i3OYt4QVQoWOmbpmIYLLidHYQOi3OoAViA5tjZiNc/WZa1RenMtZzYQszc6zFj0lunacibw7sgB+tnIhLPtyAoXf7SZ6w/ryHNZKCLUvKqgyuZV4t5TVrcr+wSEEc9AwbF5uXpk79vRq9HVybt06Vjzq5/owVqBJsBQr/8tPjA53uZTfqsQDW6XgZyRymrdQTn3kwTU6lORs+iSfTYrTGK8UaPr0lxvm9IsFZuFMa+dzOv5wTtKAXsMo3oPyZHGdGpZjai6wN1QfYFg0Gd+FEutNRH1PEOO2szQWSEOo3nArQII2JR7zX2IApI+WJvjjiXyr7rhuRsz8JWl5stK1mD4boCOGBXsnjEWvvDZd9aDJzO0jNxW5DvfwYgurwYDEGUFT+Us9FFP3ymNEqe02kpsNpxk+UyPo2bRDwlkzdmZD+sKjPeldJQif2L5pvWCGZ7RPc3IWXXhL81k/VdAcbFavmfFZzO2gDi59wchwJocAkPVC5iY57a90YllquapdRYxPkFa+ubW4syHqYKUXDxUHeO1ineFr9CNTdct8y4hU+D3tWZCDWuewnxcozDn72AEqvaP4ha1N746K2GxScOOqUB+GV6tFOEgNsIAA9IKwwFSuukl8aIrPf4JCYbH0pt5Bz9Vw6rnMFZ663CSkodSvfkIZyULjy+qUPFmjAgTb071Bjzqq3EW81lLg9L5i3LhqMYMlRmH9pEbuwMqpyjYZWuWPusAmdKLFCLZhI4J2+jAgdUaAAR2smZs52eacdbG7ei8P3uG3h//mXUutSlbekZ5pkBiMVu2WgG/V4K1uJFwBtxoFkKQu1ZMDVS5JHuSdwwIoORs4dOzodU4+5SVGHY9EpSL/WjpN1BQX6BDL/81NEidpWnacU1dR5I5mppaOJWf1ItqbXmtVxZVXvdQjYsGVjcJIbNQHFJYtcut5BOPpnlezDtbt3WSW/U8m2snVEeDNcy4fzRlprdfAwUGnDy4QwOgG3lt+B2DR+NWNLpBZ3PqQZ57lJCXMSgd9DzE9hc91E+2g9ASZ85s29jbrhgf6mBmmX2WCTjrnDUGQtXBEFotxSr8P5tGfDbe+IxJS23MkOgIOlXkLoa4rKAfi88Vjuq0gaErEh69GFpVqEP1Wd94zWZr1tfqWbZlUKEvChsS+tLlZxJdb/il40DmF+z110SllHb/JHNbhzxwqmdT7hiSUc0hIX0H/TPj0n5OSyGP2lMCbrAX3clG/7tVgK2js3lVz4Ignd/O16XeY/LfW6fRiiN9LFNr4TH1ZyFyUa9VIL4oNPV7BKkZv7O28Ry6q6/TyVSz0lq3xSJGZsNOMOtZJ/2fRLjaEbLhRPj9rxHhwnwQsGb5BUYqloTGVoCsP5cZGZ8fTjI+AoyJARh/CO/HHAVjJLoX1DXlWmnPxtqoV8TIs+XhaMaByEkXbt3Rm+w7q3I+q3LH83LZyIUzPyrC0/M0NU/RtJGWDThybsZI7ySgfxI5UDE9X/x+6Rw45PayTtZM18HyThhMOGI+Cit04dIhA3Mk/es4b+jhMAL80ZNyLCNLWyuFWZZwjOJmkbzetONtO3srvP6MVzI78lr3JOLd1mgLwtzU+lY7L8bzZ4fhMOJnSWql48n6s69VmE3bTi5YLY8Yfn4U+/J/wVtVeqBEPmsY1gvIaFu4FLKezT69g5GSHDKry1xPMN5DyMG4smwyOowTvhwwGwSuWyLMY5hIDDn1Y/8fFnodhW84SOqqjz55pRbdGx2y9tlj3jq8Te2I9tRngPcSf4nyvuNx7/VoVq/78aMMASHr71ybZgQdyJp95awHVa0yJW1HVqHLC5ZWCSiY6B+5nwTm1pL0RS4MEYZ9hx2X+Q5NJhouJuXzLCNTVRHhuf/Z6WavGbZ0Rnkd50ceITsABHgEG5ll4hwMFLx2PzmBaoPD15DHQupANBnFSZBJMKxg413fnaPJJuLNFi5+jhIQSBlCz3K2JXwe+qoPQ4vDHIObMCZGHofG50fcpR+E0wYndxtS2gaG1AYFpZxRLK8FsQFVJMdk4zs/GLRv4XrcAXG+t200DjFOhvjpDfcF2TxnU+HBje9N/ajTgYXZDnbwORPVMUrcmgFKDM7kswwospHIKVgGdCs8WOXPY/4uCjgvZUOZghvQ+VWqDp4/wP+G6g0tLxaLjgNrMT3xw4ObXaSzModsYcvc0hXDKXEwyXOZvEY8LC3kjQAZsJ/RdfKwN5HPLcOWOAjya6YkviNuaMT6Y7d44Ns3wqbSLxVkYeyfjwGOq2oYAWPJZ1lzH+Oa16KS3KIcJFU+TkhqI2k+mElJDDBCOl/jBRuVcfYYQi+53qZrOMYaPOeNqdFimFpAI7UwjUnvC1twYGtT0E9dLbn2iGP1joc+m2+waLjNV6/UaDbMhB1Sxum6TBFFsaFB/VZ7i0ZsZcw8ay0epAuvkfmqDBvBTD02PRYt61I7Wl+lQqoxlg2mcq/mg/FlrwnLfTSfzdw2E3lTP7mI2bEJIzBYUTNLrWrdQY1iA/vd7XZbF7x20NeobThr/b6ofi8kS8ASnd1s5mXbMJdjcPDSI8RlyYrWw+xBkE5oNR8yyzgreXU3efKsvAtDTDmj50cZqQtndjps9ro3UvbRIHc740UEtT76lxlXJmm3VkUA1WKIAyN5nmVIuARO3Uf93si6NKpm+U5LyvoORnLQMYdmC4EIZBu9JtW8cLMctDard23HQNKxLDtOf4wmVw81mkIQz3IUJDpNF51ns6e3XPhox2REfeSjHQBNhmwrCKzXk62vCRY0H63OTIgoBfzMqbS0RJaNV14xYVKONHolyY4XHWkdMZ8EnEFoKf2RudxPWA5E3gY4MYTIgofn1p6dy7ZeZSM2Php2nnbjx5JapsrcjJEXcl2b8vJf/l5B+HvGSYrUTTyjqUMfwVrwoFBkQhGuVQ3o04MzBerJfj2kdYfIMqhBca2ksiamRj2F+D0rHXJhKhkYvhoilsr7r6FiSazgHxbh+qY7/P5lUsqMlR8KWJxuO1XYxtp0rYCzzmZraB4080TdG0xd6py886CL9sG1O+Emrh6zbdFmW05uf6pdmi6j+E9+apk3y2Jx7nDchQE7NrtBHWg/XxnzKZ8Xw9E/ZL0XjpYTx1yFJ3ur8+Nycmo2j3rlrLonbjLNywqdXjkeUu3zTCZGn8bMNqGWHGvbjyFw6j7sMOD6gl3L/MfwbjYGStSQE+DHFBeZSV41mUmwfIc4jtmMpVrxdlj3Yq6x4MXOYzFbffXWVI/VjcFREfZ0tMJ+s2UI/soR72BE/kS9QYAeiiGgPTXPmV8nw9GpRU6TjppHP8RZJOKl1/9QY8fcKzpSWXMIKI7OtWa1G6zEpm1E5Cy7ZyzFN+fQ+zU70UUrooj6Ix0TxEjRLM01rpqOuejRuMmMXF4qTgu9kwmNu/Kugkh5cYZlIg1qFGyV+4TloYnC2F8YO7kOy7KJeLuPsOGKO7JhGdxQa0/uWRIDhWNMMo6BS1aejYNu593wKmgYmOntfPQo7mnGfiWHwqQINf8YbmKKpH3NMp9mwyGliQ6IZ50dTb2QtXJA3zq8GW6B9Z3CsCPHCdeOuRkjvWYVG69jzC9npTx7I0RtsItx3/mxXrboXo0i08o+SmsUYR5ZBc9jdxQo2H4xTDLmgF6ud05emudDdRX06d7P7rn4/poLwX3nY2TyUAXWefQ743kQfjsfYehqkg5OTKM8ZAdYdpIEcBxDyZ7FC2JpOJbZA1sLN+GbpQqTkPw00SPZYvMFC83fj8lfLrx6G4Ls6aTcfAcj5ijOTvUZN+EVg6UlIT+DI2pWtfkmY6h4UnHbMEF+9xrJ9pYlBTJ0NldHSw2KN9kF5xlB/OBvP3GcL3RInz3IBFVSdWX3Si9INXo3lk9OHnanIP/Tz9B4bWh8QLU5a93C/a2/Z69JpFkCy7HCMdWpKsSDsiiTzMEg6Ggr1wbGaxOygw2K3Vk3MTwiZpubbY+RyeD2kiPVBJFP41n+I1s6diq1triEZ866XGIXSrE3WlJQNQJhGKxQZnSUkbH0TyiK61Ew6L3zwh6Natd1SwhuDGfTPK9nTfTNZkT2TAj72egtLyNI0Gf62ZxtdvdaL+Z8kC6nyetO801NMlPCsS7+rmwum3hz9BclTGfFMMRnAxwQBe/kQzQH8w/XddVOkjaH5qxj/fJdCDhd9iIOiNLfvrpBR3PzPMPMxHyGvjIf9rTBEMjEoz46kZZVkei+bCcglvR9er0WXRIneGNdVc5hGWMpr8AbZgfBDDSNgWlb7+knhEVks0ZAQwpSXut/amgk5fkcVYYAAAAASUVORK5CYII=) repeat}
+
+  #safe{position:absolute;left:384px;top:302px;width:1152px;height:475px;border:3px dashed rgba(255,241,220,.45);border-radius:8px;pointer-events:none;display:none}
+  #safe::after{content:'text safe box 60% x 44%';position:absolute;left:12px;top:8px;font-size:18px;color:rgba(255,241,220,.5)}
+  #stage.showSafe #safe{display:block}
+  #q{position:absolute;left:384px;top:302px;width:1152px;height:475px;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 60px;color:#fff1dc;font:700 70px/1.15 system-ui,-apple-system,sans-serif;text-shadow:0 2px 12px rgba(0,0,0,.7)}
+  #stage.noQ #q{display:none}
+  #stage .pl{position:absolute;transform-origin:0 0}
+  #hud{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;max-width:1100px;margin:6px auto 0}
+  #hud span{font-size:.72rem;padding:3px 7px;border-radius:5px;background:#1a1712;color:#8a8478;border:1px solid #2c2620;font-variant-numeric:tabular-nums}
+  #hud span.cur{background:#5a4a36;color:#f0e2c4;border-color:#8a7050}
+  #hud span.k-bendL,#hud span.k-bendR{color:#b8c4d8}#hud span.k-barn{color:#e0a070}#hud span.k-house{color:#d0a0d8}
+  body.bare #hud,body.nohud #hud{display:none}
+</style>
+</head>
+<body>
+<h1>Haunted route v4: turns and a barn you walk through</h1>
+<div class="sub">Prototype. You wander through without stopping; <b>Next</b> quickens the walk to the next stretch, then it eases back to a stroll. A seeded route (<b>?seed=N</b>) picks each of the 13 stretches: straight, bend left, bend right, or a barn you walk into and out of; same seed, same route, every reload. CSS transforms and opacity only, chained timers, no animation loop. <b>?dur=</b> ms for a 6 m quicken, <b>?wander=</b> m/s stroll pace (0.42), <b>?step=</b> metres per stretch, <b>?bare</b> for a clean 1920x1080 frame. Back or a click on the strip is a covered cut.</div>
+
+<div id="fit">
+  <div id="stage" class="showSafe">
+    <div id="rig"><div id="cam">
+      <div id="sky" class="fill"></div>
+      <div class="creep" id="creepG"><div id="groundStatic" class="fill"></div><div id="ground" class="fill"></div></div>
+      <div id="light"><div id="gmask"></div></div>
+      <div class="creep" id="creepW"><div id="world" class="fill"></div></div>
+      <div id="lightsTop" class="fill"></div>
+      <div id="hush" class="fill"></div>
+      <div id="topdark" class="bleed"></div>
+      <div id="vig" class="bleed"></div>
+    </div></div>
+    <div id="grain"></div>
+    <div id="q">Which planet has the most known moons?</div>
+    <div id="safe"></div>
+  </div>
+</div>
+
+<div class="controls">
+  <button id="back">Back</button>
+  <button id="adv">Next</button>
+  <button id="auto">Auto-play</button>
+  <span id="stLabel">station 0</span>
+  <label><input type="checkbox" id="cHud" checked> route strip</label>
+  <label><input type="checkbox" id="cSafe" checked> safe box</label>
+  <label><input type="checkbox" id="cQ" checked> sample question</label>
+  <label><input type="checkbox" id="cRm"> simulate reduced motion</label>
+</div>
+<div id="hud"></div>
+
+<script>
+(function(){
+'use strict';
+// ---------- constants (design px at 1920x1080, world in metres) ----------
+const qs=new URLSearchParams(location.search);
+const W=1920, H=1080, VX=960, VY=700;      // vanishing point = horizon, low in frame
+const F=1371, E=1.7;                        // focal length px, eye height m
+const D=Math.max(2,+qs.get('step')||6), NS=13, REST=9;   // metres per forest walk, 13 stations, landmark rest distance
+const ZFAR=42, FADE=7, ZMIN=0.3, M=48, ZG0=2.5, ZG1=34;
+const DUR=Math.max(1000,+qs.get('dur')||6000), STOPS=24, PAUSE=3000;
+// ?seed= must be a whole number 0..2^32-1; anything else (abc, NaN, empty, negative, 2^32) falls back to 1031 with ONE
+// console warning, instead of being silently coerced (>>>0 turned -1 into 4294967295 and 'abc' into 0)
+const SEED=(()=>{if(!qs.has('seed'))return 1031;const v=qs.get('seed').trim();
+  if(/^\d+$/.test(v)&&+v<=4294967295)return +v;console.warn(`haunted route: ?seed=${JSON.stringify(v)} is not a whole number 0..4294967295; using 1031`);return 1031})();
+const EASE=bez(.45,.05,.25,1);
+const NAMES=['forest edge, broken fence gate','lantern on a post','scarecrow with a pumpkin head','leaning gravestone row','row of jack-o\'-lanterns','crow on a stump','stone well, glowing green','abandoned cart','fallen log, glowing mushrooms','will-o\'-wisps over a bog','harvest moon through the canopy','cabin with a lit window','signpost with a skull'];
+
+// ---------- route: copy of client/src/worlds/forest/forestRoute.js (forestRoute.test.js checks they match) ----------
+/*ROUTE*/
+function makeRoute(seed, n = 13) {
+  let a = (seed >>> 0) ^ 0x9e3779b9
+  const rnd = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296 }
+  const CALM = 10
+  const ok = ks => {
+    const cnt = k => ks.filter(x => x === k).length
+    const inner = k => k === 'barn' || k === 'house', bend = k => k === 'bendL' || k === 'bendR'
+    if (ks[0] !== 'straight' || ks[CALM] !== 'straight' || inner(ks[n - 1])) return false
+    const ni = cnt('barn') + cnt('house')
+    if (ni < 1 || ni > 3 || cnt('barn') > 2 || cnt('house') > 2 || cnt('bendL') < 1 || cnt('bendL') > 3 || cnt('bendL') !== cnt('bendR')) return false
+    for (let i = 0; i < n; i++) {
+      const k = ks[i], p = ks[(i + n - 1) % n], pp = ks[(i + n - 2) % n]
+      if (inner(p) && k !== 'straight') return false
+      if (bend(k) && bend(p) && bend(pp)) return false
+    }
+    return true
+  }
+  const KINDS = ['straight', 'straight', 'bendL', 'bendR', 'barn', 'house']
+  for (let tries = 0; tries < 5000; tries++) {
+    const ks = Array.from({ length: n }, (_, i) => i === 0 || i === CALM ? 'straight' : KINDS[Math.floor(rnd() * KINDS.length)])
+    if (ok(ks)) return ks.map(kind => ({ kind, variant: Math.floor(rnd() * 3) }))
+  }
+  throw new Error('makeRoute: no valid route for seed ' + seed)
+}
+/*/ROUTE*/
+const ROUTE=makeRoute(SEED,NS);
+// interior geometry (metres): you walk BARN_IN into a barn or house (door at 9 m from the station before) and
+// BARN_OUT out of it (far door at 11 m from the inside station). Longer stretches, so those two walks take longer.
+const BARN_IN=11, BARN_OUT=13, BW=4, WH=3.6, PK=6.2, BDOOR=9, BLEN=13;
+const INNER=k=>k==='barn'||k==='house';
+const isExit=k=>INNER(ROUTE[(k+NS-1)%NS].kind);
+const segLen=k=>INNER(ROUTE[k].kind)?BARN_IN:isExit(k)?BARN_OUT:D;
+// the shell of each interior: half width w, wall height wh, ridge pk, door half widths (front dF, back dB) and height dh,
+// facade outline (half width fw, eave fh, peak fpk) used to know what the facade hides
+const SHELL={barn:()=>({w:BW,wh:WH,pk:PK,dF:1.6,dB:1.8,dh:3.5,fw:BW+.15,fh:WH,fpk:PK}),
+  house:v=>{const w=[1.9,2.7,2.2][v];return{w,wh:2.9,pk:2.9,dF:.8,dB:.85,dh:2.3,fw:w+1.3,fh:3.3,fpk:5.7}}};
+const S=[0];for(let k=1;k<NS;k++)S.push(S[k-1]+segLen(k));
+const L=S[NS-1]+segLen(0);                 // loop length (arc metres)
+const walkDur=n=>Math.round(DUR*Math.sqrt(segLen(n)/D));
+const TURN=[0.34,0.42,0.5];                // total heading change of a bend, by variant (radians)
+// centerline curvature: a bend turns its whole angle inside its own stretch, easing in and out (1-cos bump)
+const SEG=[];for(let k=0;k<NS;k++){const a=k?S[k-1]:S[NS-1],len=segLen(k),kd=ROUTE[k].kind;SEG.push({a,len,th:kd==='bendL'?-TURN[ROUTE[k].variant]:kd==='bendR'?TURN[ROUTE[k].variant]:0})}
+function kappa(s){s=((s%L)+L)%L;for(const g of SEG){if(!g.th)continue;const u=((s-g.a)%L+L)%L;if(u<g.len)return g.th*(1-Math.cos(2*Math.PI*u/g.len))/g.len}return 0}
+// pose table along the path from arc c: position (x right, z forward) and heading th (right positive), every 0.1 m
+const PSTEP=0.1, DMAX=Math.min(80,L-4), poseCache=new Map();
+function poses(c){let t=poseCache.get(c);if(t)return t;const n=Math.ceil(DMAX/PSTEP)+1,x=new Float64Array(n),z=new Float64Array(n),th=new Float64Array(n);
+  for(let i=1;i<n;i++){const s=c+(i-0.5)*PSTEP,tm=th[i-1]+kappa(s)*PSTEP/2;th[i]=th[i-1]+kappa(s)*PSTEP;x[i]=x[i-1]+Math.sin(tm)*PSTEP;z[i]=z[i-1]+Math.cos(tm)*PSTEP}
+  t={x,z,th};poseCache.set(c,t);return t}
+function poseAt(c,d){const t=poses(c),f=Math.min(Math.max(d/PSTEP,0),t.x.length-1.001),i=Math.floor(f),u=f-i;
+  return{x:t.x[i]+(t.x[i+1]-t.x[i])*u,z:t.z[i]+(t.z[i+1]-t.z[i])*u,th:t.th[i]+(t.th[i+1]-t.th[i])*u}}
+// a point on the path at arc Z, lateral X -> camera coords seen from the rest pose at arc c (null when out of range)
+function toCam(c,Z,X){const d=((Z-c)%L+L)%L;if(d>DMAX-1)return null;const p=poseAt(c,d);return{x:p.x+X*Math.cos(p.th),z:p.z-X*Math.sin(p.th)}}
+// a rest-frame point seen from a camera pose (cx,cz,cth) in that same rest frame
+function reframe(q,x,z){const dx=x-q.x,dz=z-q.z,cs=Math.cos(q.th),sn=Math.sin(q.th);return{x:dx*cs-dz*sn,z:dx*sn+dz*cs}}
+let XOFF=0;   // set by mount: an item's geometry is drawn shifted to where the curved path puts it
+const PC=(x,h,z)=>[VX+x*F/z, VY+(E-h)*F/z];   // camera-space projection (no shift)
+
+const clamp=(v,a=0,b=1)=>v<a?a:v>b?b:v;
+const fm=n=>Math.round(n*10)/10;
+const TAU=Math.PI*2;
+const P=(X,h,z)=>[VX+(X+XOFF)*F/z, VY+(E-h)*F/z];   // XOFF: see mount()
+const fogAmt=z=>1-Math.exp(-Math.max(0,z-2.5)/17);
+const litAmt=(X,z)=>clamp(1.3-z/11)*(X>0?1:0.6);
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function rngFor(...k){let h=2166136261;for(const v of k){h=Math.imul(h^(v+0x9e3779b9),16777619);h^=h>>>13}return mulberry32(h>>>0)}
+const rr=(r,a,b)=>a+r()*(b-a);
+const mix=(a,b,t)=>'#'+[1,3,5].map(i=>Math.round(parseInt(a.substr(i,2),16)*(1-t)+parseInt(b.substr(i,2),16)*t).toString(16).padStart(2,'0')).join('');
+// ---------- per-seed palette: each colour keeps its OKLab lightness, its hue (and chroma scale) comes from the seed ----------
+const lin=c=>c<=.04045?c/12.92:Math.pow((c+.055)/1.055,2.4),gam=c=>c<=.0031308?12.92*c:1.055*Math.pow(c,1/2.4)-.055;
+function toLCh(hex){const[r,g,b]=[1,3,5].map(i=>lin(parseInt(hex.substr(i,2),16)/255));
+  const l=Math.cbrt(.4122214708*r+.5363325363*g+.0514459929*b),m=Math.cbrt(.2119034982*r+.6806995451*g+.1073969566*b),q=Math.cbrt(.0883024619*r+.2817188376*g+.6299787005*b);
+  const L=.2104542553*l+.793617785*m-.0040720468*q,A=1.9779984951*l-2.428592205*m+.4505937099*q,B=.0259040371*l+.7827717662*m-.808675766*q;return[L,Math.hypot(A,B),Math.atan2(B,A)*180/Math.PI]}
+function fromLCh(L,C,h){const A=C*Math.cos(h*Math.PI/180),B=C*Math.sin(h*Math.PI/180);
+  const l=(L+.3963377774*A+.2158037573*B)**3,m=(L-.1055613458*A-.0638541728*B)**3,q=(L-.0894841775*A-1.291485548*B)**3;
+  const rgb=[4.0767416621*l-3.3077115913*m+.2309699292*q,-1.2684380046*l+2.6097574011*m-.3413193965*q,-.0041960863*l-.7034186147*m+1.707614701*q];
+  return '#'+rgb.map(c=>Math.round(clamp(gam(clamp(c)))*255).toString(16).padStart(2,'0')).join('')}
+const PAL=(()=>{const r=rngFor(4711,SEED*7+3);for(let i=0;i<4;i++)r();const pick=a=>a[Math.floor(r()*a.length)];
+  return{fog:pick([[250,.016,'blue-grey'],[150,.018,'marsh green'],[305,.02,'violet'],[70,.018,'sepia'],[195,.016,'teal'],[20,.016,'ash rose']]),
+    trunk:pick([[55,1,'brown'],[30,1.1,'red-brown'],[95,.9,'olive'],[260,.5,'cold grey'],[75,1.2,'ochre']]),
+    ground:pick([[62,1,'loam'],[110,.9,'moss'],[40,1.1,'rust'],[250,.45,'slate'],[85,1.1,'straw']]),
+    moon:pick([[55,1,'harvest orange'],[95,.28,'bone'],[135,.75,'sickly green'],[25,1.1,'blood red'],[230,.5,'ice blue'],[300,.55,'pale violet']])}})();
+// neutral greys take the fog hue at a fixed low chroma; hued colours keep their chroma (scaled) and take the new hue
+const FOG=h=>{const[L]=toLCh(h);return fromLCh(L,PAL.fog[1],PAL.fog[0])};
+const HUE=(h,p)=>{const[L,C]=toLCh(h);return fromLCh(L,Math.max(C*p[1],.008),p[0])};
+const TRK=h=>HUE(h,PAL.trunk),GRD=h=>HUE(h,PAL.ground),MOON=h=>HUE(h,PAL.moon);
+const RGBA=(h,a)=>`rgba(${[1,3,5].map(i=>parseInt(h.substr(i,2),16)).join(',')},${a})`;
+function bez(x1,y1,x2,y2){const cx=3*x1,bx=3*(x2-x1)-cx,ax=1-cx-bx,cy=3*y1,by=3*(y2-y1)-cy,ay=1-cy-by;
+  const sx=t=>((ax*t+bx)*t+cx)*t, sy=t=>((ay*t+by)*t+cy)*t;
+  return x=>{let lo=0,hi=1,t=x;for(let i=0;i<30;i++){t=(lo+hi)/2;if(sx(t)<x)lo=t;else hi=t}return sy(t)}}
+function dPoly(pts){return 'M'+pts.map(p=>fm(p[0])+' '+fm(p[1])).join('L')+'Z'}
+function bbox(lists){let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;for(const l of lists)for(const p of l){if(p[0]<x0)x0=p[0];if(p[0]>x1)x1=p[0];if(p[1]<y0)y0=p[1];if(p[1]>y1)y1=p[1]}return[x0,y0,x1,y1]}
+// ribbon polygon around a spine [[x,y,width],...]
+function ribbon(sp){const A=[],B=[];for(let i=0;i<sp.length;i++){const a=sp[Math.max(0,i-1)],b=sp[Math.min(sp.length-1,i+1)];const dx=b[0]-a[0],dy=b[1]-a[1],m=Math.hypot(dx,dy)||1,nx=-dy/m,ny=dx/m,w=sp[i][2]/2;A.push([sp[i][0]+nx*w,sp[i][1]+ny*w]);B.push([sp[i][0]-nx*w,sp[i][1]-ny*w])}return A.concat(B.reverse())}
+// world spine [[X,h,w]] -> screen ribbon at depth z, never thinner than 7px (TV legibility floor)
+const wRib=(sp,X0,z)=>ribbon(sp.map(([x,h,w])=>{const p=P(X0+x,h,z);return[p[0],p[1],Math.max(w*F/z,7)]}));
+const rot=(pts,a,ox=0,oy=0)=>pts.map(([x,y])=>[ox+(x-ox)*Math.cos(a)-(y-oy)*Math.sin(a), oy+(x-ox)*Math.sin(a)+(y-oy)*Math.cos(a)]);
+function lgrad(id,x1,y1,x2,y2,stops){return `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${fm(x1)}" y1="${fm(y1)}" x2="${fm(x2)}" y2="${fm(y2)}">${stops.map(s=>`<stop offset="${s[0]}" stop-color="${s[1]}" stop-opacity="${s[2]??1}"/>`).join('')}</linearGradient>`}
+function rgrad(id,cx,cy,r,stops,sy=1){return `<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="${fm(cx)}" cy="${fm(cy)}" r="${fm(r)}" gradientTransform="translate(${fm(cx)} ${fm(cy)}) scale(1 ${sy}) translate(${fm(-cx)} ${fm(-cy)})">${stops.map(s=>`<stop offset="${s[0]}" stop-color="${s[1]}" stop-opacity="${s[2]??1}"/>`).join('')}</radialGradient>`}
+
+// ---------- trees (world-space shape, projected per pose) ----------
+function treeShape(r,w,hmin){
+  const lean=r()<0.4?(r()-0.5)*0.14:(r()-0.5)*0.03;
+  const HS=[-0.12,0,0.5,1.4,4,8,13,19,26,34];
+  const cx=[],ww=[];let k=0;
+  HS.forEach((h,i)=>{if(i>=4)k+=(r()-0.5)*w*0.4;cx.push(lean*Math.max(0,h)+k);
+    ww.push(w*(h<=0?1.5:h<=0.5?1.18:h<=1.4?1.03:Math.max(0.5,1-(h-1.4)/42)))});
+  const b0=cx[0],bw0=ww[0];
+  const trunk=[[b0-bw0*0.62,-0.06],[b0-bw0*0.5,0.1]].concat(HS.slice(1).map((h,i)=>[cx[i+1]-ww[i+1]/2,h]),HS.slice(1).map((h,i)=>[cx[i+1]+ww[i+1]/2,h]).reverse(),[[b0+bw0*0.5,0.1],[b0+bw0*0.62,-0.06],[b0+bw0*0.25,-0.12],[b0-bw0*0.25,-0.12]]);
+  const at=h=>{let i=0;while(i<HS.length-2&&HS[i+1]<h)i++;const t=(h-HS[i])/(HS[i+1]-HS[i]);return[cx[i]+(cx[i+1]-cx[i])*t,ww[i]+(ww[i+1]-ww[i])*t]};
+  const branches=[];const nb=2+Math.floor(r()*3);const bias=r()<.5?-1:1;
+  for(let b=0;b<nb;b++){
+    const h0=rr(r,hmin,Math.max(hmin+2,22)); const side=r()<0.75?bias:-bias; const [c0,w0]=at(h0);
+    let ang=rr(r,0.45,1.15); const len=rr(r,2.2,6.5)*Math.sqrt(w/0.7); const bw=Math.max(0.2,w0*rr(r,0.28,0.4));
+    let x=c0+side*w0*0.3, y=h0; const sp=[[x,y,bw]];
+    for(let s=1;s<=3;s++){ang+=(r()-0.35)*0.4;x+=side*Math.sin(ang)*len/3;y+=Math.cos(ang)*len/3;sp.push([x,y,bw*(1-s*0.22)])}
+    branches.push(sp);
+    if(r()<0.55){const q=sp[1];let a2=ang-0.5;const l2=len*0.45;branches.push([[q[0],q[1],bw*0.55],[q[0]+side*Math.sin(a2)*l2*0.5,q[1]+Math.cos(a2)*l2*0.5,bw*0.42],[q[0]+side*Math.sin(a2-0.2)*l2,q[1]+Math.cos(a2-0.2)*l2,bw*0.3]])}
+  }
+  return {trunk,branches,cx,ww,HS};
+}
+function litStrip(sh,inner,frac){
+  const pts=[],back=[];sh.HS.forEach((h,i)=>{if(h>6.5)return;const e=sh.cx[i]+inner*sh.ww[i]/2;pts.push([e,h]);back.push([e-inner*frac*sh.ww[i],h])});
+  return pts.concat(back.reverse());
+}
+function treeItem(Z,X,w,r){
+  const sh=treeShape(r,w,Math.abs(X)<4?8:4); const inner=X>0?-1:1;
+  const LF=0.35,litA=litStrip(sh,inner,LF);
+  const edgeAt=h=>{const i=sh.HS.findIndex(v=>v>=h);const e=sh.cx[i]+inner*sh.ww[i]/2;return[e,e-inner*LF*sh.ww[i]]};
+  // bark furrows: dark vertical ribbons across the lit side, below 6 m
+  const fur=[0.1,0.2,0.29].slice(0,2+Math.floor(r()*2)).map(f=>{const ph=r()*6,h0=rr(r,0.5,1.4),h1=rr(r,3.5,6);const at2=h=>{let i=0;while(i<sh.HS.length-2&&sh.HS[i+1]<h)i++;const t=(h-sh.HS[i])/(sh.HS[i+1]-sh.HS[i]);return[sh.cx[i]+(sh.cx[i+1]-sh.cx[i])*t,sh.ww[i]+(sh.ww[i+1]-sh.ww[i])*t]};
+    return [...Array(9)].map((_,i)=>{const t=i/8,h=h0+(h1-h0)*t,[c,ww]=at2(h);return[c+inner*ww*(0.5-f)+Math.sin(h*2.1+ph)*ww*0.03,h,w*0.05*Math.sin(Math.PI*(0.08+t*0.84))]})});
+  return {grp:'w',Z,X,kind:'tree',fastDim:2,op:z=>clamp((ZFAR-z)/FADE),
+    veil:[1],lops:[null,z=>fogAmt(z),z=>litAmt(X,z)*(1-fogAmt(z))],
+    geom(z,id){
+      const pr=p=>P(X+p[0],p[1],z);
+      const tr=sh.trunk.map(pr), br=sh.branches.map(b=>wRib(b,X,z));
+      const all=dPoly(tr)+br.map(dPoly).join('');
+      const fy0=P(0,-0.2,z)[1],fy2=P(0,18,z)[1],ly1=P(0,0.3,z)[1],ly2=P(0,4.8,z)[1];const [e0,e1]=edgeAt(1.5);const ex0=P(X+e0,1.5,z)[0],ex1=P(X+e1,1.5,z)[0];const lb=bbox([litA.map(pr)]);
+      const warm=clamp(1.25-z/9)*(X>0?1:0.75),c0=mix(TRK('#4A4035'),TRK('#6e5436'),warm),c1=mix(TRK('#3d342b'),TRK('#523e2a'),warm);
+      const furs=w*F/z>=70?fur.map(sp=>`<path d="${dPoly(wRib(sp,X,z))}" fill="${TRK('#1c160f')}" opacity=".6"/>`).join(''):'';
+      // on-frame test per trunk SECTION: one bbox for a leaning 34 m trunk spans the frame long after its foot has left
+      const secs=sh.HS.slice(0,-1).map((h,i)=>[[sh.cx[i]-sh.ww[i]/2,h],[sh.cx[i]+sh.ww[i]/2,h],[sh.cx[i+1]+sh.ww[i+1]/2,sh.HS[i+1]],[sh.cx[i+1]-sh.ww[i+1]/2,sh.HS[i+1]]].map(pr));
+      return {bb:bbox([tr,...br]),pb:[...secs,...br].map(l=>bbox([l])),lbb:[null,null,lb],layers:[
+        `<path d="${all}" fill="${TRK('#17140f')}"/>`,
+        // fog tint: the base is fog-coloured, so far trunks sink into the ground fog instead of ending on a hard dark foot
+        `<defs>${lgrad(id+'f',0,fy0,0,fy2,[[0,FOG('#34353a')],[.07,FOG('#303135')],[.16,FOG('#2d2e32')],[.55,FOG('#212226')],[1,FOG('#16171a')]])}</defs><path d="${all}" fill="url(#${id}f)"/>`,
+        `<defs>${lgrad(id+'l',ex0,0,ex1,0,[[0,c0,1],[.35,c1,.55],[1,'#2A2620',0]])}${lgrad(id+'v',0,ly1,0,ly2,[[0,'#fff',1],[.4,'#fff',.8],[1,'#fff',0]])}<mask id="${id}k" maskUnits="userSpaceOnUse" x="${fm(lb[0]-4)}" y="${fm(lb[1]-4)}" width="${fm(lb[2]-lb[0]+8)}" height="${fm(lb[3]-lb[1]+8)}"><rect x="${fm(lb[0]-4)}" y="${fm(lb[1]-4)}" width="${fm(lb[2]-lb[0]+8)}" height="${fm(lb[3]-lb[1]+8)}" fill="url(#${id}v)"/></mask></defs><g mask="url(#${id}k)"><path d="${dPoly(litA.map(pr))}" fill="url(#${id}l)"/>${furs}</g>`
+      ]};
+    }};
+}
+// overhead limb reaching in from an off-frame trunk: a world item you walk under (it rises out of the top of frame)
+function limbItem(Z,sd,r){
+  const x0=sd*rr(r,6.5,9),h0=rr(r,4.8,5.8),x1=sd*rr(r,-1.4,1.0),h1=rr(r,7.2,8.8),w0=rr(r,0.32,0.46),n=7,sp=[];
+  const ph=rr(r,0,TAU);
+  for(let i=0;i<=n;i++){const t=i/n;sp.push([x0+(x1-x0)*t,h0+(h1-h0)*Math.pow(t,0.6)+Math.sin(t*5+ph)*0.28*t,w0*(1-t*0.7)])}
+  const limbs=[sp];
+  for(const k of[2,4,6]){if(r()<.25)continue;const p=sp[k];const up=r()<.6;const l=rr(r,1.0,2.2);const dx=-sd*rr(r,0.2,0.9);
+    limbs.push([[p[0],p[1],p[2]*0.55],[p[0]+dx*0.5,p[1]+(up?1:-0.6)*l*0.5,p[2]*0.38],[p[0]+dx,p[1]+(up?1:-0.9)*l,p[2]*0.25]])}
+  return {grp:'w',Z,X:0,kind:'limb',veil:[1],op:z=>clamp((ZFAR-z)/FADE)*clamp((17-z)/4),lops:[null,z=>fogAmt(z)*0.8],
+    geom(z){const ps=limbs.map(s=>wRib(s,0,z));const d=ps.map(dPoly).join('');
+      return {bb:bbox(ps),pb:ps.map(l=>bbox([l])),layers:[`<path d="${d}" fill="${TRK('#141210')}"/>`,`<path d="${d}" fill="${FOG('#25262a')}"/>`]};}};
+}
+
+// ---------- fog shaped by trunks ----------
+function fogShaft(Z,X,wd,r){
+  const dx=fm(rr(r,10,22)),d=fm(rr(r,17,29)),dl=-fm(rr(r,0,20)),pk=rr(r,.10,.17);
+  return {grp:'w',Z,X,kind:'fog',soft:1,op:z=>clamp((ZFAR-z)/FADE)*clamp((z-3)/5),lops:[null],drift:[{dx,d,dl}],
+    geom(z,id){const a=P(X-wd/2,15,z),b=P(X+wd/2,0,z);
+      return {bb:[a[0]-40,a[1],b[0]+40,b[1]],layers:[
+        `<defs>${lgrad(id+'h',a[0],0,b[0],0,[[0,FOG('#62666e'),0],[.5,FOG('#62666e'),pk],[1,FOG('#62666e'),0]])}${lgrad(id+'v',0,a[1],0,b[1],[[0,'#fff',0],[.55,'#fff',1],[1,'#fff',.7]])}<mask id="${id}k"><rect x="${fm(a[0]-40)}" y="${fm(a[1])}" width="${fm(b[0]-a[0]+80)}" height="${fm(b[1]-a[1])}" fill="url(#${id}v)"/></mask></defs><rect mask="url(#${id}k)" x="${fm(a[0])}" y="${fm(a[1])}" width="${fm(b[0]-a[0])}" height="${fm(b[1]-a[1])}" fill="url(#${id}h)"/>`]};}};
+}
+function groundFog(Z,X,wd,r){
+  const dx=fm(rr(r,20,40)),d=fm(rr(r,19,31)),dl=-fm(rr(r,0,20)),pk=rr(r,.28,.42);
+  return {grp:'w',Z,X,kind:'fog',soft:1,op:z=>clamp((ZFAR-z)/FADE)*clamp((z-4)/5),lops:[null],drift:[{dx,d,dl}],
+    geom(z,id){const c=P(X,0.35,z),rx=wd/2*F/z,ry=0.75*F/z;
+      return {bb:[c[0]-rx-45,c[1]-ry,c[0]+rx+45,c[1]+ry],layers:[
+        `<defs>${rgrad(id+'g',c[0],c[1],rx,[[0,FOG('#3c3e43'),pk],[.6,FOG('#33353a'),pk*.5],[1,FOG('#33353a'),0]],ry/rx)}</defs><ellipse cx="${fm(c[0])}" cy="${fm(c[1])}" rx="${fm(rx)}" ry="${fm(ry)}" fill="url(#${id}g)"/>`]};}};
+}
+
+// ---------- ground: ONE layer. Walking forward over a flat ground is an exact 2D homography about the
+// vanishing point (w = 1 - dz*(y-VY)/(E*F)), so the whole floor animates as a single matrix3d, no per-decal layers ----------
+const GITEMS=[];
+const LEAFC=['#6b4a26','#7a5a2c','#5a3a1e','#4f3d27','#836236','#6a3c1c'].map(GRD);
+const gi=(Z,X,draw)=>GITEMS.push({Z,X,draw});
+function leaf(Z,X,r){
+  const l=rr(r,0.22,0.4),a=rr(r,0,Math.PI),c=LEAFC[Math.floor(r()*LEAFC.length)];
+  const shp=rot([[-l/2,0],[-l/4,l*0.22],[0,l*0.3],[l/4,l*0.2],[l/2,0],[l/4,-l*0.2],[0,-l*0.3],[-l/4,-l*0.22]],a);
+  gi(Z,X,z=>`<path d="${dPoly(shp.map(([dx,dz])=>P(X+dx,0,z+dz)))}" fill="${c}"/>`);
+}
+function root(Z,X,sd,r){
+  const n=6,x0=X,x1=sd*rr(r,-0.6,0.5),th=rr(r,0.08,0.13),sp=[];
+  for(let i=0;i<n;i++){const t=i/(n-1);sp.push([x0+(x1-x0)*t,Math.sin(t*3+r())*0.35])}
+  gi(Z,X,z=>{
+    const top=sp.map(([x,dz],i)=>P(x,th*(1-0.5*i/(n-1)),z+dz)),bot=sp.map(([x,dz])=>P(x,0,z+dz)).reverse();
+    const hl=sp.map(([x,dz],i)=>P(x,th*(1-0.5*i/(n-1))*0.95,z+dz-0.02)),hl2=sp.map(([x,dz],i)=>P(x,th*(1-0.5*i/(n-1))*0.6,z+dz-0.02)).reverse();
+    return `<path d="${dPoly(top.concat(bot))}" fill="${TRK('#1e170f')}"/><path d="${dPoly(hl.concat(hl2))}" fill="${TRK('#5a4a36')}" opacity=".8"/>`});
+}
+function stone(Z,X,r){
+  const w=rr(r,0.2,0.42),h=rr(r,0.08,0.18),n=9,top=[];
+  for(let i=0;i<=n;i++){const t=i/n*Math.PI;top.push([-Math.cos(t)*w/2,Math.sin(t)*h*(0.8+r()*0.3)])}
+  gi(Z,X,z=>{const pts=top.map(([x,hh])=>P(X+x,hh,z));const lit=top.slice(2,7).map(([x,hh])=>P(X+x,hh,z));const lb=top.slice(2,7).map(([x,hh])=>P(X+x*0.8,hh*0.6,z)).reverse();
+    return `<path d="${dPoly(pts)}" fill="#2c2a26"/><path d="${dPoly(lit.concat(lb))}" fill="#6a655c"/>`});
+}
+function tuft(Z,X,r){
+  const nb=3+Math.floor(r()*3),bl=[];for(let i=0;i<nb;i++){const bx=rr(r,-0.12,0.12),hh=rr(r,0.25,0.55),lean=rr(r,-0.12,0.12);bl.push([[bx-0.03,0],[bx+lean,hh],[bx+0.03,0]])}
+  gi(Z,X,z=>bl.map(b=>`<path d="${dPoly(b.map(([x,hh])=>P(X+x,hh,z)))}" fill="${GRD('#2c2a1e')}"/>`).join(''));
+}
+function patch(Z,X,r){
+  const w=rr(r,0.7,1.4),dz=rr(r,0.9,2.0),n=12,sh=[];for(let i=0;i<n;i++){const a=i/n*TAU;sh.push([Math.cos(a)*w/2*(0.8+r()*0.3),Math.sin(a)*dz/2*(0.8+r()*0.3)])}
+  const c=GRD(r()<.5?'#2a2219':'#5c4f3b');
+  gi(Z,X,z=>`<path d="${dPoly(sh.map(([x,d])=>P(X+x,0,z+d)))}" fill="${c}" opacity=".8"/>`);
+}
+// the path itself: a world-space strip whose centre and width wander (periodic in the loop length, so 12 -> 0 closes)
+const pathC=Z=>0.35*Math.sin(TAU*2*Z/L)+0.15*Math.sin(TAU*5*Z/L+1.3);
+const pathHW=Z=>1.3+0.16*Math.sin(TAU*9*Z/L+0.4)+0.07*Math.sin(TAU*23*Z/L+2);
+
+// ---------- landmarks ----------
+// station 0 — PASS = a fresh viewer names this as "a broken wooden fence with a gate hanging off it"
+// v: 0 broken fence with a hanging gate, 1 a leaning timber arch with a hanging sign, 2 stone pillars with a sprung iron gate
+function fenceItem(Z,v=0){
+  const r=rngFor(0,4242,v);const parts=[];const posts=[];
+  for(const sd of[-1,1]){let x=1.45;let i=0;while(x<13){const gate=i===0;const hh=gate?1.6:rr(r,1.05,1.3)*(r()<.15?0.6:1);const pw=gate?0.2:0.15;const lean=gate?0:(r()-0.5)*0.12;
+      posts.push({x:sd*x,hh});const p=[[-pw/2,-0.1],[pw/2,-0.1],[pw/2,hh-0.05],[0,hh+0.06],[-pw/2,hh-0.05]];parts.push(rot(p,lean).map(([a,b])=>[a+sd*x,b]));x+=rr(r,2.0,2.5);i++}}
+  posts.sort((a,b)=>a.x-b.x);
+  for(let i=0;i<posts.length-1;i++){const a=posts[i],b=posts[i+1];if(a.x<0&&b.x>0)continue;
+    for(const rh of[0.48,0.98]){if(Math.min(a.hh,b.hh)<rh+0.05)continue;
+      if(i===1&&rh===0.98){parts.push(ribbon([[a.x+0.05,rh,0.1],[a.x+0.9,rh-0.45,0.1],[a.x+1.35,0.02,0.1]]));continue} // broken rail, dangling
+      const sag=r()*0.05;parts.push(ribbon([[a.x,rh,0.1],[(a.x+b.x)/2,rh-sag,0.1],[b.x,rh,0.1]]))}}
+  // the gate, hanging off its top hinge on the right gate post, bottom-left corner dragging
+  // v4: narrower and hanging less steeply than v3's, so its free corner stays below eye level and clear of the
+  // walker's line; v3's corner rose to 1.66 m right in front of the camera and could never leave the frame
+  const g=[];const gw=0.95,gh=1.05,hx=1.35,hy=1.35;const bar=(pts,t)=>g.push(ribbon(pts.map(p=>[p[0],p[1],t])));
+  bar([[hx-gw,hy-gh],[hx,hy-gh]],0.11);bar([[hx-gw,hy],[hx,hy]],0.11);bar([[hx-gw,hy-gh],[hx-gw,hy]],0.11);bar([[hx,hy-gh],[hx,hy]],0.11);bar([[hx-gw,hy-gh],[hx,hy]],0.09);bar([[hx-gw/2,hy-gh],[hx-gw/2,hy]],0.08);
+  if(v===0)g.forEach(p=>parts.push(rot(p,-0.16,hx,hy)));
+  else if(v===1){const ln=rr(r,.04,.09);for(const sd of[-1,1])parts.push(rot([[sd*1.45-.12,-.1],[sd*1.45+.12,-.1],[sd*1.45+.1,2.75],[sd*1.45-.1,2.7]],sd*ln*.5,sd*1.45,0));
+    parts.push(ribbon([[-1.85,2.5,.16],[0,2.6,.15],[1.85,2.66,.16]]));
+    parts.push(ribbon([[-.35,2.55,.05],[-.38,2.1,.05]]),ribbon([[.4,2.58,.05],[.45,2.2,.05]]));
+    parts.push(rot([[-.55,1.75],[.62,1.8],[.6,2.22],[-.53,2.15]],.12,0,2));
+    const sk=[...Array(14)].map((_,i)=>{const a=i/14*TAU;return[1.0+Math.cos(a)*.13,2.98+Math.sin(a)*.14]});parts.push(sk)}
+  else{for(const sd of[-1,1]){const x=sd*1.55;parts.push([[x-.3,-.1],[x+.3,-.1],[x+.27,1.85],[x+.34,1.9],[x+.34,2.05],[x-.34,2.05],[x-.34,1.9],[x-.27,1.85]]);parts.push(ribbon([[x-.36,2.05,.08],[x,2.22,.08],[x+.36,2.05,.08]]))}
+    const gl=[];gl.push(ribbon([[-1.25,.1,.06],[-.7,.18,.06]]),ribbon([[-1.25,1.55,.06],[-.7,1.42,.06]]),ribbon([[-1.25,.1,.06],[-1.25,1.55,.06]]));
+    for(let i=0;i<4;i++){const x=-1.12+i*.13;gl.push(ribbon([[x,.12,.04],[x,1.52-i*.03,.04]]))}
+    gl.forEach(p=>parts.push(p));parts.push(rot(ribbon([[.7,.05,.06],[1.25,.05,.06]]),.0),ribbon([[.95,.05,.04],[1.05,.6,.04]]))}
+  return {grp:'w',Z,X:0,kind:'lm',veil:[1,2],op:z=>clamp((ZFAR-z)/FADE),lops:[null,z=>1-fogAmt(z),z=>fogAmt(z)],
+    geom(z,id){const ps=parts.map(p=>p.map(([x,h])=>P(x,h,z)));const d=ps.map(dPoly).join('');const c=P(0.7,0.7,z);const cf=P(0,1.2,z),cf2=P(0,0,z);
+      return{bb:bbox(ps),pb:ps.map(l=>bbox([l])),layers:[`<path d="${d}" fill="${TRK('#1a1612')}"/>`,`<defs>${rgrad(id+'w',c[0],c[1],3.2*F/z,[[0,'#6e5b42'],[.35,'#40352a'],[.7,'#15120e'],[1,'#0f0d0b']],0.55)}</defs><path d="${d}" fill="url(#${id}w)"/>`,
+        `<defs>${lgrad(id+'f',0,cf[1],0,cf2[1],[[0,FOG('#2e2f33')],[1,FOG('#25262a')]])}</defs><path d="${d}" fill="url(#${id}f)"/>`]};}};
+}
+// station 1 — PASS = "an old lantern hanging from a wooden post, lit"
+function lanternItem(Z,X){
+  const post=[[-0.09,-0.1],[0.09,-0.1],[0.08,3.05],[-0.08,3.05]];
+  const arm=ribbon([[-0.05,2.95,0.1],[0.45,2.97,0.1],[0.72,2.93,0.09]]);
+  const brace=ribbon([[0.03,2.45,0.07],[0.4,2.93,0.07]]);
+  const lx=0.66;const cap=[[lx-0.2,2.55],[lx+0.2,2.55],[lx+0.1,2.72],[lx-0.1,2.72]];const hook=ribbon([[lx,2.72,0.05],[lx,2.9,0.05]]);
+  const glass=[[lx-0.15,2.12],[lx+0.15,2.12],[lx+0.16,2.55],[lx-0.16,2.55]];const base=[[lx-0.2,2.05],[lx+0.2,2.05],[lx+0.17,2.13],[lx-0.17,2.13]];
+  const bars=[ribbon([[lx-0.15,2.12,0.05],[lx-0.16,2.55,0.05]]),ribbon([[lx+0.15,2.12,0.05],[lx+0.16,2.55,0.05]])];
+  const dark=[post,arm,brace,cap,hook,base,...bars];
+  return {grp:'w',Z,X,kind:'lm',veil:[1],op:z=>clamp((ZFAR-z)/FADE),lops:[null,z=>fogAmt(z)*0.95,z=>clamp((14.5-z)/4.5),z=>clamp((16.5-z)/6)],flick:[0,0,'flick',0],fastDim:3,glowL:[2],
+    geom(z,id){const pr=p=>P(X+p[0],p[1],z);const s=F/z;const gc=pr([lx,2.33]);const ps=dark.map(p=>p.map(pr));const gp=glass.map(pr);
+      const halo=1.05*s;
+      return{bb:bbox([...ps,[[gc[0]-halo,gc[1]-halo],[gc[0]+halo,gc[1]+halo]]]),layers:[
+        `<defs>${lgrad(id+'p',...pr([0.09,0]),...pr([-0.09,0]),[[0,'#5a4a36'],[.5,'#1c1712'],[1,'#0a0908']])}</defs><path d="${ps.map(dPoly).join('')}" fill="url(#${id}p)"/><path d="${dPoly(gp)}" fill="#1c150d"/>${ps.slice(6).map(p=>`<path d="${dPoly(p)}" fill="#141008"/>`).join('')}`,
+        `<path d="${ps.map(dPoly).join('')+dPoly(gp)}" fill="#242527"/>`,
+        `<defs>${rgrad(id+'h',gc[0],gc[1],halo,[[0,'#ffcf8a',.55],[.25,'#ffb060',.2],[1,'#ff9a40',0]])}</defs><circle cx="${fm(gc[0])}" cy="${fm(gc[1])}" r="${fm(halo)}" fill="url(#${id}h)"/>`,
+        `<defs>${lgrad(id+'g',0,gp[2][1],0,gp[0][1],[[0,'#ffe9b8'],[.6,'#ffc56a'],[1,'#e08a30']])}</defs><path d="${dPoly(gp)}" fill="url(#${id}g)"/>${ps.slice(6).map(p=>`<path d="${dPoly(p)}" fill="#141008"/>`).join('')}`]};}};
+}
+function lanternPool(Z,X){
+  return {grp:'w',Z,X,kind:'lm',soft:1,op:z=>clamp((ZFAR-z)/FADE),lops:[z=>clamp(1.1-fogAmt(z)*1.5)],
+    geom(z,id){const c=P(X,0,z),rx=2.9*F/z,near=P(X,0,Math.max(z-2.2,0.6))[1],far=P(X,0,z+3)[1];const ry=(near-far)/2,cy=(near+far)/2;
+      return{bb:[c[0]-rx,cy-ry,c[0]+rx,cy+ry],layers:[`<defs>${rgrad(id+'p',c[0],cy,rx,[[0,'#ffc070',.55],[.4,'#e08c40',.24],[1,'#c07030',0]],ry/rx)}</defs><ellipse cx="${fm(c[0])}" cy="${fm(cy)}" rx="${fm(rx)}" ry="${fm(ry)}" fill="url(#${id}p)"/>`]};}};
+}
+// station 3 — PASS = "a row of old tilted gravestones in moonlight"
+function graveItem(Z,X,r,kind){
+  const w=rr(r,0.36,0.55),h=rr(r,0.95,1.4),lean=(r()<.5?-1:1)*rr(r,0.06,0.24);let s;
+  if(kind===0){s=[[-w/2,-0.1],[w/2,-0.1],[w/2,h-w/2]];for(let i=1;i<10;i++){const a=i/10*Math.PI;s.push([Math.cos(a)*w/2,h-w/2+Math.sin(a)*w/2])}s.push([-w/2,h-w/2])}
+  else if(kind===1){const t=w*0.3;s=[[-t/2,-0.1],[t/2,-0.1],[t/2,h*0.62],[w/2,h*0.62],[w/2,h*0.62+t],[t/2,h*0.62+t],[t/2,h],[-t/2,h],[-t/2,h*0.62+t],[-w/2,h*0.62+t],[-w/2,h*0.62],[-t/2,h*0.62]]}
+  else if(kind===2){s=[[-w/2,-0.1],[w/2,-0.1],[w/2,h*0.7],[w*0.3,h*0.9],[0,h],[-w*0.3,h*0.9],[-w/2,h*0.7]]}
+  else {s=[[-w/2,-0.1],[w/2,-0.1],[w/2,h*0.7],[w*0.2,h*0.78],[w*0.05,h*0.95],[-w/2,h]]}
+  s=rot(s,lean);const eng=[[[-w*0.25,h*0.5,0.05],[w*0.25,h*0.5,0.05]],[[-w*0.2,h*0.36,0.05],[w*0.2,h*0.36,0.05]]];
+  return {grp:'w',Z,X,kind:'lm',veil:[1],op:z=>clamp((ZFAR-z)/FADE),lops:[null,z=>fogAmt(z)*0.9],
+    geom(z,id){const pr=p=>P(X+p[0],p[1],z);const ps=s.map(pr);const top=pr([-w/2,h]),bot=pr([w/2,0]);const e=eng.map(sp=>rot(wRib(sp,X,z),-lean,...pr([0,0])));const sd=[...Array(12)].map((_,i)=>{const a=i/12*TAU;return P(X+w*0.1+Math.cos(a)*w*1.1,0,z+Math.sin(a)*Math.min(0.35,z*0.3))});
+      return{bb:bbox([ps,sd]),layers:[
+        `<defs>${lgrad(id+'s',top[0],top[1],bot[0],bot[1],[[0,'#98abc2'],[.28,'#4a5464'],[.62,'#1c2027'],[1,'#101216']])}</defs><path d="${dPoly(sd)}" fill="#050506" opacity=".7"/><path d="${dPoly(ps)}" fill="url(#${id}s)"/>${e.map(p=>`<path d="${dPoly(p)}" fill="#0c0e12" opacity=".85"/>`).join('')}`,
+        `<path d="${dPoly(ps)}" fill="#24262a"/>`]};}};
+}
+function moonPool(Z,X=-4.6){
+  return {grp:'w',Z,X,kind:'lm',soft:1,op:z=>clamp((ZFAR-z)/FADE),lops:[z=>clamp(1-fogAmt(z)*1.2)],
+    geom(z,id){const c=P(X,0,z),rx=3*F/z,n=P(0,0,Math.max(z-1.8,0.6))[1],f=P(0,0,z+2.2)[1],ry=(n-f)/2,cy=(n+f)/2;
+      return{bb:[c[0]-rx,cy-ry,c[0]+rx,cy+ry],layers:[`<defs>${rgrad(id+'p',c[0],cy,rx,[[0,'#9fb4d0',.2],[.5,'#8aa0c0',.08],[1,'#8aa0c0',0]],ry/rx)}</defs><ellipse cx="${fm(c[0])}" cy="${fm(cy)}" rx="${fm(rx)}" ry="${fm(ry)}" fill="url(#${id}p)"/>`]};}};
+}
+
+// ---------- side landmarks: one per station, off the path (world |X| >= 3.8 at rest, outside the text box) ----------
+// generic prop: world shapes relative to (X,Z). p = polygon [[x,h]], s = spine [[x,h,w]] (7px floor), e = ellipse [cx,h,rx,ry],
+// hole = even-odd inner polygon. Layers: 0 back light (rim glow behind a silhouette), 1 colours, 2 fog veil, 3 light (emissive shapes + glows)
+const ell=(cx,h,rx,ry,n=18)=>[...Array(n)].map((_,i)=>{const a=i/n*TAU;return[cx+Math.cos(a)*rx,h+Math.sin(a)*ry]});
+const rotS=(sh,a,ox,oy)=>Object.assign({},sh,sh.s?{s:sh.s.map(([x,h,w])=>{const[q]=rot([[x,h]],a,ox,oy);return[q[0],q[1],w]})}:{p:rot(sh.p,a,ox,oy),hole:sh.hole&&rot(sh.hole,a,ox,oy)});
+// while a prop's main light passes behind the text box on the approach, it dims (reads as a thicker patch of fog)
+const boxDim=(X,h,z)=>{const u=Math.abs((X+XOFF)*F/z),v=Math.abs(VY+(E-h)*F/z-539.5);return 1-0.55*clamp((616-u)/80)*clamp((277.5-v)/80)};
+function prop(Z,X,body,lit,opts={}){
+  const zr=opts.zr||REST;const g0=(opts.glows||[]).find(g=>!g.back)||{x:0,h:1};
+  const lightOp=z=>clamp((zr+5.5-z)/4.5)*boxDim(X+g0.x,g0.h,z);
+  const norm=sh=>sh.e?Object.assign({},sh,{p:ell(...sh.e)}):sh;
+  // LEAN (per seed and landmark): the whole prop stands crooked, rotated about its foot
+  const ln=opts.lean??LEAN,tilt=sh=>ln?rotS(sh,ln,0,0):sh;
+  body=body.map(norm).map(tilt);lit=lit.map(norm).map(tilt);const glows=(opts.glows||[]).map(g=>{if(!ln)return g;const[q]=rot([[g.x,g.h]],ln,0,0);return{...g,x:q[0],h:q[1]}});
+  return {grp:'w',Z,X,kind:'lm',veil:[2],op:z=>clamp((ZFAR-z)/FADE),
+    // the light switches on as you come out of the fog, so a landmark two stations ahead never lights up the text box
+    // thru: an item the walk passes THROUGH (a doorway): its glows thin out over the last metres instead of
+    // swelling into a full-screen haze, so nothing is left to vanish when the camera is past it
+    // glows (layers 0, 4) thin out in the last metre or two before the camera, so a halo never swells into a haze
+    // and keeps a passing prop alive; nearFade does the same for the lit shapes (dust motes passing the lens)
+    lops:opts.thru?[z=>lightOp(z)*clamp((z-2)/3),null,z=>fogAmt(z)*0.95,z=>lightOp(z)*clamp((z-2)/3),z=>lightOp(z)*clamp((z-2)/3)]:
+      [z=>lightOp(z)*clamp((z-1.2)/1.5),null,z=>fogAmt(z)*0.95,opts.nearFade?z=>lightOp(z)*clamp((z-opts.nearFade)/1.5):lightOp,z=>lightOp(z)*clamp((z-1.2)/1.5)],flick:opts.flick?[0,0,0,'flick','flick']:null,drift:opts.drift?[null,null,null,opts.drift,opts.drift]:null,glowL:[0,4],
+    geom(z,id){
+      const pts=sh=>sh.s?wRib(sh.s,X,z):sh.p.map(([x,h])=>P(X+x,h,z));
+      const path=sh=>`<path d="${dPoly(pts(sh))}${sh.hole?dPoly(sh.hole.map(([x,h])=>P(X+x,h,z))):''}"${sh.hole?' fill-rule="evenodd"':''} fill="${sh.c}"${sh.o?` opacity="${sh.o}"`:''}/>`;
+      let gi=0;const glow=g=>{const c=P(X+g.x,g.h,z),r=g.r*F/z,gid=id+'g'+(gi++);
+        return `<defs>${rgrad(gid,c[0],c[1],r,[[0,g.c,g.a],[.35,g.c,g.a*.45],[1,g.c,0]],g.sy||1)}</defs><ellipse cx="${fm(c[0])}" cy="${fm(c[1])}" rx="${fm(r)}" ry="${fm(r*(g.sy||1))}" fill="url(#${gid})"/>`};
+      const all=[...body,...lit].map(pts);const gb=glows.map(g=>{const c=P(X+g.x,g.h,z),r=g.r*F/z;return[[c[0]-r,c[1]-r*(g.sy||1)],[c[0]+r,c[1]+r*(g.sy||1)]]});
+      const veil=body.filter(sh=>!sh.back).map(sh=>`<path d="${dPoly(pts(sh))}" fill="${FOG('#2a2b2f')}"/>`).join('');
+      const bl=body.map(pts),ll=lit.map(pts),gbb=f=>{const l=gb.filter((_,i)=>f(glows[i]));return l.length?bbox(l):null};
+      // lbb: each layer's own box, so an animated layer is rastered at its content size, not the whole item's
+      return {bb:bbox([...all,...gb]),pb:all.map(l=>bbox([l])),pg:glows.map((g,i)=>[bbox([gb[i]]),g.back?0:4]),lbb:[gbb(g=>g.back),bl.length?bbox(bl):null,bl.length?bbox(bl):null,ll.length?bbox(ll):null,gbb(g=>!g.back)],layers:[
+        glows.filter(g=>g.back).map(glow).join(''),
+        body.map(path).join(''),
+        veil,
+        lit.map(path).join(''),glows.filter(g=>!g.back).map(glow).join('')]};   // v4: lit shapes (3) and their glows (4) apart, see HAND
+    }};
+}
+const keep=(X,Z,hw=2.6,dz=3)=>[X-hw,X+hw,Z-dz,Z+dz];
+let LEAN=0;
+// station 2 — PASS = a fresh viewer names this as "a scarecrow with a glowing pumpkin head"
+function scarecrow(Z,X){
+  const cloth='#3a2a1c',straw='#8a6a2c';
+  return prop(Z,X,[
+    {p:[[-.05,-.05],[.05,-.05],[.045,2.25],[-.045,2.25]],c:'#241a10'},
+    {s:[[-.8,1.72,.09],[.8,1.76,.09]],c:'#2a1f14'},
+    {p:[[-.46,1.8],[.46,1.8],[.4,1.3],[.42,.95],[.3,.88],[.22,.98],[.1,.86],[-.02,.97],[-.14,.85],[-.26,.96],[-.36,.87],[-.42,.95],[-.4,1.3]],c:cloth},
+    {p:[[.08,1.2],[.26,1.22],[.25,1.4],[.07,1.38]],c:'#5a3f22'},
+    {s:[[-.42,1.74,.2],[-.75,1.72,.17]],c:cloth},{s:[[.42,1.76,.2],[.75,1.78,.17]],c:cloth},
+    {p:[[-.75,1.8],[-.95,1.88],[-.88,1.76],[-1,1.7],[-.86,1.68],[-.93,1.58],[-.75,1.64]],c:straw},
+    {p:[[.75,1.82],[.95,1.9],[.88,1.78],[1,1.72],[.86,1.7],[.93,1.6],[.75,1.66]],c:straw},
+    {p:[[-.22,.9],[-.18,.7],[-.13,.9]],c:straw},{p:[[.04,.9],[.1,.68],[.15,.9]],c:straw},{p:[[.27,.9],[.33,.72],[.37,.9]],c:straw},
+    {e:[0,2.02,.25,.2],c:'#8a4516'},
+    {s:[[-.1,1.86,.04],[-.13,2.02,.045],[-.1,2.18,.04]],c:'#5e2e0e'},{s:[[.1,1.86,.04],[.13,2.02,.045],[.1,2.18,.04]],c:'#5e2e0e'},
+    {s:[[-.34,2.2,.05],[.34,2.22,.05]],c:'#141010'},
+    {p:[[-.17,2.21],[.15,2.23],[.07,2.5],[.22,2.62],[-.01,2.53]],c:'#141010'},
+  ],[
+    {p:[[-.14,2.02],[-.04,2.02],[-.09,2.11]],c:'#ffc15a'},{p:[[.04,2.02],[.14,2.02],[.09,2.11]],c:'#ffc15a'},
+    {p:[[-.14,1.94],[.14,1.94],[.11,1.88],[.06,1.92],[.02,1.87],[-.02,1.92],[-.06,1.87],[-.11,1.9]],c:'#ffb347'},
+  ],{flick:1,glows:[{x:0,h:1.98,r:.6,c:'#ffa040',a:.38},{x:0,h:1.6,r:1.5,c:'#6c7a92',a:.16,back:1}]});
+}
+// station 4 — PASS = "a row of glowing carved jack-o'-lanterns"
+function jackRow(Z,X){
+  const body=[],lit=[],glows=[];
+  for(const [cx,r] of [[-.95,.26],[-.35,.33],[.25,.24],[.78,.3]]){
+    body.push({e:[cx,.88*r,1.2*r,.9*r],c:'#86400f'});
+    for(const sd of[-1,1])body.push({s:[[cx+sd*.42*r,.16*r,.05],[cx+sd*.55*r,.88*r,.06],[cx+sd*.42*r,1.6*r,.05]],c:'#5a2a0a'});
+    body.push({s:[[cx,1.7*r,.07],[cx+.05,1.98*r,.06]],c:'#2f3316'});
+    lit.push({p:[[cx-.6*r,.95*r],[cx-.15*r,.95*r],[cx-.38*r,1.32*r]],c:'#ffc45e'},{p:[[cx+.15*r,.95*r],[cx+.6*r,.95*r],[cx+.38*r,1.32*r]],c:'#ffc45e'},
+      {p:[[cx-.62*r,.62*r],[cx+.62*r,.62*r],[cx+.46*r,.38*r],[cx+.2*r,.54*r],[cx,.34*r],[cx-.2*r,.54*r],[cx-.46*r,.38*r]],c:'#ffb040'});
+    glows.push({x:cx,h:.9*r,r:r*2.6,c:'#ff9a30',a:.36});
+  }
+  glows.push({x:-.1,h:.02,r:1.7,c:'#ff9a40',a:.22,sy:.22});
+  return prop(Z,X,body,lit,{flick:1,glows});
+}
+// station 5 — PASS = "a big crow perched on a broken tree stump"
+function crowStump(Z,X){
+  const bird='#07080a';
+  return prop(Z,X,[
+    {p:[[-.62,-.04],[-.3,.16],[-.3,.12],[-.27,.92],[-.18,1.04],[-.08,.96],[.02,1.08],[.12,.94],[.2,1.02],[.27,.9],[.3,.12],[.62,-.03],[.4,-.05],[-.4,-.05]],c:'#2a2016'},
+    {s:[[-.1,.1,.05],[-.12,.85,.05]],c:'#15100b'},{s:[[.13,.1,.05],[.1,.8,.05]],c:'#15100b'},
+    {p:[[-.2,1.1],[.1,1.06],[.28,1.1],[.52,1.0],[.55,1.07],[.34,1.2],[.22,1.34],[0,1.4],[-.14,1.38],[-.22,1.28]],c:bird},
+    {e:[-.22,1.43,.12,.11],c:bird},
+    {p:[[-.31,1.47],[-.5,1.41],[-.31,1.38]],c:'#101114'},
+    {s:[[-.04,1.08,.035],[-.06,1.0,.03]],c:bird},{s:[[.08,1.08,.035],[.09,1.0,.03]],c:bird},
+    {s:[[-.08,1.32,.05],[.16,1.26,.05],[.36,1.17,.04]],c:'#262a34'},
+  ],[{e:[-.25,1.45,.035,.035,10],c:'#ffd24a'}],{glows:[{x:-.05,h:1.25,r:1.35,c:'#8090a8',a:.3,back:1},{x:-.25,h:1.45,r:.2,c:'#ffcc40',a:.5}]});
+}
+// station 6 — PASS = "an old stone well with a roof, glowing green inside"
+function well(Z,X){
+  const mort='#1c1b18',wood='#2a2016',sp=[];
+  for(const h of[.3,.58])sp.push({s:[[-.64,h,.05],[.64,h,.05]],c:mort});
+  for(const [x,a,b] of[[-.3,0,.3],[.25,0,.3],[-.05,.3,.58],[.45,.3,.58],[-.45,.58,.85],[.15,.58,.85]])sp.push({s:[[x,a,.05],[x,b,.05]],c:mort});
+  return prop(Z,X,[
+    {p:[[-.65,-.05],[.65,-.05],[.66,.85],[-.66,.85]],c:'#3a3832'},...sp,
+    {e:[0,.86,.72,.11],c:'#4a473f'},
+    {s:[[-.56,.85,.09],[-.56,1.95,.08]],c:wood},{s:[[.56,.85,.09],[.56,1.95,.08]],c:wood},
+    {s:[[-.62,1.62,.07],[.62,1.62,.07]],c:wood},{s:[[.05,1.62,.03],[.05,1.28,.03]],c:'#6a5a3a'},
+    {p:[[-.08,1.28],[.18,1.28],[.15,1.05],[-.05,1.05]],c:'#3a2c1c'},
+    {p:[[-.92,1.86],[0,2.42],[.92,1.86],[.8,1.79],[0,2.28],[-.8,1.79]],c:'#1e1812'},
+  ],[{e:[0,.88,.56,.07],c:'#b8ffcc'}],{glows:[{x:0,h:1.0,r:.95,c:'#70f0a0',a:.36,sy:.8},{x:0,h:1.55,r:.75,c:'#70f0a0',a:.14}]});
+}
+// station 7 — PASS = "an abandoned wooden cart with a broken wheel"
+function cart(Z,X){
+  const wood='#3a2a1a',dk='#1e160e',tilt=-0.1;
+  const sh=[
+    {p:[[-1,.55],[.9,.55],[.95,1],[-1.05,1]],c:wood},
+    {s:[[-1,.7,.04],[.92,.7,.04]],c:dk},{s:[[-1,.85,.04],[.93,.85,.04]],c:dk},
+    {s:[[-.95,1,.07],[-.97,1.35,.06]],c:'#2e2216'},{s:[[-.2,1,.07],[-.2,1.3,.06]],c:'#2e2216'},{s:[[.6,1,.07],[.62,1.28,.06]],c:'#2e2216'},
+    {s:[[-.97,1.3,.06],[.63,1.26,.06]],c:'#2e2216'},
+    {e:[-.55,1.1,.2,.15],c:'#8a4516'},{e:[-.12,1.08,.17,.13],c:'#7a3c12'},
+    {p:ell(-.5,.45,.45,.45,24),hole:ell(-.5,.45,.37,.37,24),c:'#2e2216'},
+    ...[0,1,2,3,4,5].map(i=>{const a=i/6*Math.PI;return{s:[[-.5-Math.cos(a)*.4,.45-Math.sin(a)*.4,.05],[-.5+Math.cos(a)*.4,.45+Math.sin(a)*.4,.05]],c:'#2e2216'}}),
+    {e:[-.5,.45,.08,.08],c:'#1a140c'},
+    {s:[[.9,.75,.07],[1.6,.35,.06],[1.85,.05,.05]],c:'#2e2216'},
+  ].map(s=>rotS(s.e?Object.assign({},s,{p:ell(...s.e),e:null}):s,tilt,0,0));
+  // mirror: shafts point toward the path, so the cart body stays inside the frame
+  sh.push({p:ell(.6,.07,.44,.09,24),hole:ell(.6,.07,.34,.05,24),c:'#2e2216'});
+  const lamp=rotS({p:[[.55,1.02],[.69,1.02],[.69,1.19],[.55,1.19]],c:'#ffcf7a'},tilt,0,0);
+  const lh=rot([[.62,1.1]],tilt,0,0)[0];
+  sh.push(rotS({s:[[.62,1.19,.03],[.62,1.28,.03]],c:'#141008'},tilt,0,0));
+  const mir=o=>Object.assign({},o,o.s?{s:o.s.map(([x,h,w])=>[-x,h,w])}:{p:o.p.map(([x,h])=>[-x,h]),hole:o.hole&&o.hole.map(([x,h])=>[-x,h])});
+  return prop(Z,X,sh.map(mir),[mir(lamp)],{flick:1,glows:[{x:-lh[0],h:lh[1],r:.75,c:'#ffb060',a:.4},{x:-.3,h:.02,r:1.2,c:'#ffb060',a:.18,sy:.25}]});
+}
+// station 8 — PASS = "a fallen mossy log with glowing mushrooms"
+function logShrooms(Z,X){
+  const lit=[],glows=[{x:0,h:.6,r:1.7,c:'#40c0b0',a:.12}];
+  for(const [x,h,r] of[[-1.1,.58,.09],[-.95,.6,.13],[-.2,.63,.1],[.35,.58,.12],[.52,.57,.08],[1.0,.55,.1]]){
+    lit.push({s:[[x,h-.1,.04],[x,h,.035]],c:'#cfeee0'},{p:[[x-r,h],[x-r*.8,h+r*.45],[x,h+r*.62],[x+r*.8,h+r*.45],[x+r,h]],c:'#7ff0d8'});
+    glows.push({x,h:h+.04,r:r*4,c:'#50e0c0',a:.34});
+  }
+  return prop(Z,X,[
+    {s:[[-1.5,.3,.56],[-.5,.33,.58],[.6,.3,.55],[1.35,.28,.5]],c:'#2c2218'},
+    {s:[[-1.3,.53,.1],[0,.57,.12],[1.1,.51,.1]],c:'#2e3a1c'},
+    {s:[[-.4,.5,.1],[-.55,.85,.07],[-.5,1.0,.05]],c:'#2c2218'},
+    {e:[1.38,.28,.12,.26],c:'#6a5236'},{e:[1.38,.28,.06,.14],c:'#4a3824'},
+  ],lit,{glows});
+}
+// station 9 — PASS = "glowing will-o'-wisps floating over a swamp"
+function bogWisps(Z,X){
+  const water=[...Array(18)].map((_,i)=>{const a=i/18*TAU;return[Math.cos(a)*1.75*(1+.07*Math.sin(i*2.3)),Math.sin(a)*1.5]});
+  const it=prop(Z,X,[
+    {s:[[-.9,.01,.05],[.4,.01,.05]],c:'#2c4448'},{s:[[-.3,.01,.05],[.9,.01,.05]],c:'#243a3e'},
+    ...[[-1.35,.1],[-1.18,-.06],[-1.02,.12],[.95,-.1],[1.12,.08],[1.32,-.04]].flatMap(([x,l])=>[{s:[[x,0,.05],[x+l,.95,.04]],c:'#1a1a10'},{s:[[x+l*.88,.8,.08],[x+l,1.0,.08]],c:'#3a2a18'}]),
+    {s:[[.3,0,.14],[.35,1.2,.1],[.2,1.7,.06]],c:'#1a1612'},{s:[[.34,1.0,.06],[.62,1.32,.05]],c:'#1a1612'},
+  ],[{e:[-.6,.9,.06,.06,10],c:'#e8fcff'},{e:[.1,1.42,.05,.05,10],c:'#e8fcff'},{e:[.85,.75,.055,.055,10],c:'#e8fcff'}],
+  {drift:{dx:14,d:9,dl:-3},glows:[{x:-.6,h:.9,r:.55,c:'#80e0ff',a:.45},{x:.1,h:1.42,r:.5,c:'#80e0ff',a:.42},{x:.85,h:.75,r:.5,c:'#80e0ff',a:.45},{x:0,h:.02,r:1.5,c:'#80e0ff',a:.14,sy:.22}]});
+  const g=it.geom;
+  it.geom=(z,id)=>{const r=g(z,id);const wp=water.map(([x,dz])=>P(X+x,0,z+Math.sign(dz)*Math.min(Math.abs(dz),z*0.3)));r.layers[1]=`<path d="${dPoly(wp)}" fill="#0b1113"/>`+r.layers[1];r.bb=bbox([[[r.bb[0],r.bb[1]],[r.bb[2],r.bb[3]]],wp]);return r};
+  return it;
+}
+// station 11 — PASS = "a small cabin in the woods with a lit window (and someone in it)"
+function cabin(Z,X,zr){
+  const logs=[.3,.6,.9,1.2,1.5].map(h=>({s:[[-1.3,h,.05],[1.3,h,.05]],c:'#15100b'}));
+  return prop(Z,X,[
+    {p:[[-1.3,-.05],[1.3,-.05],[1.3,1.8],[-1.3,1.8]],c:'#2a2118'},...logs,
+    {p:[[-1.3,1.8],[0,2.72],[1.3,1.8]],c:'#231a12'},
+    {p:[[.6,2.1],[.95,2.1],[.95,3.05],[.6,3.05]],c:'#2c2a26'},
+    {s:[[-1.62,1.68,.14],[0,2.86,.14],[1.62,1.68,.14]],c:'#120e0a'},
+    {p:[[-.95,-.05],[-.4,-.05],[-.4,1.3],[-.95,1.3]],c:'#0c0a08'},
+    {s:[[-1.05,.05,.1],[-.3,.05,.1]],c:'#1e1812'},
+  ],[
+    {p:[[.15,.65],[.85,.65],[.85,1.3],[.15,1.3]],c:'#ffc766'},
+    {e:[.62,1.07,.09,.11],c:'#3a2410'},{p:[[.44,.65],[.8,.65],[.76,.9],[.62,.96],[.48,.9]],c:'#3a2410'},
+    {s:[[.5,.65,.06],[.5,1.3,.06]],c:'#2a1a0c'},{s:[[.15,.97,.06],[.85,.97,.06]],c:'#2a1a0c'},
+  ],{zr,flick:1,glows:[{x:.5,h:1.0,r:1.25,c:'#ffb050',a:.3},{x:.5,h:.02,r:1.4,c:'#ffb050',a:.2,sy:.25}]});
+}
+// station 12 — PASS = "a crooked wooden signpost with a skull on it"
+function signpost(Z,X){
+  const b='#5a4530',dk='#241a10';
+  return prop(Z,X,[
+    {s:[[0,-.05,.14],[.02,2.3,.12]],c:'#2e2317'},
+    rotS({p:[[-.8,1.98],[-.62,2.12],[.3,2.1],[.3,1.86],[-.62,1.84]],c:b},.06,0,2),
+    rotS({s:[[-.5,1.98,.04],[.1,1.98,.04]],c:dk},.06,0,2),
+    rotS({p:[[-.2,1.5],[.62,1.52],[.8,1.4],[.62,1.28],[-.2,1.3]],c:b},-.14,0,1.4),
+    rotS({s:[[-.05,1.41,.04],[.5,1.41,.04]],c:dk},-.14,0,1.4),
+    rotS({p:[[-.34,1.0],[.34,1.0],[.34,.82],[-.34,.82]],c:'#4a3826'},.45,.3,.95),
+    {e:[.0,2.42,.13,.14],c:'#cfc6b0'},{p:[[-.08,2.3],[.08,2.3],[.07,2.22],[-.07,2.22]],c:'#bdb39c'},
+    {e:[-.05,2.43,.035,.045,10],c:'#141008'},{e:[.05,2.43,.035,.045,10],c:'#141008'},
+  ],[],{glows:[{x:0,h:1.7,r:1.5,c:'#8a98b0',a:.26,back:1}]});
+}
+
+// ---------- planar homography: 4 point pairs -> 3x3 (h33 = 1), as a CSS matrix3d about the screen origin ----------
+function homog(src,dst){
+  const A=[],b=[];
+  for(let i=0;i<4;i++){const[x,y]=src[i],[u,v]=dst[i];A.push([x,y,1,0,0,0,-u*x,-u*y]);b.push(u);A.push([0,0,0,x,y,1,-v*x,-v*y]);b.push(v)}
+  for(let c=0;c<8;c++){let p=c;for(let r=c+1;r<8;r++)if(Math.abs(A[r][c])>Math.abs(A[p][c]))p=r;[A[c],A[p]]=[A[p],A[c]];[b[c],b[p]]=[b[p],b[c]];
+    for(let r=0;r<8;r++){if(r===c)continue;const f=A[r][c]/A[c][c];if(!f)continue;for(let k=c;k<8;k++)A[r][k]-=f*A[c][k];b[r]-=f*b[c]}}
+  return b.map((v,i)=>v/A[i][i]);
+}
+// The homography is written about a screen point o that stays in FRONT of the camera for the element's whole life
+// (its first reference point), so h33 = w(o) = 1 always. Written about the screen origin instead, h33 is the w of the
+// origin's ray, which passes through 0 as the camera walks past a plane: the matrix blew up and flipped sign between
+// two keyframes, and CSS's decomposed interpolation between them drew the wall panel across the doorway for a frame.
+const m3d=h=>`matrix3d(${[h[0],h[3],0,h[6],h[1],h[4],0,h[7],0,0,1,0,h[2],h[5],0,1].map(v=>+v.toPrecision(7)).join(',')})`;
+function clipZ(poly,zmin){const out=[];for(let i=0;i<poly.length;i++){const a=poly[i],b=poly[(i+1)%poly.length],ia=a[2]>=zmin,ib=b[2]>=zmin;
+  if(ia)out.push(a);if(ia!==ib){const t=(zmin-a[2])/(b[2]-a[2]);out.push([a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,zmin])}}return out}
+
+// ---------- barn pieces: all in v3's item model (billboards scale about the vanishing point; walls and roof are
+// planes, each animated as one exact homography) ----------
+// a gable wall around a doorway, as three pieces (not one polygon with a hole): each piece's box leaves the frame
+// on its own as you walk through, so the wall is let go instead of being carried, huge, up to the camera
+function wallAround(hw,dw,c){const top=x=>WH+(PK-WH)*(1-Math.abs(x)/hw);
+  return[{p:[[-hw,-.1],[-dw,-.1],[-dw,top(dw)],[-hw,WH]],c},{p:[[dw,-.1],[hw,-.1],[hw,WH],[dw,top(dw)]],c},
+    {p:[[-dw-.01,3.45],[dw+.01,3.45],[dw+.01,top(dw)],[0,PK],[-dw-.01,top(dw)]],c}]}
+function barnFront(Z){
+  // weathered: dark, desaturated boards, a few missing (gaps), the door hung crooked; braces 46+ grey levels off the leaf
+  const top=x=>WH+(PK-WH)*(1-Math.abs(x)/BW),bd='#120907',trim='#57493c',rw=rngFor(77,Z|0);
+  const boards=[];for(let x=-3.75;x<=3.76;x+=.5)boards.push({s:[[x,Math.abs(x)<1.62?3.5:0,.05],[x+rr(rw,-.03,.03),top(x)-.06,.05]],c:bd});
+  for(let i=0;i<3;i++){const x=(rw()<.5?-1:1)*rr(rw,1.9,3.6),h=rr(rw,.4,2.4);boards.push({p:[[x-.11,h],[x+.11,h+.05],[x+.1,h+.75],[x-.1,h+.7]],c:'#070505'})}
+  const leaf=sd=>{const x0=sd*1.68,x1=sd*3.25,sg=sd<0?.06:0;return[{p:[[x0,0],[x1,0],[x1,3.3-sg*3],[x0,3.3]],c:'#2a1610'},
+    ...[[x0,.05,x1,.05],[x0,3.25,x1,3.25],[x0,1.65,x1,1.65],[x0,.05,x1,1.65],[x0,1.65,x1,3.25]].map(([a,b,c,d])=>({s:[[a,b,.09],[c,d,.09]],c:trim}))]};
+  return prop(Z,0,[
+    ...wallAround(BW+.15,1.6,'#22110c'),
+    ...boards,...leaf(-1),...leaf(1),
+    {s:[[-1.65,0,.12],[-1.65,3.5,.12]],c:trim},{s:[[1.65,0,.12],[1.65,3.5,.12]],c:trim},{s:[[-1.7,3.5,.12],[1.7,3.5,.12]],c:trim},
+    {p:[[-.6,4.15],[.6,4.15],[.6,5.2],[-.6,5.2]],c:'#0c0605'},
+    {s:[[-.6,4.15,.08],[.6,5.2,.08]],c:'#3e352c'},{s:[[.6,4.15,.08],[-.6,5.2,.08]],c:'#3e352c'},
+    {s:[[-BW-.7,WH-.35,.24],[0,PK+.35,.24],[BW+.7,WH-.35,.24]],c:'#0e0806'},
+  ],[],{zr:BDOOR,thru:1,glows:[{x:0,h:.3,r:2.6,c:'#ffa850',a:.13,sy:.35}]});
+}
+// the far wall seen from inside: the doors stand open onto the moonlit forest
+function barnBack(Z){
+  const top=x=>WH+(PK-WH)*(1-Math.abs(x)/BW),bd='#120806',trim='#3e352c';
+  const boards=[];for(let x=-3.75;x<=3.76;x+=.5)boards.push({s:[[x,Math.abs(x)<1.82?3.5:0,.05],[x,top(x)-.06,.05]],c:bd});
+  const leaf=sd=>{const x0=sd*1.88,x1=sd*3.5;return[{p:[[x0,0],[x1,0],[x1,3.3],[x0,3.3]],c:'#26130b'},
+    ...[[x0,.05,x1,.05],[x0,3.25,x1,3.25],[x0,.05,x1,3.25]].map(([a,b,c,d])=>({s:[[a,b,.09],[c,d,.09]],c:trim}))]};
+  return prop(Z,0,[
+    ...wallAround(BW,1.8,'#1c0d08'),
+    ...boards,...leaf(-1),...leaf(1),
+    {s:[[-1.85,0,.12],[-1.85,3.5,.12]],c:trim},{s:[[1.85,0,.12],[1.85,3.5,.12]],c:trim},{s:[[-1.9,3.5,.12],[1.9,3.5,.12]],c:trim},
+  ],[],{zr:BLEN,thru:1,glows:[{x:0,h:1.5,r:2.4,c:'#8094b4',a:.2,back:1}]});
+}
+function truss(Z){
+  const c='#36251a';
+  return prop(Z,0,[
+    {s:[[-BW+.12,-.05,.22],[-BW+.12,WH,.2]],c},{s:[[BW-.12,-.05,.22],[BW-.12,WH,.2]],c},
+    {s:[[-BW,WH-.25,.2],[BW,WH-.25,.2]],c},
+    {s:[[-BW-.1,WH-.1,.22],[0,PK,.2]],c:'#2a1a10'},{s:[[BW+.1,WH-.1,.22],[0,PK,.2]],c:'#2a1a10'},
+    {s:[[0,WH-.25,.14],[0,PK,.14]],c},
+    {s:[[-BW+.12,WH-1.1,.12],[-BW+1.1,WH-.25,.12]],c},{s:[[BW-.12,WH-1.1,.12],[BW-1.1,WH-.25,.12]],c},
+  ],[],{});
+}
+function hangLantern(Z,X,flick){
+  return prop(Z,X,[
+    {s:[[0,WH-.25,.03],[0,2.88,.03]],c:'#120c08'},
+    {p:[[-.17,2.72],[.17,2.72],[.09,2.88],[-.09,2.88]],c:'#1c140c'},
+    {p:[[-.19,2.28],[.19,2.28],[.16,2.36],[-.16,2.36]],c:'#1c140c'},
+  ],[
+    {p:[[-.13,2.36],[.13,2.36],[.14,2.72],[-.14,2.72]],c:'#ffd08a'},
+    {s:[[-.13,2.36,.04],[-.14,2.72,.04]],c:'#3a2412'},{s:[[.13,2.36,.04],[.14,2.72,.04]],c:'#3a2412'},
+  ],{flick:flick?1:0,glows:[{x:0,h:2.54,r:.55,c:'#ffc070',a:.5},{x:0,h:2.4,r:2.2,c:'#ff9a40',a:.13}]});
+}
+function hayBales(Z,X,stack){
+  const body=[];
+  for(const [dx,h0] of stack){
+    body.push({p:[[dx-.55,h0],[dx+.55,h0],[dx+.55,h0+.48],[dx-.55,h0+.48]],c:'#4a3c1e'});
+    body.push({p:[[dx-.55,h0+.48],[dx+.55,h0+.48],[dx+.45,h0+.58],[dx-.45,h0+.58]],c:'#6a5830'});
+    for(const f of[-.3,.3])body.push({s:[[dx+f,h0+.02,.04],[dx+f,h0+.56,.04]],c:'#2a200e'});
+    body.push({s:[[dx-.5,h0+.24,.03],[dx+.5,h0+.26,.03]],c:'#5c4c26',o:.7});
+  }
+  return prop(Z,X,body,[],{});
+}
+// dust in the lantern light: a few motes, one slow sideways drift (transform only)
+function motes(Z,X,r){const lit=[];for(let i=0;i<9;i++){const s=rr(r,.022,.034);lit.push({e:[rr(r,-.7,.7),rr(r,.9,2.3),s,s,8],c:'#ffdcaa',o:(.3+r()*.3).toFixed(2)})}
+  return prop(Z,X,[],lit,{nearFade:2.5,drift:{dx:10,d:11,dl:-rr(r,0,9).toFixed(1)}})}
+// a wall or roof panel: the quad (Zn,X0,h0) (Z,X0,h0) (Z,X1,h1) (Zn,X1,h1) on the straight barn stretch
+// insets: [u0,u1,v0,v1,colour] quads drawn on the panel (u along the walk, v across); front: drawn above the panels
+// of the same stretch (a portrait on a wall)
+function planeItem(Zn,Z,X0,h0,X1,h1,fill,lines,o={}){return{grp:'w',kind:'plane',Zn,Z,X:0,X0,h0,X1,h1,fill,lines,insets:o.insets||[],front:o.front||0}}
+// ---------- house pieces ----------
+// the house front: clapboard facade, crooked shutters, two lit windows, an open doorway with a porch lamp
+function houseFront(Z,b,r){
+  const{fw,fh,fpk,dF,dh}=b,wall='#2a292d',dark='#141316',trim='#5f594f',sg=rr(r,-.05,.05);
+  const body=[{p:[[-fw,-.1],[-dF,-.1],[-dF,dh],[-fw,fh]],c:wall},{p:[[dF,-.1],[fw,-.1],[fw,fh],[dF,dh]],c:wall},
+    {p:[[-dF-.01,dh-.05],[dF+.01,dh-.05],[dF+.01,fh],[-dF-.01,fh]],c:wall}];
+  for(let h=.35;h<fh-.1;h+=.32){for(const sd of[-1,1]){const xa=sd*fw,xb=sd*(h<dh?dF:0);body.push({s:[[xa,h,.035],[xb,h+sd*sg*.2,.035]],c:'#1c1b1f'})}}
+  body.push({p:[[-fw-.45,fh-.15],[0,fpk],[fw+.45,fh-.15],[fw+.45,fh+.12],[0,fpk+.3],[-fw-.45,fh+.12]],c:'#0f0d0e'});
+  body.push({p:[[-fw+.2,fh],[0,fpk-.25],[fw-.2,fh]],c:'#1d1b1e'});
+  body.push({p:[[fw*.45,fpk-1.1],[fw*.45+.45,fpk-1.1],[fw*.45+.45,fpk+.5],[fw*.45,fpk+.45]],c:'#1a1414'});   // chimney
+  for(const sd of[-1,1])body.push({s:[[sd*(dF+.07),0,.14],[sd*(dF+.07),dh+.07,.14]],c:trim});
+  body.push({s:[[-dF-.14,dh+.07,.14],[dF+.14,dh+.07,.14]],c:trim});
+  body.push({s:[[-dF-.25,0,.18],[dF+.25,0,.18]],c:'#3b352e'});
+  const lit=[],glows=[{x:0,h:dh+.35,r:.7,c:'#ffc070',a:.45},{x:0,h:.02,r:2,c:'#ffa850',a:.12,sy:.3}];
+  for(const sd of[-1,1]){const cx=sd*(dF+(fw-dF)/2),w=Math.min(.42,(fw-dF)/2-.25);if(w<.2)continue;
+    lit.push({p:[[cx-w,1.15],[cx+w,1.15],[cx+w,2.05],[cx-w,2.05]],c:sd<0?'#d89a50':'#c48440'});
+    lit.push({s:[[cx,1.15,.05],[cx,2.05,.05]],c:'#2a1a0c'},{s:[[cx-w,1.6,.05],[cx+w,1.6,.05]],c:'#2a1a0c'});
+    body.push({p:[[cx-w-.32,1.1],[cx-w-.05,1.12],[cx-w-.06,2.1+sg],[cx-w-.33,2.08]],c:'#201e22'});
+    body.push({p:[[cx+w+.05,1.1],[cx+w+.3,1.05-sg*2],[cx+w+.36,2.0],[cx+w+.07,2.1]],c:'#201e22'});
+    glows.push({x:cx,h:1.6,r:1.1,c:'#ffb050',a:.22})}
+  lit.push({p:[[-.08,dh+.25],[.08,dh+.25],[.07,dh+.45],[-.07,dh+.45]],c:'#ffd890'});
+  return prop(Z,0,body,lit,{zr:BDOOR,thru:1,flick:1,glows})}
+// the far wall seen from inside the house: wallpaper, a door frame open onto the moonlit forest
+function houseBack(Z,b){
+  const{w,wh,dB,dh}=b,c=b.paper,trim='#4e4438';
+  return prop(Z,0,[
+    {p:[[-w,-.1],[-dB,-.1],[-dB,dh],[-w,wh]],c},{p:[[dB,-.1],[w,-.1],[w,wh],[dB,dh]],c},{p:[[-dB-.01,dh-.05],[dB+.01,dh-.05],[dB+.01,wh],[-dB-.01,wh]],c},
+    {s:[[-w,.06,.12],[-dB,.06,.12]],c:'#120c09'},{s:[[dB,.06,.12],[w,.06,.12]],c:'#120c09'},
+    {s:[[-w,.95,.05],[-dB,.95,.05]],c:trim},{s:[[dB,.95,.05],[w,.95,.05]],c:trim},
+    {s:[[-dB-.07,0,.13],[-dB-.07,dh+.07,.13]],c:trim},{s:[[dB+.07,0,.13],[dB+.07,dh+.07,.13]],c:trim},{s:[[-dB-.13,dh+.07,.13],[dB+.13,dh+.07,.13]],c:trim},
+  ],[],{zr:BLEN,thru:1,glows:[{x:0,h:1.2,r:1.6,c:'#8094b4',a:.22,back:1}]})}
+// a staircase rising along one wall, seen from the hall: treads stacked up and back, a banister with spindles
+function stairs(Z,X,sd){
+  const body=[],n=9;
+  for(let i=0;i<n;i++){const h=i*.24,x0=-.55+i*.03,x1=.55-i*.03;body.push({p:[[x0,h],[x1,h],[x1,h+.24],[x0,h+.24]],c:i%2?'#22170f':'#1a120c'});body.push({s:[[x0,h+.24,.03],[x1,h+.24,.03]],c:'#4a3a28'})}
+  const rx=-sd*.62;body.push({s:[[rx,.9,.07],[rx+sd*.25,n*.24+.9,.06]],c:'#3a2a1a'});
+  for(let i=0;i<n;i+=2)body.push({s:[[rx+sd*.25*i/n,i*.24,.03],[rx+sd*.25*i/n,i*.24+.88,.03]],c:'#2e2216'});
+  body.push({s:[[rx,0,.1],[rx,1.1,.1]],c:'#3e2e1e'},{e:[rx,1.14,.07,.06],c:'#4a3826'});
+  return prop(Z,X,body,[],{})}
+function sconce(Z,X,h){
+  return prop(Z,X,[{s:[[0,h-.25,.05],[0,h,.04]],c:'#2a2018'},{s:[[-.12,h-.2,.035],[.12,h-.2,.035]],c:'#3a2c1e'},{p:[[-.035,h],[.035,h],[.035,h+.16],[-.035,h+.16]],c:'#d8ccb0'}],
+    [{p:[[-.03,h+.16],[.03,h+.16],[0,h+.27]],c:'#ffd27a'}],{flick:1,glows:[{x:0,h:h+.2,r:.42,c:'#ffc070',a:.5},{x:0,h:h,r:1.5,c:'#ff9a40',a:.12}]})}
+function hallLamp(Z,X,top){
+  return prop(Z,X,[{s:[[0,top,.03],[0,top-.45,.03]],c:'#120c08'},{p:[[-.28,top-.45],[.28,top-.45],[.16,top-.62],[-.16,top-.62]],c:'#2a1e14'}],
+    [{p:[[-.22,top-.62],[.22,top-.62],[.15,top-.72],[-.15,top-.72]],c:'#ffd08a'}],{glows:[{x:0,h:top-.68,r:.5,c:'#ffc070',a:.45},{x:0,h:top-.9,r:1.9,c:'#ff9a40',a:.12}]})}
+function clock(Z,X){
+  return prop(Z,X,[{p:[[-.25,0],[.25,0],[.25,1.55],[.3,1.6],[.3,2.15],[0,2.3],[-.3,2.15],[-.3,1.6],[-.25,1.55]],c:'#1e140e'},
+    {e:[0,1.9,.19,.19],c:'#9a9078'},{s:[[0,1.9,.025],[.07,2.02,.025]],c:'#141010'},{s:[[0,1.9,.025],[-.1,1.86,.025]],c:'#141010'},
+    {p:[[-.13,.45],[.13,.45],[.13,1.35],[-.13,1.35]],c:'#0e0907'},{s:[[0,1.3,.02],[0,.8,.02]],c:'#6a5a3a'},{e:[0,.78,.06,.06],c:'#8a7448'}],[],{})}
+function fireplace(Z,X,sd){
+  return prop(Z,X,[{p:[[-.85,0],[.85,0],[.85,1.15],[-.85,1.15]],c:'#3a3430'},{p:[[-.95,1.15],[.95,1.15],[.95,1.27],[-.95,1.27]],c:'#2a1e16'},
+    {p:[[-.5,0],[.5,0],[.5,.75],[-.5,.75]],c:'#0a0605'},{s:[[-.4,1.27,.05],[-.4,1.5,.05]],c:'#c8bca0'},{s:[[.35,1.27,.05],[.35,1.42,.05]],c:'#c8bca0'},
+    {p:[[-.25,1.35],[.25,1.35],[.25,1.95],[-.25,1.95]],c:'#4a3a24'},{p:[[-.19,1.41],[.19,1.41],[.19,1.89],[-.19,1.89]],c:'#151110'}],
+    [{p:[[-.38,0],[.38,0],[.3,.18],[.12,.32],[0,.2],[-.14,.34],[-.3,.16]],c:'#ff8a30'},{p:[[-.2,0],[.2,0],[.06,.14],[-.08,.12]],c:'#ffd070'}],
+    {flick:1,glows:[{x:0,h:.25,r:1.1,c:'#ff7a20',a:.45},{x:0,h:.02,r:2.2,c:'#ff8a30',a:.18,sy:.3}]})}
+function armchair(Z,X){
+  return prop(Z,X,[{p:[[-.45,0],[.45,0],[.45,.45],[.52,.5],[.52,.72],[.4,.75],[.38,1.25],[.2,1.35],[-.2,1.35],[-.38,1.25],[-.4,.75],[-.52,.72],[-.52,.5],[-.45,.45]],c:'#2c1418'},
+    {s:[[-.3,.5,.05],[.3,.5,.05]],c:'#1a0a0c'}],[],{})}
+// ---------- barn layout extras ----------
+function ladder(Z,X){const body=[{s:[[-.22,0,.07],[-.15,3.4,.06]],c:'#3a2a1a'},{s:[[.22,0,.07],[.15,3.4,.06]],c:'#3a2a1a'}];
+  for(let h=.3;h<3.3;h+=.35)body.push({s:[[-.21+h*.02,h,.05],[.21-h*.02,h,.05]],c:'#4a3826'});return prop(Z,X,body,[],{})}
+function pitchfork(Z,X){return prop(Z,X,[{s:[[0,0,.05],[.35,1.6,.045]],c:'#4a3a28'},{s:[[.28,1.55,.04],[.44,1.62,.04]],c:'#5a5450'},
+  ...[0,1,2].map(i=>({s:[[.29+i*.07,1.58,.025],[.33+i*.08,1.95,.02]],c:'#6a6460'}))],[],{})}
+function roostCrows(Z,X){const b=[];for(const [x,f] of[[-.6,1],[.1,-1],[.9,1]])b.push({p:[[x-.18*f,WH-.22],[x+.12*f,WH-.24],[x+.2*f,WH-.1],[x+.05*f,WH+.12],[x-.08*f,WH+.1],[x-.2*f,WH-.02]],c:'#060607'},{e:[x-.05*f,WH+.18,.08,.07],c:'#060607'});
+  return prop(Z,X,b,[{e:[-.62,WH+.2,.02,.02,8],c:'#ffd24a'}],{})}
+// ---------- the world: pure function of the seed, built once ----------
+const ITEMS=[], OCC=[], EXCL=[], BARNS=[], LMLIST=[];
+(function buildWorld(){
+  const lm=(it,box)=>{ITEMS.push(it);if(box)EXCL.push(box)};
+  for(let k=1;k<NS;k++)if(INNER(ROUTE[k].kind)){const A=S[k-1]+BDOOR,kind=ROUTE[k].kind,v=ROUTE[k].variant;BARNS.push({k,A,B:A+BLEN,v,kind,...SHELL[kind](v)})}
+  const inBarn=(Z,pad=2)=>BARNS.some(b=>((Z-b.A+pad)%L+L)%L<BLEN+2*pad);
+  const lmOff=s=>BARNS.some(b=>s===b.k||s===b.k-1);   // that landmark would stand on the barn's facade or inside it
+  // a landmark is moved sideways until it clears the text box at its own rest view (a bend ahead swings it inward)
+  const side=(s,X,zr=REST)=>{for(let i=0;i<3;i++){const q=toCam(S[s],S[s]+zr,X),need=Math.sign(X)*640*q.z/F;if(Math.sign(q.x)===Math.sign(X)&&Math.abs(q.x)>=Math.abs(need))break;X+=need-q.x}return X};
+  const R=s=>S[s]+REST;
+  const occ=(s,X,hw,zr=REST)=>{const q=toCam(S[s],S[s]+zr,X);OCC.push({c:S[s],zr,xa:VX+(q.x-hw)*F/q.z-30,xb:VX+(q.x+hw)*F/q.z+30})};
+  // per-seed landmark SET and ORDER: the gate is one of three; the side landmarks are shuffled over the free stations,
+  // two stations stay bare forest, each landmark picks its side and leans a little its own way
+  const rl=rngFor(31,SEED*13+5);for(let i=0;i<4;i++)rl();const GV=Math.floor(rl()*3);
+  // the arch stands nearer: station 1 must not rest right under its beam
+  lm(fenceItem(S[0]+(GV===1?4:6.6),GV));LMLIST.push(`0 ${['broken fence gate','timber arch with a sign','stone pillars, iron gate'][GV]}`);
+  const POOL=[['lantern on a post'],['gravestone row'],['scarecrow',scarecrow,4.9,1.1],['jack-o\'-lanterns',jackRow,4.6,1.3],['crow on a stump',crowStump,4.4,.8],['stone well',well,4.8,1.0],
+    ['abandoned cart',cart,5.0,1.2],['log and mushrooms',logShrooms,4.6,1.6],['will-o\'-wisps',bogWisps,4.6,1.8],['skull signpost',signpost,4.8,.9],['cabin, lit window']];
+  for(let i=POOL.length-1;i>0;i--){const j=Math.floor(rl()*(i+1));[POOL[i],POOL[j]]=[POOL[j],POOL[i]]}
+  const slots=[1,2,3,4,5,6,7,8,9,11,12];for(let i=slots.length-1;i>0;i--){const j=Math.floor(rl()*(i+1));[slots[i],slots[j]]=[slots[j],slots[i]]}
+  const plan=slots.slice(0,9).map((s,i)=>[s,POOL[i],rl()<.5?-1:1,rr(rl,-.09,.09)]).sort((a,b)=>a[0]-b[0]);
+  for(const [s,[name,fn,X0,hw],sd,lean] of plan){if(lmOff(s))continue;LEAN=lean;LMLIST.push(`${s} ${name}${sd<0?' (left)':' (right)'}`);
+    if(name==='lantern on a post'){const X=side(s,sd*5.7);lm(lanternPool(R(s)+0.05,X-sd*1.6));lm(lanternItem(R(s),X),sd<0?[X-1.9,X+3.1,R(s)-2.5,R(s)+2.5]:[X-3.1,X+1.9,R(s)-2.5,R(s)+2.5]);occ(s,X-sd*.4,.9)}
+    else if(name==='gravestone row'){const dX=side(s,sd*4.7,11)-sd*4.7,rgv=rngFor(s,55,SEED);[[2.3,9],[3.1,9.8],[4.0,10.5],[5.0,11.3],[6.1,12],[7.2,12.7]].forEach(([X,o],i)=>ITEMS.push(graveItem(S[s]+o,sd*X+dX,rgv,i%4)));
+      EXCL.push(sd<0?[-8.5+dX,-1.6+dX,S[s]+7,S[s]+14]:[1.6+dX,8.5+dX,S[s]+7,S[s]+14]);lm(moonPool(S[s]+11,sd*4.6+dX));occ(s,sd*4.7+dX,2.6,11)}
+    else if(name==='cabin, lit window'){const X=side(s,sd*7.1,REST+4);lm(cabin(R(s)+4,X,REST+4),keep(X,R(s)+4,3));occ(s,X,1.7,13)}
+    else{const X=side(s,sd*X0);lm(fn(R(s),X),keep(X,R(s),name==='abandoned cart'?3:2.6));occ(s,X,hw)}}
+  LEAN=0;
+  // the interiors. Everything belonging to one is GATED: it fades in through the fog only once its front door is
+  // within ~22 m, so a barn or house shows up as the next stop, never as a permanent landmark in the background
+  const rb=rngFor(9,SEED);
+  for(const b of BARNS){const{A,B}=b,mr=rb()<.5?-1:1,its=[];const add=it=>{its.push(it);return it};
+    const P2=(Zn,Z1,X0,h0,X1,h1,fill,lines,o)=>add(planeItem(Zn,Z1,X0,h0,X1,h1,fill,lines,o)),BAY=BLEN/4;
+    if(b.kind==='barn'){
+      add(barnFront(A));add(barnBack(B));
+      for(let z=A+2;z<B-.5;z+=3)add(truss(z));
+      for(let z=A;z<B-.01;z+=BAY){const z1=Math.min(z+BAY,B);
+        const planks=[...Array(8)].map((_,i)=>[(i+1)/9,.035,'#1a100a']);
+        for(const sd of[-1,1]){P2(z,z1,sd*BW,0,sd*BW,WH,'#2e1d13',planks);P2(z,z1,sd*BW,WH,0,PK,'#21160e',[[.35,.1,'#2e1f14'],[.7,.1,'#2e1f14']])}}
+      if(b.v===0){   // hay and a cart, two lanterns
+        add(hangLantern(A+8,-2.9*mr,true));add(hangLantern(A+10,3.5*mr,false));add(lanternPool(A+8,-2.4*mr));add(lanternPool(A+10,2.8*mr));
+        add(hayBales(A+8.5,-3.1*mr,[[0,0],[0,.5],[1.1*mr,0]]));add(hayBales(A+11.5,2.6*mr,[[0,0],[0,.5]]));add(cart(A+9.5,2.7*mr));
+        add(motes(A+8,-2.6*mr,rb));add(motes(A+10,3.0*mr,rb))}
+      else if(b.v===1){   // horse stalls down both sides, one lantern, a ladder to the loft
+        for(const sd of[-1,1])for(const z of[A+3.2,A+7.2])P2(z,z+3,sd*2.3,0,sd*2.3,1.35,'#2a1a10',[[.25,.04,'#140c07'],[.5,.04,'#140c07'],[.75,.04,'#140c07'],[.97,.07,'#4e3d2a']],{insets:[[.0,.04,0,1,'#4e3d2a'],[.96,1,0,1,'#4e3d2a']]});
+        add(hangLantern(A+7,2.1*mr,true));add(lanternPool(A+7,1.9*mr));add(ladder(A+11.6,-2.9*mr));add(pitchfork(A+10.5,3.2*mr));add(motes(A+7,1.6*mr,rb))}
+      else{   // hay piled high, crows on the tie beam, a single lantern
+        add(hayBales(A+7.5,-2.7*mr,[[0,0],[0,.5],[0,1],[1.1*mr,0],[1.1*mr,.5],[.55*mr,1.5]]));add(hayBales(A+10.5,2.7*mr,[[0,0],[0,.5],[-1.1*mr,0]]));
+        add(roostCrows(A+8,.4*mr));add(hangLantern(A+9.5,2.4*mr,true));add(lanternPool(A+9.5,2.2*mr));add(pitchfork(A+9,-2.2*mr));add(motes(A+9.5,2.1*mr,rb))}
+      b.hay=[...Array(36)].map(()=>[A+rr(rb,.5,BLEN-.5),(rb()<.5?-1:1)*rr(rb,1.2,3.8),rr(rb,0,Math.PI),rr(rb,.25,.5)]);
+    }else{
+      // house: v0 narrow hall with a staircase, v1 parlour with a fireplace, v2 long hall of portraits and a clock
+      b.paper=['#2a1e26','#1c2a24','#30251b'][b.v];b.hay=[];const w=b.w,wh=b.wh;
+      add(houseFront(A,b,rb));add(houseBack(B,b));
+      for(let z=A;z<B-.01;z+=BAY){const z1=Math.min(z+BAY,B);
+        for(const sd of[-1,1])P2(z,z1,sd*w,0,sd*w,wh,b.paper,[[.02,.06,'#0e0a08'],[.33,.03,'#4a3c2c'],[.87,.025,'#3a2e22']],{insets:[[0,1,0,.33,'#21180f']]});
+        P2(z,z1,-w,wh,w,wh,'#241e1a',[[.2,.05,'#0f0c0a'],[.5,.05,'#0f0c0a'],[.8,.05,'#0f0c0a']])}
+      const pz=b.v===2?[A+1.6,A+4.9,A+8.1,A+11.4]:[A+4.9,A+8.1];
+      pz.forEach((z,i)=>{const sd=(i%2?1:-1)*mr,len=rr(rb,.55,.8),h0=rr(rb,1.25,1.45),h1=h0+rr(rb,.6,.85);
+        P2(z-len/2,z+len/2,sd*(w-.03),h0,sd*(w-.03),h1,'#5a4326',[],{front:1,insets:[[.1,.9,.1,.9,'#16110e'],[.36,.64,.38,.74,'#57503f'],[.42,.58,.3,.4,'#1e1814']]})});
+      add(hallLamp(A+6.5,0,wh));add(motes(A+6.5,(b.w-.9)*mr,rb));
+      if(b.v===0){add(stairs(A+10.5,-(w-.65)*mr,mr));add(sconce(A+4,(w-.12)*mr,1.75));add(sconce(A+9,-(w-.12)*mr,1.75))}
+      else if(b.v===1){add(fireplace(A+8,(w-.35)*mr,mr));add(armchair(A+9.5,-(w-.8)*mr));add(armchair(A+6.8,(w-1.1)*mr));add(sconce(A+4.5,-(w-.12)*mr,1.8));add(motes(A+8.5,-(w-1)*mr,rb))}
+      else{add(clock(A+10.8,(w-.4)*mr));add(sconce(A+3.5,(w-.12)*mr,1.75));add(sconce(A+6.8,-(w-.12)*mr,1.75));add(sconce(A+10,-(w-.12)*mr,1.75))}
+    }
+    for(const it of its){const dA=(it.kind==='plane'?it.Z:it.Z)-A;it.dA=dA;
+      if(it.kind!=='plane'){const o=it.op;it.op=z=>o(z)*clamp((22-(z-dA))/7)}ITEMS.push(it)}
+  }
+  const clear=(X,Z,w=1)=>!EXCL.some(e=>X>e[0]&&X<e[1]&&Z>e[2]&&Z<e[3])&&!(inBarn(Z)&&Math.abs(X)<9)&&
+    !OCC.some(o=>{const q=toCam(o.c,Z,X);if(!q||q.z<=0.3||q.z>=o.zr)return false;const x=VX+q.x*F/q.z,hw=w*0.8*F/q.z;return x+hw>o.xa&&x-hw<o.xb});
+  // keep the harvest moon visible from station 10 (screen rect of the moon)
+  const moonHole=bb=>bb&&bb[2]>1480&&bb[0]<1840&&bb[1]<290;
+  const inMoon=(X,Z)=>{const q=toCam(S[10],Z,X);if(!q||q.z<0.5||q.z>ZFAR)return false;const x=VX+q.x*F/q.z;return x>1500&&x<1800};
+  for(let seg=0;seg<NS;seg++){
+    const Z0=S[seg],len=segLen((seg+1)%NS),f=len/D,r=rngFor(seg,11,SEED);
+    const add=(X,off,w)=>{X=Math.sign(X)*Math.max(Math.abs(X),2.3+w*0.6);const Z=Z0+off;if(clear(X,Z,w)&&!inMoon(X,Z))ITEMS.push(treeItem(Z,X,w,rngFor(seg,Math.round(off*97),Math.round(X*131),SEED)))};
+    for(let rep=0;rep<Math.round(f);rep++){const o0=rep*D;
+      for(const sd of[-1,1]){
+        const off=o0+rr(r,3.0,5.4); let k=rr(r,0.5,0.72); if(seg===10&&sd>0)k=0.8;
+        add(sd*Math.max(2.1,(off-o0)*k),off,rr(r,0.7,1.1));                         // near frame trunk
+        const n2=1+Math.floor(r()*2);for(let i=0;i<n2;i++)add(sd*rr(r,3.8,9),o0+rr(r,1.5,6),rr(r,0.45,0.9));
+      }
+      const nf=3+Math.floor(r()*3);for(let i=0;i<nf;i++){const sd=r()<.5?-1:1;add(sd*rr(r,2.4,16),o0+rr(r,0,D),rr(r,0.35,0.75))}
+    }
+    const rl=rngFor(seg,77,SEED);
+    for(const sd of[-1,1]){if(rl()<.3)continue;const Z=Z0+rr(rl,0,len);const it=limbItem(Z,sd,rl);if(inBarn(Z,6))continue;
+      const q=toCam(S[10],Z,0);if(q&&q.z>4&&q.z<ZFAR){XOFF=q.x;const hole=moonHole(it.geom(q.z,'x').bb);XOFF=0;if(hole)continue}ITEMS.push(it)}
+    const rf=rngFor(seg,23,SEED);
+    for(let i=0;i<Math.round(f);i++){const sd=rf()<.5?-1:1,Z=Z0+rr(rf,0,len);const it=fogShaft(Z,sd*rr(rf,2.6,9),rr(rf,1.3,2.8),rf);if(!inBarn(Z))ITEMS.push(it)}
+    {const Z=Z0+rr(rf,0,len),it=groundFog(Z,rr(rf,-6,6),rr(rf,5,10),rf);if(!inBarn(Z,4))ITEMS.push(it)}
+    const rg=rngFor(seg,37,SEED);const gok=(Z,X)=>!BARNS.some(b=>((Z-b.A+0.3)%L+L)%L<BLEN+0.6&&Math.abs(X)<b.w+0.4);
+    const n=Math.round(f);
+    for(let i=0;i<12*n;i++){const onPath=rg()<.55,Z=Z0+rr(rg,0,len),X=onPath?rr(rg,-1.3,1.3):(rg()<.5?-1:1)*rr(rg,1.5,3.6);if(gok(Z,X))leaf(Z,X,rg);else{rg();rg();rg()}}
+    for(let i=0;i<2*n;i++){const sd=rg()<.5?-1:1,Z=Z0+rr(rg,0,len),X=sd*rr(rg,1.5,2.6);if(gok(Z,X))root(Z,X,sd,rg);else rg()}
+    for(let i=0;i<2*n;i++){const Z=Z0+rr(rg,0,len),X=rr(rg,-2,2);if(gok(Z,X))stone(Z,X,rg);else rg()}
+    for(let i=0;i<3*n;i++){const sd=rg()<.5?-1:1,Z=Z0+rr(rg,0,len),X=sd*rr(rg,1.5,2.4);if(gok(Z,X))tuft(Z,X,rg);else rg()}
+    for(let i=0;i<2*n;i++){const Z=Z0+rr(rg,0,len),X=pathC(Z)+rr(rg,-0.6,0.6);if(gok(Z,X))patch(Z,X,rg);else rg()}
+  }
+})();
+
+// ---------- screen-fixed layers ----------
+const $=id=>document.getElementById(id);
+const stage=$('stage'),cam=$('cam'),world=$('world'),ground=$('ground'),sky=$('sky');
+stage.style.setProperty('--walk',DUR+'ms');
+(function staticLayers(){
+  $('groundStatic').innerHTML=`<svg width="1920" height="1080" viewBox="0 0 1920 1080" style="position:absolute;inset:0;overflow:visible"><rect x="-80" y="${VY}" width="2080" height="${H-VY+80}" fill="${GRD('#2e281f')}"/></svg>`;
+  const gm=$('gmask');const B=48,T=VY-60;
+  gm.style.cssText=`position:absolute;left:-${B}px;right:-${B}px;bottom:-${B}px;top:${T}px;background:linear-gradient(to bottom,${RGBA(FOG('#2a2b2d'),0)} 0px,${RGBA(FOG('#2c2d30'),.9)} 60px,${RGBA(FOG('#2a2b2e'),.95)} 84px,${RGBA(FOG('#222326'),.9)} 110px,${RGBA(GRD('#1a1713'),.86)} 230px,${RGBA(GRD('#16130f'),.8)} 442px);`+
+    `-webkit-mask-image:radial-gradient(ellipse 470px 150px at ${1085+B}px ${300+60}px,rgba(0,0,0,.06) 0%,rgba(0,0,0,.35) 45%,#000 100%);mask-image:radial-gradient(ellipse 470px 150px at ${1085+B}px ${300+60}px,rgba(0,0,0,.06) 0%,rgba(0,0,0,.35) 45%,#000 100%)`;
+  const beam=document.createElement('div');beam.className='bleed';
+  beam.style.background=`radial-gradient(ellipse 360px 105px at ${1085+B}px ${1000+B}px,rgba(255,244,214,.20),rgba(255,214,160,.07) 55%,transparent 100%),radial-gradient(ellipse 720px 420px at ${1300+B}px ${1120+B}px,rgba(255,236,200,.05),transparent 100%)`;
+  gm.after(beam);
+  sky.innerHTML=`<div class="bleed" style="background:linear-gradient(to bottom,${FOG('#16181c')} 48px,${FOG('#1b1d21')} 288px,${FOG('#222428')} 468px,${FOG('#2b2c30')} 658px,${FOG('#323337')} 738px,${FOG('#323337')} 752px,${FOG('#27282b')} 808px)"></div>
+   <div class="bleed sl" data-st="0" style="background:radial-gradient(ellipse 1150px 150px at 1008px 753px,${RGBA(MOON('#965628'),.32)},${RGBA(MOON('#783c1e'),.09)} 60%,transparent 100%)"></div>
+   <div class="bleed" style="background:radial-gradient(ellipse 620px 300px at 1008px 48px,${RGBA(MOON('#5a6474'),.42)},${RGBA(FOG('#282c34'),.16)} 55%,transparent 100%)"></div>
+   <div class="fill sl" data-st="10"><svg width="1920" height="1080" viewBox="0 0 1920 1080" style="position:absolute;inset:0">${moonSvg()}</svg></div>`;
+  { const tm=[95,-20],bm=[390,990],ux=bm[0]-tm[0],uy=bm[1]-tm[1],ul=Math.hypot(ux,uy),nx=-uy/ul,ny=ux/ul,hw=165,c=[(tm[0]+bm[0])/2,(tm[1]+bm[1])/2];
+    $('lightsTop').innerHTML=`<div class="fill sl" data-st="3" style="opacity:0"><svg width="1920" height="1080" viewBox="0 0 1920 1080" style="position:absolute;inset:0"><defs>${lgrad('msa',c[0]-nx*hw,c[1]-ny*hw,c[0]+nx*hw,c[1]+ny*hw,[[0,'#a8bcd8',0],[.5,'#b4c6de',.21],[1,'#a8bcd8',0]])}${lgrad('msv',0,-20,0,990,[[0,'#fff',.45],[.7,'#fff',1],[1,'#fff',.2]])}<mask id="msk"><rect x="0" y="-20" width="900" height="1030" fill="url(#msv)"/></mask></defs><path mask="url(#msk)" d="M${tm[0]-hw} -20L${tm[0]+hw} -20L${bm[0]+hw} 990L${bm[0]-hw} 990Z" fill="url(#msa)"/></svg></div>`; }
+  $('topdark').style.background='linear-gradient(to bottom,rgba(8,8,10,.5) 48px,rgba(8,8,10,.3) 120px,rgba(8,8,10,0) 250px)';
+  // the question box stays dark and calm (>= 7:1 for cream text even over a lit doorway); the frame around it is lifted
+  $('hush').style.background='radial-gradient(ellipse 900px 400px at 960px 540px,rgba(4,4,5,.56),rgba(4,4,5,.5) 50%,rgba(4,4,5,.28) 75%,rgba(4,4,5,0) 100%)';
+  $('vig').style.background='radial-gradient(ellipse 78% 74% at 50% 52%,transparent 62%,rgba(6,6,8,.28) 100%)';
+})();
+function moonSvg(){const cx=1650,cy=158,R=84;
+  return `<defs><radialGradient id="mh"><stop offset="0" stop-color="${MOON('#e88a3a')}" stop-opacity=".4"/><stop offset=".35" stop-color="${MOON('#c8662a')}" stop-opacity=".15"/><stop offset="1" stop-color="${MOON('#c8662a')}" stop-opacity="0"/></radialGradient>
+  <radialGradient id="md" cx=".44" cy=".42" r=".56"><stop offset="0" stop-color="${MOON('#f6ae66')}"/><stop offset=".62" stop-color="${MOON('#e3813a')}"/><stop offset=".86" stop-color="${MOON('#c9642a')}" stop-opacity=".95"/><stop offset="1" stop-color="${MOON('#b8561f')}" stop-opacity="0"/></radialGradient>
+  <radialGradient id="md2" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="${MOON('#e8904a')}" stop-opacity=".55"/><stop offset=".8" stop-color="${MOON('#d0702c')}" stop-opacity=".35"/><stop offset="1" stop-color="${MOON('#b8561f')}" stop-opacity="0"/></radialGradient>
+  <radialGradient id="mm" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="${MOON('#b85a24')}" stop-opacity=".32"/><stop offset="1" stop-color="${MOON('#b85a24')}" stop-opacity="0"/></radialGradient></defs>
+  <circle cx="${cx}" cy="${cy}" r="${R*3.2}" fill="url(#mh)"/><ellipse cx="${cx+5}" cy="${cy-3}" rx="${R*1.14}" ry="${R*1.1}" fill="url(#md2)"/><circle cx="${cx}" cy="${cy}" r="${R*1.16}" fill="url(#md)"/>
+  <ellipse cx="${cx-18}" cy="${cy-10}" rx="46" ry="34" fill="url(#mm)"/><ellipse cx="${cx+26}" cy="${cy+24}" rx="34" ry="26" fill="url(#mm)"/>
+  <path d="${dPoly(ribbon([[cx+200,cy+62,20],[cx+110,cy+30,15],[cx+30,cy+14,12],[cx-40,cy-18,10],[cx-110,cy-30,8]]))}${dPoly(ribbon([[cx+60,cy+22,10],[cx+40,cy+70,9],[cx+14,cy+104,7]]))}${dPoly(ribbon([[cx-10,cy,9],[cx-18,cy-44,8],[cx-6,cy-78,7]]))}${dPoly(ribbon([[cx-60,cy-24,8],[cx-96,cy-66,7]]))}" fill="${TRK('#100e0c')}"/>`;}
+
+// ---------- WANDER (spec 3b): the camera never stops. Its arc position u(t) along the route comes from a speed
+// schedule (slow wander pace; advance() adds a quicken that eases back). Every element lives from the moment its item
+// enters the far fog to the moment it is off the frame for good, with ONE animation over that whole life keyed to
+// the camera's ARC position (1 animation-second = 1 metre). Speed changes = playbackRate changes (applied to all at
+// once, at schedule boundaries); there is no rest frame, no walk frame and no rebuild between them.
+const sstep=x=>{x=clamp(x);return x*x*(3-2*x)};
+const GS=0.05,G0=-80,GN=Math.ceil((L+170-G0)/GS)+2,GX=new Float64Array(GN),GZ=new Float64Array(GN),GT=new Float64Array(GN);
+(function(){let x=0,z=0,t=0;for(let i=1;i<GN;i++){const s=G0+(i-0.5)*GS,k=kappa(s),tm=t+k*GS/2;x+=Math.sin(tm)*GS;z+=Math.cos(tm)*GS;t+=k*GS;GX[i]=x;GZ[i]=z;GT[i]=t}})();
+function gAt(s){const f=Math.min(Math.max((s-G0)/GS,0),GN-1.001),i=f|0,a=f-i;return[GX[i]+(GX[i+1]-GX[i])*a,GZ[i]+(GZ[i+1]-GZ[i])*a,GT[i]+(GT[i+1]-GT[i])*a]}
+const WANDER=Math.max(0,qs.has('wander')?+qs.get('wander'):0.42);      // m/s between slides
+// gentle meander of the walker around the path centre: a little sideways drift and a slow look left/right
+const mLat=u=>0.22*Math.sin(TAU*u/19+.7)+0.08*Math.sin(TAU*u/7.3+2.1);
+const mYaw=u=>0.03*Math.sin(TAU*u/27+1.9)+0.01*Math.sin(TAU*u/9.1);
+// base: express the pose in a given lap's frame (frames of different laps are not joined, the loop is not closed)
+function camAt(u,base){const uu=base===undefined?((u%L)+L)%L:u-base,[x,z,t]=gAt(uu),m=mLat(u);return{base:u-uu,x:x+m*Math.cos(t),z:z-m*Math.sin(t),th:t+mYaw(u)}}
+const toLocal=(cf,gx,gz)=>{const dx=gx-cf.x,dz=gz-cf.z,c=Math.cos(cf.th),s=Math.sin(cf.th);return{x:dx*c-dz*s,z:dx*s+dz*c}};
+const toGlobal=(cf,x,z)=>{const c=Math.cos(cf.th),s=Math.sin(cf.th);return[cf.x+x*c+z*s,cf.z-x*s+z*c]};
+function pathPt(cf,Zabs,X){const Zr=Zabs-cf.base;if(Zr<G0+1||Zr>G0+(GN-3)*GS)return null;const[px,pz,pt]=gAt(Zr);return toLocal(cf,px+X*Math.cos(pt),pz-X*Math.sin(pt))}
+const relocal=(cfA,cfB,[x,h,z])=>{const g=toGlobal(cfA,x,z),q=toLocal(cfB,g[0],g[1]);return[q.x,h,q.z]};
+
+const ZIN=ZFAR+1, ZREF=12, TILE=4;
+const fm4=n=>Math.round(n*10000)/10000, pc=v=>(v*100).toFixed(3);
+let uid=0;const STAT={stuck:0,maxK:0};
+const offBox=(b,k,tx)=>VX+(b[2]-VX)*k+tx<-M||VX+(b[0]-VX)*k+tx>W+M||VY+(b[3]-VY)*k<-M||VY+(b[1]-VY)*k>H+M;
+// samples camera arcs from ue on, finer when the item is near; fn(u) returns a sample or null to stop
+// rate: arc step as a fraction of the current depth (planes need it finer: CSS interpolates matrix3d keyframes by
+// decomposing them, which goes wrong between strongly different perspective matrices)
+function sampleLife(ue,Zabs,zOf,fn,rate=0.06){const out=[];let u=ue;for(let i=0;i<1500;i++){const s=fn(u);if(!s)break;out.push(s);if(s.stop)break;u+=Math.min(0.8,Math.max(0.01,rate*zOf(s)))}return out}
+function entryArc(Zabs,zAt){for(let u=Zabs-ZIN-30;u<Zabs+3;u+=0.5){const z=zAt(u);if(z!==null&&z<=ZIN)return u}return null}
+function refArc(ue,Zabs,zAt){for(let u=ue;u<Zabs+3;u+=0.25){const z=zAt(u);if(z!==null&&z<=ZREF)return u}return ue}
+
+// ---------- the barn shell hides things: from outside, the interior shows only through the front door (the facade
+// covers the rest); from inside, the outside shows only through the far door. A band or plane that is hidden for its
+// whole life is never mounted (it costs a layer and an animation for nothing); hidden samples do not count as "on".
+function shellCut(u){
+  let sh=null;for(const b of BARNS){const d=((u-b.A)%L+L)%L;if(d>0.3&&d<BLEN-0.3){sh={b,mode:'in',Zd:u+BLEN-d};break}}
+  if(!sh)for(const b of BARNS){const d=((b.A-u)%L+L)%L;if(d>0.3&&d<ZIN+4){sh={b,mode:'out',Zd:u+d};break}}
+  if(!sh)return null;const cf=camAt(u),scr=(X,h)=>{const q=pathPt(cf,sh.Zd,X);return q&&q.z>0.3?PC(q.x,h,q.z):null};
+  const b=sh.b,hw=sh.mode==='in'?b.dB:b.dF,door=[[-hw,0],[hw,0],[hw,b.dh],[-hw,b.dh]].map(([X,h])=>scr(X,h));if(door.some(p=>!p))return null;
+  sh.door=bbox([door]);
+  if(sh.mode==='out'){const t=b.fw;sh.face=[[-t,-.1],[t,-.1],[t,b.fh],[0,b.fpk],[-t,b.fh]].map(([X,h])=>scr(X,h));if(sh.face.some(p=>!p))return null}
+  return sh}
+const insideB=(b,Z,X)=>{const d=((Z-b.A)%L+L)%L;return d>0.05&&d<BLEN-0.05&&Math.abs(X)<b.w+0.3};
+const ovl=(r,q)=>r[0]<q[2]&&r[2]>q[0]&&r[1]<q[3]&&r[3]>q[1];
+const inConvex=(poly,[x,y])=>{let sg=0;for(let i=0;i<poly.length;i++){const a=poly[i],b=poly[(i+1)%poly.length],c=(b[0]-a[0])*(y-a[1])-(b[1]-a[1])*(x-a[0]);if(c){if(sg&&Math.sign(c)!==sg)return false;sg=Math.sign(c)}}return true};
+function hiddenBy(u,Z,X,r){const c=shellCut(u);if(!c)return false;const ins=insideB(c.b,Z,X);
+  if(c.mode==='in')return !ins&&!ovl(r,c.door);
+  return ins&&!ovl(r,c.door)&&[[r[0],r[1]],[r[2],r[1]],[r[2],r[3]],[r[0],r[3]]].every(p=>inConvex(c.face,p))}
+
+// A billboard's life is split into DEPTH BANDS, each its own element drawn at the near end of its band (so it never
+// scales above 1 and Chrome rasters it at a bounded size: one element scaled from 43 m to 1 m would be rastered at
+// its largest scale over a huge box, which dropped tiles). At a hand-over the next band's element (same item, same
+// place, drawn nearer) fades in ON TOP of the old one over ~1 m of travel; the old one stays fully opaque under it
+// and is removed only once covered, so the item never dims or blinks.
+const BANDS=[26,16,10,6.4,4,2.5,1.6,0], HAND=0.6;
+function lifeBB(it,Zabs,cutU){
+  const zAt=u=>{const q=pathPt(camAt(u),Zabs,it.X);return q?q.z:null};
+  const ue=entryArc(Zabs,zAt);if(ue===null)return null;
+  // the raw path of the item through the frame, finer when near
+  let raw=sampleLife(ue,Zabs,s=>Math.max(s.z,ZMIN),u=>{const q=pathPt(camAt(u),Zabs,it.X);if(!q)return null;return{u,x:q.x,z:q.z,stop:q.z<ZMIN||u>Zabs+3}});
+  if(cutU!==undefined)raw=raw.filter(s=>s.u<=cutU);
+  if(!raw.length)return{skip:true};
+  const band=z=>BANDS.findIndex(b=>z>=b);
+  const out=[];let i0=0,lastOn=-1,lastOnBand=-1;
+  while(i0<raw.length){
+    const b=band(Math.max(raw[i0].z,ZMIN)),uh=raw[i0].u;let i1=i0;while(i1+1<raw.length&&band(Math.max(raw[i1+1].z,ZMIN))===b)i1++;
+    // this band's element also covers the next band's first metre (it is the one underneath during the hand-over)
+    let i2=i1;if(i1+1<raw.length){const uh1=raw[i1+1].u;while(i2+1<raw.length&&raw[i2+1].u<=uh1+HAND+1e-6)i2++}
+    const seg=raw.slice(i0,i2+1),rz=Math.max(ZMIN,raw[i1].z),rs=raw[i1];
+    const id='i'+(uid++);XOFF=rs.x-it.X;const g=it.geom(rz,id),pbs=g.pb||[g.bb];
+    const ks=seg.map(s=>{const zz=Math.max(s.z,ZMIN),k=rz/zz,tx=(s.x-rs.x*zz/zz)*F/zz-(rs.x*F/rz)*k+rs.x*F/zz,gone=bx=>offBox(bx,k,tx);
+      const t2=(s.x-rs.x)*F/zz,bb=g.bb,on=!(pbs.every(bx=>offBox(bx,k,t2))&&(g.pg||[]).every(([bx,li])=>offBox(bx,k,t2)||(it.lops[li]?it.lops[li](zz):1)<0.01));
+      const hid=on&&hiddenBy(s.u,it.Z,it.X,[VX+(bb[0]-VX)*k+t2,VY+(bb[1]-VY)*k,VX+(bb[2]-VX)*k+t2,VY+(bb[3]-VY)*k]);
+      return{u:s.u,k,zz,tx:t2,hid,on:on&&!hid}});
+    ks.forEach((s,j)=>{if(s.on&&j<=i1-i0){lastOn=out.length;lastOnBand=out.length}});
+    let [x0,y0,x1,y1]=g.bb,cx0=-M,cx1=W+M,cy0=-M,cy1=H+M;
+    for(const s of ks){STAT.maxK=Math.max(STAT.maxK,s.k);cx0=Math.min(cx0,VX+(-M-VX-s.tx)/s.k);cx1=Math.max(cx1,VX+(W+M-VX-s.tx)/s.k);cy0=Math.min(cy0,VY+(-M-VY)/s.k);cy1=Math.max(cy1,VY+(H+M-VY)/s.k)}
+    const box=[Math.max(Math.floor(x0),Math.floor(cx0)),Math.max(Math.floor(y0),Math.floor(cy0)),Math.min(Math.ceil(x1),Math.ceil(cx1)),Math.min(Math.ceil(y1),Math.ceil(cy1))];
+    // during the hand-over the old band stays opaque under the new one, but its TRANSLUCENT parts (fog, light pools,
+    // glows) fade out as the new ones fade in, or they would add up and brighten for a moment
+    const uh1=i1+1<raw.length?raw[i1+1].u:Infinity,out1=u=>1-sstep((u-uh1)/HAND);
+    const gl=it.soft?[]:(it.glowL||[]),lopAt=(i,s)=>(it.lops[i]?it.lops[i](s.zz):1)*(gl.includes(i)?out1(s.u):1);
+    const lv=g.layers.map((_,i)=>{const lop=it.lops[i];if(!lop&&!gl.includes(i))return{v0:1,anim:false};let a=1e9,c=-1e9;for(const s of ks){const v=lopAt(i,s);a=Math.min(a,v);c=Math.max(c,v)}
+      // a fog VEIL that changes little over the band is held at its middle value (one animation fewer per item; the
+      // band hand-over crossfades the step, a few grey levels of low-contrast fog, never a visible jump)
+      if(it.veil&&it.veil.includes(i)&&c-a<0.22)return{v0:(a+c)/2,anim:false,max:c};
+      return{v0:lopAt(i,ks[0]),anim:c-a>=0.04,max:c}});
+    const fade=out.length?u=>sstep((u-uh)/HAND):()=>1;
+    out.push({kind:'bb',rz,it,g,ks,box,lv,lops:lv.map((l,i)=>l.anim?ks.map(s=>lopAt(i,s)):null),ops:ks.map(s=>it.op(s.zz)*fade(s.u)*(it.soft?out1(s.u):1)),ue:ks[0].u,ux:ks[ks.length-1].u,band:out.length,anyOn:ks.some(s=>s.on)});
+    XOFF=0;i0=i1+1;
+  }
+  // the item leaves for good after its last on-frame sample: cut the life there (one sample later, just off the frame)
+  let last=-1,lb=-1;out.forEach((lf,b)=>lf.ks.forEach((s,j)=>{if(s.on){last=j;lb=b}}));
+  if(lb<0)return{skip:true};
+  const L0=out[lb];L0.ks=L0.ks.slice(0,last+2);L0.ops=L0.ops.slice(0,last+2);L0.lops=L0.lops.map(a=>a&&a.slice(0,last+2));L0.ux=L0.ks[L0.ks.length-1].u;
+  if(L0.ks.length<2){L0.ks.push({...L0.ks[0],u:L0.ks[0].u+0.2});L0.ops.push(L0.ops[0]);L0.lops=L0.lops.map(a=>a&&a.concat(a[a.length-1]));L0.ux=L0.ks[1].u}
+  const r=raw.find(s=>s.u>=L0.ux-1e-9);if(r&&r.z<ZMIN&&L0.ks[Math.min(last,L0.ks.length-1)].on)STAT.stuck++;
+  // the last band was drawn for the nearest sample of the raw path; if the item leaves the frame well before that,
+  // draw it again for where it really leaves (a band drawn at 0.3 m and shown at 1.5 m was rastered 5x too big)
+  if(cutU===undefined){const zc=raw.find(s=>s.u>=L0.ux-1e-9);if(zc&&L0.rz<0.8*Math.max(zc.z,ZMIN))return lifeBB(it,Zabs,L0.ux+1e-6)}
+  const bands=out.slice(0,lb+1);bands.forEach(b=>{b.order=ue});
+  // a band that the barn shell hides for part of its life is mounted only around the part where it shows
+  for(const b of bands){if(!b.ks.some(s=>s.hid))continue;const fo=b.ks.findIndex(s=>s.on),lo=b.ks.map(s=>s.on).lastIndexOf(true);if(fo<0){b.anyOn=false;continue}
+    const a=Math.max(0,fo-1),z=Math.min(b.ks.length,lo+2);if(z-a<2)continue;b.ks=b.ks.slice(a,z);b.ops=b.ops.slice(a,z);b.lops=b.lops.map(l=>l&&l.slice(a,z));b.ue=b.ks[0].u;b.ux=b.ks[b.ks.length-1].u}
+  return{bands};
+}
+function polyInFrame(poly){let pts=poly;for(const [ax,v,sg] of [[0,-M,1],[0,W+M,-1],[1,-M,1],[1,H+M,-1]]){const o=[];
+    for(let i=0;i<pts.length;i++){const a=pts[i],b=pts[(i+1)%pts.length],ia=(a[ax]-v)*sg>=0,ib=(b[ax]-v)*sg>=0;if(ia)o.push(a);if(ia!==ib){const t=(v-a[ax])/(b[ax]-a[ax]);o.push([a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t])}}
+    pts=o;if(!pts.length)return false}
+  let A=0;for(let i=0;i<pts.length;i++){const a=pts[i],b=pts[(i+1)%pts.length];A+=a[0]*b[1]-b[0]*a[1]}return Math.abs(A)/2>200}
+// a plane (barn wall / roof bay): one exact homography per sample, from its drawing at the reference arc
+function planeCorners(it,cf,Zabs){const Zn=Zabs-(it.Z-it.Zn);return[[Zn,it.X0,it.h0],[Zabs,it.X0,it.h0],[Zabs,it.X1,it.h1],[Zn,it.X1,it.h1]].map(([Z,X,h])=>{const q=pathPt(cf,Z,X);return q?[q.x,h,q.z]:null})}
+function lifePlane(it,Zabs){
+  const zAt=u=>{const q=pathPt(camAt(u),Zabs,0);return q?q.z:null};
+  const ue=entryArc(Zabs,zAt);if(ue===null)return null;
+  const cr=camAt(refArc(ue,Zabs,zAt)),c=planeCorners(it,cr,Zabs);if(c.some(p=>!p))return{skip:true};
+  const P3=(u,v)=>{const a=c[0].map((p,i)=>p+(c[1][i]-p)*u),b=c[3].map((p,i)=>p+(c[2][i]-p)*u);return a.map((p,i)=>p+(b[i]-p)*v)};
+  const poly=clipZ([P3(0,0),P3(1,0),P3(1,1),P3(0,1)],0.3).map(([x,h,z])=>PC(x,h,z));
+  let svg=`<path d="${dPoly(poly)}" fill="${it.fill}"/>`;const all=[poly];
+  for(const [u0,u1,v0,v1,col] of it.insets){const q=clipZ([P3(u0,v0),P3(u1,v0),P3(u1,v1),P3(u0,v1)],0.3).map(([x,h,z])=>PC(x,h,z));if(q.length>2)svg+=`<path d="${dPoly(q)}" fill="${col}"/>`}
+  for(const [v,w,col] of it.lines){const sp=[];for(let i=0;i<=16;i++){const[x,h,z]=P3(i/16,v);if(z>=0.3){const p=PC(x,h,z);sp.push([p[0],p[1],Math.max(w*F/z,7)])}}
+    if(sp.length>1){const rb=ribbon(sp);all.push(rb);svg+=`<path d="${dPoly(rb)}" fill="${col}"/>`}}
+  const ref=[P3(1,0),P3(1,1),P3(2,0),P3(2,1)];
+  const smp=sampleLife(ue,Zabs,s=>Math.max(0.5,s.zn),u=>{const cf=camAt(u,cr.base),cz=c.map(p=>relocal(cr,cf,p)),zmin=Math.min(...cz.map(p=>p[2]));
+    // Chrome clips the part of a plane that has passed behind the viewer (w < 0), so the panel keeps its exact
+    // homography as it slides past; it is off when what is still in front is outside the frame
+    const vis=clipZ(cz,0.3);if(!vis.length||Math.max(...cz.map(p=>p[2]))<1)return{u,dead:true,stop:true,zf:1};
+    // on = the panel's screen polygon really overlaps the frame (its bbox is not enough: a wall beside the walker
+    // spans "the frame" in bbox terms long after it has slid off, and an edge-on panel's interpolated matrix is wild)
+    const sp=vis.map(([x,h,z])=>PC(x,h,z));
+    return{u,m:homRef(ref,cr,cf),zf:cz[1][2],zn:zmin,on:polyInFrame(sp)&&!hiddenBy(u,(it.Zn+it.Z)/2,0,bbox([sp])),stop:u>Zabs+3}},0.015);
+  const last=smp.map(s=>!!s.on).lastIndexOf(true);if(last<0)return{skip:true};
+  // the panel is mounted from the sample before it first shows (through a door), not from the far fog
+  const first=Math.max(0,smp.findIndex(s=>s.on)-1);
+  const ks=smp.slice(first,last+2).map(s=>s.dead?{...smp[last],u:s.u}:s);if(ks.length<2)ks.push({...ks[0],u:ks[0].u+0.2});
+  const bb=bbox(all);
+  // depth order: panels sort by their far end like billboards by their entry, a portrait above its own wall stretch
+  return{kind:'pl',order:Zabs-ZIN-(it.front?1.6:0),org:PC(...ref[0]),svg,ks,ops:ks.map(s=>clamp((ZFAR-s.zf)/FADE)*(it.dA===undefined?1:clamp((22-(s.zf-it.dA))/7))),box:[Math.max(Math.floor(bb[0]),-3000),Math.max(Math.floor(bb[1]),-3000),Math.min(Math.ceil(bb[2]),W+3000),Math.min(Math.ceil(bb[3]),H+3000)],ue:ks[0].u,ux:ks[ks.length-1].u};
+}
+function homRef(ref,cfA,cfB){const src=ref.map(([x,h,z])=>PC(x,h,z)),o=src[0],rel=p=>[p[0]-o[0],p[1]-o[1]];
+  return m3d(homog(src.map(rel),ref.map(p=>{const[x,h,z]=relocal(cfA,cfB,p);return rel(PC(x,h,z))})))}
+// ground tile: 3 m of floor (path, ruts, leaves, roots, barn boards), drawn once and moved as one exact homography
+function lifeTile(j,lap){
+  const a=j*TILE,Zabs=a+lap*L,cr=camAt(Zabs-ZREF),hi=Math.min(a+TILE+0.12,L+TILE);
+  const corners=u=>{const cf=camAt(u);return[[Zabs,-4.5],[Zabs,4.5],[Zabs+TILE,-4.5],[Zabs+TILE,4.5]].map(([Z,X])=>pathPt(cf,Z,X))};
+  const zAt=u=>{const c=corners(u);return c.some(p=>!p)?null:Math.min(...c.map(p=>p.z))};
+  const ue=entryArc(Zabs,u=>{const z=zAt(u);return z===null?null:z-4});if(ue===null)return null;
+  const P=(Z,X)=>{const q=pathPt(cr,Z+lap*L,X);return q&&q.z>0.3?PC(q.x,0,q.z):null};
+  const ds=[];for(let d=a;d<hi;d+=0.25)ds.push(d);ds.push(hi);
+  const strip=off=>{const A=[],B=[];for(const d of ds){const hw=pathHW(d)+off,c0=pathC(d),p=P(d,c0-hw),q=P(d,c0+hw);if(p&&q){A.push(p);B.push(q)}}return A.length>1?dPoly(A.concat(B.reverse())):''};
+  const line=(fx,wm,col)=>{const sp=[];for(const d of ds){const q=pathPt(cr,d+lap*L,fx(d));if(q&&q.z>0.3){const p=PC(q.x,0,q.z);sp.push([p[0],p[1],Math.max(wm*F/q.z,7)])}}return sp.length>1?`<path d="${dPoly(ribbon(sp))}" fill="${col}"/>`:''};
+  let s=`<path d="${strip(0.55)}" fill="${GRD('#372e23')}"/><path d="${strip(0)}" fill="${GRD('#4c3f30')}"/>`+line(d=>pathC(d),0.6,GRD('#554836'));
+  for(const sd of[-1,1])s+=line(d=>pathC(d)+sd*(0.5+0.05*Math.sin(TAU*13*d/L+sd)),0.2,GRD('#30271c'));
+  for(const b of BARNS){const z0=Math.max(a,b.A),z1=Math.min(hi,b.B);if(z0>=z1)continue;
+    const sideL=(Za,Zb,X)=>[...Array(5)].map((_,i)=>{const q=pathPt(cr,Za+(Zb-Za)*i/4+lap*L,X);return q?[q.x,0,q.z]:null}).filter(Boolean);
+    const quad=(xa,xb,col)=>{const q=clipZ([...sideL(z0,z1,xa),...sideL(z1,z0,xb)],0.3).map(([x,h,z])=>PC(x,h,z));return q.length>2?`<path d="${dPoly(q)}" fill="${col}"/>`:''};
+    if(b.kind==='house'){s+=quad(-b.w,b.w,'#2c1c12');
+      for(let X=-b.w+.22;X<b.w;X+=.22){const sp=sideL(z0,z1,X).filter(p=>p[2]>0.3).map(([x,,z])=>{const p=PC(x,0,z);return[p[0],p[1],Math.max(.02*F/z,7)]});if(sp.length>1)s+=`<path d="${dPoly(ribbon(sp))}" fill="#26180f"/>`}
+      const rw=b.v===1?1.3:.55,ra=Math.max(z0,b.A+(b.v===1?4:.8)),rb2=Math.min(z1,b.B-(b.v===1?3:.8));
+      if(ra<rb2){const q2=(xa,xb,col)=>{const q=clipZ([...sideL(ra,rb2,xa),...sideL(rb2,ra,xb)],0.3).map(([x,h,z])=>PC(x,h,z));return q.length>2?`<path d="${dPoly(q)}" fill="${col}"/>`:''};
+        s+=q2(-rw,rw,'#5a3a22')+q2(-rw+.1,rw-.1,'#3c1414')+q2(-rw+.3,rw-.3,'#4a1c18')}
+      continue}
+    s+=`<path d="${dPoly(clipZ([...sideL(z0,z1,-BW),...sideL(z1,z0,BW)],0.3).map(([x,h,z])=>PC(x,h,z)))}" fill="#33241a"/>`;
+    for(let X=-3.6;X<3.61;X+=.6){const sp=sideL(z0,z1,X).filter(p=>p[2]>0.3).map(([x,,z])=>{const p=PC(x,0,z);return[p[0],p[1],Math.max(.03*F/z,7)]});if(sp.length>1)s+=`<path d="${dPoly(ribbon(sp))}" fill="#1a110a"/>`}
+    for(const [Z,X,an,l] of b.hay){if(Z<z0||Z>=z1)continue;const p=pathPt(cr,Z+lap*L,X),q=pathPt(cr,Z+Math.cos(an)*l+lap*L,X+Math.sin(an)*l);if(p&&q&&p.z>0.3&&q.z>0.3){const A2=PC(p.x,0,p.z),B2=PC(q.x,0,q.z);s+=`<path d="${dPoly(ribbon([[A2[0],A2[1],Math.max(.04*F/p.z,7)],[B2[0],B2[1],Math.max(.04*F/q.z,7)]]))}" fill="#6a5a30" opacity=".55"/>`}}}
+  for(const g of GITEMS){if(g.Z<a||g.Z>=a+TILE)continue;const q=pathPt(cr,g.Z+lap*L,g.X);if(!q||q.z<0.3)continue;XOFF=q.x-g.X;s+=g.draw(q.z)}XOFF=0;
+  const ref=[[-4,0,0],[4,0,0],[-4,0,15],[4,0,15]].map(([x,h,dz])=>{const q=pathPt(cr,Zabs+TILE+10+dz,x);return[q.x,0,q.z]});
+  const smp=sampleLife(ue,Zabs,s=>s.zn,u=>{const c=corners(u);if(c.some(p=>!p))return null;const zs=c.map(p=>p.z);
+    return{u,m:homRef(ref,cr,camAt(u,cr.base)),zn:Math.max(1,Math.min(...zs)),op:clamp((46-Math.min(...zs))/6),stop:Math.max(...zs)<5.3}},0.02);
+  if(!smp.length)return{skip:true};
+  // the layer is only as big as the tile's own patch of floor at the reference view (all content is within +-4.5 m)
+  const cb=bbox([[[Zabs,-4.6],[Zabs,4.6],[Zabs+TILE+0.15,-4.6],[Zabs+TILE+0.15,4.6]].map(([Z,X])=>{const q=pathPt(cr,Z,X);return PC(q.x,0,Math.max(q.z,0.3))})]);
+  return{kind:'pl',org:PC(...ref[0]),svg:s,ks:smp,ops:smp.map(x=>x.op),box:[Math.max(-2200,Math.floor(cb[0]-40)),Math.max(VY+2,Math.floor(cb[1]-40)),Math.min(W+2200,Math.ceil(cb[2]+40)),Math.min(H+2600,Math.ceil(cb[3]+40))],ue:smp[0].u,ux:smp[smp.length-1].u};
+}
+// screen-fixed station lights (sky glow at 0, moon shaft at 3, harvest moon at 10): opacity keyed to the arc too
+function slOpacity(st,uu){const a=((S[st]-3)%L+L)%L,b=((S[(st+1)%NS]-2)%L+L)%L,len=((b-a)%L+L)%L,d=((uu-a)%L+L)%L;return d>len?0:Math.min(sstep(d/4),sstep((len-d)/4))}
+
+// ---------- live elements ----------
+const LIVE=new Map(), LIFE=new Map();
+const head=document.head;
+function mkEl(key,lf,parent){
+  const name='a'+(uid++),dur=Math.max(1,Math.round((lf.ux-lf.ue)*1000)),span=lf.ux-lf.ue||1,css=[];
+  const el=document.createElement('div');let[x0,y0,x1,y1]=lf.box;if(x1-x0<1||y1-y0<1)return null;
+  const vb=`viewBox="${x0} ${y0} ${x1-x0} ${y1-y0}" preserveAspectRatio="none"`;
+  el.style.cssText=`left:${x0}px;top:${y0}px;width:${x1-x0}px;height:${y1-y0}px;opacity:0;`;
+  if(lf.kind==='bb'){
+    el.className='it';el.style.transformOrigin=`${VX-x0}px ${VY-y0}px`;el.dataset.z=fm(lf.it.Z)+' '+fm(lf.it.X)+' '+lf.it.kind;
+    let html='';lf.g.layers.forEach((body,i)=>{const l=lf.lv[i];if((l.max??l.v0)<0.01||!body)return;const it=lf.it,dr=it.drift&&it.drift[i],fl=it.flick&&it.flick[i];
+      if(!l.anim&&!dr&&!fl){html+=`<svg ${vb}${l.v0<1?` style="opacity:${fm4(l.v0)}"`:''}>${body}</svg>`;return}
+      const lb=lf.g.lbb&&lf.g.lbb[i];let lx0=x0,ly0=y0,lx1=x1,ly1=y1;
+      if(lb){lx0=Math.max(x0,Math.floor(lb[0]-(dr?dr.dx:0)-3));ly0=Math.max(y0,Math.floor(lb[1]-3));lx1=Math.min(x1,Math.ceil(lb[2]+(dr?dr.dx:0)+3));ly1=Math.min(y1,Math.ceil(lb[3]+3));if(lx1-lx0<1||ly1-ly0<1)return}
+      const box=lb?`left:${lx0-x0}px;top:${ly0-y0}px;width:${lx1-lx0}px;height:${ly1-ly0}px;`:'';
+      let inner=`<svg viewBox="${lx0} ${ly0} ${lx1-lx0} ${ly1-ly0}" preserveAspectRatio="none">${body}</svg>`;
+      if(dr)inner=`<div class="ly drift" style="--dx:${dr.dx}px;--d:${dr.d}s;--dl:${dr.dl}s">${inner}</div>`;
+      if(fl)inner=`<div class="ly ${fl}">${inner}</div>`;
+      if(l.anim)css.push(`@keyframes ${name}l${i}{${lf.ks.map((s,j)=>`${pc((s.u-lf.ue)/span)}%{opacity:${fm4(lf.lops[i][j])}}`).join('')}}`);
+      html+=`<div class="ly" style="${box}opacity:${fm4(l.v0)};${l.anim?`animation:${name}l${i} ${dur}ms linear both;`:''}">${inner}</div>`});
+    el.innerHTML=html;
+    css.push(`@keyframes ${name}{${lf.ks.map((s,j)=>`${pc((s.u-lf.ue)/span)}%{transform:translateX(${fm(s.tx)}px) scale(${fm4(s.k)});opacity:${fm4(lf.ops[j])}}`).join('')}}`);
+  }else{
+    el.className='pl';el.style.transformOrigin=`${fm(lf.org[0]-x0)}px ${fm(lf.org[1]-y0)}px`;
+    el.innerHTML=`<svg ${vb} style="position:absolute;inset:0;width:100%;height:100%;overflow:hidden">${lf.svg}</svg>`;
+    css.push(`@keyframes ${name}{${lf.ks.map((s,j)=>`${pc((s.u-lf.ue)/span)}%{transform:${s.m};opacity:${fm4(lf.ops[j])}}`).join('')}}`);
+  }
+  el.style.animation=`${name} ${dur}ms linear both`;
+  return mount(key,el,css,lf.ue,lf.ux,parent,lf.order!==undefined?lf.order-1e-4*(lf.band||0):lf.ks[0].u);
+}
+function mount(key,el,css,ue,ux,parent,order){
+  const st=document.createElement('style');st.textContent=css.join('\n');head.appendChild(st);
+  el.dataset.o=order;let before=null;for(const c of parent.children){if(+c.dataset.o<order){before=c;break}}parent.insertBefore(el,before);
+  const rec={el,st,ue,ux,anims:[],tanims:[]};
+  for(const a of el.getAnimations({subtree:true}))(/^a\d/.test(a.animationName)?rec.anims:rec.tanims).push(a);
+  LIVE.set(key,rec);syncRec(rec);return rec;
+}
+function retire(key){const r=LIVE.get(key);if(!r)return;r.el.remove();r.st.remove();LIVE.delete(key)}
+
+// ---------- the clock and the speed schedule ----------
+const TL0=document.timeline.currentTime||0,VT0=performance.now();
+let frozen=false;
+const clk=()=>frozen?performance.now()-VT0:(document.timeline.currentTime||0)-TL0;
+let SCHED=[{t:0,u:0,v:WANDER}];
+const segAt=t=>{let i=SCHED.length-1;while(i>0&&SCHED[i].t>t)i--;return i};
+const uAt=t=>{const s=SCHED[segAt(t)];return s.u+s.v*(t-s.t)/1000};
+const vAt=t=>SCHED[segAt(t)].v;
+function syncRec(rec,t=clk()){const u=uAt(t),v=vAt(t);
+  for(const a of rec.anims){a.currentTime=(u-rec.ue)*1000;if(frozen)a.pause();else{a.playbackRate=v;if(a.playState!=='running')a.play()}}
+  for(const a of rec.tanims){if(frozen){a.pause();a.currentTime=t}else a.startTime=TL0}}
+function syncAll(){const t=clk();for(const r of LIVE.values())syncRec(r,t)}
+
+// ---------- the rolling window ----------
+const NT=Math.ceil(L/TILE);
+function ensure(key,make){let lf=LIFE.get(key);if(lf===undefined){lf=make();LIFE.set(key,lf)}if(!lf||lf.skip)return;const u=uAt(clk());
+  if(lf.bands){lf.bands.forEach((b,i)=>{const k=key+'#'+i;if(b.anyOn&&!LIVE.has(k)&&u>=b.ue-(i?0:8)&&u<b.ux)mkEl(k,b,world)});return}
+  if(!LIVE.has(key)&&u>=lf.ue&&u<lf.ux)mkEl(key,lf,lf.planeWorld?world:(lf.ground?ground:world))}
+function updateWindow(){
+  const u=uAt(clk()),lap=Math.floor(u/L);
+  for(const l of[lap-1,lap,lap+1]){
+    ITEMS.forEach((it,i)=>{const Zabs=it.Z+l*L;if(Zabs-u>ZIN+40||Zabs-u<-6)return;ensure(`i${i}_${l}`,()=>{const lf=it.kind==='plane'?lifePlane(it,Zabs):lifeBB(it,Zabs);if(lf&&it.kind==='plane')lf.planeWorld=1;return lf})});
+    for(let j=0;j<NT;j++){const Zabs=j*TILE+l*L;if(Zabs-u>ZIN+40||Zabs-u<-12)continue;ensure(`g${j}_${l}`,()=>{const lf=lifeTile(j,l);if(lf&&!lf.skip)lf.ground=1;return lf})}
+  }
+  for(const [k,r] of LIVE)if(!k.startsWith('s')&&u>r.ux+0.02)retire(k)
+  for(const k of LIFE.keys()){const lf=LIFE.get(k);const ux=lf&&(lf.bands?lf.bands[lf.bands.length-1].ux:lf.ux);if(lf&&!lf.skip&&u>ux+1&&![...LIVE.keys()].some(x=>x.startsWith(k+'#')||x===k))LIFE.delete(k)}
+  // station lights: one animated copy per lap of each screen-fixed light
+  for(const tpl of SLT){const key=`s${tpl.dataset.st}_${lap}`;if(LIVE.has(key))continue;
+    for(const k of[...LIVE.keys()])if(k.startsWith(`s${tpl.dataset.st}_`))retire(k);
+    const name='a'+(uid++),st=+tpl.dataset.st,el=tpl.cloneNode(true);el.style.opacity='0';
+    const kf=[];for(let i=0;i<=Math.ceil(L);i++){const uu=Math.min(i,L);kf.push(`${pc(uu/L)}%{opacity:${fm4(slOpacity(st,uu))}}`)}
+    el.style.animation=`${name} ${Math.round(L*1000)}ms linear forwards`;mount(key,el,[`@keyframes ${name}{${kf.join('')}}`],lap*L,lap*L+L,tpl.home,-1)}
+}
+
+const rig=$('rig');
+// ---------- stations, quicken, cuts ----------
+const SLT=[...cam.querySelectorAll('.sl')];SLT.forEach(e=>{e.home=e.parentNode;e.remove()});
+const rmOn=()=>$('cRm').checked||matchMedia('(prefers-reduced-motion: reduce)').matches;
+const stationAt=u=>{const uu=((u%L)+L)%L;let k=0;for(let i=0;i<NS;i++)if(S[i]<=uu+0.5)k=i;return k};
+// the next station boundary at least 1 m ahead (absolute arc)
+const nextBoundary=u=>{const lap=Math.floor(u/L);for(const l of[lap,lap+1])for(let k=0;k<NS;k++){const b=S[k]+l*L;if(b>u+1)return b}return u+D};
+const prevBoundary=b=>{let best=-Infinity;const lap=Math.floor(b/L);for(const l of[lap-1,lap])for(let k=0;k<NS;k++){const x=S[k]+l*L;if(x<b-1e-6&&x>best)best=x}return best};
+let autoT=null,tickT=null,station=0,quickEnd=0,goal=null,rmT=null;
+// presses are never dropped (the app's retarget policy): GOAL is the arc of station + net presses. A press while the
+// walk is still quickening toward an earlier goal moves the goal one boundary further and re-plans from the current
+// speed, so the motion carries on smoothly toward the latest target.
+const liveGoal=u=>goal!==null&&goal>u+0.05?goal:null;
+function advance(){
+  const t0=clk(),u0=uAt(t0),g=liveGoal(u0);goal=g===null?nextBoundary(u0):nextBoundary(g-1+1e-6);
+  return goTo(t0,u0);
+}
+// back: one boundary earlier than the goal while that is still ahead; otherwise a covered cut to the previous station
+function back(){
+  const t0=clk(),u0=uAt(t0),g=liveGoal(u0);
+  if(g!==null&&prevBoundary(g)>u0+1){goal=prevBoundary(g);return goTo(t0,u0)}
+  goal=null;return jump(station-1);
+}
+function goTo(t0,u0){
+  // reduced motion: the same targets, reached by covered cuts; presses inside one cut's fade coalesce into one more cut
+  if(rmOn()||!WANDER&&qs.has('rmcut')){if(!rmT){cutTo(goal);rmT=setTimeout(()=>{rmT=null;if(goal!==null&&Math.abs(uAt(clk())-goal)>0.01)cutTo(goal)},460)}return 450}
+  const tgt=goal,vc=vAt(t0),Dq=tgt-u0,T=Math.round(clamp(DUR*Math.sqrt(Dq/D),3500,12000)/100)*100,N=T/100;
+  const prof=vp=>[...Array(N)].map((_,i)=>{const tt=(i+.5)*100,up=sstep(tt/1500),dn=sstep(((i+.5)/N-.55)/.45);return (vc+(vp-vc)*up)*(1-dn)+WANDER*dn});
+  const dist=p=>p.reduce((s,v)=>s+v*0.1,0),a=dist(prof(0)),b=dist(prof(1))-a,vp=Math.max(vc,(Dq-a)/b);
+  SCHED=SCHED.slice(0,segAt(t0)+1);SCHED.push({t:t0,u:u0,v:vc});
+  let u=u0;prof(vp).forEach((v,i)=>{SCHED.push({t:t0+i*100,u,v});u+=v*0.1});SCHED.push({t:t0+T,u,v:WANDER});
+  SCHED=SCHED.filter((s,i,arr)=>i===arr.length-1||arr[i+1].t>s.t);
+  quickEnd=t0+T;kick();return T;
+}
+// a covered cut (Back, a click on the strip, reduced motion): the old frame stays on top and fades out
+function cutTo(uT){
+  const old=cam.cloneNode(true);old.removeAttribute('id');old.querySelectorAll('[id]').forEach(e=>e.removeAttribute('id'));
+  old.getAnimations?.({subtree:true}).forEach(a=>a.pause());old.classList.add('rmx');rig.appendChild(old);
+  for(const k of[...LIVE.keys()])retire(k);LIFE.clear();
+  const t=clk();SCHED=[{t,u:uT,v:rmOn()?0:WANDER}];quickEnd=0;applied=-1;updateWindow();syncAll();ui();
+  void old.offsetWidth;old.style.opacity='0';setTimeout(()=>old.remove(),450);return 450;
+}
+function jump(k){const u=uAt(clk()),lap=Math.floor(u/L);goal=null;clearTimeout(rmT);rmT=null;return cutTo(S[((k%NS)+NS)%NS]+lap*L)}
+// one chained timer: lands on each speed step exactly, applies it to every animation, keeps the window filled
+let applied=-1;
+function tick(){
+  const t=clk(),i=segAt(t);
+  if(i!==applied){applied=i;syncAll()}
+  updateWindow();
+  const s=stationAt(uAt(t));if(s!==station){station=s;ui()}
+  const nx=SCHED[i+1];tickT=setTimeout(tick,nx?Math.max(5,Math.min(250,nx.t-t)):250);
+}
+function kick(){clearTimeout(tickT);tick()}
+const LABEL={straight:'straight',bendL:'bend left',bendR:'bend right',barn:'barn, in',house:'house, in'};
+const LAYOUT={barn:['hay and cart','stalls','hay loft'],house:['hall and stair','parlour','portrait hall']};
+const kindOf=k=>isExit(k)?ROUTE[(k+NS-1)%NS].kind+', out':LABEL[ROUTE[k].kind]+(INNER(ROUTE[k].kind)?` (${LAYOUT[ROUTE[k].kind][ROUTE[k].variant]})`:'')+(k===10?' (calm)':'');
+function ui(){
+  $('stLabel').textContent=`seed ${SEED} · station ${station} / 12 · ${kindOf(station)}`;
+  $('hud').innerHTML=ROUTE.map((r,i)=>`<span data-s="${i}" class="k-${isExit(i)?ROUTE[(i+NS-1)%NS].kind:r.kind}${i===station?' cur':''}">${i} ${kindOf(i)}</span>`).join('');
+}
+$('hud').addEventListener('click',e=>{const d=e.target.closest('[data-s]');if(d)jump(+d.dataset.s)});
+$('adv').onclick=advance;$('back').onclick=back;
+$('auto').onclick=()=>{if(autoT){clearTimeout(autoT);autoT=null;$('auto').classList.remove('on');return}
+  $('auto').classList.add('on');const step=()=>{const T=advance();autoT=setTimeout(step,T+PAUSE)};step()};
+$('cHud').onchange=e=>document.body.classList.toggle('nohud',!e.target.checked);
+$('cSafe').onchange=e=>stage.classList.toggle('showSafe',e.target.checked);
+$('cQ').onchange=e=>stage.classList.toggle('noQ',!e.target.checked);
+$('cRm').onchange=()=>cutTo(uAt(clk()));
+function fit(){const f=$('fit');stage.style.transform=`scale(${f.clientWidth/W})`}
+addEventListener('resize',fit);
+if(qs.has('bare'))document.body.classList.add('bare');
+if(qs.has('noq')){stage.classList.add('noQ');$('cQ').checked=false}
+if(qs.has('nosafe')||qs.has('bare')){stage.classList.remove('showSafe');$('cSafe').checked=false}
+const hs=/s=(\d+)/.exec(location.hash);
+SCHED=[{t:0,u:S[hs?(+hs[1])%NS:0],v:rmOn()?0:WANDER}];station=stationAt(SCHED[0].u);
+fit();ui();tick();
+// sampling handle (scripts/forest-blob-check.mjs, with Playwright's fake clock): freeze() pins every animation to the
+// page clock's current time and pauses it; clock.runFor() then moves time on and the next freeze() shows it
+const anims=()=>stage.getAnimations({subtree:true});
+window.__route={route:ROUTE,seed:SEED,S,L,palette:{fog:PAL.fog[2],trunk:PAL.trunk[2],ground:PAL.ground[2],moon:PAL.moon[2],
+    swatch:{fog:FOG('#62666e'),trunk:TRK('#6e5436'),ground:GRD('#4c3f30'),moon:MOON('#e3813a')}},landmarks:LMLIST,advance,back,jump,get goal(){return goal===null?null:stationAt(goal)},get station(){return station},walkDur,clk,u:()=>uAt(clk()),v:()=>vAt(clk()),
+  freeze(){frozen=true;updateWindow();syncAll()},unfreeze(){frozen=false;syncAll()},
+  internals:{ITEMS,LIVE,LIFE,camAt,pathPt,lifePlane,uAt,clk},
+  stats(){return{elements:LIVE.size,anims:anims().length,u:+uAt(clk()).toFixed(2),v:+vAt(clk()).toFixed(3),maxK:+STAT.maxK.toFixed(2),stuck:STAT.stuck,total:ITEMS.length}}};
+})();
+</script>
+</body>
+</html>
