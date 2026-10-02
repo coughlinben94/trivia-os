@@ -13,7 +13,7 @@ const STEM_KEYS = ['drums', 'bass', 'other', 'vocals']
 // created_at/status/artist/error_text) never selected — a song already
 // `ready` at page-load time would otherwise render its scrubber with no
 // audio to fetch until the next realtime UPDATE happened to arrive.
-const SONG_LIST_COLUMNS = 'id, title, created_at, status, artist, error_text, drums_url, bass_url, other_url, guitar_url, guitar_status, guitar_error, start_offset_seconds, end_offset_seconds'
+const SONG_LIST_COLUMNS = 'id, title, answer, aliases, created_at, status, artist, error_text, drums_url, bass_url, other_url, guitar_url, guitar_status, guitar_error, start_offset_seconds, end_offset_seconds'
 
 function cleanSpotifyTitle(title) {
   return title
@@ -39,6 +39,32 @@ function guitarStatusLabel(status) {
   }[status] ?? null
 }
 
+// Phone guesses are graded against title, answer and aliases (bendleGuessScoring.js),
+// so a song with alternate names ("Mr. Brightside" / "Mister Brightside") needs them listed.
+function AliasEditor({ song, onSaved }) {
+  const [text, setText] = useState((song.aliases ?? []).join(', '))
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState(null)
+  async function save() {
+    setSaving(true); setErr(null)
+    const aliases = text.split(',').map(a => a.trim()).filter(Boolean)
+    const { error } = await supabase.from('bendle_songs').update({ aliases }).eq('id', song.id)
+    setSaving(false)
+    if (error) { setErr(error.message ?? 'Save failed'); return }
+    onSaved(aliases)
+  }
+  return (
+    <div className="flex flex-col gap-1.5 pl-1">
+      <input aria-label={`Aliases for ${song.title}`} value={text} onChange={e => setText(e.target.value)}
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Other titles teams might type, comma-separated" />
+      <div className="flex items-center gap-2">
+        <button onClick={save} disabled={saving} className="text-xs font-semibold text-[#1a6b4a] disabled:opacity-40">{saving ? 'Saving…' : 'Save aliases'}</button>
+        {err && <span className="text-xs text-red-600">{err}</span>}
+      </div>
+    </div>
+  )
+}
+
 export default function BendleAdmin({ onClose }) {
   const [songs, setSongs] = useState([])
   const [title, setTitle] = useState('')
@@ -49,6 +75,7 @@ export default function BendleAdmin({ onClose }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [expandedId, setExpandedId] = useState(null)
+  const [aliasEditId, setAliasEditId] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -237,11 +264,26 @@ export default function BendleAdmin({ onClose }) {
                         {expandedId === s.id ? '▲ Scrub' : '🎚 Scrub'}
                       </button>
                     )}
+                    {s.status === 'ready' && (
+                      <button
+                        onClick={() => setAliasEditId(id => id === s.id ? null : s.id)}
+                        className={`text-xs shrink-0 ${(s.aliases?.length ?? 0) === 0 ? 'text-amber-600 font-semibold' : 'text-gray-400 hover:text-gray-700'}`}
+                        title="Phone guesses also match these titles"
+                      >
+                        {(s.aliases?.length ?? 0) === 0 ? '＋ Add aliases' : 'Aliases'}
+                      </button>
+                    )}
                     {s.status === 'failed' && (
                       <button onClick={() => handleDeleteFailed(s.id)} className="text-xs text-gray-400 hover:text-red-500 shrink-0" title="Delete and try again">🗑</button>
                     )}
                   </div>
                   {expandedId === s.id && <BendleOffsetScrubber song={s} />}
+                  {aliasEditId === s.id && (
+                    <AliasEditor song={s} onSaved={aliases => {
+                      setSongs(prev => prev.map(x => x.id === s.id ? { ...x, aliases } : x))
+                      setAliasEditId(null)
+                    }} />
+                  )}
                 </li>
               ))}
             </ul>

@@ -12,12 +12,14 @@ import { createRoot } from 'react-dom/client'
 // per-test before rendering.
 let songsFixture = []
 let lastSelectColumns = null
+let lastUpdate = null
 vi.mock('../../lib/supabase.js', () => ({
   supabase: {
     channel: () => ({ on: () => ({ subscribe: () => ({}) }) }),
     removeChannel: () => {},
     from: () => ({
       select: columns => { lastSelectColumns = columns; return { order: () => Promise.resolve({ data: songsFixture }) } },
+      update: payload => ({ eq: (col, id) => { lastUpdate = { payload, col, id }; return Promise.resolve({ error: null }) } }),
     }),
   },
 }))
@@ -72,5 +74,32 @@ describe('<BendleAdmin> song list', () => {
 
     act(() => root.unmount())
     container.remove()
+  })
+})
+
+describe('<BendleAdmin> aliases', () => {
+  const settle = () => act(async () => { await new Promise(r => setTimeout(r, 0)) })
+  it('prompts for aliases on a ready song with none, and saves a comma list', async () => {
+    songsFixture = [
+      { id: 'bnd_1', title: 'Mr. Brightside', answer: 'Mr. Brightside', aliases: [], status: 'ready', artist: 'The Killers', drums_url: 'd', bass_url: 'b', other_url: 'o', start_offset_seconds: 0 },
+      { id: 'bnd_2', title: 'Africa', answer: 'Africa', aliases: ['Africa (Toto)'], status: 'ready', artist: 'Toto', drums_url: 'd', bass_url: 'b', other_url: 'o', start_offset_seconds: 0 },
+    ]
+    const container = document.createElement('div'); document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => { root.render(<BendleAdmin onClose={() => {}} />) })
+    await settle()
+    expect(lastSelectColumns).toContain('aliases')
+    const prompts = [...container.querySelectorAll('button')].filter(b => b.textContent.includes('Add aliases'))
+    expect(prompts).toHaveLength(1)
+    await act(async () => prompts[0].click())
+    const input = container.querySelector('input[aria-label="Aliases for Mr. Brightside"]')
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'Mister Brightside, Brightside')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => [...container.querySelectorAll('button')].find(b => b.textContent === 'Save aliases').click())
+    expect(lastUpdate).toEqual({ payload: { aliases: ['Mister Brightside', 'Brightside'] }, col: 'id', id: 'bnd_1' })
+    expect([...container.querySelectorAll('button')].filter(b => b.textContent.includes('Add aliases'))).toHaveLength(0)
+    act(() => root.unmount()); container.remove()
   })
 })
