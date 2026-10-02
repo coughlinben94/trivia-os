@@ -5,7 +5,8 @@ import { createRoot } from 'react-dom/client'
 
 vi.mock('../../lib/supabase.js', () => ({ supabase: {} }))
 const chime = vi.hoisted(() => vi.fn(() => Promise.resolve(true)))
-vi.mock('../../lib/timerChime.js', () => ({ playTimerChime: chime, unlockTimerAudio: vi.fn() }))
+const warm = vi.hoisted(() => vi.fn(() => Promise.resolve()))
+vi.mock('../../lib/timerChime.js', () => ({ playTimerChime: chime, unlockTimerAudio: vi.fn(), warmTimerChime: warm }))
 
 import { ThemeProvider } from '../shared/ThemeProvider.jsx'
 import TimerOverlay from './TimerOverlay.jsx'
@@ -22,6 +23,7 @@ describe('<TimerOverlay>', () => {
     if (!document.fonts) document.fonts = { add() {}, delete() {}, ready: Promise.resolve() }
     sessionStorage.clear()
     chime.mockClear()
+    warm.mockClear()
     vi.useFakeTimers()
     vi.setSystemTime(1_000_000)
     container = document.createElement('div')
@@ -39,6 +41,15 @@ describe('<TimerOverlay>', () => {
   })
   const withTimer = timer => ({ id: 's', special_event: timer ? { timer } : null })
   const phase = () => container.querySelector('[data-timer-overlay]')?.getAttribute('data-phase')
+
+  it('pre-loads the chime clip when a timer starts, once per timer, and not for an idle overlay', async () => {
+    render(withTimer(null))
+    expect(warm).not.toHaveBeenCalled()
+    render(withTimer(startTimer(60000, Date.now())))
+    expect(warm).toHaveBeenCalledTimes(1)
+    await act(async () => { vi.advanceTimersByTime(2000) }) // ticks do not re-warm
+    expect(warm).toHaveBeenCalledTimes(1)
+  })
 
   it('renders nothing with no timer', () => {
     render(withTimer(null))
