@@ -152,7 +152,8 @@ export default function BendleBoard({ slide, slides, team, theme, preview = fals
   const field = { width: '100%', minHeight: 44, padding: '0.75rem', borderRadius: 10, color: '#111', fontSize: 16 }
   const display = `'${theme?.fonts?.display ?? 'Boogaloo'}', 'Boogaloo', sans-serif`
   const result = revealed && Array.isArray(lockData.bendleResults) ? lockData.bendleResults.find(r => r.teamId === team?.id) : null
-  const answer = typeof lockData.answer === 'string' ? lockData.answer.trim() : ''
+  // Written at the reveal from the graded song row; the slide's own `answer` can be stale.
+  const answer = typeof lockData.bendleAnswer === 'string' ? lockData.bendleAnswer.trim() : ''
   const typedOnly = catalog === 'none' || catalog === 'error'
 
   return (

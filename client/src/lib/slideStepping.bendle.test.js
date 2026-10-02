@@ -13,7 +13,7 @@ const title = { id: 't', order: 1, type: 'shiny-title', roundId: 'r1', data: { i
 const show = (slides, idx) => ({ slides, currentSlideIndex: idx, currentSlideId: [...slides].sort((a, b) => a.order - b.order)[idx].id })
 const dataOf = (patch, id) => patch.slides.find(s => s.id === id).data
 const LOCKED = { bendleLocked: true, bendleLockedAt: '2026-10-02T20:00:00Z' }
-const DONE = { ...LOCKED, bendleRevealed: true, bendleResults: [{ teamId: 'p1', points: 30 }], bendleOverrides: { p1: 30 } }
+const DONE = { ...LOCKED, bendleRevealed: true, bendleResults: [{ teamId: 'p1', points: 30 }], bendleAnswer: 'Africa — Toto', bendleOverrides: { p1: 30 } }
 const deck = (s3extra = {}) => [plain('q0', 0), title, bendle('s1', 2, 0), bendle('s2', 3, 1), bendle('s3', 4, 2, s3extra), plain('q5', 5)]
 
 describe('PHONE_MECHANICS.bendle', () => {
@@ -21,7 +21,7 @@ describe('PHONE_MECHANICS.bendle', () => {
     const m = PHONE_MECHANICS.bendle
     expect(m.lockFields).toEqual(['bendleLocked'])
     expect(m.revealField).toBe('bendleRevealed')
-    expect(m.clearFields).toEqual(['bendleResults', 'bendleLockedAt'])
+    expect(m.clearFields).toEqual(['bendleResults', 'bendleLockedAt', 'bendleAnswer'])
     expect(m.freshClearFields).toEqual(['bendleOverrides'])
     expect([0, 1, 2].map(i => m.lockHere({ bendleStepIndex: i }))).toEqual([false, false, true])
     expect(REVEAL_FIELD.bendle).toBe('bendleRevealed')
@@ -35,7 +35,7 @@ describe('PHONE_MECHANICS.bendle', () => {
     expect(pendingReveal(bendle('s3', 4, 2, DONE))).toBe(null)
   })
   it('unlockPatch clears lock, reveal, results and lock time, keeps overrides', () => {
-    expect(unlockPatch('bendle', DONE)).toEqual({ bendleLocked: false, bendleRevealed: false, bendleResults: null, bendleLockedAt: null })
+    expect(unlockPatch('bendle', DONE)).toEqual({ bendleLocked: false, bendleRevealed: false, bendleResults: null, bendleLockedAt: null, bendleAnswer: null })
   })
   it('lockSlideFor points every step at step 3', () => {
     const slides = deck()
@@ -49,7 +49,7 @@ describe('entry and replay protection', () => {
   it('fresh entry into step 1 clears a stale lock on step 3, overrides included', async () => {
     const patch = await computeNextStep(show(deck(DONE).map(s => s.id === 's3' ? { ...s, data: { ...s.data, bendleRevealed: false } } : s), 1), noTeams)
     expect(patch.current_slide_id).toBe('s1')
-    expect(dataOf(patch, 's3')).toMatchObject({ bendleLocked: false, bendleResults: null, bendleLockedAt: null, bendleOverrides: null })
+    expect(dataOf(patch, 's3')).toMatchObject({ bendleLocked: false, bendleResults: null, bendleLockedAt: null, bendleAnswer: null, bendleOverrides: null })
   })
   it('a fully finished Bendle re-entered from the title keeps its results', async () => {
     const patch = await computeNextStep(show(deck(DONE), 1), noTeams)

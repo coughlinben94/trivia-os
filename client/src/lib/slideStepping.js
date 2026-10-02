@@ -404,7 +404,7 @@ export const PHONE_MECHANICS = {
   // so Join, the remote and the host pane keep working. lockSlideFor finds
   // the step-3 slide from any step. lockHere is optional on any mechanic:
   // when present and false, pendingLockPhase and pendingReveal return null.
-  bendle:   { guard: isBendleShiny, lockHere: d => d.bendleStepIndex === 2, lockFields: ['bendleLocked'], revealField: 'bendleRevealed', clearFields: ['bendleResults', 'bendleLockedAt'],
+  bendle:   { guard: isBendleShiny, lockHere: d => d.bendleStepIndex === 2, lockFields: ['bendleLocked'], revealField: 'bendleRevealed', clearFields: ['bendleResults', 'bendleLockedAt', 'bendleAnswer'],
             // fresh entry only; Unlock keeps the host's per-team points
             freshClearFields: ['bendleOverrides'] },
 }

@@ -87,13 +87,19 @@ describe('<BendleHostPanel>', () => {
   })
   it('after reveal: the answer line, wrapped guesses and a (changed) tag on overrides', async () => {
     const changed = [{ ...results[0], points: 10, overridden: true }, results[1]]
-    await render({ slide: step(2), lockData: { answer: 'Africa – Toto', bendleLocked: true, bendleRevealed: true, bendleResults: changed } })
-    expect(host.textContent).toContain('Answer: Africa – Toto')
+    await render({ slide: step(2), lockData: { answer: 'Stale Song', bendleAnswer: 'Africa — Toto', bendleLocked: true, bendleRevealed: true, bendleResults: changed } })
+    expect(host.textContent).toContain('Answer: Africa — Toto')
+    expect(host.textContent).not.toContain('Stale Song')
     expect(host.querySelector('.truncate')).toBeNull()
     expect(host.querySelector('.max-h-72')).toBeNull()
     const rows = [...host.querySelectorAll('[data-bendle-result]')]
     expect(rows[0].textContent).toContain('(changed)')
     expect(rows[1].textContent).not.toContain('(changed)')
+  })
+  it('no graded label: no Answer line, never the stale slide answer', async () => {
+    await render({ slide: step(2), lockData: { answer: 'Stale Song', bendleLocked: true, bendleRevealed: true, bendleResults: results } })
+    expect(host.textContent).not.toContain('Answer:')
+    expect(host.textContent).not.toContain('Stale Song')
   })
   it('Unlock explains what it does and turns red once armed', async () => {
     await render({ slide: step(2), lockData: { bendleLocked: true } })

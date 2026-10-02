@@ -153,6 +153,8 @@ describe('Bendle host flows', () => {
     expect(writes[0][0]).toBe('s3')
     const published = writes[0][1].data
     expect(published.bendleRevealed).toBe(true)
+    // The Answer label comes from the song row that was graded, in the same write.
+    expect(published.bendleAnswer).toBe('Mr. Brightside — The Killers')
     expect(published.bendleResults.map(r => [r.teamId, r.points])).toEqual([['p1', 30], ['p2', 0], ['p3', 0]])
     const up = upserts()[0].args
     expect(up.find(u => u.id === 't1').scores.r_r1).toEqual({ written: 4, phone: { s3: 30 } })
@@ -204,7 +206,7 @@ describe('Bendle host flows', () => {
     expect(a.updateSlide).toHaveBeenCalledTimes(1)
     const [id, { data }] = a.updateSlide.mock.calls.at(-1)
     expect(id).toBe('s3')
-    expect(data).toMatchObject({ bendleLocked: false, bendleRevealed: false, bendleResults: null, bendleLockedAt: null, bendleOverrides: { p3: 20 } })
+    expect(data).toMatchObject({ bendleLocked: false, bendleRevealed: false, bendleResults: null, bendleLockedAt: null, bendleAnswer: null, bendleOverrides: { p3: 20 } })
   })
   it('A after the reveal still toggles the answer after Prev back to step 1', async () => {
     const a = actions()
@@ -262,6 +264,7 @@ describe('Bendle host flows', () => {
       await act(async () => button('Tap again').click())
       await stall()
       expect(host.textContent).toContain('Could not unlock')
+      expect(host.textContent).toContain('Retry Unlock before you reveal')
       expect(a.updateSlide).not.toHaveBeenCalled()
       expect(button('Unlock').disabled).toBe(false)
     })

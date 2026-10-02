@@ -226,16 +226,19 @@ describe('<BendleBoard>', () => {
   })
   it('reveal shows the answer and a right/wrong mark before the points', async () => {
     const res = (points, guess = { title: 'Africa', artist: 'Toto' }) => ({ teamId: 'p1', teamName: 'Alpha', guess, stepIndex: guess ? 0 : null, correct: points > 0, autoPoints: points, points, overridden: false })
-    await render(step(2, { answer: 'Africa – Toto', bendleLocked: true, bendleRevealed: true, bendleResults: [res(30)] }))
-    expect(host.textContent).toContain('Answer: Africa – Toto')
+    await render(step(2, { answer: 'Stale Song', bendleAnswer: 'Africa — Toto', bendleLocked: true, bendleRevealed: true, bendleResults: [res(30)] }))
+    expect(host.textContent).toContain('Answer: Africa — Toto')
+    expect(host.textContent).not.toContain('Stale Song')
     expect(host.querySelector('[role="status"] svg[data-mark="right"]')).not.toBeNull()
     act(() => root.unmount())
-    await render(step(2, { answer: 'Africa – Toto', bendleLocked: true, bendleRevealed: true, bendleResults: [res(0, { title: 'Rosanna', artist: 'Toto' })] }))
+    await render(step(2, { answer: 'Stale Song', bendleLocked: true, bendleRevealed: true, bendleResults: [res(0, { title: 'Rosanna', artist: 'Toto' })] }))
+    expect(host.textContent).not.toContain('Answer:')
+    expect(host.textContent).not.toContain('Stale Song')
     expect(host.querySelector('[role="status"] svg[data-mark="wrong"]')).not.toBeNull()
     expect(host.textContent).toContain('0 points')
   })
   it('the answer never shows before the reveal', async () => {
-    await render(step(2, { answer: 'Africa – Toto', bendleLocked: true }))
+    await render(step(2, { answer: 'Africa – Toto', bendleAnswer: 'Africa — Toto', bendleLocked: true }))
     expect(host.textContent).not.toContain('Africa')
   })
   it('after "Guesses are locked" Lock In stays disabled; "step moved on" can retry', async () => {

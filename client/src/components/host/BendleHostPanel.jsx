@@ -57,7 +57,8 @@ export default function BendleHostPanel({ slide, lockData = {}, stepIds = [], sh
       : locked
         ? 'Guesses locked. Press A to reveal and score.'
         : 'Step 3. Next plays the clip; the next Next locks guesses.'
-  const answer = typeof lockData.answer === 'string' ? lockData.answer.trim() : ''
+  // Written at the reveal from the graded song row; the slide's own `answer` can be stale.
+  const answer = typeof lockData.bendleAnswer === 'string' ? lockData.bendleAnswer.trim() : ''
   const mainLabel = busy ? 'Working…' : revealed ? '🔁 Retry Scoring' : locked ? 'Reveal & Score (A)' : '🔒 Lock Guesses'
 
   return (

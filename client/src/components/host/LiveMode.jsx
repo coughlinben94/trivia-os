@@ -1330,7 +1330,9 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     } finally { bendleRunRef.current = false; setBendleBusy(false) }
   }
 
-  async function writeBendleScores(slide, results, teams) {
+  // reveal: extra fields published in the same write as bendleResults (the
+  // graded song's Answer label); ignored once the slide is already revealed.
+  async function writeBendleScores(slide, results, teams, reveal = {}) {
     await scoreChainRef.current.run(async () => {
       const { data: scoreboardTeams, error: sbError } = await withTimeout(signal => supabase.from('scoreboard_teams')
         .select('id, show_id, name, scores, sort_order').eq('show_id', show.id).abortSignal(signal), SCORE_CALL_TIMEOUT_MS)
@@ -1339,7 +1341,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       if (results.length > 0 && updates.length === 0) throw new Error('No team matched a scoreboard row')
       if (!slide.data.bendleRevealed) {
         // Publish results and the reveal together: nothing public before A.
-        actions.updateSlide(slide.id, { data: { ...slide.data, bendleResults: results, bendleRevealed: true } })
+        actions.updateSlide(slide.id, { data: { ...slide.data, ...reveal, bendleResults: results, bendleRevealed: true } })
         await actions.flushSlides()
       }
       if (updates.length > 0) {
@@ -1360,6 +1362,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       if (teamsError) throw teamsError
       // Retry after the reveal rescores what the TV already shows.
       let results = slide.data.bendleRevealed && Array.isArray(slide.data.bendleResults) ? slide.data.bendleResults : null
+      const reveal = {}
       if (!results) {
         const stepIds = bendleStepIds(slides, slide)
         const [rowsRes, songRes] = await Promise.all([
@@ -1369,8 +1372,12 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         for (const r of [rowsRes, songRes]) if (r.error) throw r.error
         if (!songRes.data) throw new Error('Bendle song row missing')
         results = gradeBendleGroup({ rows: rowsRes.data, stepIds, song: songRes.data, teams: teams ?? [], overrides: slide.data.bendleOverrides })
+        // From the row that was graded, never the slide's build-time `answer`
+        // (stale once the song is changed or edited).
+        const { title, artist } = songRes.data
+        reveal.bendleAnswer = artist ? `${title} — ${artist}` : title
       }
-      await writeBendleScores(slide, results, teams ?? [])
+      await writeBendleScores(slide, results, teams ?? [], reveal)
       refreshScoresView()
     } catch (error) {
       console.error('Bendle reveal failed:', error)
@@ -1416,7 +1423,9 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       await actions.flushSlides()
     } catch (error) {
       console.error('Bendle unlock failed:', error)
-      setBendleError('Could not unlock. Check connection and retry.')
+      // The delete may have gone through even if the reply never came back:
+      // revealing now could score every team 0, so Unlock must be retried first.
+      setBendleError('Could not unlock. Retry Unlock before you reveal.')
     } finally { bendleRunRef.current = false; setBendleBusy(false) }
   }
 
