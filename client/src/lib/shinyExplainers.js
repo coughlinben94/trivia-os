@@ -38,8 +38,13 @@ export const SHINY_EXPLAINERS = Object.freeze([
     inputType: 'bendle',
     mode: 'rules',
     rendererKey: 'bendle',
-    action: 'Write down the song title as each mix step plays. No phone entry.',
-    scoring: [`Earlier guesses score more: ${BENDLE_STEP_POINTS.join(' / ')} points by step.`],
+    action: 'Write down the song title as each mix step plays.',
+    // Ben, 2026-10-02: Bendle is 30 / 20 / 10 and the card must show the
+    // grading rule — the step you get it right on sets your points.
+    scoring: [
+      `Get it right on step 1 for ${BENDLE_STEP_POINTS[0]}, step 2 for ${BENDLE_STEP_POINTS[1]}, step 3 for ${BENDLE_STEP_POINTS[2]}.`,
+      'No phone entry. Ben checks answers by hand.',
+    ],
     assets: [],
   }),
   Object.freeze({

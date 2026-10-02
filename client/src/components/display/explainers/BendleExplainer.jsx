@@ -9,10 +9,9 @@ import WaveformBars from '../WaveformBars.jsx'
 // song title on paper. Visual only — no audio, no phone entry, and never which
 // stem plays at which step (that is per slide).
 //
-// Deliberately NOT stated here or in the registry copy: how answers across
-// steps are graded (whether an early right answer also counts at later steps,
-// or any penalty for a wrong early guess). Ben has not stated that rule yet;
-// the card shows only the per-step values from BENDLE_STEP_POINTS.
+// Grading rule (Ben, 2026-10-02: "bendle is 30 20 10", card must show it): the
+// step you get it right on sets your points. The registry copy states that;
+// any penalty for a wrong early guess is NOT stated (none is defined in code).
 const STAGES = [
   { step: 'Step 1', bars: 12 },
   { step: 'Step 2', bars: 20 },
