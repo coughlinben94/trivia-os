@@ -267,14 +267,10 @@ export function bendleExtraControls(ctx) {
 
 // 3 REAL sibling slides, one per step (2026-09-08, Ben: "i asked you for
 // three different slides. one each for each diff step" — not parts on one
-// slide). Manual grading, not phone-scored: teams write the answer down,
-// Ben walks around and enters points via Quick Entry like any other
-// question — so no bendleGuessesLocked/bendleRevealed/bendleResults state
-// machine, no BendleBoard phone flow. Each slide carries the real `answer`
-// field, so the standard "A" key answer-reveal overlay (AnswerRevealOverlay
-// in Display.jsx, already generic — reads resolveShinyPart(data).answer on
-// ANY slide) works on Bendle with zero Bendle-specific code, same as a
-// regular question.
+// slide). Teams lock ONE guess on their phones across the three steps
+// (BendleBoard); the lock, results and overrides live on the step-3 slide
+// (PHONE_MECHANICS.bendle, lockHere). Each slide still carries the real
+// `answer` field for the song editor and AnswerRevealOverlay.
 const BENDLE_STEP_COUNT = 3
 
 // ctx: { qNum, roundId, afterId, selectedShinyFmt, shinyQuestion, bendleSongId, bendleSongs }

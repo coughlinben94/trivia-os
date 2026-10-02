@@ -50,6 +50,7 @@ description: Trivia OS — real-time trivia-night platform for Baynes Apple Vall
 8. `references/features.md` — full feature inventory
 9. `references/round-journeys.md` — themed round-transition journey pattern (read before designing any round-intro/round-transition sequence)
 10. `references/shiny-rules-card.md` — shiny title's second "how it works" beat: registry, adding a format, scoring-copy rules (read before any shiny format explainer work)
+    (Bendle phone guess: `docs/superpowers/specs/2026-10-02-bendle-phone-guess-design.md` + `docs/superpowers/plans/2026-10-02-bendle-phone-guess.md` before touching Bendle phone/grading code)
 11. Then: `emil-design-eng` skill before any Framer Motion work
 
 ---
@@ -214,6 +215,21 @@ client/src/
       Movie Chain files       — client/src/components/join/MovieChainBoard.jsx (phone),
                                  client/src/components/display/slides/ShinyMovieChainQuestion.jsx (TV),
                                  client/src/lib/movieChainScoring.js (rules), api/movie-chain.js (Wikidata)
+      Bendle phone guess      — client/src/components/join/BendleBoard.jsx (phone),
+                                 client/src/lib/bendleGuessScoring.js (grading: title + artist where possible, typo tolerance, groups),
+                                 client/src/lib/bendleCatalog.js + public/bendle-catalog.<hash>.json
+                                 (static Wikidata CC0 song list, built once by scripts/build-bendle-catalog.mjs, owner-run;
+                                 bendleCatalogVersion.js is null until built, so phones can only type; no Spotify in the phone path),
+                                 BendleRevealList.jsx (TV), BendleHostPanel.jsx (host).
+                                 One guess per team; lock/reveal/results/overrides live on the step-3 slide
+                                 (PHONE_MECHANICS.bendle.lockHere). Points 30/20/10 by the step live when the team locks.
+                                 DB trigger guard_bendle_phone_answers: live step only, one row per team per group, no update.
+                                 Host Unlock deletes guesses via clear_bendle_group_answers, then reopens.
+                                 Do not use Quick Entry for a phone-played Bendle (points would count twice).
+                                 Spec docs/superpowers/specs/2026-10-02-bendle-phone-guess-design.md, plan docs/superpowers/plans/2026-10-02-bendle-phone-guess.md.
+                                 STATUS (branch feat/bendle-phone-guess): not merged, migration not applied to production.
+                                 Owner steps: apply supabase/migrations/20261002120000_bendle_phone_guess_guard.sql to a throwaway DB first,
+                                 run scripts/build-bendle-catalog.mjs, commit the generated file.
     display/
       ParticleBackground.jsx  — 21 GPU-only ambient themes, three-way routing:
                                  8 keep a bespoke scene, 1 (midnight-galaxy)

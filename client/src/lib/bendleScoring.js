@@ -1,13 +1,9 @@
 // The default tier ladder: earlier layers are harder to guess, so they pay
 // more. Which STEM occupies which position is per-slide (data.bendleTierOrder,
 // edited in SlideEditor's BendleBuilder) — see buildBendleTiers below. Points
-// (30/20/10) are a REFERENCE for Ben's manual grading, not auto-scored
-// (2026-09-08 rebuild: Bendle is 3 real host-advanced slides, graded by hand
-// — teams write the answer down, Ben walks around and enters points via
-// Quick Entry, same as any regular question. No phone guess-lock, no
-// auto-scoring — see docs/superpowers/specs/
-// 2026-09-04-bendle-layered-audio-question-design.md for the original
-// phone-scored design this superseded).
+// (30/20/10) are auto-scored from each team's one phone guess: the step that
+// was live when the team locked sets its points (bendleGuessScoring.js,
+// spec docs/superpowers/specs/2026-10-02-bendle-phone-guess-design.md).
 //
 // Earlier layers pay more so committing on a thinner mix is the right play
 // (2026-09-05, Ben: "i want them to guess earlier, ie less instruments ...
