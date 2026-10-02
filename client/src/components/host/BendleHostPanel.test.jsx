@@ -53,6 +53,7 @@ describe('<BendleHostPanel>', () => {
     const p = await render({ slide: step(2), lockData: { bendleLocked: true } })
     await act(async () => button('Unlock').click())
     expect(p.onUnlock).not.toHaveBeenCalled()
+    await act(async () => { await new Promise(r => setTimeout(r, 450)) })
     await act(async () => button('Tap again').click())
     expect(p.onUnlock).toHaveBeenCalledTimes(1)
   })
@@ -71,5 +72,68 @@ describe('<BendleHostPanel>', () => {
     await render({ slide: step(2), error: 'Could not finish', lockData: { bendleLocked: true, bendleRevealed: true, bendleResults: results } })
     expect(button('Retry Scoring')).toBeTruthy()
     expect(host.textContent).toContain('Could not finish')
+  })
+})
+
+describe('<BendleHostPanel> unlock guard', () => {
+  const base = { stepIds: ['s1', 's2', 's3'], showId: 'show1', busy: false, error: null, slide: step(2), lockData: { bendleLocked: true } }
+  let p
+  const draw = extra => { p = { ...base, onLock: vi.fn(), onReveal: vi.fn(), onUnlock: vi.fn(), onOverride: vi.fn(), ...p, ...extra }; return act(async () => root.render(<BendleHostPanel {...p} />)) }
+  const tap = label => act(async () => button(label).click())
+  const wait = ms => act(async () => { await vi.advanceTimersByTimeAsync(ms) })
+  async function mount() {
+    vi.useFakeTimers()
+    p = undefined
+    host = document.createElement('div'); document.body.append(host); root = createRoot(host)
+    await draw()
+  }
+  afterEach(() => { vi.useRealTimers() })
+
+  it('first tap arms and shows the confirm text', async () => {
+    await mount()
+    await tap('Unlock')
+    expect(host.textContent).toContain('Tap again')
+    expect(p.onUnlock).not.toHaveBeenCalled()
+  })
+  it('a double-click does not unlock', async () => {
+    await mount()
+    await tap('Unlock')
+    await wait(100)
+    await tap('Tap again')
+    expect(p.onUnlock).not.toHaveBeenCalled()
+  })
+  it('a deliberate second tap after the window unlocks once', async () => {
+    await mount()
+    await tap('Unlock')
+    await wait(600)
+    await tap('Tap again')
+    expect(p.onUnlock).toHaveBeenCalledTimes(1)
+  })
+  it('the armed state expires after the timeout', async () => {
+    await mount()
+    await tap('Unlock')
+    await wait(4100)
+    expect(host.textContent).not.toContain('Tap again')
+    await tap('Unlock')
+    expect(p.onUnlock).not.toHaveBeenCalled()
+  })
+  it('unlock then re-lock while armed needs a fresh arm', async () => {
+    await mount()
+    await tap('Unlock')
+    await wait(600)
+    await draw({ lockData: {} })
+    await draw({ lockData: { bendleLocked: true } })
+    await tap('Unlock')
+    expect(p.onUnlock).not.toHaveBeenCalled()
+    expect(host.textContent).toContain('Tap again')
+  })
+  it('busy while armed disarms', async () => {
+    await mount()
+    await tap('Unlock')
+    await wait(600)
+    await draw({ busy: true })
+    await draw({ busy: false })
+    await tap('Unlock')
+    expect(p.onUnlock).not.toHaveBeenCalled()
   })
 })

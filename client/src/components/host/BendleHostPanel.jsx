@@ -2,14 +2,15 @@
 // LiveMode's lock/score pane for Bendle. The lock, results and overrides live
 // on the step-3 slide (lockData); steps 1-2 only show how many teams have
 // locked. Unlock deletes every team's guess, so it takes two taps.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import { BENDLE_OVERRIDE_POINTS, guessLabel } from '../../lib/bendleGuessScoring.js'
 
 const POLL_MS = 3000
 const CONFIRM_MS = 4000
+const DOUBLE_TAP_MS = 400 // a second click this soon is a double-click, not a confirm
 
-export default function BendleHostPanel({ slide, lockData = {}, stepIds = [], showId, busy = false, error = null, onLock, onReveal, onUnlock, onOverride }) {
+export default function BendleHostPanel({ slide, lockData = {}, stepIds = [], showId, busy = false, error = null, onLock, onReveal, onUnlock = () => {}, onOverride = () => {} }) {
   const step = (slide?.data?.bendleStepIndex ?? 0) + 1
   const isLockStep = step === 3
   const locked = !!lockData.bendleLocked
@@ -17,6 +18,7 @@ export default function BendleHostPanel({ slide, lockData = {}, stepIds = [], sh
   const results = Array.isArray(lockData.bendleResults) ? lockData.bendleResults : null
   const [counts, setCounts] = useState(null)
   const [confirmUnlock, setConfirmUnlock] = useState(false)
+  const armedAt = useRef(0)
   const idsKey = stepIds.filter(Boolean).join('|')
 
   useEffect(() => {
@@ -36,6 +38,9 @@ export default function BendleHostPanel({ slide, lockData = {}, stepIds = [], sh
     const t = setInterval(poll, POLL_MS)
     return () => { dead = true; clearInterval(t) }
   }, [showId, idsKey, revealed])
+
+  // any change to the lock, the busy flag or the slide drops a half-finished unlock
+  useEffect(() => { setConfirmUnlock(false) }, [locked, busy, slide?.id])
 
   useEffect(() => {
     if (!confirmUnlock) return undefined
@@ -94,10 +99,12 @@ export default function BendleHostPanel({ slide, lockData = {}, stepIds = [], sh
       {isLockStep && locked && (
         <button
           onClick={() => {
-            if (!confirmUnlock) { setConfirmUnlock(true); return }
+            if (!confirmUnlock) { armedAt.current = Date.now(); setConfirmUnlock(true); return }
+            if (Date.now() - armedAt.current < DOUBLE_TAP_MS) return
             setConfirmUnlock(false)
             onUnlock()
           }}
+          onBlur={() => setConfirmUnlock(false)}
           disabled={busy}
           className="w-full mt-2 min-h-[44px] py-2 rounded-lg border border-gray-200 text-gray-500 text-xs font-semibold hover:bg-gray-50 disabled:opacity-40"
         >
