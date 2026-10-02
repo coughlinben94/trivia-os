@@ -364,7 +364,8 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
 
       {listShown && <BendleRevealList results={data.bendleResults} theme={theme} />}
 
-      {loadState === 'loading' && !isPreview && (
+      {/* Not under the reveal list: it would only take room from it for a moment. */}
+      {loadState === 'loading' && !isPreview && !listShown && (
         <p style={{ margin: 0, color: `${text}60`, fontSize: '1.3rem', fontFamily: bodyFont }}>Loading song…</p>
       )}
       {loadState === 'error' && (

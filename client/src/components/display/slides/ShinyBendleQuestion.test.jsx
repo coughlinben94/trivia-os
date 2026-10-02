@@ -348,6 +348,17 @@ describe('<ShinyBendleQuestion>', () => {
       expect(container.textContent).not.toContain('Name it')
       expect(container.textContent).not.toContain('pts')
     })
+    it('hides "Loading song…" while the reveal list is up (it would only steal list room)', async () => {
+      const song = mkSong()
+      const gate = deferred(); H.gates.drums = gate.promise
+      const results = [{ teamId: 'p1', teamName: 'Alpha', guess: null, stepIndex: null, correct: false, autoPoints: 0, points: 0, overridden: false }]
+      await render(slideFor(song, { bendleStepIndex: 2, bendleLocked: true, bendleRevealed: true, bendleResults: results }), playing('s1'))
+      await settle()
+      expect(container.querySelectorAll('[role="listitem"]')).toHaveLength(1)
+      expect(container.textContent).not.toContain('Loading song')
+      gate.resolve()
+      await settle()
+    })
     it('bendleRevealed with an empty bendleResults keeps the old layout', async () => {
       const song = mkSong()
       await render(slideFor(song, { bendleStepIndex: 2, text: 'Name it', bendleRevealed: true, bendleResults: [] }), playing('s1'))
