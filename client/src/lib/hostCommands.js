@@ -114,6 +114,9 @@ export function planHostCommand({ cmd, via, args = {}, expectSlideId = null, sen
       if (remote && (ctx.gate == null || ctx.gate === 'reveal-owed' || args.expectGate !== ctx.gate)) {
         return { refuse: 'gate-changed' }
       }
+      // Bendle step 3: the clip plays before the lock (spec 2026-10-02:
+      // play, lock, A, Next). Every other mechanic keeps lock-first.
+      if (ctx.audioPending && ctx.lockPhase === 'bendle') return { run: 'play-audio' }
       if (ctx.lockPhase) {
         if (ctx.lockCountdownRunning) return { refuse: 'locking' }
         // The lock would be refused by its preCheck WITHOUT closing the phase, so a
@@ -129,13 +132,17 @@ export function planHostCommand({ cmd, via, args = {}, expectSlideId = null, sen
       return { run: 'prev', cancelPending: !button }
     case 'answer': {
       if (ctx.scoringBusy) return { refuse: 'scoring' }
+      // answerHeld: a Bendle slide whose answer must not show yet (steps 1-2,
+      // or step 3 before the lock). Hiding a showing answer is still allowed.
       if (!remote) {
         if (ctx.revealPending) return { run: 'reveal-slide' }
+        if (ctx.answerHeld && !ctx.answerReveal) return { refuse: 'answer-held' }
         return { run: 'set-answer-reveal', value: !ctx.answerReveal }
       }
       const value = args.value === true
       if (value && ctx.revealPending) return { run: 'reveal-slide' }
       if (value && ctx.phoneRevealed) return { run: 'noop' }
+      if (value && ctx.answerHeld) return { refuse: 'answer-held' }
       return setTo('set-answer-reveal', value, ctx.answerReveal)
     }
     case 'scoreboard':

@@ -3,6 +3,7 @@ import { parseWagerNumber } from './wagerScoring.js'
 import { HUES_CUES_CODE_RE } from './huesCuesGrid.js'
 import { dropOptions } from './dropScoring.js'
 import { movieChainConfigError } from './movieChainScoring.js'
+import { bendleConfigError } from './bendleGuessScoring.js'
 
 export const HUES_CUES_ANSWER_ERROR = 'Set a correct square before locking — pick one on the grid'
 export const DROP_ANSWER_ERROR = 'Set the correct tile before locking — pick one in the slide editor'
@@ -20,6 +21,7 @@ export function lockRefusal(slide) {
     case 'wager-guesses':
       if (parseWagerNumber(d.answer) == null) return WAGER_ANSWER_ERROR
       return d.wagerTiers == null ? WAGER_TIERS_ERROR : null
+    case 'bendle': return bendleConfigError(d)
     case 'drop': return dropOptions(d).some(o => o.id === d.correctId) ? null : DROP_ANSWER_ERROR
     default: return null
   }

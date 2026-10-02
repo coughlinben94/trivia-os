@@ -65,6 +65,7 @@ export const REFUSAL_TEXT = {
   'nothing-locked': 'Nothing is locked yet',
   'not-locked': 'Answers are not locked yet — press Next to lock them',
   'already-revealed': 'The TV already shows the result — unlock first if you need to redo it',
+  'answer-held': 'Bendle shows the answer after step 3 is locked',
   'laptop-only': 'Rescore a horse race on the laptop',
   error: 'Something went wrong on the laptop — check the laptop',
   // Phase 2b: jukebox (through /display), volume, Duck, soundboard.

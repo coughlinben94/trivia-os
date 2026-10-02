@@ -42,6 +42,8 @@ export function nextPressGate({ slide, nextSlide, audioPending = false, scoringB
   if (saving) return { label: 'Saving scores…', gate: 'saving' }
   const d = slide?.data
   const phase = slide ? pendingLockPhase(slide) : null
+  // Bendle step 3 plays its clip before the lock (hostCommands.js 'next').
+  if (phase === 'bendle' && audioPending) return { label: 'Play clip', gate: 'audio' }
   if (phase) {
     if (d?.lockCountdownStartedAt) return { label: 'Locking…', gate: 'locking' }
     return { label: phase === 'wager-tiers' ? 'Lock wagers' : 'Lock answers', gate: 'lock' }
