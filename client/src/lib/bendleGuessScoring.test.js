@@ -205,3 +205,23 @@ describe('group helpers', () => {
     expect(bendleConfigError({ shinyGroupId: 'g1' })).toMatch(/Pick a song/)
   })
 })
+
+describe('non-Latin titles', () => {
+  it('keeps letters and digits from any script', () => {
+    expect(normalizeText('千と千尋')).not.toBe('')
+    expect(normalizeText('Кино')).not.toBe('')
+  })
+  it('grades Cyrillic and CJK guesses against the same title', () => {
+    const kino = { title: 'Кино', answer: '', aliases: [], artist: null }
+    const sen = { title: '千と千尋', answer: '', aliases: [], artist: null }
+    expect(gradeGuess({ title: 'кино', artist: null }, kino)).toBe(true)
+    expect(gradeGuess({ title: '千と千尋', artist: null }, sen)).toBe(true)
+    expect(gradeGuess({ title: 'Кино', artist: null }, sen)).toBe(false)
+    expect(parseGuess({ title: '千と千尋' })).not.toBe(null)
+  })
+  it('a punctuation-only guess still normalizes to empty and never matches', () => {
+    expect(normalizeText('?!...')).toBe('')
+    expect(gradeGuess({ title: '?!...', artist: null }, { title: '!!!', answer: '', aliases: [] })).toBe(false)
+    expect(parseGuess({ title: '?!...' })).toBe(null)
+  })
+})
