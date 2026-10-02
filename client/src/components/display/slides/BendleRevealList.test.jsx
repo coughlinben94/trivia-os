@@ -87,6 +87,8 @@ describe('<BendleRevealList>', () => {
     render([{ ...team(1, 10), overridden: true }, team(2, 30)])
     const rows = [...host.querySelectorAll('[role="listitem"]')]
     expect(rows[0].textContent).toContain('(host)')
+    const tag = [...rows[0].querySelectorAll('span')].find(s => s.textContent === '(host)')
+    expect(tag.style.display).toBe('inline')
     expect(rows[0].getAttribute('aria-label')).toContain('changed by the host')
     expect(rows[1].textContent).not.toContain('(host)')
   })

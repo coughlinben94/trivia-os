@@ -75,7 +75,7 @@ export default function BendleRevealList({ results, theme }) {
             <span style={{ ...cell, fontStyle: r.guess ? 'normal' : 'italic' }}>{label}</span>
             <span style={scored ? { opacity: 0.8 } : undefined}>
               {r.guess && r.stepIndex != null ? `Step ${r.stepIndex + 1}` : ''}
-              {r.overridden && <span style={{ display: 'block' }}>(host)</span>}
+              {r.overridden && <span style={{ display: 'inline', marginLeft: '0.3em' }}>(host)</span>}
             </span>
             <span style={{ color: scored ? SHINY_GOLD : `${text}b3`, fontWeight: 700, textAlign: 'right' }}>{scored ? `+${r.points}` : '0'}</span>
           </motion.div>
