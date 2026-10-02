@@ -4,9 +4,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 
-const db = { rows: [], insertError: null, inserts: [] }
+const db = { rows: [], insertError: null, inserts: [], readGate: null }
 vi.mock('../../lib/supabase.js', () => ({ supabase: { from: () => ({
-  select: () => ({ eq: () => ({ in: (_c, ids) => Promise.resolve({ data: db.rows.filter(r => ids.includes(r.slide_id)), error: null }) }) }),
+  select: () => ({ eq: () => ({ in: (_c, ids) => {
+    const res = { data: db.rows.filter(r => ids.includes(r.slide_id)), error: null } // snapshot at call time
+    return db.readGate ? db.readGate.then(() => res) : Promise.resolve(res)
+  } }) }),
   insert: async payload => { db.inserts.push(payload); if (db.insertError) return { error: db.insertError }; db.rows.push({ slide_id: payload.slide_id, answer: payload.answer }); return { error: null } },
 }) } }))
 const { default: BendleBoard, saveErrorKind } = await import('./BendleBoard.jsx')
@@ -18,18 +21,24 @@ const theme = { colors: { text: '#fff', highlight: '#f5c842' }, fonts: { body: '
 const step = (i, extra = {}) => ({ id: `s${i + 1}`, showId: 'show1', type: 'question',
   data: { isShiny: true, shinyInputSchema: { type: 'bendle' }, shinyGroupId: 'g1', bendleStepIndex: i, text: 'Name that song', ...extra } })
 const team = { id: 'p1', showId: 'show1' }
-let root, host
+let root, host, lastProps
 beforeEach(() => {
-  db.rows = []; db.insertError = null; db.inserts = []
+  db.rows = []; db.insertError = null; db.inserts = []; db.readGate = null
   globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ rows: ROWS }) }))
 })
 afterEach(() => { act(() => root?.unmount()); host?.remove(); vi.useRealTimers() })
 const tick = (ms = 0) => act(() => new Promise(r => setTimeout(r, ms)))
 async function render(slide, { slides = [step(0), step(1), step(2)], onAnswered = vi.fn(), catalogUrl = `/cat-${++urlN}.json` } = {}) {
   host = document.createElement('div'); document.body.append(host); root = createRoot(host)
+  lastProps = { slides, onAnswered, catalogUrl }
   await act(async () => root.render(<BendleBoard slide={slide} slides={slides.map(s => s.id === slide.id ? slide : s)} team={team} theme={theme} onAnswered={onAnswered} catalogUrl={catalogUrl} />))
   await tick()
   return onAnswered
+}
+async function rerender(slide) {
+  const { slides, onAnswered, catalogUrl } = lastProps
+  await act(async () => root.render(<BendleBoard slide={slide} slides={slides.map(s => s.id === slide.id ? slide : s)} team={team} theme={theme} onAnswered={onAnswered} catalogUrl={catalogUrl} />))
+  await tick()
 }
 async function type(label, value) {
   const input = host.querySelector(`input[aria-label="${label}"]`)
@@ -124,6 +133,47 @@ describe('<BendleBoard>', () => {
     expect(saveErrorKind({ code: '23505', message: 'duplicate key' })).toBe('duplicate')
     expect(saveErrorKind({ message: 'bendle_no_group' })).toBe('config')
     expect(saveErrorKind(new Error('timeout'))).toBe('network')
+  })
+  it('host Unlock reopens the board even while the old row still reads back', async () => {
+    db.rows = [{ slide_id: 's1', answer: { title: 'Africa', artist: 'Toto', source: 'catalog', qid: null } }]
+    const onAnswered = await render(step(2, { bendleLocked: true }))
+    expect(host.textContent).toContain('Locked in at step 1')
+    await rerender(step(2, { bendleLocked: false })) // RPC delete not committed yet: row still there
+    await tick()
+    expect(host.textContent).not.toContain('Locked in')
+    expect(host.querySelector('input[aria-label="Search for the song"]')).not.toBeNull()
+    expect(onAnswered).toHaveBeenLastCalledWith(false)
+  })
+  it('a stale read that lands after Unlock does not restore "Locked in"', async () => {
+    db.rows = [{ slide_id: 's1', answer: { title: 'Africa', artist: 'Toto', source: 'catalog', qid: null } }]
+    let release
+    db.readGate = new Promise(r => { release = r })
+    const onAnswered = await render(step(2, { bendleLocked: true })) // mount read in flight
+    await rerender(step(2, { bendleLocked: false }))
+    db.readGate = null
+    await act(async () => { release(); await Promise.resolve() })
+    await tick()
+    expect(host.textContent).not.toContain('Locked in')
+    expect(host.querySelector('input[aria-label="Search for the song"]')).not.toBeNull()
+    expect(onAnswered).toHaveBeenLastCalledWith(false)
+  })
+  it('a duplicate whose read-back finds nothing tells the team to reload', async () => {
+    await render(step(0))
+    db.insertError = { message: 'bendle_already_guessed', code: '23505' }
+    await type('Search for the song', 'Africa')
+    await act(async () => button('Use what I typed').click())
+    await act(async () => button('Lock In').click())
+    await tick()
+    expect(host.querySelector('[role="alert"]').textContent).toContain('Already locked in. Reload to see your guess.')
+  })
+  it('no song list built yet: no load error, typed path works', async () => {
+    await render(step(0), { catalogUrl: null })
+    expect(host.textContent).not.toContain('Song list did not load')
+    expect(globalThis.fetch).not.toHaveBeenCalled()
+    await type('Search for the song', 'Africa')
+    await act(async () => button('Use what I typed').click())
+    await act(async () => button('Lock In').click())
+    expect(db.inserts[0].answer.source).toBe('typed')
   })
   it('a double tap on Lock In writes once', async () => {
     await render(step(0))

@@ -38,13 +38,18 @@ export default function BendleBoard({ slide, slides, team, theme, preview = fals
   const [query, setQuery] = useState(draft?.query ?? '')
   const [choice, setChoice] = useState(draft?.choice ?? null) // { source:'catalog', title, artist } | { source:'typed' } | null
   const [artist, setArtist] = useState(draft?.artist ?? '')
-  const [catalog, setCatalog] = useState(null) // null loading | 'error' | index
+  const [catalog, setCatalog] = useState(null) // null loading | 'none' (no list built) | 'error' | index
   const [results, setResults] = useState([])
   const [saved, setSaved] = useState(null) // { stepIndex, guess }
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [recheck, setRecheck] = useState(0)
+  const [lockOns, setLockOns] = useState(0)
   const prevLocked = useRef(groupLocked)
+  const readGen = useRef(0) // bumped on Unlock: any read started before it is stale
+  const readbackRef = useRef(false) // next read is the read-back after a duplicate save
+  const lockedBoxRef = useRef(null)
+  const justLocked = useRef(false)
   const busyRef = useRef(false) // state lags a same-tick double tap; the ref does not
 
   const ink = theme?.colors?.text ?? '#fff'
@@ -54,6 +59,7 @@ export default function BendleBoard({ slide, slides, team, theme, preview = fals
     : choice ? { title: choice.title, artist: choice.artist, source: 'catalog', qid: null } : null
 
   useEffect(() => {
+    if (!catalogUrl) { setCatalog('none'); return undefined }
     let dead = false
     loadBendleCatalog(catalogUrl).then(ix => { if (!dead) setCatalog(ix) }, () => { if (!dead) setCatalog('error') })
     return () => { dead = true }
@@ -62,29 +68,42 @@ export default function BendleBoard({ slide, slides, team, theme, preview = fals
   useEffect(() => {
     if (preview || !team?.id || !idsKey) return undefined
     let dead = false
+    const gen = readGen.current
+    const readback = readbackRef.current
+    readbackRef.current = false
     const ids = idsKey.split('|')
+    const missing = () => { if (!dead && readback && gen === readGen.current) setError('Already locked in. Reload to see your guess.') }
     supabase.from('phone_answers').select('slide_id, answer').eq('team_id', team.id).in('slide_id', ids)
       .then(({ data: rows }) => {
-        if (dead || !rows?.length) return
-        const best = rows
+        if (dead || gen !== readGen.current) return
+        const best = (rows ?? [])
           .map(r => ({ stepIndex: stepIds.indexOf(r.slide_id), guess: parseGuess(r.answer) }))
           .filter(r => r.stepIndex >= 0)
           .sort((a, b) => a.stepIndex - b.stepIndex)[0]
         if (best) setSaved(best)
-      }, () => {})
+        else missing()
+      }, missing)
     return () => { dead = true }
-  }, [preview, team?.id, idsKey, recheck, groupLocked]) // eslint-disable-line react-hooks/exhaustive-deps
+    // Reads on mount, after a duplicate save, and when the host locks; never on
+    // Unlock (the host's delete may not have committed, so it would read the old row).
+  }, [preview, team?.id, idsKey, recheck, lockOns]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Host Unlock deletes every guess: a phone that was locked starts over.
+  // Host Unlock deletes every guess: a phone that was locked starts over, and
+  // a read already in flight must not put the old guess back.
   useEffect(() => {
-    if (prevLocked.current && !groupLocked) setSaved(null)
+    if (!prevLocked.current && groupLocked) setLockOns(n => n + 1)
+    if (prevLocked.current && !groupLocked) { readGen.current += 1; setSaved(null) }
     prevLocked.current = groupLocked
   }, [groupLocked])
+
+  useEffect(() => {
+    if (saved && justLocked.current) { justLocked.current = false; lockedBoxRef.current?.focus() }
+  }, [saved])
 
   useEffect(() => { onAnswered?.(!!saved) }, [saved, onAnswered])
 
   useEffect(() => {
-    if (!catalog || catalog === 'error') { setResults([]); return undefined }
+    if (!Array.isArray(catalog)) { setResults([]); return undefined }
     const t = setTimeout(() => setResults(searchCatalog(catalog, query, 8)), SEARCH_DEBOUNCE_MS)
     return () => clearTimeout(t)
   }, [catalog, query])
@@ -102,11 +121,12 @@ export default function BendleBoard({ slide, slides, team, theme, preview = fals
         new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), MAX_SAVE_MS)),
       ])
       if (saveError) throw saveError
+      justLocked.current = true
       setSaved({ stepIndex, guess })
       drafts.delete(draftKey)
     } catch (caught) {
       const kind = saveErrorKind(caught)
-      if (kind === 'duplicate') setRecheck(n => n + 1) // already locked (maybe another phone): read it back
+      if (kind === 'duplicate') { readbackRef.current = true; setRecheck(n => n + 1) } // already locked (maybe another phone): read it back
       else if (kind === 'moved') setError('The step moved on. Tap Lock In again.')
       else if (kind === 'locked') setError('Guesses are locked.')
       else if (kind === 'config') setError('This Bendle is not set up right. Ask the host to recreate it.')
@@ -121,7 +141,7 @@ export default function BendleBoard({ slide, slides, team, theme, preview = fals
   const result = revealed && Array.isArray(lockData.bendleResults) ? lockData.bendleResults.find(r => r.teamId === team?.id) : null
 
   return (
-    <section style={{ color: ink, display: 'grid', gap: '0.9rem', fontFamily: theme?.fonts?.body }}>
+    <section style={{ color: ink, display: 'grid', gap: '0.9rem', fontFamily: `'${theme?.fonts?.body ?? 'DM Sans'}', 'DM Sans', sans-serif` }}>
       <p style={{ margin: 0, fontSize: '1.1rem', lineHeight: 1.35 }}>{data.text || 'Name that song.'}</p>
 
       {revealed ? (
@@ -132,7 +152,7 @@ export default function BendleBoard({ slide, slides, team, theme, preview = fals
           </> : <p style={{ margin: 0 }}>No guess from your team{result?.points > 0 ? ` · +${result.points} points` : ''}.</p>}
         </div>
       ) : saved ? (
-        <div style={box} role="status">
+        <div style={box} role="status" tabIndex={-1} ref={lockedBoxRef}>
           <p style={{ margin: 0, fontFamily: display, fontSize: '1.3rem' }}>✓ Locked in at step {saved.stepIndex + 1}</p>
           <p style={{ margin: '0.4rem 0 0' }}>Your guess: {guessLabel(saved.guess)}</p>
           <p style={{ margin: '0.4rem 0 0', opacity: 0.8 }}>Waiting for the reveal.</p>
@@ -140,7 +160,8 @@ export default function BendleBoard({ slide, slides, team, theme, preview = fals
       ) : groupLocked ? (
         <p role="status" style={{ margin: 0 }}>Guesses are locked. No guess from your team.</p>
       ) : <>
-        {data.lockCountdownStartedAt && guess && <p role="alert" style={{ margin: 0, fontFamily: display, fontSize: '1.3rem', color: accent }}>⏱ Lock in now!</p>}
+        {/* One live region per countdown; only its text follows the pick. */}
+        {data.lockCountdownStartedAt && <p role="status" style={{ margin: 0, fontFamily: display, fontSize: '1.3rem', color: accent }}>{guess ? '⏱ Lock in now!' : ''}</p>}
         <input
           type="search" aria-label="Search for the song" value={query} placeholder="Song title or artist"
           autoComplete="off" autoCorrect="off" spellCheck={false}
@@ -149,10 +170,10 @@ export default function BendleBoard({ slide, slides, team, theme, preview = fals
         />
         {catalog === 'error' && <p style={{ margin: 0, fontSize: '0.9rem', opacity: 0.85 }}>Song list did not load. Type the title and tap "Use what I typed".</p>}
         <div style={{ display: 'grid', gap: 6 }}>
-          {results.map(r => {
+          {results.map((r, i) => {
             const picked = choice?.source === 'catalog' && choice.title === r.title && choice.artist === r.artist
             return (
-              <button type="button" key={`${r.title}|${r.artist}`} aria-pressed={picked} onClick={() => { setChoice({ source: 'catalog', title: r.title, artist: r.artist }); setError('') }}
+              <button type="button" key={`${i}|${r.title}|${r.artist}`} aria-pressed={picked} onClick={() => { setChoice({ source: 'catalog', title: r.title, artist: r.artist }); setError('') }}
                 style={{ ...rowBtn, borderColor: picked ? accent : `${ink}44`, borderWidth: picked ? 2 : 1 }}>
                 {picked && <span aria-hidden="true">✓ </span>}<strong>{r.title}</strong>{r.artist ? <span style={{ opacity: 0.8 }}> - {r.artist}</span> : null}
               </button>
