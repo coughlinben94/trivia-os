@@ -190,7 +190,7 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
   const stepIndex = Math.min(Math.max(data.bendleStepIndex ?? 0, 0), tiers.length - 1)
   const answerReveal = !!(show?.answer_reveal ?? show?.showState?.answerReveal)
   const revealed = answerReveal || !!data.bendleRevealed
-  const listShown = !!data.bendleRevealed && Array.isArray(data.bendleResults)
+  const listShown = !!data.bendleRevealed && Array.isArray(data.bendleResults) && data.bendleResults.length > 0
   const shouldReduceMotion = useReducedMotion()
 
   const [song, setSong] = useState(null)
