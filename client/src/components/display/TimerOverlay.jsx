@@ -4,7 +4,7 @@ import { useTheme } from '../shared/ThemeProvider.jsx'
 import AudioBlockedCue from './AudioBlockedCue.jsx'
 import { EASE_OUT, EASE_EXIT } from '../../lib/easings.js'
 import { timerView, shouldChime, calibrateOffset, TIMES_UP } from '../../lib/showTimer.js'
-import { playTimerChime, unlockTimerAudio } from '../../lib/timerChime.js'
+import { playTimerChime, unlockTimerAudio, warmTimerChime } from '../../lib/timerChime.js'
 
 // Host countdown timer, a layer over whatever slide is live (not a slide type).
 // Mounted ONCE in Display.jsx inside the stage, next to ScoreboardOverlay.
@@ -83,6 +83,11 @@ export default function TimerOverlay({ show }) {
       window.removeEventListener('keydown', unlock)
     }
   }, [])
+
+  // Fetch the chime clip as soon as a timer exists, so zero is not waiting on the network.
+  useEffect(() => {
+    if (view.phase !== 'idle' && view.phase !== 'done') warmTimerChime()
+  }, [view.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Chime exactly once per timer id (ref + sessionStorage, so a reload cannot ring
   // it again), and never for a TV that loads long after zero (shouldChime).

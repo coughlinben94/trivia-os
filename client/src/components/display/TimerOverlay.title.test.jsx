@@ -4,7 +4,7 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 
 vi.mock('../../lib/supabase.js', () => ({ supabase: {} }))
-vi.mock('../../lib/timerChime.js', () => ({ playTimerChime: vi.fn(() => Promise.resolve(true)), unlockTimerAudio: vi.fn() }))
+vi.mock('../../lib/timerChime.js', () => ({ playTimerChime: vi.fn(() => Promise.resolve(true)), unlockTimerAudio: vi.fn(), warmTimerChime: vi.fn(() => Promise.resolve()) }))
 
 import { ThemeProvider } from '../shared/ThemeProvider.jsx'
 import TimerOverlay from './TimerOverlay.jsx'
