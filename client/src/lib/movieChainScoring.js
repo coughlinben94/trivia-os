@@ -3,6 +3,10 @@ import { applyPhoneScoreUpdates } from './scoreboardMath.js'
 const QID = /^Q[1-9]\d*$/
 const qid = value => typeof value === 'string' && QID.test(value)
 
+// Fixed tiers (not host-set): at or under the announced movie count, or one
+// movie longer. Anything longer or invalid scores 0. The rules card reads these.
+export const MOVIE_CHAIN_POINTS = Object.freeze({ shortest: 15, oneLonger: 10 })
+
 export function movieChainConfigError(data) {
   const start = data?.movieChainStart?.id
   const end = data?.movieChainEnd?.id
@@ -46,7 +50,8 @@ export function scoreMovieChainSubmission(answer, { startId, endId, announcedCou
   if (!earlierValid) return invalid('earlier-link', movies.length, finalConnected)
   if (!finalConnected) return invalid('final-link', movies.length)
 
-  const points = movies.length <= announcedCount ? 15 : movies.length === announcedCount + 1 ? 10 : 0
+  const points = movies.length <= announcedCount ? MOVIE_CHAIN_POINTS.shortest
+    : movies.length === announcedCount + 1 ? MOVIE_CHAIN_POINTS.oneLonger : 0
   return {
     valid: true,
     finalConnected: true,

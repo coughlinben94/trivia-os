@@ -81,8 +81,12 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
     if (idx < 0) return
     const target = sorted[idx]
     const landing = resolveJumpIndex(sorted, targetSlideId)
+    // The landing slide is the title, whose own currentPart can be left at 1
+    // by an earlier pass (a title with a rules card has two beats) — reset it
+    // too, or the jump opens on the rules card and skips the announce beat.
+    const landingId = sorted[landing].id
     const newSlides = (show.slides ?? []).map(s =>
-      s.id === target.id
+      s.id === target.id || s.id === landingId
         ? { ...s, data: { ...s.data, currentPart: 0 } }
         : s
     )

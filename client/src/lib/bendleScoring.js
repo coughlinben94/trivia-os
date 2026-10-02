@@ -1,7 +1,7 @@
 // The default tier ladder: earlier layers are harder to guess, so they pay
 // more. Which STEM occupies which position is per-slide (data.bendleTierOrder,
 // edited in SlideEditor's BendleBuilder) — see buildBendleTiers below. Points
-// (20/15/10) are a REFERENCE for Ben's manual grading, not auto-scored
+// (30/20/10) are a REFERENCE for Ben's manual grading, not auto-scored
 // (2026-09-08 rebuild: Bendle is 3 real host-advanced slides, graded by hand
 // — teams write the answer down, Ben walks around and enters points via
 // Quick Entry, same as any regular question. No phone guess-lock, no
@@ -12,7 +12,8 @@
 // Earlier layers pay more so committing on a thinner mix is the right play
 // (2026-09-05, Ben: "i want them to guess earlier, ie less instruments ...
 // so theyd get rewarded for doing so"). (2026-09-08, Ben: retuned 30/15/10
-// to 20/15/10 — his call.)
+// to 20/15/10 — his call. 2026-10-01, Ben: "bendle is 30 20 10", so it is
+// 30/20/10 again.)
 //
 // THREE steps, always (2026-09-05, Ben: "all shiny step questions will always
 // be 3 steps") — that's a house rule across the shiny step formats, not a
@@ -31,15 +32,11 @@ export const STEM_LABELS = { drums: 'Drums', bass: 'Bass', other: 'Everything El
 // SlideEditor.jsx's BendleBuilder, which picks the pool per selected song.
 export const AVAILABLE_STEMS = ['drums', 'bass', 'other', 'guitar']
 
-// Position 0/1/2 always pay 20/15/10 — only WHICH stem sits in which
+// Position 0/1/2 always pay 30/20/10 — only WHICH stem sits in which
 // position varies per slide. (2026-09-08, Ben: "what if i wanted bass first
 // drums second sometimes" / "if i want bass first, or guitar first, doesnt
 // matter" — the order itself is the point, not the points.)
-const STEP_POSITIONS = [
-  { points: 20 },
-  { points: 15 },
-  { points: 10 },
-]
+export const BENDLE_STEP_POINTS = Object.freeze([30, 20, 10])
 
 // 'other' keeps the id 'full' it always had (pre-reorder BENDLE_TIERS named
 // its tier that, not 'other') — kept for continuity with any historical
@@ -51,13 +48,13 @@ const TIER_IDS = { drums: 'drums', bass: 'bass', other: 'full' }
 // ['bass', 'drums', 'other']. Falls back to the default order for anything
 // malformed (missing, wrong length) rather than throwing on a live TV.
 export function buildBendleTiers(stepOrder) {
-  const order = Array.isArray(stepOrder) && stepOrder.length === STEP_POSITIONS.length
+  const order = Array.isArray(stepOrder) && stepOrder.length === BENDLE_STEP_POINTS.length
     ? stepOrder
     : DEFAULT_STEP_ORDER
   return order.map((stem, i) => ({
     id: TIER_IDS[stem] ?? stem,
     label: i === 0 ? `${STEM_LABELS[stem] ?? stem} Only` : `+ ${STEM_LABELS[stem] ?? stem}`,
-    points: STEP_POSITIONS[i].points,
+    points: BENDLE_STEP_POINTS[i],
     stems: [stem],
   }))
 }

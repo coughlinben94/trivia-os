@@ -1,6 +1,14 @@
 import { chebyshevDistance, codeToColRow, colRowToCode } from './huesCuesGrid.js'
 import { applyPhoneScoreUpdates } from './scoreboardMath.js'
 
+export const HUES_CUES_SCORE_BANDS = Object.freeze([
+  Object.freeze({ maxDistance: 0, points: 30 }),
+  Object.freeze({ maxDistance: 1, points: 20 }),
+  Object.freeze({ maxDistance: 2, points: 10 }),
+])
+
+const pointsForDistance = distance => HUES_CUES_SCORE_BANDS.find(band => distance <= band.maxDistance)?.points ?? 0
+
 // Absolute scoring, not room-relative like wager — every team is scored only
 // against the true answer, never against each other. No ties to resolve.
 //
@@ -17,7 +25,7 @@ export function scoreHuesCuesRound({ entries, correctAnswer }) {
       return { teamId: e.teamId, teamName: e.teamName ?? null, guess: null, distance: null, points: 0 }
     }
     const distance = chebyshevDistance(guess, correct)
-    const points = distance === 0 ? 30 : distance === 1 ? 20 : distance === 2 ? 10 : 0
+    const points = pointsForDistance(distance)
     return { teamId: e.teamId, teamName: e.teamName ?? null, guess: colRowToCode(guess), distance, points }
   })
   return results.sort((a, b) => {

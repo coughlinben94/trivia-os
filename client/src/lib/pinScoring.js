@@ -3,6 +3,8 @@ import { applyPhoneScoreUpdates } from './scoreboardMath.js'
 import { normalizeTeamName } from './teamColors.js'
 
 export const PIN_POINTS = 10
+export const PIN_WINNER_FRACTION = Object.freeze({ numerator: 2, denominator: 5 })
+export const PIN_MIN_ROOM_FOR_FRACTION = 5
 export const US_BOUNDS = { minLat: 24, maxLat: 50, minLon: -125.5, maxLon: -66 }
 
 export const PIN_SPOT_ERROR = 'Set the true spot first — click the map in the slide editor'
@@ -36,12 +38,14 @@ export function parsePinPaste(text) {
   return pin && isValidPin(pin) ? pin : null
 }
 
-// Top 40% of the room, rounded up, via integer math (no float drift):
-// ceil(2N/5) === floor((2N + 4) / 5). Rooms under 5 teams: closest team only.
+// Top PIN_WINNER_FRACTION of the room, rounded up, via integer math (no float drift).
+// Rooms under PIN_MIN_ROOM_FOR_FRACTION teams: closest team only.
 export function scoringGroupSize(roomSize) {
   if (!Number.isFinite(roomSize) || roomSize <= 0) return 0
   const n = Math.floor(roomSize)
-  return n < 5 ? 1 : Math.floor((2 * n + 4) / 5)
+  if (n < PIN_MIN_ROOM_FOR_FRACTION) return 1
+  const { numerator, denominator } = PIN_WINNER_FRACTION
+  return Math.floor((numerator * n + denominator - 1) / denominator)
 }
 
 // The room = teams that can actually be paid: a live `teams` row that matches

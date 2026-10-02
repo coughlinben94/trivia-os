@@ -174,7 +174,7 @@ describe('<ShinyBendleQuestion>', () => {
     ])
     const [p] = players()
     expect(p.start).toHaveBeenCalledWith(0, 1)
-    expect(container.textContent).toContain('Drums Only · 20 pts')
+    expect(container.textContent).toContain('Drums Only · 30 pts')
     expect(container.textContent).not.toContain('Loading song')
   })
 
@@ -292,7 +292,7 @@ describe('<ShinyBendleQuestion>', () => {
     const song = mkSong()
     await render(slideFor(song, { bendleTierOrder: ['bass', 'drums', 'other'] }))
     await settle()
-    expect(container.textContent).toContain('Bass Only · 20 pts')
+    expect(container.textContent).toContain('Bass Only · 30 pts')
     expect(H.log[0].stem).toBe('bass')
   })
 

@@ -122,3 +122,82 @@ describe('<ShinyTitleSlide> explainer beat', () => {
     expect(skipsLockedBackground(slideAt(1))).toBe(false)
   })
 })
+
+describe('<ShinyTitleSlide> rules cards', () => {
+  let container, root
+  beforeEach(() => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true
+    globalThis.FontFace = class { load() { return Promise.resolve(this) } }
+    if (!document.fonts) document.fonts = { add() {}, delete() {}, ready: Promise.resolve() }
+    if (!Range.prototype.getClientRects) Range.prototype.getClientRects = () => [{}]
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+  afterEach(() => { act(() => root.unmount()); container.remove() })
+
+  const cardFor = inputType => ({
+    id: 'slide-title', type: 'shiny-title', roundId: 'round-1',
+    data: { isShiny: true, shinyGroupId: 'sgrp_x', shinyFormatId: 'fmt_generated_x', shinyInputType: inputType, seriesTheme: 'X', parts: [{}, {}], currentPart: 1 },
+  })
+  const render = slide => act(() => {
+    root.render(<ThemeProvider><ShinyTitleSlide slide={slide} show={{ slides: [slide] }} /></ThemeProvider>)
+  })
+
+  it('wager card shows action, scoring and the scored sample room', async () => {
+    const { SAMPLE_WAGER_RESULTS } = await import('../explainers/WagerExplainer.jsx')
+    render(cardFor('wager'))
+    const el = container.querySelector('[data-testid="shiny-explainer"]')
+    expect(el.textContent).toContain('Pick a wager before you see the question')
+    expect(el.textContent).toContain('Example')
+    expect(el.textContent).toContain('Beat 2 of 4 teams to win')
+    expect(SAMPLE_WAGER_RESULTS.map(r => r.points)).toEqual([20, 0, 10, 0, 0])
+    expect(el.textContent).toContain('B beat 3 of 4 but wagered Fly Close To The Sun, which needs 4.')
+  })
+
+  it('order card shows one scoring answer and one zero', async () => {
+    const { SAMPLE_ORDER_ANSWERS } = await import('../explainers/OrderExplainer.jsx')
+    render(cardFor('order'))
+    const el = container.querySelector('[data-testid="shiny-explainer"]')
+    expect(el.textContent).toContain('Tap the pictures on your phone in order')
+    expect(SAMPLE_ORDER_ANSWERS[0].points).toBeGreaterThan(0)
+    expect(SAMPLE_ORDER_ANSWERS[1].points).toBe(0)
+    expect(el.textContent).toContain('Scores')
+    expect(el.textContent).toContain('Cat and Horse swapped')
+  })
+
+  it('hues-cues sample points come from the real scorer (distance-1 band)', async () => {
+    const { SAMPLE_GUESS_POINTS } = await import('../explainers/HuesCuesExplainer.jsx')
+    const { HUES_CUES_SCORE_BANDS } = await import('../../../lib/huesCuesScoring.js')
+    expect(SAMPLE_GUESS_POINTS).toBe(HUES_CUES_SCORE_BANDS[1].points)
+    render(cardFor('hues-cues'))
+    expect(container.textContent).toContain(`+${HUES_CUES_SCORE_BANDS[1].points} points`)
+  })
+
+  it('choice card follows the stamped shinyMultiSelect; no stamp = generic card', () => {
+    const choice = extra => ({ ...cardFor('choice'), data: { ...cardFor('choice').data, ...extra } })
+    render(choice({ shinyMultiSelect: false }))
+    let el = container.querySelector('[data-testid="shiny-explainer"]')
+    expect(el.textContent).toContain('Tap the one right answer on your phone')
+    expect(el.textContent).not.toContain('Pick every one that fits')
+    render(choice({ shinyMultiSelect: true }))
+    el = container.querySelector('[data-testid="shiny-explainer"]')
+    expect(el.textContent).toContain('Tap every answer that fits on your phone')
+    expect(el.textContent).not.toContain('Pick one')
+    render(choice({}))
+    el = container.querySelector('[data-testid="shiny-explainer"]')
+    expect(el.textContent).toContain('your phone says to pick one or every one that fits')
+    expect(el.textContent).toContain('Pick one')
+    expect(el.textContent).toContain('Pick every one that fits')
+  })
+
+  it('stepping back to beat 0 keeps the same announce card mounted (no entrance replay)', () => {
+    const at = currentPart => ({ ...cardFor('order'), data: { ...cardFor('order').data, currentPart } })
+    render(at(0))
+    const titleNode = [...container.querySelectorAll('*')].find(n => n.textContent === 'X' && n.children.length === 0)
+    expect(titleNode).toBeTruthy()
+    render(at(1))
+    render(at(0))
+    expect(titleNode.isConnected).toBe(true)
+  })
+})

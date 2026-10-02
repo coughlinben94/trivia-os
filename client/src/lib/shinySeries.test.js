@@ -408,6 +408,29 @@ describe('buildShinyTitleSlide / withShinyTitleSlide', () => {
     })
   })
 
+  it.each(['bendle', 'pin', 'hues-cues', 'wager', 'order', 'drop', 'movie-chain', 'choice', 'matching'])('a %s format gets the rules beat and stamps shinyInputType', type => {
+    const { data } = buildShinyTitleSlide({ id: 'fmt_generated_x', name: 'X', icon: '*', input_schema: { type } }, 'sgrp_abc', 'round_1')
+    expect(data.shinyInputType).toBe(type)
+    expect(data.parts).toEqual([{}, {}])
+    expect(data.currentPart).toBe(0)
+  })
+
+  it('a choice format stamps shinyMultiSelect from its schema; absent field stays absent', () => {
+    const build = schema => buildShinyTitleSlide({ id: 'fmt_generated_x', name: 'X', icon: '*', input_schema: schema }, 'sgrp_abc').data
+    expect(build({ type: 'choice', multiSelect: true }).shinyMultiSelect).toBe(true)
+    expect(build({ type: 'choice', multiSelect: false }).shinyMultiSelect).toBe(false)
+    expect(build({ type: 'choice' })).not.toHaveProperty('shinyMultiSelect')
+    // Only choice titles carry it.
+    expect(build({ type: 'order', multiSelect: true })).not.toHaveProperty('shinyMultiSelect')
+  })
+
+  it('a format without a card stamps shinyInputType but stays one beat', () => {
+    const { data } = buildShinyTitleSlide({ id: 'fmt_generated_x', name: 'X', icon: '*', input_schema: { type: 'race' } }, 'sgrp_abc', 'round_1')
+    expect(data.shinyInputType).toBe('race')
+    expect(data).not.toHaveProperty('parts')
+    expect(data).not.toHaveProperty('currentPart')
+  })
+
   it('leaves hostPhotoUrl unset (random pool) and never seeds introDone', () => {
     const { data } = buildShinyTitleSlide(fmt, 'sgrp_abc')
     expect(data).not.toHaveProperty('hostPhotoUrl')
