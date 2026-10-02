@@ -95,7 +95,7 @@ export function parseGuess(answer) {
 
 export function guessLabel(guess) {
   if (!guess) return 'No guess'
-  return guess.artist ? `${guess.title} - ${guess.artist}` : guess.title
+  return guess.artist ? `${guess.title} — ${guess.artist}` : guess.title
 }
 
 const byReveal = (a, b) => b.points - a.points

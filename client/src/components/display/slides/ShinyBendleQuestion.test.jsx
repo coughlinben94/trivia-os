@@ -343,7 +343,7 @@ describe('<ShinyBendleQuestion>', () => {
       expect(container.textContent).toContain('Crazy On You — Heart')
       const items = container.querySelectorAll('[role="listitem"]')
       expect(items).toHaveLength(2)
-      expect(items[0].textContent).toContain('Barracuda - Heart')
+      expect(items[0].textContent).toContain('Barracuda — Heart')
       expect(items[1].textContent).toContain('No guess')
       expect(container.textContent).not.toContain('Name it')
       expect(container.textContent).not.toContain('pts')

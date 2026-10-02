@@ -22,7 +22,7 @@ describe('<BendleRevealList>', () => {
     const rows = [...host.querySelectorAll('[role="listitem"]')]
     expect(rows.map(r => r.dataset.correct)).toEqual(['true', 'false', 'false'])
     expect(rows[0].textContent).toContain('Team 1')
-    expect(rows[0].textContent).toContain('Song 1 - Artist 1')
+    expect(rows[0].textContent).toContain('Song 1 — Artist 1')
     expect(rows[0].textContent).toContain('Step 1')
     expect(rows[0].textContent).toContain('+30')
     expect(rows[1].textContent).toContain('Africa')
@@ -56,7 +56,38 @@ describe('<BendleRevealList>', () => {
     expect(mark.style.color).toBe(rowColor)
     expect(pts.style.color).toBe(rowColor)
     expect(step.style.opacity).toBe('')
-    expect(mark.textContent).toBe('✗')
+    expect(mark.querySelector('svg').dataset.mark).toBe('wrong')
     expect(pts.textContent).toBe('0')
+  })
+  it('marks are inline SVG (no font fallback glyph), hidden from screen readers', () => {
+    render([team(1, 30), team(2, 0)])
+    const [right, wrong] = [...host.querySelectorAll('[role="listitem"]')].map(r => r.children[0])
+    expect(right.querySelector('svg').dataset.mark).toBe('right')
+    expect(wrong.querySelector('svg').dataset.mark).toBe('wrong')
+    expect(right.textContent).toBe('')
+    expect(right.getAttribute('aria-hidden')).toBe('true')
+    expect(host.querySelector('[role="listitem"]').getAttribute('aria-label')).toContain('30 points')
+  })
+  it('two columns let the name and guess wrap to two lines; one column stays one line', () => {
+    render(Array.from({ length: 11 }, (_, i) => team(i, 0, { title: 'Sweet Dreams (Are Made of This)', artist: 'Eurythmics' })))
+    const [, name, guess] = host.querySelector('[role="listitem"]').children
+    expect(guess.style.whiteSpace).toBe('normal')
+    expect(name.style.whiteSpace).toBe('normal')
+    act(() => root.render(<BendleRevealList results={[team(1, 0)]} theme={theme} />))
+    const [, name1, guess1] = host.querySelector('[role="listitem"]').children
+    expect(guess1.style.whiteSpace).toBe('nowrap')
+    expect(name1.style.whiteSpace).toBe('nowrap')
+  })
+  it('one column sizes the name column to the names (fit-content, capped at 40%)', () => {
+    render([team(1, 0)])
+    const list = host.querySelector('[role="list"]')
+    expect(list.dataset.nameColumn).toBe('fit-content(40%)')
+  })
+  it('host-changed rows carry a (host) tag', () => {
+    render([{ ...team(1, 10), overridden: true }, team(2, 30)])
+    const rows = [...host.querySelectorAll('[role="listitem"]')]
+    expect(rows[0].textContent).toContain('(host)')
+    expect(rows[0].getAttribute('aria-label')).toContain('changed by the host')
+    expect(rows[1].textContent).not.toContain('(host)')
   })
 })

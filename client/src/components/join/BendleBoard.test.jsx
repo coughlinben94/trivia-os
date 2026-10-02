@@ -55,7 +55,7 @@ describe('<BendleBoard>', () => {
     const onAnswered = await render(step(0))
     await type('Search for the song', 'mr bright')
     await act(async () => button('Mr. Brightside').click())
-    expect(host.textContent).toContain('Your guess: Mr. Brightside - The Killers')
+    expect(host.textContent).toContain('Your guess: Mr. Brightside — The Killers')
     await act(async () => button('Lock In').click())
     expect(db.inserts[0]).toEqual({ show_id: 'show1', slide_id: 's1', team_id: 'p1', answer: { title: 'Mr. Brightside', artist: 'The Killers', source: 'catalog', qid: null } })
     expect(host.textContent).toContain('Locked in at step 1')
@@ -75,7 +75,7 @@ describe('<BendleBoard>', () => {
     db.rows = [{ slide_id: 's1', answer: { title: 'Africa', artist: 'Toto', source: 'catalog', qid: null } }]
     const onAnswered = await render(step(2))
     expect(host.textContent).toContain('Locked in at step 1')
-    expect(host.textContent).toContain('Africa - Toto')
+    expect(host.textContent).toContain('Africa — Toto')
     expect(host.querySelector('input')).toBeNull()
     expect(onAnswered).toHaveBeenLastCalledWith(true)
   })
@@ -181,6 +181,97 @@ describe('<BendleBoard>', () => {
     await act(async () => button('Use what I typed').click())
     await act(async () => { const b = button('Lock In'); b.click(); b.click() })
     expect(db.inserts).toHaveLength(1)
+  })
+  it('picking a song scrolls Lock In into view (it sits below the fold on a phone)', async () => {
+    const spy = vi.fn()
+    Element.prototype.scrollIntoView = spy
+    try {
+      await render(step(0))
+      await type('Search for the song', 'africa')
+      await act(async () => button('Toto').click())
+      expect(spy).toHaveBeenCalledWith({ block: 'nearest' })
+      expect(spy.mock.contexts.at(-1)).toBe(button('Lock In'))
+      spy.mockClear()
+      await act(async () => button('Use what I typed').click())
+      expect(spy).toHaveBeenCalledWith({ block: 'nearest' })
+    } finally { delete Element.prototype.scrollIntoView }
+  })
+  it('countdown with no pick yet asks for a pick, in the same status line', async () => {
+    // Own group id: drafts survive remounts (module Map), so g1 may hold an earlier test's pick.
+    await render(step(2, { shinyGroupId: 'g-countdown', lockCountdownStartedAt: Date.now() }))
+    const statuses = () => [...host.querySelectorAll('[role="status"]')]
+    expect(statuses()).toHaveLength(1)
+    expect(statuses()[0].textContent).toBe('Pick a song — guesses lock soon')
+    await type('Search for the song', 'Africa')
+    await act(async () => button('Use what I typed').click())
+    expect(statuses()).toHaveLength(1)
+    expect(statuses()[0].textContent).toContain('Lock in now')
+  })
+  it('the artist box has a visible label', async () => {
+    await render(step(0))
+    await type('Search for the song', 'Uptown Funk')
+    await act(async () => button('Use what I typed').click())
+    const label = [...host.querySelectorAll('label')].find(l => l.textContent.includes('Artist (optional)'))
+    expect(label).toBeTruthy()
+    expect(label.querySelector('input')).toBe(host.querySelector('input[aria-label="Artist (optional)"]'))
+  })
+  it('typed-only (no song list built): asks for the title and points the artist to the next box', async () => {
+    await render(step(0), { catalogUrl: null })
+    expect(host.querySelector('input[aria-label="Search for the song"]').placeholder).toBe('Song title')
+    expect(host.textContent).toContain('The artist goes in the next box.')
+    act(() => root.unmount())
+    await render(step(0))
+    expect(host.querySelector('input[aria-label="Search for the song"]').placeholder).toBe('Song title or artist')
+    expect(host.textContent).not.toContain('The artist goes in the next box.')
+  })
+  it('reveal shows the answer and a right/wrong mark before the points', async () => {
+    const res = (points, guess = { title: 'Africa', artist: 'Toto' }) => ({ teamId: 'p1', teamName: 'Alpha', guess, stepIndex: guess ? 0 : null, correct: points > 0, autoPoints: points, points, overridden: false })
+    await render(step(2, { answer: 'Africa – Toto', bendleLocked: true, bendleRevealed: true, bendleResults: [res(30)] }))
+    expect(host.textContent).toContain('Answer: Africa – Toto')
+    expect(host.querySelector('[role="status"] svg[data-mark="right"]')).not.toBeNull()
+    act(() => root.unmount())
+    await render(step(2, { answer: 'Africa – Toto', bendleLocked: true, bendleRevealed: true, bendleResults: [res(0, { title: 'Rosanna', artist: 'Toto' })] }))
+    expect(host.querySelector('[role="status"] svg[data-mark="wrong"]')).not.toBeNull()
+    expect(host.textContent).toContain('0 points')
+  })
+  it('the answer never shows before the reveal', async () => {
+    await render(step(2, { answer: 'Africa – Toto', bendleLocked: true }))
+    expect(host.textContent).not.toContain('Africa')
+  })
+  it('after "Guesses are locked" Lock In stays disabled; "step moved on" can retry', async () => {
+    await render(step(2))
+    db.insertError = { message: 'bendle_locked' }
+    await type('Search for the song', 'Africa')
+    await act(async () => button('Use what I typed').click())
+    await act(async () => button('Lock In').click())
+    expect(host.querySelector('[role="alert"]').textContent).toContain('Guesses are locked')
+    expect(button('Lock In').disabled).toBe(true)
+    await act(async () => button('Lock In').click())
+    expect(db.inserts).toHaveLength(1)
+    // Host Unlock (lock on then off) reopens it.
+    await rerender(step(2, { bendleLocked: true }))
+    await rerender(step(2, { bendleLocked: false }))
+    db.insertError = null
+    await type('Search for the song', 'Africa')
+    await act(async () => button('Use what I typed').click())
+    expect(button('Lock In').disabled).toBe(false)
+  })
+  it('a save in flight disables Lock In', async () => {
+    await render(step(0))
+    let release
+    const gate = new Promise(r => { release = r })
+    const { supabase } = await import('../../lib/supabase.js')
+    const from = supabase.from
+    supabase.from = () => ({ ...from(), insert: async () => { await gate; return { error: { message: 'bendle_not_live' } } } })
+    try {
+      await type('Search for the song', 'Africa')
+      await act(async () => button('Use what I typed').click())
+      await act(async () => button('Lock In').click())
+      expect(button('Saving').disabled).toBe(true)
+      await act(async () => { release(); await gate })
+      await tick()
+      expect(button('Lock In').disabled).toBe(false)
+    } finally { supabase.from = from }
   })
   it('a Bendle with no group id tells the host, not the team connection', async () => {
     await render(step(0))

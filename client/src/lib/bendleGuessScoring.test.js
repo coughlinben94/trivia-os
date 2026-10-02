@@ -122,7 +122,7 @@ describe('step points and guesses', () => {
     expect(parseGuess({ title: 'x'.repeat(500) }).title).toHaveLength(200)
   })
   it('guessLabel', () => {
-    expect(guessLabel({ title: 'Africa', artist: 'Toto' })).toBe('Africa - Toto')
+    expect(guessLabel({ title: 'Africa', artist: 'Toto' })).toBe('Africa — Toto')
     expect(guessLabel({ title: 'Africa', artist: null })).toBe('Africa')
     expect(guessLabel(null)).toBe('No guess')
   })

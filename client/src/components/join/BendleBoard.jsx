@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase.js'
 import { loadBendleCatalog, searchCatalog } from '../../lib/bendleCatalog.js'
 import { BENDLE_CATALOG_URL } from '../../lib/bendleCatalogVersion.js'
 import { bendleLockSlide, bendleStepIds, guessLabel, parseGuess } from '../../lib/bendleGuessScoring.js'
+import { BendleMark } from '../display/slides/BendleRevealList.jsx'
 
 const MAX_SAVE_MS = 8000
 const SEARCH_DEBOUNCE_MS = 100
@@ -51,6 +52,9 @@ export default function BendleBoard({ slide, slides, team, theme, preview = fals
   const lockedBoxRef = useRef(null)
   const justLocked = useRef(false)
   const busyRef = useRef(false) // state lags a same-tick double tap; the ref does not
+  const lockBtnRef = useRef(null)
+  const scrollToLock = useRef(false) // set by a pick; Lock In sits below the fold on a phone
+  const [lockedOut, setLockedOut] = useState(false) // the database said "locked": stop taps until the lock changes
 
   const ink = theme?.colors?.text ?? '#fff'
   const accent = theme?.colors?.highlight ?? '#f5c842'
@@ -91,6 +95,7 @@ export default function BendleBoard({ slide, slides, team, theme, preview = fals
   // Host Unlock deletes every guess: a phone that was locked starts over, and
   // a read already in flight must not put the old guess back.
   useEffect(() => {
+    setLockedOut(false)
     if (!prevLocked.current && groupLocked) setLockOns(n => n + 1)
     if (prevLocked.current && !groupLocked) { readGen.current += 1; setSaved(null) }
     prevLocked.current = groupLocked
@@ -110,8 +115,16 @@ export default function BendleBoard({ slide, slides, team, theme, preview = fals
 
   useEffect(() => { drafts.set(draftKey, { query, choice, artist }) }, [draftKey, query, choice, artist])
 
+  useEffect(() => {
+    if (!scrollToLock.current) return
+    scrollToLock.current = false
+    lockBtnRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [choice])
+
+  function pick(next) { scrollToLock.current = true; setChoice(next); setError('') }
+
   async function lockIn() {
-    if (!guess || saved || groupLocked || busyRef.current) return
+    if (!guess || saved || groupLocked || lockedOut || busyRef.current) return
     if (preview) { setSaved({ stepIndex, guess }); return }
     busyRef.current = true
     setBusy(true); setError('')
@@ -128,7 +141,7 @@ export default function BendleBoard({ slide, slides, team, theme, preview = fals
       const kind = saveErrorKind(caught)
       if (kind === 'duplicate') { readbackRef.current = true; setRecheck(n => n + 1) } // already locked (maybe another phone): read it back
       else if (kind === 'moved') setError('The step moved on. Tap Lock In again.')
-      else if (kind === 'locked') setError('Guesses are locked.')
+      else if (kind === 'locked') { setLockedOut(true); setError('Guesses are locked.') }
       else if (kind === 'config') setError('This Bendle is not set up right. Ask the host to recreate it.')
       else setError('Could not save your guess. Check your connection and try again.')
     } finally { busyRef.current = false; setBusy(false) }
@@ -139,6 +152,8 @@ export default function BendleBoard({ slide, slides, team, theme, preview = fals
   const field = { width: '100%', minHeight: 44, padding: '0.75rem', borderRadius: 10, color: '#111', fontSize: 16 }
   const display = `'${theme?.fonts?.display ?? 'Boogaloo'}', 'Boogaloo', sans-serif`
   const result = revealed && Array.isArray(lockData.bendleResults) ? lockData.bendleResults.find(r => r.teamId === team?.id) : null
+  const answer = typeof lockData.answer === 'string' ? lockData.answer.trim() : ''
+  const typedOnly = catalog === 'none' || catalog === 'error'
 
   return (
     <section style={{ color: ink, display: 'grid', gap: '0.9rem', fontFamily: `'${theme?.fonts?.body ?? 'DM Sans'}', 'DM Sans', sans-serif` }}>
@@ -146,10 +161,11 @@ export default function BendleBoard({ slide, slides, team, theme, preview = fals
 
       {revealed ? (
         <div style={box} role="status">
+          {answer && <p style={{ margin: '0 0 0.4rem' }}>Answer: <strong>{answer}</strong></p>}
           {result?.guess ? <>
             <p style={{ margin: 0 }}>Your guess: <strong>{guessLabel(result.guess)}</strong> (step {result.stepIndex + 1})</p>
-            <p style={{ margin: '0.4rem 0 0', fontWeight: 700 }}>{result.points > 0 ? `+${result.points} points` : 'Not this time · 0 points'}</p>
-          </> : <p style={{ margin: 0 }}>No guess from your team{result?.points > 0 ? ` · +${result.points} points` : ''}.</p>}
+            <p style={{ margin: '0.4rem 0 0', fontWeight: 700 }}><BendleMark right={result.points > 0} /> {result.points > 0 ? `+${result.points} points` : 'Not this time · 0 points'}</p>
+          </> : <p style={{ margin: 0 }}><BendleMark right={result?.points > 0} /> No guess from your team{result?.points > 0 ? ` · +${result.points} points` : ''}.</p>}
         </div>
       ) : saved ? (
         <div style={box} role="status" tabIndex={-1} ref={lockedBoxRef}>
@@ -161,38 +177,42 @@ export default function BendleBoard({ slide, slides, team, theme, preview = fals
         <p role="status" style={{ margin: 0 }}>Guesses are locked. No guess from your team.</p>
       ) : <>
         {/* One live region per countdown; only its text follows the pick. */}
-        {data.lockCountdownStartedAt && <p role="status" style={{ margin: 0, fontFamily: display, fontSize: '1.3rem', color: accent }}>{guess ? '⏱ Lock in now!' : ''}</p>}
+        {data.lockCountdownStartedAt && <p role="status" style={{ margin: 0, fontFamily: display, fontSize: '1.3rem', color: accent }}>{guess ? '⏱ Lock in now!' : 'Pick a song — guesses lock soon'}</p>}
         <input
-          type="search" aria-label="Search for the song" value={query} placeholder="Song title or artist"
+          type="search" aria-label="Search for the song" value={query} placeholder={typedOnly ? 'Song title' : 'Song title or artist'}
           autoComplete="off" autoCorrect="off" spellCheck={false}
           onChange={e => { setQuery(e.target.value); if (choice?.source !== 'typed') setChoice(null) }}
           style={field}
         />
+        {catalog === 'none' && <p style={{ margin: 0, fontSize: '0.9rem', opacity: 0.85 }}>The artist goes in the next box.</p>}
         {catalog === 'error' && <p style={{ margin: 0, fontSize: '0.9rem', opacity: 0.85 }}>Song list did not load. Type the title and tap "Use what I typed".</p>}
         <div style={{ display: 'grid', gap: 6 }}>
           {results.map((r, i) => {
             const picked = choice?.source === 'catalog' && choice.title === r.title && choice.artist === r.artist
             return (
-              <button type="button" key={`${i}|${r.title}|${r.artist}`} aria-pressed={picked} onClick={() => { setChoice({ source: 'catalog', title: r.title, artist: r.artist }); setError('') }}
+              <button type="button" key={`${i}|${r.title}|${r.artist}`} aria-pressed={picked} onClick={() => pick({ source: 'catalog', title: r.title, artist: r.artist })}
                 style={{ ...rowBtn, borderColor: picked ? accent : `${ink}44`, borderWidth: picked ? 2 : 1 }}>
                 {picked && <span aria-hidden="true">✓ </span>}<strong>{r.title}</strong>{r.artist ? <span style={{ opacity: 0.8 }}> - {r.artist}</span> : null}
               </button>
             )
           })}
           {query.trim() && (
-            <button type="button" aria-pressed={choice?.source === 'typed'} onClick={() => { setChoice({ source: 'typed' }); setError('') }}
+            <button type="button" aria-pressed={choice?.source === 'typed'} onClick={() => pick({ source: 'typed' })}
               style={{ ...rowBtn, borderStyle: 'dashed', borderColor: choice?.source === 'typed' ? accent : `${ink}66`, borderWidth: choice?.source === 'typed' ? 2 : 1 }}>
               {choice?.source === 'typed' && <span aria-hidden="true">✓ </span>}Use what I typed: “{query.trim()}”
             </button>
           )}
         </div>
         {choice?.source === 'typed' && (
-          <input aria-label="Artist (optional)" value={artist} placeholder="Artist (optional)" autoComplete="off"
-            onChange={e => setArtist(e.target.value)} style={field} />
+          <label style={{ display: 'grid', gap: 4, fontSize: '0.9rem' }}>
+            Artist (optional)
+            <input aria-label="Artist (optional)" value={artist} autoComplete="off"
+              onChange={e => setArtist(e.target.value)} style={field} />
+          </label>
         )}
         {guess && <p style={{ margin: 0 }}>Your guess: <strong>{guessLabel(guess)}</strong></p>}
-        <button type="button" onClick={lockIn} disabled={!guess || busy}
-          style={{ color: ink, border: `2px solid ${accent}`, borderRadius: 12, minHeight: 48, padding: '0.9rem', fontFamily: display, fontSize: '1.2rem', opacity: !guess || busy ? 0.5 : 1 }}>
+        <button type="button" ref={lockBtnRef} onClick={lockIn} disabled={!guess || busy || lockedOut}
+          style={{ color: ink, border: `2px solid ${accent}`, borderRadius: 12, minHeight: 48, padding: '0.9rem', fontFamily: display, fontSize: '1.2rem', opacity: !guess || busy || lockedOut ? 0.5 : 1 }}>
           {busy ? 'Saving…' : `Lock In at step ${stepIndex + 1}`}
         </button>
         <p style={{ margin: 0, fontSize: '0.85rem', opacity: 0.75 }}>One guess for the whole Bendle. Earlier steps score more.</p>
