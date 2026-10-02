@@ -1048,7 +1048,9 @@ function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, up
                 pointsPerMatch={data.pointsPerMatch ?? 2}
                 onChangePairs={pairs => onChange('pairs', pairs)}
                 onChangePoints={pts => onChange('pointsPerMatch', pts)}
-                onMediaUpload={async file => { const r = await uploadMedia(file); return r?.url }}
+                // The builders read `result?.url` off the full uploadMedia() result ({url, type, filename}); a wrapper
+                // that returned the bare URL made every photo upload here silently do nothing.
+                onMediaUpload={uploadMedia}
               />
               <PhonePreview Board={MatchingBoard} theme={theme} show={show} slide={slide} data={{ ...data, pairs: data.pairs ?? [{ id: 'p0', left: '', right: '' }, { id: 'p1', left: '', right: '' }] }} />
             </>
@@ -1105,7 +1107,7 @@ function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, up
                 onChangeCorrectOrder={order => onChange('correctOrder', order)}
                 onChangePoints={pts => onChange('pointsForOrder', pts)}
                 onBatchChange={onBatchChange}
-                onMediaUpload={async file => { const r = await uploadMedia(file); return r?.url }}
+                onMediaUpload={uploadMedia}
               />
               <PhonePreview Board={OrderBoard} theme={theme} show={show} slide={slide} data={{ ...data, items: orderItems, orderLocked: false }} />
             </>
@@ -1127,7 +1129,7 @@ function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, up
                 onChangeCorrectIds={ids => onChange('correctIds', ids)}
                 onChangePoints={pts => onChange('pointsForChoice', pts)}
                 onBatchChange={onBatchChange}
-                onMediaUpload={async file => { const r = await uploadMedia(file); return r?.url }}
+                onMediaUpload={uploadMedia}
               />
               <PhonePreview Board={ChoiceBoard} theme={theme} show={show} slide={slide} data={{ ...data, options: choiceOptions, choiceLocked: false }} />
             </>
@@ -1143,7 +1145,7 @@ function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, up
                 onChangeOptions={opts => onChange('options', opts)}
                 onBatchChange={onBatchChange}
                 onChangeTotal={n => onChange('dropTotal', n)}
-                onMediaUpload={async file => { const r = await uploadMedia(file); return r?.url }}
+                onMediaUpload={uploadMedia}
               />
               <PhonePreview Board={DropBoard} theme={theme} show={show} slide={slide} data={{ ...data, options: dropTiles, dropLocked: false }} />
             </>
