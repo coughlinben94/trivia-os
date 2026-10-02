@@ -415,11 +415,11 @@ describe('buildShinyTitleSlide / withShinyTitleSlide', () => {
     expect(data.currentPart).toBe(0)
   })
 
-  it('a choice format stamps shinyMultiSelect from its schema; absent field stays absent', () => {
+  it('a choice format always stamps shinyMultiSelect; absent field = single-pick (false)', () => {
     const build = schema => buildShinyTitleSlide({ id: 'fmt_generated_x', name: 'X', icon: '*', input_schema: schema }, 'sgrp_abc').data
     expect(build({ type: 'choice', multiSelect: true }).shinyMultiSelect).toBe(true)
     expect(build({ type: 'choice', multiSelect: false }).shinyMultiSelect).toBe(false)
-    expect(build({ type: 'choice' })).not.toHaveProperty('shinyMultiSelect')
+    expect(build({ type: 'choice' }).shinyMultiSelect).toBe(false)
     // Only choice titles carry it.
     expect(build({ type: 'order', multiSelect: true })).not.toHaveProperty('shinyMultiSelect')
   })

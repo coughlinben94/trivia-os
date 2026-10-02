@@ -116,10 +116,18 @@ describe('<ShinyTitleSlide> explainer beat', () => {
     expect(warmImagesMock).toHaveBeenCalledTimes(1)
     expect(warmImagesMock.mock.calls[0][0]).toHaveLength(4)
   })
-  it('the explainer is opaque: skipsLockedBackground is false on beat 1, true on beat 0', async () => {
+  it('no instant bgDeep lock on either beat; the explainer paints its own shinyBg backdrop instead', async () => {
     const { skipsLockedBackground } = await import('../SlideRenderer.jsx')
     expect(skipsLockedBackground(slideAt(0))).toBe(true)
-    expect(skipsLockedBackground(slideAt(1))).toBe(false)
+    expect(skipsLockedBackground(slideAt(1))).toBe(true)
+    const { getTheme, DEFAULT_THEME_ID } = await import('../../../themes/index.js')
+    render(slideAt(1))
+    const bg = container.querySelector('[data-testid="shiny-explainer"]').style.background
+    // jsdom normalizes hex to rgb(), so normalize the expected color the same way.
+    const probe = document.createElement('div')
+    probe.style.background = getTheme(DEFAULT_THEME_ID).colors.shinyBg
+    expect(bg).toBe(probe.style.background)
+    expect(bg).not.toBe('')
   })
 })
 
@@ -155,6 +163,17 @@ describe('<ShinyTitleSlide> rules cards', () => {
     expect(el.textContent).toContain('B beat 3 of 4 but wagered Fly Close To The Sun, which needs 4.')
   })
 
+  it('bendle card: one guess per team, one answer line, step values from the scorer, never "Ben"', async () => {
+    const { BENDLE_STEP_POINTS } = await import('../../../lib/bendleScoring.js')
+    render(cardFor('bendle'))
+    const text = container.querySelector('[data-testid="shiny-explainer"]').textContent
+    expect(text).toContain(`One guess per team. Right on step 1: ${BENDLE_STEP_POINTS[0]}. Step 2: ${BENDLE_STEP_POINTS[1]}. Step 3: ${BENDLE_STEP_POINTS[2]}.`)
+    expect(text).toContain('No phone entry. The host checks answers by hand.')
+    expect(text).toContain('Your one guess')
+    expect(text).toContain(`Guess on step 1: ${BENDLE_STEP_POINTS[0]} · step 2: ${BENDLE_STEP_POINTS[1]} · step 3: ${BENDLE_STEP_POINTS[2]}`)
+    expect(text).not.toMatch(/\bBen\b|first right answer|pts/)
+  })
+
   it('order card shows one scoring answer and one zero', async () => {
     const { SAMPLE_ORDER_ANSWERS } = await import('../explainers/OrderExplainer.jsx')
     render(cardFor('order'))
@@ -186,7 +205,7 @@ describe('<ShinyTitleSlide> rules cards', () => {
     expect(el.textContent).not.toContain('Pick one')
     render(choice({}))
     el = container.querySelector('[data-testid="shiny-explainer"]')
-    expect(el.textContent).toContain('your phone says to pick one or every one that fits')
+    expect(el.textContent).toContain('Your phone says pick one or pick all.')
     expect(el.textContent).toContain('Pick one')
     expect(el.textContent).toContain('Pick every one that fits')
   })

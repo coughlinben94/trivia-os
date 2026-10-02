@@ -50,7 +50,14 @@ export default function PylRevealSlide({ slide, show, isPreview = false }) {
     const sorted = sortSlides(show.slides ?? [])
     const cur = show.current_slide_index ?? 0
     const next = Math.min(cur + 1, sorted.length - 1)
+    // Fresh entry, same as jumpToSlide below: a stale currentPart (e.g. a
+    // shiny-title left on its rules-card beat by an earlier pass) would open
+    // the landing slide mid-way. Slides are written only when that reset is
+    // needed, so the usual case stays an index-only write.
+    const target = sorted[next]
+    const stale = next !== cur && (target?.data?.parts?.length ?? 0) > 1 && (target.data.currentPart ?? 0) !== 0
     await supabase.from('shows').update({
+      ...(stale ? { slides: (show.slides ?? []).map(s => s.id === target.id ? { ...s, data: { ...s.data, currentPart: 0 } } : s) } : {}),
       current_slide_index: next,
       current_slide_id: sorted[next]?.id ?? null,
     }).eq('id', show.id)

@@ -15,6 +15,9 @@ describe('nextPressCue', () => {
   it('steps through parts before leaving', () => {
     const slide = s('question', { parts: [{}, {}, {}, {}], currentPart: 1 })
     expect(nextPressCue({ slide, nextSlide: s('question') })).toBe('Reveal 3 of 4')
+    const title = s('shiny-title', { parts: [{}, {}], currentPart: 0 })
+    expect(nextPressGate({ slide: title, nextSlide: s('question') })).toEqual({ label: 'Show rules card', gate: 'reveal-part' })
+    expect(nextPressCue({ slide: { ...title, data: { ...title.data, currentPart: 1 } }, nextSlide: s('question', { questionNumber: 1 }) })).toBe('Show question 1')
     const last = s('question', { parts: [{}, {}, {}, {}], currentPart: 3 })
     expect(nextPressCue({ slide: last, nextSlide: s('grading-break') })).toBe('Start grading break')
   })

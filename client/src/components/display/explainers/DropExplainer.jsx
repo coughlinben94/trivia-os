@@ -28,9 +28,11 @@ export const SAMPLE_DROP = {
   dropOrder: dropSequence({ options: OPTIONS, correctId: CORRECT }),
 }
 
-// Dropped tiles dim to this. With the "0" at text d9 and "pts" at text d0,
-// the worst theme (halloween) measures 4.11:1 and 3.86:1 on bgDeep (both
-// large text, bar 3:1); 0.45 measured 2.08:1.
+// Dropped tiles dim to this. Measured over the card's shinyBg backdrop on all
+// 21 themes (worst: halloween): option label 5.24:1, letter badge 5.59:1, gold
+// points 5.34:1, "0" (large, text d9) 4.10:1. "pts" is small text at 720p, so
+// it uses full text color: 5.24:1, over the 4.5:1 bar (at text d0 it was
+// 3.86:1). 0.45 measured 2.08:1.
 const DIMMED = 0.65
 const DROP_START = 1.3
 const DROP_GAP = 0.55
@@ -62,13 +64,13 @@ export default function DropExplainer() {
       role="img"
       aria-label={`Example: ${QUESTION} A team split ${TOTAL} points: ${OPTIONS.map(o => `${SPLIT[o.id]} on ${o.label}`).join(', ')}. ${SAMPLE_DROP_RESULT}`}
       style={{
-        width: 'min(100%, 1500px)', display: 'flex', flexDirection: 'column',
+        width: 'min(100%, max(1500px, 139vmin))', display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center', gap: '2.4vmin', fontVariantNumeric: 'tabular-nums',
       }}
     >
       <motion.div {...enter(0.1)} style={{ display: 'flex', alignItems: 'baseline', gap: '2.4vmin', flexWrap: 'wrap', justifyContent: 'center' }}>
-        <span style={{ fontFamily: displayFont, fontSize: 'clamp(2rem, 3.4vmin, 3.8rem)', lineHeight: 1.1, color: text }}>{QUESTION}</span>
-        <span style={{ fontSize: 'clamp(1.3rem, 2.5vmin, 2.6rem)', color: `${text}d9` }}>{TOTAL} points to split</span>
+        <span style={{ fontFamily: displayFont, fontSize: 'max(2rem, 3.4vmin)', lineHeight: 1.1, color: text }}>{QUESTION}</span>
+        <span style={{ fontSize: 'max(1.3rem, 2.5vmin)', color: `${text}d9` }}>{TOTAL} points to split</span>
       </motion.div>
 
       <div style={{ display: 'flex', gap: '3vmin', width: '100%', justifyContent: 'center' }}>
@@ -78,7 +80,7 @@ export default function DropExplainer() {
           const winner = opt.id === CORRECT
           const tilt = i % 2 === 0 ? -2.5 : 2.5
           return (
-            <motion.div key={opt.id} {...enter(0.25 + i * 0.06, 18)} style={{ flex: '1 1 0', maxWidth: 330, minWidth: 0 }}>
+            <motion.div key={opt.id} {...enter(0.25 + i * 0.06, 18)} style={{ flex: '1 1 0', maxWidth: 'max(330px, 30.5vmin)', minWidth: 0 }}>
               <motion.div
                 initial={reduce ? { opacity: 1 } : { opacity: 1, transform: 'translateY(0px) rotate(0deg)' }}
                 animate={dropped
@@ -102,7 +104,7 @@ export default function DropExplainer() {
                   position: 'absolute', top: '-1.6vmin', left: '-1.6vmin', width: '5.4vmin', height: '5.4vmin',
                   borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   background: 'rgba(0,0,0,0.72)', border: `2px solid ${SHINY_GOLD}66`,
-                  fontFamily: displayFont, fontSize: 'clamp(1.5rem, 3vmin, 3rem)', lineHeight: 1, color: text,
+                  fontFamily: displayFont, fontSize: 'max(1.5rem, 3vmin)', lineHeight: 1, color: text,
                 }}>
                   {String.fromCharCode(65 + i)}
                   {winner && (
@@ -114,15 +116,15 @@ export default function DropExplainer() {
                     </motion.span>
                   )}
                 </span>
-                <span style={{ position: 'relative', fontFamily: displayFont, fontSize: 'clamp(1.9rem, 3.4vmin, 3.8rem)', lineHeight: 1.05, color: text }}>
+                <span style={{ position: 'relative', fontFamily: displayFont, fontSize: 'max(1.9rem, 3.4vmin)', lineHeight: 1.05, color: text }}>
                   {opt.label}
                 </span>
                 <span style={{
-                  position: 'relative', fontFamily: displayFont, fontSize: 'clamp(2.4rem, 5vmin, 5.4rem)', lineHeight: 1,
+                  position: 'relative', fontFamily: displayFont, fontSize: 'max(2.4rem, 5vmin)', lineHeight: 1,
                   color: SPLIT[opt.id] > 0 ? SHINY_GOLD : `${text}d9`,
                 }}>
                   {SPLIT[opt.id]}
-                  <span style={{ fontSize: '0.45em', marginLeft: '0.3em', color: `${text}d0` }}>pts</span>
+                  <span style={{ fontSize: '0.45em', marginLeft: '0.3em', color: text }}>pts</span>
                 </span>
               </motion.div>
             </motion.div>
@@ -131,7 +133,7 @@ export default function DropExplainer() {
       </div>
 
       <motion.p {...fadeIn(reduce ? REVEAL : REVEAL + 0.25)} style={{
-        margin: '1vmin 0 0', fontSize: 'clamp(1.4rem, 2.8vmin, 2.9rem)', color: text, textWrap: 'balance',
+        margin: '1vmin 0 0', fontSize: 'max(1.4rem, 2.8vmin)', color: text, textWrap: 'balance',
       }}>
         {SAMPLE_DROP_RESULT}
       </motion.p>

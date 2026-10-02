@@ -9,9 +9,10 @@ import WaveformBars from '../WaveformBars.jsx'
 // song title on paper. Visual only — no audio, no phone entry, and never which
 // stem plays at which step (that is per slide).
 //
-// Grading rule (Ben, 2026-10-02: "bendle is 30 20 10", card must show it): the
-// step you get it right on sets your points. The registry copy states that;
-// any penalty for a wrong early guess is NOT stated (none is defined in code).
+// Owner rule, 2026-10-02: ONE guess per team. The step a team guesses on sets
+// its points if right (30 / 20 / 10). The sheet shows one blank line, never
+// one line per step, so nothing reads as scoring on several steps. No penalty
+// and no way of marking the step is stated (neither is defined in code).
 const STAGES = [
   { step: 'Step 1', bars: 12 },
   { step: 'Step 2', bars: 20 },
@@ -33,9 +34,9 @@ export default function BendleExplainer() {
   return (
     <div
       role="img"
-      aria-label={`Example: the song plays in three steps, one more layer each. Write the title on your answer sheet: step 1, ${BENDLE_STEP_POINTS[0]} points; step 2, ${BENDLE_STEP_POINTS[1]}; step 3, ${BENDLE_STEP_POINTS[2]}.`}
+      aria-label={`Example: the song plays in three steps, one more layer each. Each team writes one guess. Right on step 1: ${BENDLE_STEP_POINTS[0]} points; step 2: ${BENDLE_STEP_POINTS[1]}; step 3: ${BENDLE_STEP_POINTS[2]}.`}
       style={{
-        width: 'min(100%, 1500px)', display: 'flex', flexDirection: 'column',
+        width: 'min(100%, max(1500px, 139vmin))', display: 'flex', flexDirection: 'column',
         alignItems: 'center', gap: '3vmin', color: text,
       }}
     >
@@ -46,40 +47,41 @@ export default function BendleExplainer() {
             {...enter(STEP_AT(index), 18)}
             style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.6vmin' }}
           >
-            <span style={{ color: SHINY_GOLD, fontFamily: displayFont, fontSize: 'clamp(2rem, 3.4vmin, 3.8rem)', lineHeight: 1, textShadow: `0 0 2vmin ${SHINY_GOLD_GLOW}55` }}>
+            <span style={{ color: SHINY_GOLD, fontFamily: displayFont, fontSize: 'max(2rem, 3.4vmin)', lineHeight: 1, textShadow: `0 0 2vmin ${SHINY_GOLD_GLOW}55` }}>
               {stage.step}
             </span>
-            <div style={{ height: '11vmin', display: 'flex', alignItems: 'center', justifyContent: 'center', transform: 'scale(1.35)', transformOrigin: 'center' }}>
+            {/* WaveformBars is an 80px box whose paused bars fill only its
+                bottom ~40%; bottom-align it in a short box so the bars sit
+                right under the step label instead of ~80px below it. */}
+            <div style={{ height: '5.5vmin', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', transform: 'scale(1.35)', transformOrigin: 'bottom center' }}>
               <WaveformBars playing={false} barCount={stage.bars} />
             </div>
-            <span style={{ color: `${text}e0`, fontSize: 'clamp(1.4rem, 2.4vmin, 2.6rem)' }}>
+            <span style={{ color: `${text}e0`, fontSize: 'max(1.4rem, 2.4vmin)' }}>
               {index + 1} {index === 0 ? 'layer' : 'layers'}
             </span>
           </motion.div>
         ))}
       </div>
 
-      {/* "Write it down", made concrete: a blank answer sheet. */}
+      {/* "Write it down", made concrete: ONE blank guess line, with the step
+          values shown as the choice of when to guess. */}
       <motion.div {...enter(STEP_AT(0) + 0.15, 10)} style={{
-        width: 'min(100%, 1100px)', display: 'flex', flexDirection: 'column', gap: '1.2vmin',
+        width: 'min(100%, max(1100px, 102vmin))', display: 'flex', flexDirection: 'column', gap: '1.4vmin',
         padding: '1.8vmin 3vmin 2.2vmin', borderRadius: 14,
         background: 'rgba(255,255,255,0.06)', border: `1px solid ${text}33`,
       }}>
-        <span style={{ fontFamily: displayFont, fontSize: 'clamp(1.7rem, 3vmin, 3.2rem)', lineHeight: 1.1 }}>
-          Your answer sheet
-        </span>
-        {STAGES.map((stage, index) => (
-          <motion.div key={stage.step} {...enter(STEP_AT(index) + 0.2, 8)} style={{
-            display: 'grid', gridTemplateColumns: 'auto 1fr auto', alignItems: 'end', columnGap: '2.4vmin',
-            fontSize: 'clamp(1.4rem, 2.6vmin, 2.8rem)', fontVariantNumeric: 'tabular-nums', textAlign: 'left',
-          }}>
-            <span style={{ color: `${text}e0` }}>{stage.step}</span>
-            <span aria-hidden="true" style={{ height: '0.2em', borderBottom: `3px solid ${text}66`, marginBottom: '0.25em' }} />
-            <span style={{ fontFamily: displayFont, color: SHINY_GOLD, fontSize: '1.15em', lineHeight: 1 }}>
-              {BENDLE_STEP_POINTS[index]} pts
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', alignItems: 'end', columnGap: '2.4vmin', textAlign: 'left' }}>
+          <span style={{ fontFamily: displayFont, fontSize: 'max(1.7rem, 3vmin)', lineHeight: 1.1 }}>Your one guess</span>
+          <span aria-hidden="true" style={{ height: '0.2em', borderBottom: `3px solid ${text}66`, marginBottom: '0.35em' }} />
+        </div>
+        <span style={{ fontSize: 'max(1.4rem, 2.6vmin)', fontVariantNumeric: 'tabular-nums', color: `${text}e6` }}>
+          Guess on{' '}
+          {BENDLE_STEP_POINTS.map((points, index) => (
+            <span key={index}>
+              {index > 0 && ' · '}step {index + 1}: <strong style={{ fontFamily: displayFont, fontWeight: 400, color: SHINY_GOLD, fontSize: '1.15em' }}>{points}</strong>
             </span>
-          </motion.div>
-        ))}
+          ))}
+        </span>
       </motion.div>
     </div>
   )

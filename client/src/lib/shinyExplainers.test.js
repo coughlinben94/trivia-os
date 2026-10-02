@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hasExplainer, explainerImageUrls, EXPLAINER_BEAT_PARTS, SHINY_EXPLAINERS, getShinyExplainer, explainerCopy, choiceVariantKey, wagerThresholdWords } from './shinyExplainers.js'
+import { hasExplainer, explainerImageUrls, EXPLAINER_BEAT_PARTS, SHINY_EXPLAINERS, getShinyExplainer, explainerCopy, choiceVariantKey } from './shinyExplainers.js'
 import { DEFAULT_TIER_ID, WAGER_TIERS, getWagerTier, scoreWagerRound, wagerTierBar } from './wagerScoring.js'
 import { scoreMovieChainSubmission } from './movieChainScoring.js'
 import { scoreChoiceSubmission } from './choiceScoring.js'
@@ -56,26 +56,28 @@ describe('rules-card entries by input_schema.type', () => {
 })
 
 describe('card scoring copy matches the scorers', () => {
-  it('wager lines state the bars in words, every tier point value, ties and the default', () => {
+  it('wager lines state the bars in words, every tier point value, ties, blanks and the default', () => {
     const [line, rest] = getShinyExplainer({ inputType: 'wager' }).scoring
-    expect(line).toBe('Beat at least half / three-quarters / nearly all of the other teams to win +10 / +20 / +30.')
-    expect(line).not.toMatch(/%/)
+    expect(line).toBe('Beat at least half the other teams: +10 · three-quarters: +20 · all of them (90% in a big room): +30.')
     for (const tier of WAGER_TIERS) expect(line).toContain(`+${tier.points}`)
-    expect(rest).toBe(`Ties don't count as beating. Miss your bar: 0. No wager = ${getWagerTier(DEFAULT_TIER_ID).label}.`)
+    expect(rest).toBe(`Ties don't count as beating. Miss your bar or enter no number: 0. No wager = ${getWagerTier(DEFAULT_TIER_ID).label}.`)
   })
-  it('wager words are true lower bounds: each real bar is at or above the stated fraction', () => {
-    const fraction = { half: 0.5, 'three-quarters': 0.75, 'nearly all': 0.9 }
-    const words = wagerThresholdWords.split(' / ')
-    expect(words).toHaveLength(WAGER_TIERS.length)
-    WAGER_TIERS.forEach((tier, i) => {
-      expect(fraction[words[i]]).toBe(tier.threshold)
-      for (let room = 2; room <= 30; room++) {
-        expect(wagerTierBar(tier.id, room) / (room - 1)).toBeGreaterThanOrEqual(tier.threshold)
-      }
-    })
-    // Up to 10 teams Sun means beating every other team; "Play It Safe" is
-    // what a team that never picks is scored as.
-    for (let room = 2; room <= 10; room++) expect(wagerTierBar('sun', room)).toBeGreaterThanOrEqual(room - 1)
+  it('wager words are true: half / three-quarters are lower bounds; top tier = every other team up to 10, 90%+ above', () => {
+    const [safe, fire, sun] = WAGER_TIERS
+    expect([safe.threshold, fire.threshold, sun.threshold]).toEqual([0.5, 0.75, 0.9])
+    for (let room = 2; room <= 30; room++) {
+      for (const tier of WAGER_TIERS) expect(wagerTierBar(tier.id, room) / (room - 1)).toBeGreaterThanOrEqual(tier.threshold)
+      // "all of them" in a small room: never less than every other team.
+      if (room <= 10) expect(wagerTierBar('sun', room)).toBeGreaterThanOrEqual(room - 1)
+    }
+    // A big room (11+) needs 90%+, not all: the "(90% in a big room)" words.
+    for (let room = 11; room <= 30; room++) expect(wagerTierBar('sun', room)).toBeLessThan(room - 1)
+  })
+  it('wager: a team that enters no number scores 0 and is left out of the pool', () => {
+    const results = scoreWagerRound({ entries: [{ teamId: 'a', tier: 'safe', guess: 10 }, { teamId: 'b', tier: 'safe', guess: '' }, { teamId: 'c', tier: 'safe', guess: 50 }], correctAnswer: 12 })
+    const byId = Object.fromEntries(results.map(r => [r.teamId, r]))
+    expect(byId.b.points).toBe(0)
+    expect(byId.a.won).toBe(true) // beat 1 of 1 answering team: b doesn't pad the pool
   })
   it('wager ties do not count as beating', () => {
     const results = scoreWagerRound({ entries: [{ teamId: 'a', tier: 'safe', guess: 10 }, { teamId: 'b', tier: 'safe', guess: 10 }], correctAnswer: 12 })

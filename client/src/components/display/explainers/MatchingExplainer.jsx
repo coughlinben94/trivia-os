@@ -42,7 +42,7 @@ export default function MatchingExplainer() {
   const tile = color => ({
     padding: '1.3vmin 2.4vmin', borderRadius: 12, minWidth: 0,
     background: color, color: MATCHED_TEXT,
-    fontFamily: displayFont, fontSize: 'clamp(1.8rem, 3.4vmin, 3.8rem)', lineHeight: 1.05,
+    fontFamily: displayFont, fontSize: 'max(1.8rem, 3.4vmin)', lineHeight: 1.05,
   })
 
   return (
@@ -50,7 +50,7 @@ export default function MatchingExplainer() {
       role="img"
       aria-label={`Example matching answer: ${SAMPLE_CORRECT_PAIRS} correct pairs score; the 2 swapped pairs score 0.`}
       style={{
-        width: 'min(100%, 1300px)', display: 'flex', flexDirection: 'column',
+        width: 'min(100%, max(1300px, 120vmin))', display: 'flex', flexDirection: 'column',
         justifyContent: 'center', gap: '1.4vmin',
       }}
     >
@@ -63,17 +63,18 @@ export default function MatchingExplainer() {
           }}>
             <motion.div {...enter(base)} style={tile(PAIR_COLORS[row])}>{LEFT[pair.leftId]}</motion.div>
             <motion.span {...enter(base + 0.25, 'translateX(-12px)', 'translateX(0px)')} aria-hidden="true" style={{
-              fontSize: 'clamp(1.6rem, 3.4vmin, 3.4rem)', color: `${text}cc`, lineHeight: 1,
+              fontSize: 'max(1.6rem, 3.4vmin)', color: `${text}cc`, lineHeight: 1,
             }}>
               ↔
             </motion.span>
             <motion.div {...enter(base + 0.25, 'translateX(-24px)', 'translateX(0px)')} style={tile(PAIR_COLORS[row])}>{RIGHT[pair.rightId]}</motion.div>
             <motion.div {...enter(verdictAt, 'scale(0.96)', 'scale(1)')} style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5em', width: '6em',
+              // Left-aligned so ✓ and ✗ sit in the same spot on every row.
+              display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '0.5em', width: '6em',
               padding: '0.9vmin 1.6vmin', borderRadius: 12,
               background: pair.scored ? `${SHINY_GOLD}24` : 'rgba(255,255,255,0.05)',
               outline: pair.scored ? `2px solid ${SHINY_GOLD}aa` : 'none', outlineOffset: '-2px',
-              fontFamily: displayFont, fontSize: 'clamp(1.6rem, 3.4vmin, 3.4rem)', lineHeight: 1,
+              fontFamily: displayFont, fontSize: 'max(1.6rem, 3.4vmin)', lineHeight: 1,
               color: pair.scored ? SHINY_GOLD : `${text}c8`,
             }}>
               <span aria-hidden="true">{pair.scored ? '✓' : '✗'}</span>

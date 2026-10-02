@@ -56,7 +56,14 @@ const EXPLAINER_RENDERERS = {
 // replayKey never changes: stepping back from the card shows the landed title
 // instead of replaying the spin-land entrance. Renderers receive
 // { definition, data } (data = slide.data).
+//
+// The explainer carries its own opaque theme.colors.shinyBg backdrop (the
+// same color the shiny question after it paints), so the ambient world fades
+// out under the card instead of cutting (SlideRenderer skips its bgDeep lock
+// for both beats). The intro fades out faster than the card fades in, so its
+// tilted title never ghosts through the half-faded card.
 const FADE = { duration: 0.22, ease: EASE_OUT }
+const INTRO_OUT = { duration: 0.12, ease: EASE_OUT }
 
 export default function ShinyTitleSlide({ slide, show }) {
   const { theme } = useTheme()
@@ -80,7 +87,7 @@ export default function ShinyTitleSlide({ slide, show }) {
         aria-hidden={showExplainer || undefined}
         initial={false}
         animate={{ opacity: showExplainer ? 0 : 1 }}
-        transition={FADE}
+        transition={showExplainer ? INTRO_OUT : FADE}
         style={{ position: 'absolute', inset: 0, pointerEvents: showExplainer ? 'none' : undefined }}
       >
         <ShinyIntroScreen slide={introSlide} theme={theme} show={show} />
@@ -94,7 +101,7 @@ export default function ShinyTitleSlide({ slide, show }) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={FADE}
-            style={{ position: 'absolute', inset: 0 }}
+            style={{ position: 'absolute', inset: 0, background: theme.colors.shinyBg }}
           >
             {definition.mode === 'rules'
               ? <ShinyRulesCard definition={definition} data={data}><Renderer definition={definition} data={data} /></ShinyRulesCard>

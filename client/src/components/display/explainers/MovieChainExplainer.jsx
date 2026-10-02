@@ -57,15 +57,15 @@ export default function MovieChainExplainer() {
       role="img"
       aria-label={`Example: link ${MOVIES[START]} to ${MOVIES[END]}, shortest chain ${ANNOUNCED} movies. A ${ANNOUNCED}-movie chain scores ${SAMPLE_CHAINS[0].points}, a ${ANNOUNCED + 1}-movie chain scores ${SAMPLE_CHAINS[1].points}, a chain with a wrong link scores 0.`}
       style={{
-        width: 'min(100%, 1600px)', display: 'flex', flexDirection: 'column',
+        width: 'min(100%, max(1600px, 148vmin))', display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center', gap: '2vmin',
       }}
     >
       <motion.div {...enter(0.15)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.6vmin' }}>
-        <p style={{ margin: 0, fontFamily: displayFont, fontSize: 'clamp(2rem, 3.4vmin, 3.8rem)', lineHeight: 1, color: text }}>
+        <p style={{ margin: 0, fontFamily: displayFont, fontSize: 'max(2rem, 3.4vmin)', lineHeight: 1, color: text }}>
           {MOVIES[START]} <span aria-hidden="true" style={{ color: SHINY_GOLD }}>→</span> {MOVIES[END]}
         </p>
-        <p style={{ margin: 0, fontSize: 'clamp(1.3rem, 2.6vmin, 2.7rem)', color: SHINY_GOLD, textShadow: `0 0 1.6vmin ${SHINY_GOLD_GLOW}55` }}>
+        <p style={{ margin: 0, fontSize: 'max(1.3rem, 2.6vmin)', color: SHINY_GOLD, textShadow: `0 0 1.6vmin ${SHINY_GOLD_GLOW}55` }}>
           Shortest chain: {ANNOUNCED} movies
         </p>
       </motion.div>
@@ -75,13 +75,14 @@ export default function MovieChainExplainer() {
           const scored = chain.points > 0
           return (
             <motion.div key={row} {...enter(0.7 + row * 0.5, 10)} style={{
-              display: 'grid', gridTemplateColumns: 'auto 1fr auto', alignItems: 'center', columnGap: '2vmin',
+              // Fixed mark and result columns so ✓ and ✗ rows line up.
+                    display: 'grid', gridTemplateColumns: '1.6em 1fr minmax(4.5em, auto)', alignItems: 'center', columnGap: '2vmin',
               padding: '1.3vmin 2.4vmin', borderRadius: 12, textAlign: 'left',
               background: scored ? `${SHINY_GOLD}24` : 'rgba(255,255,255,0.05)',
               outline: scored ? `2px solid ${SHINY_GOLD}aa` : 'none', outlineOffset: '-2px',
-              fontSize: 'clamp(1.35rem, 2.6vmin, 2.8rem)', color: text,
+              fontSize: 'max(1.35rem, 2.6vmin)', color: text,
             }}>
-              <span aria-hidden="true" style={{ fontFamily: displayFont, fontSize: '1.4em', lineHeight: 1, color: scored ? SHINY_GOLD : `${text}c8` }}>
+              <span aria-hidden="true" style={{ justifySelf: 'center', fontFamily: displayFont, fontSize: '1.4em', lineHeight: 1, color: scored ? SHINY_GOLD : `${text}c8` }}>
                 {scored ? '✓' : '✗'}
               </span>
               <span style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '0.3em 0.55em', lineHeight: 1.25 }}>
