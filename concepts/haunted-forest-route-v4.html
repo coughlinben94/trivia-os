@@ -160,7 +160,13 @@ function makeRoute(seed, n = 13) {
   const KINDS = ['straight', 'straight', 'bendL', 'bendR', 'barn', 'house']
   for (let tries = 0; tries < 5000; tries++) {
     const ks = Array.from({ length: n }, (_, i) => i === 0 || i === CALM ? 'straight' : KINDS[Math.floor(rnd() * KINDS.length)])
-    if (ok(ks)) return ks.map(kind => ({ kind, variant: Math.floor(rnd() * 3) }))
+    // an interior kind never repeats its layout within one route (3 layouts, at most 2 of a kind)
+    const used = { barn: [], house: [] }
+    if (ok(ks)) return ks.map(kind => {
+      let variant = Math.floor(rnd() * 3)
+      if (used[kind]) { while (used[kind].includes(variant)) variant = (variant + 1) % 3; used[kind].push(variant) }
+      return { kind, variant }
+    })
   }
   throw new Error('makeRoute: no valid route for seed ' + seed)
 }
@@ -170,6 +176,10 @@ const ROUTE=makeRoute(SEED,NS);
 // BARN_OUT out of it (far door at 11 m from the inside station). Longer stretches, so those two walks take longer.
 const BARN_IN=11, BARN_OUT=13, BW=4, WH=3.6, PK=6.2, BDOOR=9, BLEN=13;
 const INNER=k=>k==='barn'||k==='house';
+// an interior (and all of its pieces) comes out of the fog only as the NEXT stop: d = distance to its front door.
+// Hidden beyond 12.5 m (two stations back the door is 15 m of path off, only ~13 m in depth across a sharp bend), full
+// from 9.5 m (the station before rests at 9 m)
+const GATE=d=>clamp((12.5-d)/3);
 const isExit=k=>INNER(ROUTE[(k+NS-1)%NS].kind);
 const segLen=k=>INNER(ROUTE[k].kind)?BARN_IN:isExit(k)?BARN_OUT:D;
 // the shell of each interior: half width w, wall height wh, ridge pk, door half widths (front dF, back dB) and height dh,
@@ -233,8 +243,12 @@ function dPoly(pts){return 'M'+pts.map(p=>fm(p[0])+' '+fm(p[1])).join('L')+'Z'}
 function bbox(lists){let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;for(const l of lists)for(const p of l){if(p[0]<x0)x0=p[0];if(p[0]>x1)x1=p[0];if(p[1]<y0)y0=p[1];if(p[1]>y1)y1=p[1]}return[x0,y0,x1,y1]}
 // ribbon polygon around a spine [[x,y,width],...]
 function ribbon(sp){const A=[],B=[];for(let i=0;i<sp.length;i++){const a=sp[Math.max(0,i-1)],b=sp[Math.min(sp.length-1,i+1)];const dx=b[0]-a[0],dy=b[1]-a[1],m=Math.hypot(dx,dy)||1,nx=-dy/m,ny=dx/m,w=sp[i][2]/2;A.push([sp[i][0]+nx*w,sp[i][1]+ny*w]);B.push([sp[i][0]-nx*w,sp[i][1]-ny*w])}return A.concat(B.reverse())}
-// world spine [[X,h,w]] -> screen ribbon at depth z, never thinner than 7px (TV legibility floor)
-const wRib=(sp,X0,z)=>ribbon(sp.map(([x,h,w])=>{const p=P(X0+x,h,z);return[p[0],p[1],Math.max(w*F/z,7)]}));
+// world spine [[X,h,w]] -> screen ribbon at depth z, never thinner than 7px (TV legibility floor). The floor holds at
+// every depth an element is SHOWN at, not only where it is drawn: a band element is drawn at the near end of its depth
+// band and shrinks toward the band's far end (WB = BANDS, see lifeBB, plus the fog entry ZIN; keep in step)
+const WB=[43,26,16,10,6.4,4,2.5,1.6];
+const wFloor=z=>{let f=43;for(const b of WB)if(b>z+1e-6)f=b;return Math.max(7,7*f/Math.max(z,0.3))};
+const wRib=(sp,X0,z)=>{const fl=wFloor(z);return ribbon(sp.map(([x,h,w])=>{const p=P(X0+x,h,z);return[p[0],p[1],Math.max(w*F/z,fl)]}))};
 const rot=(pts,a,ox=0,oy=0)=>pts.map(([x,y])=>[ox+(x-ox)*Math.cos(a)-(y-oy)*Math.sin(a), oy+(x-ox)*Math.sin(a)+(y-oy)*Math.cos(a)]);
 function lgrad(id,x1,y1,x2,y2,stops){return `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${fm(x1)}" y1="${fm(y1)}" x2="${fm(x2)}" y2="${fm(y2)}">${stops.map(s=>`<stop offset="${s[0]}" stop-color="${s[1]}" stop-opacity="${s[2]??1}"/>`).join('')}</linearGradient>`}
 function rgrad(id,cx,cy,r,stops,sy=1){return `<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="${fm(cx)}" cy="${fm(cy)}" r="${fm(r)}" gradientTransform="translate(${fm(cx)} ${fm(cy)}) scale(1 ${sy}) translate(${fm(-cx)} ${fm(-cy)})">${stops.map(s=>`<stop offset="${s[0]}" stop-color="${s[1]}" stop-opacity="${s[2]??1}"/>`).join('')}</radialGradient>`}
@@ -358,35 +372,55 @@ const pathHW=Z=>1.3+0.16*Math.sin(TAU*9*Z/L+0.4)+0.07*Math.sin(TAU*23*Z/L+2);
 
 // ---------- landmarks ----------
 // station 0 — PASS = a fresh viewer names this as "a broken wooden fence with a gate hanging off it"
-// v: 0 broken fence with a hanging gate, 1 a leaning timber arch with a hanging sign, 2 stone pillars with a sprung iron gate
+// v: 0 broken fence with a hanging picket gate, 1 a leaning timber arch with a hanging sign and a horned skull,
+// 2 stone pillars with a sprung iron gate. v4b: split and snapped post tops, missing and sagging rails, a picket gate
+// that sags off its top hinge, knee-braced arch, coursed stone with iron spear bars. Thin parts are SPINES (ribbons
+// floored by wRib, so they keep >= 7 px at every depth the band shows them at); wood takes the flashlight gradient,
+// iron is flat dark, bone is pale.
 function fenceItem(Z,v=0){
-  const r=rngFor(0,4242,v);const parts=[];const posts=[];
-  for(const sd of[-1,1]){let x=1.45;let i=0;while(x<13){const gate=i===0;const hh=gate?1.6:rr(r,1.05,1.3)*(r()<.15?0.6:1);const pw=gate?0.2:0.15;const lean=gate?0:(r()-0.5)*0.12;
-      posts.push({x:sd*x,hh});const p=[[-pw/2,-0.1],[pw/2,-0.1],[pw/2,hh-0.05],[0,hh+0.06],[-pw/2,hh-0.05]];parts.push(rot(p,lean).map(([a,b])=>[a+sd*x,b]));x+=rr(r,2.0,2.5);i++}}
-  posts.sort((a,b)=>a.x-b.x);
-  for(let i=0;i<posts.length-1;i++){const a=posts[i],b=posts[i+1];if(a.x<0&&b.x>0)continue;
-    for(const rh of[0.48,0.98]){if(Math.min(a.hh,b.hh)<rh+0.05)continue;
-      if(i===1&&rh===0.98){parts.push(ribbon([[a.x+0.05,rh,0.1],[a.x+0.9,rh-0.45,0.1],[a.x+1.35,0.02,0.1]]));continue} // broken rail, dangling
-      const sag=r()*0.05;parts.push(ribbon([[a.x,rh,0.1],[(a.x+b.x)/2,rh-sag,0.1],[b.x,rh,0.1]]))}}
-  // the gate, hanging off its top hinge on the right gate post, bottom-left corner dragging
-  // v4: narrower and hanging less steeply than v3's, so its free corner stays below eye level and clear of the
-  // walker's line; v3's corner rose to 1.66 m right in front of the camera and could never leave the frame
-  const g=[];const gw=0.95,gh=1.05,hx=1.35,hy=1.35;const bar=(pts,t)=>g.push(ribbon(pts.map(p=>[p[0],p[1],t])));
-  bar([[hx-gw,hy-gh],[hx,hy-gh]],0.11);bar([[hx-gw,hy],[hx,hy]],0.11);bar([[hx-gw,hy-gh],[hx-gw,hy]],0.11);bar([[hx,hy-gh],[hx,hy]],0.11);bar([[hx-gw,hy-gh],[hx,hy]],0.09);bar([[hx-gw/2,hy-gh],[hx-gw/2,hy]],0.08);
-  if(v===0)g.forEach(p=>parts.push(rot(p,-0.16,hx,hy)));
-  else if(v===1){const ln=rr(r,.04,.09);for(const sd of[-1,1])parts.push(rot([[sd*1.45-.12,-.1],[sd*1.45+.12,-.1],[sd*1.45+.1,2.75],[sd*1.45-.1,2.7]],sd*ln*.5,sd*1.45,0));
-    parts.push(ribbon([[-1.85,2.5,.16],[0,2.6,.15],[1.85,2.66,.16]]));
-    parts.push(ribbon([[-.35,2.55,.05],[-.38,2.1,.05]]),ribbon([[.4,2.58,.05],[.45,2.2,.05]]));
-    parts.push(rot([[-.55,1.75],[.62,1.8],[.6,2.22],[-.53,2.15]],.12,0,2));
-    const sk=[...Array(14)].map((_,i)=>{const a=i/14*TAU;return[1.0+Math.cos(a)*.13,2.98+Math.sin(a)*.14]});parts.push(sk)}
-  else{for(const sd of[-1,1]){const x=sd*1.55;parts.push([[x-.3,-.1],[x+.3,-.1],[x+.27,1.85],[x+.34,1.9],[x+.34,2.05],[x-.34,2.05],[x-.34,1.9],[x-.27,1.85]]);parts.push(ribbon([[x-.36,2.05,.08],[x,2.22,.08],[x+.36,2.05,.08]]))}
-    const gl=[];gl.push(ribbon([[-1.25,.1,.06],[-.7,.18,.06]]),ribbon([[-1.25,1.55,.06],[-.7,1.42,.06]]),ribbon([[-1.25,.1,.06],[-1.25,1.55,.06]]));
-    for(let i=0;i<4;i++){const x=-1.12+i*.13;gl.push(ribbon([[x,.12,.04],[x,1.52-i*.03,.04]]))}
-    gl.forEach(p=>parts.push(p));parts.push(rot(ribbon([[.7,.05,.06],[1.25,.05,.06]]),.0),ribbon([[.95,.05,.04],[1.05,.6,.04]]))}
+  const r=rngFor(0,4242,v),wood=[],wsp=[],dark=[],dsp=[],bone=[];
+  const post=(x,hh,pw,ln,jag)=>{const t=jag?[[pw/2,hh-rr(r,0,.07)],[pw*.12,hh-rr(r,.05,.14)],[-pw*.15,hh+rr(r,0,.04)],[-pw/2,hh-rr(r,0,.08)]]:[[pw/2,hh-.04],[0,hh+.05],[-pw/2,hh-.04]];
+    wood.push(rot([[-pw/2,-.1],[pw/2,-.1],...t],ln).map(([a,b])=>[a+x,b]))};
+  if(v===0){const posts=[];
+    for(const sd of[-1,1]){let x=1.45,i=0;while(x<13){const gate=i===0,snap=!gate&&r()<.2;const hh=gate?1.62:snap?rr(r,.55,.8):rr(r,1.0,1.28);
+      post(sd*x,hh,gate?.2:rr(r,.13,.18),gate?0:(r()-.5)*.14,!gate);posts.push({x:sd*x,hh});x+=rr(r,2.0,2.5);i++}}
+    posts.sort((a,b)=>a.x-b.x);
+    for(let i=0;i<posts.length-1;i++){const a=posts[i],b=posts[i+1];if(a.x<0&&b.x>0)continue;
+      for(const rh of[0.46,0.96]){if(Math.min(a.hh,b.hh)<rh+0.05||r()<.12)continue;
+        if(i===1&&rh===0.96){wsp.push([[a.x+.05,rh,.1],[a.x+.9,rh-.45,.1],[a.x+1.35,.02,.1]]);continue}
+        const j1=rr(r,-.04,.04),j2=rr(r,-.04,.04);wsp.push([[a.x,rh+j1,.1],[(a.x+b.x)/2,rh-rr(r,.02,.08),.1],[b.x,rh+j2,.1]])}}
+    // the gate: five pickets on two rails and a brace, sagging off its top hinge on the right gate post, free corner low
+    const gw=.95,gh=1.05,hx=1.35,hy=1.35,R=pts=>rot(pts,.14,hx,hy),RS=sp=>sp.map(([x,h,w])=>{const[q]=rot([[x,h]],.14,hx,hy);return[q[0],q[1],w]});
+    for(let k=0;k<5;k++){const px=hx-gw+(k+.5)*gw/5,tp=k===3?hy-.32:hy+.04;wood.push(R(k===3?[[px-.045,hy-gh-.06],[px+.045,hy-gh-.06],[px+.045,tp+.05],[px,tp-.03],[px-.045,tp+.02]]:[[px-.045,hy-gh-.06],[px+.045,hy-gh-.06],[px+.045,tp],[px,tp+.1],[px-.045,tp]]))}
+    wsp.push(RS([[hx-gw,hy-gh+.14,.09],[hx,hy-gh+.14,.09]]),RS([[hx-gw,hy-.14,.09],[hx,hy-.14,.09]]),RS([[hx-gw+.04,hy-gh+.16,.08],[hx-.04,hy-.16,.08]]));
+    dsp.push(RS([[hx-.3,hy-.14,.05],[hx+.06,hy-.14,.05]]),RS([[hx-.3,hy-gh+.14,.05],[hx+.06,hy-gh+.14,.05]]))}
+  else if(v===1){const ln=rr(r,.04,.09);
+    for(const sd of[-1,1]){wood.push(rot([[sd*1.45-.13,-.1],[sd*1.45+.13,-.1],[sd*1.45+.11,2.62],[sd*1.45-.11,2.58]],sd*ln*.5,sd*1.45,0));
+      wsp.push([[sd*1.42,2.0,.09],[sd*1.15,2.32,.08],[sd*.98,2.55,.08]])}
+    wsp.push([[-2.0,2.47,.17],[-1,2.55,.17],[0,2.6,.16],[1,2.62,.17],[1.95,2.68,.16]]);
+    wood.push([[-2.0,2.4],[-2.12,2.46],[-2.04,2.58],[-1.95,2.55]],[[1.9,2.6],[2.04,2.62],[1.98,2.77],[1.9,2.76]]);
+    wsp.push([[-.38,2.52,.035],[-.42,2.1,.035]],[[.42,2.55,.035],[.47,2.2,.035]]);
+    wood.push(rot([[-.56,1.74],[.06,1.76],[.1,1.9],[.03,1.98],[.1,2.08],[.06,2.22],[-.54,2.16]],.12,0,2),rot([[.14,1.78],[.63,1.8],[.6,2.22],[.12,2.2],[.16,2.06],[.09,1.97],[.16,1.88]],.12,0,2));
+    bone.push([[-.15,3.02],[-.06,3.05],[.06,3.05],[.15,3.02],[.12,2.9],[.07,2.72],[.05,2.6],[0,2.57],[-.05,2.6],[-.07,2.72],[-.12,2.9]]);
+    dark.push(ell(-.065,2.9,.032,.026,10),ell(.065,2.9,.032,.026,10),[[-.03,2.66],[-.005,2.66],[-.015,2.62]],[[.005,2.66],[.03,2.66],[.015,2.62]]);
+    for(const sd of[-1,1])wsp.push([[sd*.13,3.01,.06],[sd*.32,3.04,.05],[sd*.44,3.18,.04],[sd*.42,3.3,.035]])}
+  else{for(const sd of[-1,1]){const x=sd*1.55;wood.push([[x-.3,-.1],[x+.3,-.1],[x+.27,1.85],[x+.34,1.9],[x+.34,2.05],[x-.34,2.05],[x-.34,1.9],[x-.27,1.85]],[...ell(x,2.24,.15,.15,14)]);
+      wsp.push([[x-.36,2.05,.08],[x,2.12,.08],[x+.36,2.05,.08]]);
+      for(const h of[.42,.86,1.3])dsp.push([[x-.29,h+rr(r,-.03,.03),.035],[x+.28,h+rr(r,-.03,.03),.035]]);
+      for(const [h0,h1] of[[0,.42],[.42,.86],[.86,1.3],[1.3,1.85]])dsp.push([[x+rr(r,-.14,.14),h0,.03],[x+rr(r,-.14,.14),h1,.03]])}
+    // left leaf sprung off its lower hinge, hanging askew; right leaf leans against its pillar
+    const RL=sp=>sp.map(([x,h,w])=>{const[q]=rot([[x,h]],-.2,-1.25,1.55);return[q[0],q[1],w]});
+    dsp.push(RL([[-1.25,.12,.06],[-.7,.18,.06]]),RL([[-1.25,1.5,.06],[-.7,1.44,.06]]),RL([[-1.25,.1,.06],[-1.25,1.55,.06]]));
+    for(let i=0;i<4;i++){const x=-1.12+i*.13,t=1.6-i*.03;dsp.push(RL([[x,.12,.045],[x,t,.045]]));dark.push(rot([[x-.05,t],[x+.05,t],[x,t+.13]],-.2,-1.25,1.55))}
+    for(let i=0;i<4;i++){const x=.78+i*.13;dsp.push([[x,.05,.045],[x+.32,1.42,.045]]);dark.push(rot([[x+.27,1.42],[x+.37,1.42],[x+.32,1.55]],0))}
+    dsp.push([[.74,.25,.06],[1.2,.3,.06]],[[.96,1.18,.06],[1.3,1.24,.06]])}
+  const stone=v===2,cw=stone?['#6a6862','#3e3c38','#24221f','#1d1b19']:['#6e5b42','#40352a','#261f18','#1f1a15'];
   return {grp:'w',Z,X:0,kind:'lm',veil:[1,2],op:z=>clamp((ZFAR-z)/FADE),lops:[null,z=>1-fogAmt(z),z=>fogAmt(z)],
-    geom(z,id){const ps=parts.map(p=>p.map(([x,h])=>P(x,h,z)));const d=ps.map(dPoly).join('');const c=P(0.7,0.7,z);const cf=P(0,1.2,z),cf2=P(0,0,z);
-      return{bb:bbox(ps),pb:ps.map(l=>bbox([l])),layers:[`<path d="${d}" fill="${TRK('#1a1612')}"/>`,`<defs>${rgrad(id+'w',c[0],c[1],3.2*F/z,[[0,'#6e5b42'],[.35,'#40352a'],[.7,'#15120e'],[1,'#0f0d0b']],0.55)}</defs><path d="${d}" fill="url(#${id}w)"/>`,
-        `<defs>${lgrad(id+'f',0,cf[1],0,cf2[1],[[0,FOG('#2e2f33')],[1,FOG('#25262a')]])}</defs><path d="${d}" fill="url(#${id}f)"/>`]};}};
+    geom(z,id){const pp=l=>l.map(([x,h])=>P(x,h,z)),ws=[...wood.map(pp),...wsp.map(sp=>wRib(sp,0,z))],ds=[...dark.map(pp),...dsp.map(sp=>wRib(sp,0,z))],bs=bone.map(pp);
+      const d=ws.map(dPoly).join(''),dd=ds.map(dPoly).join(''),db=bs.map(dPoly).join(''),all=d+dd+db;const c=P(0.7,0.7,z);const cf=P(0,1.2,z),cf2=P(0,0,z);
+      return{bb:bbox([...ws,...ds,...bs]),pb:[...ws,...ds,...bs].map(l=>bbox([l])),layers:[`<path d="${all}" fill="${TRK('#1a1612')}"/>`,
+        `<defs>${rgrad(id+'w',c[0],c[1],3.2*F/z,[[0,cw[0]],[.35,cw[1]],[.7,cw[2]],[1,cw[3]]],0.55)}</defs><path d="${d}" fill="url(#${id}w)"/>${db?`<path d="${db}" fill="#6a6456"/>`:''}${dd?`<path d="${dd}" fill="#0d0c0b"/>`:''}`,
+        `<defs>${lgrad(id+'f',0,cf[1],0,cf2[1],[[0,FOG('#2e2f33')],[1,FOG('#25262a')]])}</defs><path d="${all}" fill="url(#${id}f)"/>`]};}};
 }
 // station 1 — PASS = "an old lantern hanging from a wooden post, lit"
 function lanternItem(Z,X){
@@ -413,16 +447,25 @@ function lanternPool(Z,X){
 }
 // station 3 — PASS = "a row of old tilted gravestones in moonlight"
 function graveItem(Z,X,r,kind){
-  const w=rr(r,0.36,0.55),h=rr(r,0.95,1.4),lean=(r()<.5?-1:1)*rr(r,0.06,0.24);let s;
-  if(kind===0){s=[[-w/2,-0.1],[w/2,-0.1],[w/2,h-w/2]];for(let i=1;i<10;i++){const a=i/10*Math.PI;s.push([Math.cos(a)*w/2,h-w/2+Math.sin(a)*w/2])}s.push([-w/2,h-w/2])}
-  else if(kind===1){const t=w*0.3;s=[[-t/2,-0.1],[t/2,-0.1],[t/2,h*0.62],[w/2,h*0.62],[w/2,h*0.62+t],[t/2,h*0.62+t],[t/2,h],[-t/2,h],[-t/2,h*0.62+t],[-w/2,h*0.62+t],[-w/2,h*0.62],[-t/2,h*0.62]]}
-  else if(kind===2){s=[[-w/2,-0.1],[w/2,-0.1],[w/2,h*0.7],[w*0.3,h*0.9],[0,h],[-w*0.3,h*0.9],[-w/2,h*0.7]]}
-  else {s=[[-w/2,-0.1],[w/2,-0.1],[w/2,h*0.7],[w*0.2,h*0.78],[w*0.05,h*0.95],[-w/2,h]]}
-  s=rot(s,lean);const eng=[[[-w*0.25,h*0.5,0.05],[w*0.25,h*0.5,0.05]],[[-w*0.2,h*0.36,0.05],[w*0.2,h*0.36,0.05]]];
+  // v4b: weathered, not cartoon: dimmer moonlit tops, chipped and uneven outlines, some sunk deep and leaning hard, a
+  // crack across the face, moss at the foot; six silhouettes (round, cross, gothic point, broken, obelisk, slab)
+  const w=rr(r,0.36,0.55),h=rr(r,0.85,1.35),sink=r()<.35?rr(r,.12,.3):0,lean=(r()<.5?-1:1)*rr(r,0.05,sink?0.34:0.2);let s;
+  const chip=pts=>pts.map(([x,y],i)=>i>1&&i<pts.length-1&&r()<.45?[x+rr(r,-.025,.025),y-rr(r,0,.05)]:[x,y]);
+  if(kind===0){s=[[-w/2,-0.1],[w/2,-0.1],[w/2,h-w/2]];for(let i=1;i<10;i++){const a=i/10*Math.PI;s.push([Math.cos(a)*w/2,h-w/2+Math.sin(a)*w/2])}s.push([-w/2,h-w/2]);s=chip(s)}
+  else if(kind===1){const t=Math.max(.11,w*0.3),ab=h*rr(r,.6,.68);s=[[-t/2,-0.1],[t/2,-0.1],[t/2,ab],[w/2,ab+.02],[w/2,ab+t],[t/2,ab+t],[t/2,h],[-t/2,h-.03],[-t/2,ab+t],[-w/2+.04,ab+t-.03],[-w/2+.04,ab],[-t/2,ab]]}
+  else if(kind===2){s=chip([[-w/2,-0.1],[w/2,-0.1],[w/2,h*0.7],[w*0.32,h*0.86],[w*.12,h*.95],[0,h],[-w*0.3,h*0.88],[-w/2,h*0.7]])}
+  else if(kind===3){s=[[-w/2,-0.1],[w/2,-0.1],[w/2,h*0.58],[w*0.3,h*0.66],[w*0.22,h*0.6],[w*0.05,h*0.82],[-w*.1,h*.74],[-w*.28,h*.9],[-w/2,h*.84]]}
+  else if(kind===4){const t=w*.62;s=[[-t/2,-0.1],[t/2,-0.1],[t*.36,h*1.25],[0,h*1.42],[-t*.36,h*1.25]]}
+  else {s=chip([[-w*.62,-0.1],[w*.62,-0.1],[w*.6,h*.55],[w*.5,h*.62],[-w*.52,h*.64],[-w*.62,h*.56]])}
+  s=rot(s.map(([x,y])=>[x,y-sink]),lean);const ht=Math.max(...s.map(p=>p[1]));
+  const ck=r()<.6?[[-w*.18,ht*.8,.035],[w*.02,ht*.62,.035],[-w*.06,ht*.45,.03],[w*.14,ht*.3,.03]]:null;
+  const eng=kind===4||kind===1?[]:[[[-w*0.25,ht*0.5,0.05],[w*0.25,ht*0.5,0.05]],[[-w*0.2,ht*0.36,0.05],[w*0.2,ht*0.36,0.05]]];
+  const tone=['#7f8b9a','#738090','#8a8f94','#6e7a86'][Math.floor(r()*4)];
   return {grp:'w',Z,X,kind:'lm',veil:[1],op:z=>clamp((ZFAR-z)/FADE),lops:[null,z=>fogAmt(z)*0.9],
-    geom(z,id){const pr=p=>P(X+p[0],p[1],z);const ps=s.map(pr);const top=pr([-w/2,h]),bot=pr([w/2,0]);const e=eng.map(sp=>rot(wRib(sp,X,z),-lean,...pr([0,0])));const sd=[...Array(12)].map((_,i)=>{const a=i/12*TAU;return P(X+w*0.1+Math.cos(a)*w*1.1,0,z+Math.sin(a)*Math.min(0.35,z*0.3))});
+    geom(z,id){const pr=p=>P(X+p[0],p[1],z);const ps=s.map(pr);const top=pr([-w/2,ht]),bot=pr([w/2,0]);const e=eng.map(sp=>rot(wRib(sp,X,z),-lean,...pr([0,0])));const sd=[...Array(12)].map((_,i)=>{const a=i/12*TAU;return P(X+w*0.1+Math.cos(a)*w*1.1,0,z+Math.sin(a)*Math.min(0.35,z*0.3))});
+      const cr=ck?`<path d="${dPoly(rot(wRib(ck,X,z),-lean,...pr([0,0])))}" fill="#0a0c10" opacity=".8"/>`:'';
       return{bb:bbox([ps,sd]),layers:[
-        `<defs>${lgrad(id+'s',top[0],top[1],bot[0],bot[1],[[0,'#98abc2'],[.28,'#4a5464'],[.62,'#1c2027'],[1,'#101216']])}</defs><path d="${dPoly(sd)}" fill="#050506" opacity=".7"/><path d="${dPoly(ps)}" fill="url(#${id}s)"/>${e.map(p=>`<path d="${dPoly(p)}" fill="#0c0e12" opacity=".85"/>`).join('')}`,
+        `<defs>${lgrad(id+'s',top[0],top[1],bot[0],bot[1],[[0,tone],[.3,'#414a56'],[.62,'#1a1e24'],[.86,'#14180f'],[1,'#0e110c']])}</defs><path d="${dPoly(sd)}" fill="#050506" opacity=".7"/><path d="${dPoly(ps)}" fill="url(#${id}s)"/>${e.map(p=>`<path d="${dPoly(p)}" fill="#0c0e12" opacity=".85"/>`).join('')}${cr}`,
         `<path d="${dPoly(ps)}" fill="#24262a"/>`]};}};
 }
 function moonPool(Z,X=-4.6){
@@ -471,26 +514,34 @@ function prop(Z,X,body,lit,opts={}){
 }
 const keep=(X,Z,hw=2.6,dz=3)=>[X-hw,X+hw,Z-dz,Z+dz];
 let LEAN=0;
-// station 2 — PASS = a fresh viewer names this as "a scarecrow with a glowing pumpkin head"
+// station 2 — PASS = a fresh viewer names this as "a ragged scarecrow with a sack head" (v4b: no pumpkin, no witch hat;
+// a tattered long coat, a lolling burlap head under a battered brim, two dim ember eyes)
 function scarecrow(Z,X){
-  const cloth='#3a2a1c',straw='#8a6a2c';
+  const coat='#29231c',straw='#5a4a28',dk='#0b0806',hat='#110f0e';
+  const head=[[.08,2.24],[.2,2.2],[.27,2.08],[.27,1.96],[.2,1.86],[.08,1.82],[-.04,1.85],[-.11,1.95],[-.12,2.07],[-.05,2.19]];
+  const hd=sh=>rotS(sh.e?{...sh,p:ell(...sh.e),e:null}:sh,-.16,.06,1.84);   // the head lolls to one side
   return prop(Z,X,[
-    {p:[[-.05,-.05],[.05,-.05],[.045,2.25],[-.045,2.25]],c:'#241a10'},
-    {s:[[-.8,1.72,.09],[.8,1.76,.09]],c:'#2a1f14'},
-    {p:[[-.46,1.8],[.46,1.8],[.4,1.3],[.42,.95],[.3,.88],[.22,.98],[.1,.86],[-.02,.97],[-.14,.85],[-.26,.96],[-.36,.87],[-.42,.95],[-.4,1.3]],c:cloth},
-    {p:[[.08,1.2],[.26,1.22],[.25,1.4],[.07,1.38]],c:'#5a3f22'},
-    {s:[[-.42,1.74,.2],[-.75,1.72,.17]],c:cloth},{s:[[.42,1.76,.2],[.75,1.78,.17]],c:cloth},
-    {p:[[-.75,1.8],[-.95,1.88],[-.88,1.76],[-1,1.7],[-.86,1.68],[-.93,1.58],[-.75,1.64]],c:straw},
-    {p:[[.75,1.82],[.95,1.9],[.88,1.78],[1,1.72],[.86,1.7],[.93,1.6],[.75,1.66]],c:straw},
-    {p:[[-.22,.9],[-.18,.7],[-.13,.9]],c:straw},{p:[[.04,.9],[.1,.68],[.15,.9]],c:straw},{p:[[.27,.9],[.33,.72],[.37,.9]],c:straw},
-    {e:[0,2.02,.25,.2],c:'#8a4516'},
-    {s:[[-.1,1.86,.04],[-.13,2.02,.045],[-.1,2.18,.04]],c:'#5e2e0e'},{s:[[.1,1.86,.04],[.13,2.02,.045],[.1,2.18,.04]],c:'#5e2e0e'},
-    {s:[[-.34,2.2,.05],[.34,2.22,.05]],c:'#141010'},
-    {p:[[-.17,2.21],[.15,2.23],[.07,2.5],[.22,2.62],[-.01,2.53]],c:'#141010'},
+    {s:[[0,-.05,.1],[.025,1.2,.09],[-.01,2.0,.08]],c:'#1c150e'},
+    {s:[[-.86,1.6,.08],[.86,1.82,.08]],c:'#231a11'},
+    {s:[[-.34,1.69,.2],[-.6,1.65,.18],[-.8,1.62,.16]],c:coat},{s:[[.34,1.78,.2],[.6,1.8,.18],[.8,1.83,.16]],c:coat},
+    {p:[[-.36,1.71],[-.1,1.77],[.1,1.8],[.36,1.8],[.4,1.4],[.45,1.0],[.42,.78],[.34,.96],[.28,.64],[.18,.9],[.1,.68],[0,.86],[-.08,.6],[-.16,.88],[-.26,.7],[-.32,.93],[-.43,.79],[-.42,1.05],[-.38,1.4]],c:coat},
+    {p:[[.1,1.22],[.27,1.25],[.25,1.43],[.08,1.4]],c:'#372e24'},
+    {s:[[-.42,1.17,.04],[0,1.15,.04],[.44,1.19,.04]],c:'#3a2f1e'},
+    {p:[[-.83,1.58],[-.77,1.58],[-.81,1.27]],c:coat},{p:[[-.72,1.6],[-.67,1.6],[-.71,1.4]],c:coat},{p:[[-.58,1.62],[-.53,1.62],[-.57,1.44]],c:coat},
+    {p:[[.83,1.8],[.77,1.79],[.82,1.5]],c:coat},{p:[[.66,1.78],[.61,1.77],[.64,1.56]],c:coat},
+    {p:[[-.79,1.66],[-.97,1.7],[-.88,1.62],[-1.0,1.58],[-.86,1.56],[-.92,1.47],[-.79,1.55]],c:straw},
+    {p:[[.79,1.88],[.97,1.94],[.88,1.85],[1.0,1.81],[.86,1.79],[.92,1.71],[.79,1.78]],c:straw},
+    {p:[[-.21,.76],[-.17,.54],[-.13,.76]],c:straw},{p:[[.12,.73],[.16,.5],[.2,.75]],c:straw},
+    hd({p:[[-.04,1.79],[.15,1.81],[.19,1.9],[0,1.88]],c:'#40362a'}),
+    hd({p:head,c:'#504435'}),
+    hd({s:[[-.05,1.86,.045],[.18,1.88,.045]],c:'#171109'}),
+    hd({e:[0,2.05,.055,.045,10],c:dk}),hd({e:[.16,2.07,.055,.045,10],c:dk}),
+    hd({s:[[-.03,1.95,.03],[.08,1.93,.035],[.19,1.96,.03]],c:dk}),
+    hd({p:[[-.24,2.15],[.05,2.22],[.4,2.25],[.47,2.17],[.3,2.18],[.05,2.16],[-.21,2.08]],c:hat}),
+    hd({p:[[-.08,2.19],[.26,2.23],[.24,2.45],[.13,2.4],[.03,2.48],[-.06,2.42]],c:hat}),
   ],[
-    {p:[[-.14,2.02],[-.04,2.02],[-.09,2.11]],c:'#ffc15a'},{p:[[.04,2.02],[.14,2.02],[.09,2.11]],c:'#ffc15a'},
-    {p:[[-.14,1.94],[.14,1.94],[.11,1.88],[.06,1.92],[.02,1.87],[-.02,1.92],[-.06,1.87],[-.11,1.9]],c:'#ffb347'},
-  ],{flick:1,glows:[{x:0,h:1.98,r:.6,c:'#ffa040',a:.38},{x:0,h:1.6,r:1.5,c:'#6c7a92',a:.16,back:1}]});
+    hd({e:[0,2.05,.04,.032,10],c:'#9a4e24'}),hd({e:[.16,2.07,.04,.032,10],c:'#9a4e24'}),
+  ],{flick:1,glows:[{x:.05,h:2.08,r:.34,c:'#ff8a3a',a:.2},{x:0,h:1.6,r:1.5,c:'#6c7a92',a:.18,back:1}]});
 }
 // station 4 — PASS = "a row of glowing carved jack-o'-lanterns"
 function jackRow(Z,X){
@@ -613,6 +664,100 @@ function signpost(Z,X){
   ],[],{glows:[{x:0,h:1.7,r:1.5,c:'#8a98b0',a:.26,back:1}]});
 }
 
+// ---------- v4b landmark kit (more variation; silhouettes first, at most one warm light each) ----------
+const flipX=(sh,sd)=>sd>0?sh:Object.assign({},sh,sh.s?{s:sh.s.map(([x,h,w])=>[-x,h,w])}:sh.e?{e:[-sh.e[0],...sh.e.slice(1)]}:{p:sh.p.map(([x,h])=>[-x,h]),hole:sh.hole&&sh.hole.map(([x,h])=>[-x,h])});
+// PASS = "a fallen tree with its roots torn out of the ground". The root plate stands on the far side; the trunk lies
+// toward the path, low (under the text box), its broken end short of the path edge.
+function rootPlate(Z,X){
+  const sd=Math.sign(X)||1,r=rngFor(Math.round(Z*10),61,SEED),earth='#17120d',rt='#241b13';
+  const disc=[...Array(30)].map((_,i)=>{const a=i/30*TAU,rad=i%3?rr(r,.86,1.02):rr(r,1.02,1.16);return[Math.cos(a)*rad*.95,Math.max(-.06,1.0+Math.sin(a)*rad)]});
+  const roots=[...Array(15)].map((_,i)=>{const a=(i/15)*TAU+rr(r,-.2,.2);if(Math.sin(a)<-.55)return null;const r0=.9,l=rr(r,.35,.75),cu=rr(r,-.35,.35);
+    return{s:[[Math.cos(a)*r0*.95,1+Math.sin(a)*r0,.1],[Math.cos(a+cu*.3)*(r0+l*.5)*.95,1+Math.sin(a+cu*.3)*(r0+l*.5),.06],[Math.cos(a+cu)*(r0+l)*.95,1+Math.sin(a+cu)*(r0+l),.035]],c:rt}}).filter(Boolean);
+  const hang=[-.5,-.1,.35].map(x=>({s:[[x,.2,.05],[x+rr(r,-.08,.08),-.02+rr(r,0,.1),.035]],c:rt}));
+  return prop(Z,X,[
+    {s:[[.3,.52,.74],[1.3,.48,.69],[2.3,.43,.62],[3.0,.4,.56]],c:'#2a2119'},{s:[[.5,.8,.05],[1.6,.74,.05],[2.8,.66,.04]],c:'#3a2e22'},
+    {p:[[2.9,.1],[3.22,.18],[3.08,.32],[3.3,.44],[3.0,.56],[2.85,.68]],c:'#2c2219'},
+    {s:[[1.2,.75,.12],[1.42,1.25,.09],[1.3,1.55,.06]],c:'#211a13'},{s:[[2.1,.66,.1],[2.42,1.05,.07]],c:'#211a13'},{s:[[2.6,.6,.08],[2.75,.82,.05]],c:'#211a13'},
+    {e:[-.15,.0,.95,.07],c:'#060505'},
+    ...roots,{p:disc,c:earth},...hang,
+    {s:[[-.75,1.55,.05],[-.3,1.25,.045],[.1,1.3,.04]],c:'#120e0a'},{s:[[.55,1.45,.05],[.2,.95,.045],[.35,.5,.04]],c:'#120e0a'},{s:[[-.6,.6,.045],[-.2,.85,.04]],c:'#120e0a'},
+  ].map(sh=>flipX(sh,-sd)),[],{glows:[{x:0,h:1.15,r:1.9,c:'#7a88a2',a:.22,back:1}]});
+}
+// PASS = "a ruined stone chapel wall with a pointed window, a candle on the sill"
+function chapelRuin(Z,X){
+  const sd=Math.sign(X)||1,stone='#2b2a28',jt='#121110';
+  const win=[[-.65,1.15],[.05,1.15],[.05,2.2],[.0,2.42],[-.12,2.62],[-.3,2.76],[-.48,2.62],[-.6,2.42],[-.65,2.2]];
+  const wall=[[-1.6,-.1],[1.7,-.1],[1.72,1.6],[1.55,1.86],[1.4,1.7],[1.16,2.06],[.92,1.98],[.74,2.42],[.52,2.3],[.32,2.88],[.12,3.02],[-.2,3.26],[-.5,3.4],[-.76,3.3],[-1.0,3.66],[-1.26,3.55],[-1.45,3.72],[-1.6,3.5]];
+  const joints=[[-1.55,.5,-.7],[.1,.5,1.68],[-1.55,1.0,-.7],[.1,1.02,1.66],[-1.55,1.55,1.5],[-1.5,2.95,-.75],[.2,2.1,1.0]].map(([a,h,b])=>({s:[[a,h,.035],[b,h+.02,.035]],c:jt}));
+  const vj=[[-1.1,.0,.5],[.7,.5,1.0],[-.9,1.0,1.55],[1.2,1.02,1.55],[-1.2,1.55,2.95]].map(([x,a,b])=>({s:[[x,a,.03],[x,b,.03]],c:jt}));
+  return prop(Z,X,[
+    {p:wall,hole:win,c:stone},...joints,...vj,
+    {p:[[-1.88,-.1],[-1.45,-.1],[-1.45,2.62],[-1.66,2.84],[-1.88,2.6]],c:'#222120'},
+    {p:[[.95,1.5],[1.72,1.45],[1.72,.3],[1.3,.0],[1.0,.6]],c:'#151a13',o:.85},
+    {p:[[1.75,-.1],[2.25,-.1],[2.15,.18],[1.9,.26]],c:'#222120'},{p:[[-2.3,-.1],[-1.95,-.1],[-2.05,.16]],c:'#222120'},
+    {p:[[-.68,1.09],[.08,1.09],[.08,1.16],[-.68,1.16]],c:'#363431'},
+    {p:[[-.33,1.16],[-.27,1.16],[-.27,1.28],[-.33,1.28]],c:'#b9ae94'},
+  ].map(sh=>flipX(sh,sd)),[
+    flipX({p:[[-.335,1.28],[-.265,1.28],[-.3,1.4]],c:'#ffd27a'},sd),
+  ],{flick:1,glows:[{x:-.3*sd,h:1.33,r:.42,c:'#ffc070',a:.45},{x:-.3*sd,h:2.0,r:1.25,c:'#8ea2c4',a:.34,back:1}]});
+}
+// PASS = "a ruined windmill on the skyline with broken sails" (stands far off the path, seen across many metres)
+function windmill(Z,X,zr){
+  const r=rngFor(Math.round(Z*10),67,SEED),a0=rr(r,0,Math.PI/2),hub=[0,6.55],sl='#191512',arms=[];
+  const at=(a,d)=>[hub[0]+Math.cos(a)*d,hub[1]+Math.sin(a)*d];
+  const sail=(a,d0,d1,frame)=>{const[x0,h0]=at(a,d0),[x1,h1]=at(a,d1);arms.push({s:[[hub[0],hub[1],.13],[x1,h1,.1]],c:sl});if(!frame)return;
+    const n=[-Math.sin(a)*.55,Math.cos(a)*.55],q=(x,h)=>[x+n[0],h+n[1]];const[xa,ha]=q(x0,h0),[xb,hb]=q(x1,h1);
+    arms.push({s:[[xa,ha,.05],[xb,hb,.05]],c:sl});for(let i=0;i<=3;i++){const t=i/3,[cx,ch]=[x0+(x1-x0)*t,h0+(h1-h0)*t];if(frame===2&&i>1)break;arms.push({s:[[cx,ch,.045],[cx+n[0],ch+n[1],.045]],c:sl})}};
+  sail(a0,.6,3.4,1);sail(a0+Math.PI,.6,3.3,2);
+  {const a=a0+Math.PI/2,[x,h]=at(a,1.5);arms.push({s:[[hub[0],hub[1],.13],[x,h,.1]],c:sl},{p:[[x-.08,h-.06],[x+.1,h],[x+.02,h+.14]],c:sl})}
+  {const a=a0+Math.PI*1.5,[bx,bh]=at(a,1.0);arms.push({s:[[hub[0],hub[1],.13],[bx,bh,.11]],c:sl},{s:[[bx,bh,.1],[bx+.25,bh-2.2,.09]],c:sl},{s:[[bx+.08,bh-.5,.05],[bx+.62,bh-.42,.05],[bx+.8,bh-2.1,.05],[bx+.3,bh-2.2,.05]],c:sl})}
+  return prop(Z,X,[
+    {p:[[-1.25,-.1],[1.25,-.1],[.72,6.2],[-.72,6.2]],c:'#2a2622'},
+    {p:[[-.28,-.1],[.28,-.1],[.28,1.1],[0,1.4],[-.28,1.1]],c:'#0b0a09'},
+    {p:[[-.46,2.5],[-.2,2.52],[-.22,2.9],[-.44,2.86]],c:'#0d0c0b'},
+    {p:[[-.98,6.1],[.98,6.1],[.76,6.9],[.3,7.2],[.1,7.0],[-.1,7.32],[-.76,6.9]],c:'#171412'},
+    ...arms,{e:[hub[0],hub[1],.18,.18,12],c:'#100e0c'},
+  ],[{p:[[.02,4.2],[.26,4.2],[.26,4.52],[.02,4.52]],c:'#c9934e'}],
+  {zr,glows:[{x:.14,h:4.36,r:.65,c:'#ffb060',a:.26},{x:0,h:5.2,r:4.6,c:'#7d8ba6',a:.2,back:1}]});
+}
+// PASS = "eyes watching from the dark under the trees"
+function watchEyes(Z,X){
+  const r=rngFor(Math.round(Z*10),71,SEED),ec=r()<.5?'#e6ef8c':'#ff6a3c',pairs=[[-1.15,.52],[.25,.86],[1.05,.4]],lit=[],glows=[];
+  for(const[x,h] of pairs){const g=rr(r,.13,.16);lit.push({e:[x-g/2,h,.034,.026,10],c:ec},{e:[x+g/2,h+.006,.034,.026,10],c:ec});glows.push({x,h,r:.26,c:ec,a:.3})}
+  const bush=(x0,w,h)=>{const pts=[[x0-w/2,-.05]];for(let i=0;i<=9;i++){const t=i/9;pts.push([x0-w/2+w*t,(i%2?h:h*.55)*Math.sin(Math.PI*(.1+t*.8))+rr(r,0,.08)])}pts.push([x0+w/2,-.05]);return{p:pts,c:'#0d0c0a'}};
+  return prop(Z,X,[bush(-1.0,1.1,.42),bush(.35,1.3,.66),bush(1.25,.9,.32),{s:[[-.2,0,.05],[-.32,.95,.04],[-.5,1.3,.03]],c:'#0f0d0b'},{s:[[.9,0,.05],[1.05,.8,.035]],c:'#0f0d0b'}],
+    lit,{flick:1,glows});
+}
+// PASS = "a dead tree with old lanterns hanging from a branch" (the branch reaches away from the path)
+function lanternTree(Z,X){
+  const sd=Math.sign(X)||1,tr='#1d1813',body=[],lit=[],glows=[];
+  body.push({s:[[0,-.05,.34],[.06,1.2,.27],[-.08,2.4,.21],[.04,3.5,.13],[-.05,4.1,.07]],c:tr},{s:[[-.02,2.55,.17],[.8,2.88,.12],[1.6,3.0,.09],[2.25,3.22,.06]],c:tr},
+    {s:[[.02,3.2,.1],[-.5,3.7,.07],[-.75,4.1,.04]],c:tr},{s:[[1.2,2.95,.05],[1.35,3.35,.04]],c:tr},{s:[[.1,.0,.22],[.55,-.04,.12]],c:tr},{s:[[-.1,.0,.2],[-.45,-.04,.1]],c:tr});
+  const lan=(x,top,len,on,tilt)=>{const y=top-len;body.push({s:[[x,top,.03],[x,y+.16,.03]],c:'#100c09'});
+    const T=sh=>rotS(sh,tilt,x,y+.16);body.push(T({p:[[x-.15,y],[x+.15,y],[x+.08,y+.14],[x-.08,y+.14]],c:'#1c140c'}),T({p:[[x-.17,y-.4],[x+.17,y-.4],[x+.14,y-.33],[x-.14,y-.33]],c:'#1c140c'}));
+    const gl=T({p:[[x-.12,y-.33],[x+.12,y-.33],[x+.13,y],[x-.13,y]],c:on?'#ffd08a':'#1a1610'});if(on){lit.push(gl);glows.push({x,h:y-.17,r:.55,c:'#ffc070',a:.42})}else body.push(gl)};
+  lan(.85,2.86,.5,1,0);lan(1.35,2.97,.95,0,.35);lan(1.85,3.08,.7,1,0);
+  glows.push({x:1.3,h:.02,r:1.5,c:'#ffb050',a:.16,sy:.25});
+  return prop(Z,X,body.map(sh=>flipX(sh,sd)),lit.map(sh=>flipX(sh,sd)),{flick:1,glows:glows.map(g=>({...g,x:g.x*sd}))});
+}
+// PASS = "a dead tree full of crows"
+function crowTree(Z,X){
+  const sd=Math.sign(X)||1,r=rngFor(Math.round(Z*10),73,SEED),tr='#16130f',b=[];
+  b.push({s:[[0,-.05,.3],[-.05,1.4,.22],[.1,2.6,.15],[.0,3.4,.08]],c:tr},{s:[[-.02,1.9,.13],[.7,2.3,.09],[1.4,2.4,.06]],c:tr},{s:[[.08,2.5,.1],[-.6,2.95,.07],[-1.1,3.05,.045]],c:tr},{s:[[.05,3.0,.07],[.55,3.45,.045]],c:tr});
+  const crow=(x,h,f)=>{b.push({p:[[x-.17*f,h],[x+.13*f,h-.02],[x+.21*f,h+.1],[x+.05*f,h+.32],[x-.08*f,h+.3],[x-.2*f,h+.18]],c:'#060607'},{e:[x-.05*f,h+.38,.08,.07],c:'#060607'},{p:[[x-.12*f,h+.4],[x-.24*f,h+.37],[x-.12*f,h+.35]],c:'#060607'},{s:[[x+.1*f,h+.04,.035],[x+.36*f,h-.1,.03]],c:'#060607'})};
+  [[1.0,2.36],[1.38,2.42],[-.55,2.95],[.48,3.42],[.0,3.38]].forEach(([x,h])=>crow(x,h+.02,r()<.5?-1:1));
+  return prop(Z,X,b.map(sh=>flipX(sh,sd)),[],{glows:[{x:.2*sd,h:2.6,r:2.0,c:'#8090a8',a:.26,back:1}]});
+}
+// PASS = "a coffin standing up against a dug grave, lid ajar, a shovel in the dirt"
+function coffin(Z,X){
+  const sd=Math.sign(X)||1,cf=[[-.19,-.05],[.19,-.05],[.3,1.42],[.18,1.92],[-.18,1.92],[-.3,1.42]],T=sh=>rotS(sh,-.14,0,0);
+  const lid=rot(cf.map(([x,h])=>[x*1.02+.07,h+.02]),-.05,.3,1.42);
+  return prop(Z,X,[
+    {e:[.75,.0,.75,.22],c:'#1b1712'},{p:[[.25,-.05],[1.25,-.05],[1.1,.3],[.8,.42],[.45,.32]],c:'#231d16'},
+    {s:[[.95,.0,.05],[1.12,1.15,.045]],c:'#2a2018'},{p:[[1.03,1.12],[1.21,1.16],[1.2,1.28],[1.04,1.25]],c:'#2a2018'},{p:[[.88,-.05],[1.06,-.04],[1.02,.24],[.9,.22]],c:'#3a3a38'},
+    T({p:cf,c:'#0a0807'}),T({p:lid,c:'#2c2219'}),T({s:[[-.1,1.55,.04],[.22,1.58,.04]],c:'#171210'}),T({s:[[.05,.3,.035],[.06,1.75,.035]],c:'#171210'}),
+  ].map(sh=>flipX(sh,sd)),[],{glows:[{x:.3*sd,h:1.1,r:1.6,c:'#7a88a2',a:.24,back:1}]});
+}
 // ---------- planar homography: 4 point pairs -> 3x3 (h33 = 1), as a CSS matrix3d about the screen origin ----------
 function homog(src,dst){
   const A=[],b=[];
@@ -636,30 +781,40 @@ function clipZ(poly,zmin){const out=[];for(let i=0;i<poly.length;i++){const a=po
 function wallAround(hw,dw,c){const top=x=>WH+(PK-WH)*(1-Math.abs(x)/hw);
   return[{p:[[-hw,-.1],[-dw,-.1],[-dw,top(dw)],[-hw,WH]],c},{p:[[dw,-.1],[hw,-.1],[hw,WH],[dw,top(dw)]],c},
     {p:[[-dw-.01,3.45],[dw+.01,3.45],[dw+.01,top(dw)],[0,PK],[-dw-.01,top(dw)]],c}]}
-function barnFront(Z){
-  // weathered: dark, desaturated boards, a few missing (gaps), the door hung crooked; braces 46+ grey levels off the leaf
-  const top=x=>WH+(PK-WH)*(1-Math.abs(x)/BW),bd='#120907',trim='#57493c',rw=rngFor(77,Z|0);
-  const boards=[];for(let x=-3.75;x<=3.76;x+=.5)boards.push({s:[[x,Math.abs(x)<1.62?3.5:0,.05],[x+rr(rw,-.03,.03),top(x)-.06,.05]],c:bd});
+// barn paint, seeded per barn. Door braces sit ~42 grey levels (Rec.709 luma) off their door leaf: they read at 30 ft
+// but never glow (v4: 49 levels, read as a bright white X)
+const BPAINT=[{wall:'#25140e',leaf:'#28160f',bd:'#110907',trim:'#4d4136'},{wall:'#252321',leaf:'#2c2a27',bd:'#121110',trim:'#58534c'},
+  {wall:'#22190f',leaf:'#271c13',bd:'#0e0a07',trim:'#514639'}];
+function barnFront(Z,pt){
+  // weathered: dark boards, a few planks lighter or darker, rot creeping up from the ground, missing and loose boards,
+  // the doors hung crooked, the hay-loft door hanging open off one hinge, a sagging roof edge
+  const top=x=>WH+(PK-WH)*(1-Math.abs(x)/BW),rw=rngFor(77,Z|0);
+  const boards=[];for(let x=-3.75;x<=3.76;x+=.5)boards.push({s:[[x,Math.abs(x)<1.62?3.5:0,.05],[x+rr(rw,-.03,.03),top(x)-.06,.05]],c:pt.bd});
+  for(let x=-3.5;x<3.6;x+=.5){if(Math.abs(x)<1.9||rw()<.5)continue;const y0=rr(rw,.3,.7);boards.push({p:[[x-.2,y0],[x+.2,y0],[x+.2,top(x+.2)-.12],[x-.2,top(x-.2)-.12]],c:mix(pt.wall,rw()<.5?'#000000':'#5a5048',.16)})}
+  for(const sd of[-1,1]){const pts=[[sd*1.66,-.1],[sd*(BW+.15),-.1]];for(let i=0;i<=8;i++)pts.push([sd*(BW+.15-i*(BW+.15-1.66)/8),rr(rw,.16,.52)]);boards.push({p:pts,c:'#0b0907',o:.7})}
   for(let i=0;i<3;i++){const x=(rw()<.5?-1:1)*rr(rw,1.9,3.6),h=rr(rw,.4,2.4);boards.push({p:[[x-.11,h],[x+.11,h+.05],[x+.1,h+.75],[x-.1,h+.7]],c:'#070505'})}
-  const leaf=sd=>{const x0=sd*1.68,x1=sd*3.25,sg=sd<0?.06:0;return[{p:[[x0,0],[x1,0],[x1,3.3-sg*3],[x0,3.3]],c:'#2a1610'},
-    ...[[x0,.05,x1,.05],[x0,3.25,x1,3.25],[x0,1.65,x1,1.65],[x0,.05,x1,1.65],[x0,1.65,x1,3.25]].map(([a,b,c,d])=>({s:[[a,b,.09],[c,d,.09]],c:trim}))]};
+  const lx=(rw()<.5?-1:1)*rr(rw,2.2,3.3);boards.push({p:rot([[lx-.11,1.15],[lx+.11,1.15],[lx+.11,2.9],[lx-.11,2.9]],Math.sign(lx)*.24,lx,2.9),c:mix(pt.wall,'#5a5048',.14)});
+  const j=()=>rr(rw,-.035,.035);
+  const leaf=sd=>{const x0=sd*1.68,x1=sd*3.25,sg=sd<0?.06:0;return[{p:[[x0,0],[x1,0],[x1,3.3-sg*3],[x0,3.3]],c:pt.leaf},
+    ...[[x0,.05,x1,.05],[x0,3.25,x1,3.25],[x0,1.65,x1,1.65],[x0,.05,x1,1.65],[x0,1.65,x1,3.25]].map(([a,b,c,d])=>({s:[[a,b+j(),.085],[c,d+j(),.085]],c:pt.trim}))]};
+  const hs=rw()<.5?-1:1,sh=rot([[hs*.6,4.15],[hs*1.16,4.15],[hs*1.16,5.2],[hs*.6,5.2]],-hs*.3,hs*.6,5.2);
   return prop(Z,0,[
-    ...wallAround(BW+.15,1.6,'#22110c'),
+    ...wallAround(BW+.15,1.6,pt.wall),
     ...boards,...leaf(-1),...leaf(1),
-    {s:[[-1.65,0,.12],[-1.65,3.5,.12]],c:trim},{s:[[1.65,0,.12],[1.65,3.5,.12]],c:trim},{s:[[-1.7,3.5,.12],[1.7,3.5,.12]],c:trim},
-    {p:[[-.6,4.15],[.6,4.15],[.6,5.2],[-.6,5.2]],c:'#0c0605'},
-    {s:[[-.6,4.15,.08],[.6,5.2,.08]],c:'#3e352c'},{s:[[.6,4.15,.08],[-.6,5.2,.08]],c:'#3e352c'},
-    {s:[[-BW-.7,WH-.35,.24],[0,PK+.35,.24],[BW+.7,WH-.35,.24]],c:'#0e0806'},
+    {s:[[-1.65,0,.12],[-1.65,3.5,.12]],c:pt.trim},{s:[[1.65,0,.12],[1.65,3.5,.12]],c:pt.trim},{s:[[-1.7,3.5,.12],[1.7,3.52,.12]],c:pt.trim},
+    {p:[[-.6,4.15],[.6,4.15],[.6,5.2],[-.6,5.2]],c:'#070404'},
+    {p:sh,c:pt.leaf},{s:[[sh[0][0],sh[0][1],.07],[sh[2][0],sh[2][1],.07]],c:mix(pt.trim,'#000000',.15)},
+    {s:[[-BW-.7,WH-.35,.24],[-(BW+.7)/2,(WH+PK)/2-.12,.24],[0,PK+.35,.24],[(BW+.7)/2,(WH+PK)/2-.09,.24],[BW+.5,WH-.22,.24]],c:'#0e0806'},
   ],[],{zr:BDOOR,thru:1,glows:[{x:0,h:.3,r:2.6,c:'#ffa850',a:.13,sy:.35}]});
 }
 // the far wall seen from inside: the doors stand open onto the moonlit forest
-function barnBack(Z){
-  const top=x=>WH+(PK-WH)*(1-Math.abs(x)/BW),bd='#120806',trim='#3e352c';
+function barnBack(Z,pt){
+  const top=x=>WH+(PK-WH)*(1-Math.abs(x)/BW),bd=pt.bd,trim=mix(pt.trim,'#000000',.2);
   const boards=[];for(let x=-3.75;x<=3.76;x+=.5)boards.push({s:[[x,Math.abs(x)<1.82?3.5:0,.05],[x,top(x)-.06,.05]],c:bd});
-  const leaf=sd=>{const x0=sd*1.88,x1=sd*3.5;return[{p:[[x0,0],[x1,0],[x1,3.3],[x0,3.3]],c:'#26130b'},
+  const leaf=sd=>{const x0=sd*1.88,x1=sd*3.5;return[{p:[[x0,0],[x1,0],[x1,3.3],[x0,3.3]],c:mix(pt.leaf,'#000000',.1)},
     ...[[x0,.05,x1,.05],[x0,3.25,x1,3.25],[x0,.05,x1,3.25]].map(([a,b,c,d])=>({s:[[a,b,.09],[c,d,.09]],c:trim}))]};
   return prop(Z,0,[
-    ...wallAround(BW,1.8,'#1c0d08'),
+    ...wallAround(BW,1.8,mix(pt.wall,'#000000',.15)),
     ...boards,...leaf(-1),...leaf(1),
     {s:[[-1.85,0,.12],[-1.85,3.5,.12]],c:trim},{s:[[1.85,0,.12],[1.85,3.5,.12]],c:trim},{s:[[-1.9,3.5,.12],[1.9,3.5,.12]],c:trim},
   ],[],{zr:BLEN,thru:1,glows:[{x:0,h:1.5,r:2.4,c:'#8094b4',a:.2,back:1}]});
@@ -704,12 +859,14 @@ function planeItem(Zn,Z,X0,h0,X1,h1,fill,lines,o={}){return{grp:'w',kind:'plane'
 // ---------- house pieces ----------
 // the house front: clapboard facade, crooked shutters, two lit windows, an open doorway with a porch lamp
 function houseFront(Z,b,r){
-  const{fw,fh,fpk,dF,dh}=b,wall='#2a292d',dark='#141316',trim='#5f594f',sg=rr(r,-.05,.05);
-  const body=[{p:[[-fw,-.1],[-dF,-.1],[-dF,dh],[-fw,fh]],c:wall},{p:[[dF,-.1],[fw,-.1],[fw,fh],[dF,dh]],c:wall},
+  const{fw,fh,fpk,dF,dh}=b,wall=b.wall,dark='#141316',trim='#5f594f',sg=rr(r,-.05,.05);
+  // side pieces run square up to the eave (v4 sloped them from eave to door head, leaving a triangle on each side
+  // through which the hall showed)
+  const body=[{p:[[-fw,-.1],[-dF,-.1],[-dF,fh],[-fw,fh]],c:wall},{p:[[dF,-.1],[fw,-.1],[fw,fh],[dF,fh]],c:wall},
     {p:[[-dF-.01,dh-.05],[dF+.01,dh-.05],[dF+.01,fh],[-dF-.01,fh]],c:wall}];
   for(let h=.35;h<fh-.1;h+=.32){for(const sd of[-1,1]){const xa=sd*fw,xb=sd*(h<dh?dF:0);body.push({s:[[xa,h,.035],[xb,h+sd*sg*.2,.035]],c:'#1c1b1f'})}}
-  body.push({p:[[-fw-.45,fh-.15],[0,fpk],[fw+.45,fh-.15],[fw+.45,fh+.12],[0,fpk+.3],[-fw-.45,fh+.12]],c:'#0f0d0e'});
-  body.push({p:[[-fw+.2,fh],[0,fpk-.25],[fw-.2,fh]],c:'#1d1b1e'});
+  body.push({p:[[-fw-.45,fh-.15],[0,fpk],[fw+.45,fh-.15],[fw+.45,fh+.12],[0,fpk+.3],[-fw-.45,fh+.12]],c:'#151317'});
+  body.push({p:[[-fw+.2,fh],[0,fpk-.25],[fw-.2,fh]],c:mix(wall,'#000000',.12)});
   body.push({p:[[fw*.45,fpk-1.1],[fw*.45+.45,fpk-1.1],[fw*.45+.45,fpk+.5],[fw*.45,fpk+.45]],c:'#1a1414'});   // chimney
   for(const sd of[-1,1])body.push({s:[[sd*(dF+.07),0,.14],[sd*(dF+.07),dh+.07,.14]],c:trim});
   body.push({s:[[-dF-.14,dh+.07,.14],[dF+.14,dh+.07,.14]],c:trim});
@@ -773,52 +930,72 @@ const ITEMS=[], OCC=[], EXCL=[], BARNS=[], LMLIST=[];
   for(let k=1;k<NS;k++)if(INNER(ROUTE[k].kind)){const A=S[k-1]+BDOOR,kind=ROUTE[k].kind,v=ROUTE[k].variant;BARNS.push({k,A,B:A+BLEN,v,kind,...SHELL[kind](v)})}
   const inBarn=(Z,pad=2)=>BARNS.some(b=>((Z-b.A+pad)%L+L)%L<BLEN+2*pad);
   const lmOff=s=>BARNS.some(b=>s===b.k||s===b.k-1);   // that landmark would stand on the barn's facade or inside it
-  // a landmark is moved sideways until it clears the text box at its own rest view (a bend ahead swings it inward)
-  const side=(s,X,zr=REST)=>{for(let i=0;i<3;i++){const q=toCam(S[s],S[s]+zr,X),need=Math.sign(X)*640*q.z/F;if(Math.sign(q.x)===Math.sign(X)&&Math.abs(q.x)>=Math.abs(need))break;X+=need-q.x}return X};
+  // a landmark is moved sideways until its body (half width hw) clears the text box, tucking at most 40 px under its
+  // edge, over the camera arcs around its station's rest view where it is near and lit: wander drifts on past the
+  // station, and a bend ahead swings it inward. ht: its height (a prop that stays below the box is left alone)
+  const side=(s,X,zr=REST,hw=1,ht=3)=>{const Z=S[s]+zr,sg=Math.sign(X),X0=Math.abs(X);
+    for(let i=0;i<6;i++){let need=0;
+      for(let c=S[s]-.5;c<=S[s]+4.01;c+=.5){const q=toCam(c,Z,X);if(!q||q.z<2.5||VY+(E-ht)*F/q.z>=757)continue;
+        const inner=sg*q.x-hw,want=536*q.z/F;if(inner<want)need=Math.max(need,want-inner)}
+      if(need<.01)break;X+=sg*Math.min(need,1.5)}
+    return sg*Math.min(Math.abs(X),X0+3.5)};
   const R=s=>S[s]+REST;
   const occ=(s,X,hw,zr=REST)=>{const q=toCam(S[s],S[s]+zr,X);OCC.push({c:S[s],zr,xa:VX+(q.x-hw)*F/q.z-30,xb:VX+(q.x+hw)*F/q.z+30})};
   // per-seed landmark SET and ORDER: the gate is one of three; the side landmarks are shuffled over the free stations,
   // two stations stay bare forest, each landmark picks its side and leans a little its own way
   const rl=rngFor(31,SEED*13+5);for(let i=0;i<4;i++)rl();const GV=Math.floor(rl()*3);
-  // the arch stands nearer: station 1 must not rest right under its beam
-  lm(fenceItem(S[0]+(GV===1?4:6.6),GV));LMLIST.push(`0 ${['broken fence gate','timber arch with a sign','stone pillars, iron gate'][GV]}`);
-  const POOL=[['lantern on a post'],['gravestone row'],['scarecrow',scarecrow,4.9,1.1],['jack-o\'-lanterns',jackRow,4.6,1.3],['crow on a stump',crowStump,4.4,.8],['stone well',well,4.8,1.0],
-    ['abandoned cart',cart,5.0,1.2],['log and mushrooms',logShrooms,4.6,1.6],['will-o\'-wisps',bogWisps,4.6,1.8],['skull signpost',signpost,4.8,.9],['cabin, lit window']];
+  // the arch stands nearer: station 1 must not rest right under its beam. When station 1 is an interior the gate
+  // stands nearer too, so its leaf and rails do not hang across the front door 2.4 m behind it (seed 3)
+  lm(fenceItem(S[0]+(GV===1||INNER(ROUTE[1].kind)?4:6.6),GV));LMLIST.push(`0 ${['broken fence gate','timber arch with a sign','stone pillars, iron gate'][GV]}`);
+  // [name, fn, X, half width, height]; a kind that repeats something inside this route's interiors is left out (the
+  // cart in barn layout 0, crows in barn layout 2, a cabin when a house is on the route)
+  const has=(k,v)=>BARNS.some(b=>b.kind===k&&(v===undefined||b.v===v));
+  const POOL=[['lantern on a post'],['gravestone row'],['scarecrow',scarecrow,4.9,1.1,2.5],['jack-o\'-lanterns',jackRow,4.6,1.3,.8],['crows'],['stone well',well,4.8,1.0,2.4],
+    ['abandoned cart',cart,5.0,1.2,1.4],['log and mushrooms',logShrooms,4.6,1.6,1.1],['will-o\'-wisps',bogWisps,4.6,1.8,1.7],['skull signpost',signpost,4.8,.9,2.6],['cabin, lit window'],
+    ['fallen tree, roots up',rootPlate,5.6,1.1,2.2],['chapel ruin',chapelRuin,5.6,1.9,3.7],['windmill ruin'],['eyes in the dark',watchEyes,4.8,1.6,.9],['lantern tree',lanternTree,4.2,.4,4],
+    ['coffin by a dug grave',coffin,4.7,.9,2]].filter(([n])=>!(n==='abandoned cart'&&has('barn',0)||n==='crows'&&has('barn',2)||n==='cabin, lit window'&&has('house')));
   for(let i=POOL.length-1;i>0;i--){const j=Math.floor(rl()*(i+1));[POOL[i],POOL[j]]=[POOL[j],POOL[i]]}
   const slots=[1,2,3,4,5,6,7,8,9,11,12];for(let i=slots.length-1;i>0;i--){const j=Math.floor(rl()*(i+1));[slots[i],slots[j]]=[slots[j],slots[i]]}
-  const plan=slots.slice(0,9).map((s,i)=>[s,POOL[i],rl()<.5?-1:1,rr(rl,-.09,.09)]).sort((a,b)=>a[0]-b[0]);
-  for(const [s,[name,fn,X0,hw],sd,lean] of plan){if(lmOff(s))continue;LEAN=lean;LMLIST.push(`${s} ${name}${sd<0?' (left)':' (right)'}`);
-    if(name==='lantern on a post'){const X=side(s,sd*5.7);lm(lanternPool(R(s)+0.05,X-sd*1.6));lm(lanternItem(R(s),X),sd<0?[X-1.9,X+3.1,R(s)-2.5,R(s)+2.5]:[X-3.1,X+1.9,R(s)-2.5,R(s)+2.5]);occ(s,X-sd*.4,.9)}
-    else if(name==='gravestone row'){const dX=side(s,sd*4.7,11)-sd*4.7,rgv=rngFor(s,55,SEED);[[2.3,9],[3.1,9.8],[4.0,10.5],[5.0,11.3],[6.1,12],[7.2,12.7]].forEach(([X,o],i)=>ITEMS.push(graveItem(S[s]+o,sd*X+dX,rgv,i%4)));
+  // up to 9 landmarks on the stations an interior leaves free (the rest stay bare forest, a breather)
+  const plan=slots.filter(s=>!lmOff(s)).slice(0,9).map((s,i)=>[s,POOL[i],rl()<.5?-1:1,rr(rl,-.09,.09)]).sort((a,b)=>a[0]-b[0]);
+  plan.forEach((q,i)=>{if(i>1&&q[2]===plan[i-1][2]&&q[2]===plan[i-2][2])q[2]=-q[2]});   // never three on one side in a row
+  for(let [s,[name,fn,X0,hw,ht],sd,lean] of plan){LEAN=lean;
+    if(name==='crows'){const t=rl()<.5;name=t?'dead tree of crows':'crow on a stump';fn=t?crowTree:crowStump;X0=t?4.9:4.4;hw=t?1.2:.8;ht=t?3.6:1.8}
+    LMLIST.push(`${s} ${name}${sd<0?' (left)':' (right)'}`);
+    if(name==='lantern on a post'){const X=side(s,sd*5.7,REST,.9,3.2);lm(lanternPool(R(s)+0.05,X-sd*1.6));lm(lanternItem(R(s),X),sd<0?[X-1.9,X+3.1,R(s)-2.5,R(s)+2.5]:[X-3.1,X+1.9,R(s)-2.5,R(s)+2.5]);occ(s,X-sd*.4,.9)}
+    else if(name==='gravestone row'){const dX=side(s,sd*4.7,11)-sd*4.7,rgv=rngFor(s,55,SEED),k0=Math.floor(rgv()*6);[[2.3,9],[3.1,9.8],[4.0,10.5],[5.0,11.3],[6.1,12],[7.2,12.7]].forEach(([X,o],i)=>ITEMS.push(graveItem(S[s]+o,sd*X+dX,rgv,(k0+i)%6)));
       EXCL.push(sd<0?[-8.5+dX,-1.6+dX,S[s]+7,S[s]+14]:[1.6+dX,8.5+dX,S[s]+7,S[s]+14]);lm(moonPool(S[s]+11,sd*4.6+dX));occ(s,sd*4.7+dX,2.6,11)}
-    else if(name==='cabin, lit window'){const X=side(s,sd*7.1,REST+4);lm(cabin(R(s)+4,X,REST+4),keep(X,R(s)+4,3));occ(s,X,1.7,13)}
-    else{const X=side(s,sd*X0);lm(fn(R(s),X),keep(X,R(s),name==='abandoned cart'?3:2.6));occ(s,X,hw)}}
+    else if(name==='cabin, lit window'){const X=side(s,sd*7.1,REST+4,1.7,3.1);lm(cabin(R(s)+4,X,REST+4),keep(X,R(s)+4,3));occ(s,X,1.7,13)}
+    else if(name==='windmill ruin'){const zr=REST+9,X=side(s,sd*11.5,zr,2.4,8);lm(windmill(R(s)+9,X,zr),keep(X,R(s)+9,3.5,4));occ(s,X,2.4,zr)}
+    else{const X=side(s,sd*X0,REST,hw,ht);lm(fn(R(s),X),keep(X,R(s),name==='abandoned cart'?3:2.6));occ(s,X,hw)}}
   LEAN=0;
-  // the interiors. Everything belonging to one is GATED: it fades in through the fog only once its front door is
-  // within ~22 m, so a barn or house shows up as the next stop, never as a permanent landmark in the background
+  // the interiors. Everything belonging to one is GATED (GATE): it fades in through the fog only once its front door
+  // is within 14.5 m, so a barn or house shows up as the next stop, never early
   const rb=rngFor(9,SEED);
   for(const b of BARNS){const{A,B}=b,mr=rb()<.5?-1:1,its=[];const add=it=>{its.push(it);return it};
     const P2=(Zn,Z1,X0,h0,X1,h1,fill,lines,o)=>add(planeItem(Zn,Z1,X0,h0,X1,h1,fill,lines,o)),BAY=BLEN/4;
     if(b.kind==='barn'){
-      add(barnFront(A));add(barnBack(B));
+      b.pt=BPAINT[Math.floor(rngFor(91,SEED,b.k)()*3)];add(barnFront(A,b.pt));add(barnBack(B,b.pt));
       for(let z=A+2;z<B-.5;z+=3)add(truss(z));
       for(let z=A;z<B-.01;z+=BAY){const z1=Math.min(z+BAY,B);
         const planks=[...Array(8)].map((_,i)=>[(i+1)/9,.035,'#1a100a']);
         for(const sd of[-1,1]){P2(z,z1,sd*BW,0,sd*BW,WH,'#2e1d13',planks);P2(z,z1,sd*BW,WH,0,PK,'#21160e',[[.35,.1,'#2e1f14'],[.7,.1,'#2e1f14']])}}
       if(b.v===0){   // hay and a cart, two lanterns
-        add(hangLantern(A+8,-2.9*mr,true));add(hangLantern(A+10,3.5*mr,false));add(lanternPool(A+8,-2.4*mr));add(lanternPool(A+10,2.8*mr));
+        add(hangLantern(A+8,-2.9*mr,true));add(hangLantern(A+10,3.65*mr,false));add(lanternPool(A+8,-2.4*mr));add(lanternPool(A+10,3.0*mr));
         add(hayBales(A+8.5,-3.1*mr,[[0,0],[0,.5],[1.1*mr,0]]));add(hayBales(A+11.5,2.6*mr,[[0,0],[0,.5]]));add(cart(A+9.5,2.7*mr));
         add(motes(A+8,-2.6*mr,rb));add(motes(A+10,3.0*mr,rb))}
       else if(b.v===1){   // horse stalls down both sides, one lantern, a ladder to the loft
         for(const sd of[-1,1])for(const z of[A+3.2,A+7.2])P2(z,z+3,sd*2.3,0,sd*2.3,1.35,'#2a1a10',[[.25,.04,'#140c07'],[.5,.04,'#140c07'],[.75,.04,'#140c07'],[.97,.07,'#4e3d2a']],{insets:[[.0,.04,0,1,'#4e3d2a'],[.96,1,0,1,'#4e3d2a']]});
-        add(hangLantern(A+7,2.1*mr,true));add(lanternPool(A+7,1.9*mr));add(ladder(A+11.6,-2.9*mr));add(pitchfork(A+10.5,3.2*mr));add(motes(A+7,1.6*mr,rb))}
+        add(hangLantern(A+7,3.0*mr,true));add(lanternPool(A+7,2.6*mr));add(ladder(A+11.6,-2.9*mr));add(pitchfork(A+10.5,3.2*mr));add(motes(A+7,2.5*mr,rb))}
       else{   // hay piled high, crows on the tie beam, a single lantern
         add(hayBales(A+7.5,-2.7*mr,[[0,0],[0,.5],[0,1],[1.1*mr,0],[1.1*mr,.5],[.55*mr,1.5]]));add(hayBales(A+10.5,2.7*mr,[[0,0],[0,.5],[-1.1*mr,0]]));
-        add(roostCrows(A+8,.4*mr));add(hangLantern(A+9.5,2.4*mr,true));add(lanternPool(A+9.5,2.2*mr));add(pitchfork(A+9,-2.2*mr));add(motes(A+9.5,2.1*mr,rb))}
+        add(roostCrows(A+8,.4*mr));add(hangLantern(A+9.5,3.55*mr,true));add(lanternPool(A+9.5,3.0*mr));add(pitchfork(A+9,-2.2*mr));add(motes(A+9.5,2.1*mr,rb))}
       b.hay=[...Array(36)].map(()=>[A+rr(rb,.5,BLEN-.5),(rb()<.5?-1:1)*rr(rb,1.2,3.8),rr(rb,0,Math.PI),rr(rb,.25,.5)]);
     }else{
       // house: v0 narrow hall with a staircase, v1 parlour with a fireplace, v2 long hall of portraits and a clock
-      b.paper=['#2a1e26','#1c2a24','#30251b'][b.v];b.hay=[];const w=b.w,wh=b.wh;
+      {const rp=rngFor(93,SEED,b.k),pk=a=>a[Math.floor(rp()*a.length)];   // seeded siding and wallpaper (each layout keeps its own family)
+        b.wall=pk(['#2a292d','#252a27','#2d2925','#2b2628']);b.paper=pk([['#2a1e26','#2a2230','#26202a'],['#1c2a24','#1e2630','#232a1e'],['#30251b','#2e1e1e','#2a2a20']][b.v])}
+      b.hay=[];const w=b.w,wh=b.wh;
       add(houseFront(A,b,rb));add(houseBack(B,b));
       for(let z=A;z<B-.01;z+=BAY){const z1=Math.min(z+BAY,B);
         for(const sd of[-1,1])P2(z,z1,sd*w,0,sd*w,wh,b.paper,[[.02,.06,'#0e0a08'],[.33,.03,'#4a3c2c'],[.87,.025,'#3a2e22']],{insets:[[0,1,0,.33,'#21180f']]});
@@ -832,7 +1009,7 @@ const ITEMS=[], OCC=[], EXCL=[], BARNS=[], LMLIST=[];
       else{add(clock(A+10.8,(w-.4)*mr));add(sconce(A+3.5,(w-.12)*mr,1.75));add(sconce(A+6.8,-(w-.12)*mr,1.75));add(sconce(A+10,-(w-.12)*mr,1.75))}
     }
     for(const it of its){const dA=(it.kind==='plane'?it.Z:it.Z)-A;it.dA=dA;
-      if(it.kind!=='plane'){const o=it.op;it.op=z=>o(z)*clamp((22-(z-dA))/7)}ITEMS.push(it)}
+      if(it.kind!=='plane'){const o=it.op;it.op=z=>o(z)*GATE(z-dA)}ITEMS.push(it)}
   }
   const clear=(X,Z,w=1)=>!EXCL.some(e=>X>e[0]&&X<e[1]&&Z>e[2]&&Z<e[3])&&!(inBarn(Z)&&Math.abs(X)<9)&&
     !OCC.some(o=>{const q=toCam(o.c,Z,X);if(!q||q.z<=0.3||q.z>=o.zr)return false;const x=VX+q.x*F/q.z,hw=w*0.8*F/q.z;return x+hw>o.xa&&x-hw<o.xb});
@@ -1035,7 +1212,7 @@ function lifePlane(it,Zabs){
   const ks=smp.slice(first,last+2).map(s=>s.dead?{...smp[last],u:s.u}:s);if(ks.length<2)ks.push({...ks[0],u:ks[0].u+0.2});
   const bb=bbox(all);
   // depth order: panels sort by their far end like billboards by their entry, a portrait above its own wall stretch
-  return{kind:'pl',order:Zabs-ZIN-(it.front?1.6:0),org:PC(...ref[0]),svg,ks,ops:ks.map(s=>clamp((ZFAR-s.zf)/FADE)*(it.dA===undefined?1:clamp((22-(s.zf-it.dA))/7))),box:[Math.max(Math.floor(bb[0]),-3000),Math.max(Math.floor(bb[1]),-3000),Math.min(Math.ceil(bb[2]),W+3000),Math.min(Math.ceil(bb[3]),H+3000)],ue:ks[0].u,ux:ks[ks.length-1].u};
+  return{kind:'pl',order:Zabs-ZIN-(it.front?1.6:0),org:PC(...ref[0]),svg,ks,ops:ks.map(s=>clamp((ZFAR-s.zf)/FADE)*(it.dA===undefined?1:GATE(s.zf-it.dA))),box:[Math.max(Math.floor(bb[0]),-3000),Math.max(Math.floor(bb[1]),-3000),Math.min(Math.ceil(bb[2]),W+3000),Math.min(Math.ceil(bb[3]),H+3000)],ue:ks[0].u,ux:ks[ks.length-1].u};
 }
 function homRef(ref,cfA,cfB){const src=ref.map(([x,h,z])=>PC(x,h,z)),o=src[0],rel=p=>[p[0]-o[0],p[1]-o[1]];
   return m3d(homog(src.map(rel),ref.map(p=>{const[x,h,z]=relocal(cfA,cfB,p);return rel(PC(x,h,z))})))}

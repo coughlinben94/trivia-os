@@ -42,6 +42,16 @@ describe('makeRoute', () => {
     expect(both.length).toBeGreaterThan(20)
   })
 
+  it('never repeats an interior layout within a route, and layouts vary by seed', () => {
+    const layouts = new Set()
+    for (let s = 0; s < 500; s++) {
+      const inner = makeRoute(s, 13).filter(x => x.kind === 'barn' || x.kind === 'house').map(x => x.kind + x.variant)
+      expect(new Set(inner).size).toBe(inner.length)
+      if (s < 60) layouts.add(inner.join(','))
+    }
+    expect(layouts.size).toBeGreaterThan(30)
+  })
+
   it('gives different seeds different routes', () => {
     const seen = new Set()
     for (let s = 0; s < 100; s++) seen.add(kinds(makeRoute(s, 13)).join(','))
