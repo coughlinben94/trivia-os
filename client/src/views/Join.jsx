@@ -5,9 +5,9 @@ import { nanoid } from 'nanoid'
 import { supabase } from '../lib/supabase.js'
 import { deriveRoundCols, computeTotal, computePlaces, MEDALS } from '../lib/scoreboardMath.js'
 import { getTheme } from '../themes/index.js'
-import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentMediaShiny, isChoiceShiny, isDropShiny, isHuesCuesShiny, isPinShiny, isMovieChainShiny } from '../lib/shinySeries.js'
+import { resolveShinyPart, isMatchingShiny, isWagerShiny, isOrderShiny, isConcurrentMediaShiny, isChoiceShiny, isDropShiny, isHuesCuesShiny, isPinShiny, isMovieChainShiny, isBendleShiny } from '../lib/shinySeries.js'
 import { getWagerTier } from '../lib/wagerScoring.js'
-import { PHONE_MECHANICS, sortSlides } from '../lib/slideStepping.js'
+import { PHONE_MECHANICS, sortSlides, liveSlideOpenForPhones, phonePhaseKey } from '../lib/slideStepping.js'
 import MatchingBoard from '../components/join/MatchingBoard.jsx'
 import WagerBoard from '../components/join/WagerBoard.jsx'
 import OrderBoard from '../components/join/OrderBoard.jsx'
@@ -16,6 +16,9 @@ import DropBoard from '../components/join/DropBoard.jsx'
 import HuesCuesBoard from '../components/join/HuesCuesBoard.jsx'
 import PinBoard from '../components/join/PinBoard.jsx'
 import MovieChainBoard from '../components/join/MovieChainBoard.jsx'
+import BendleBoard from '../components/join/BendleBoard.jsx'
+import { loadBendleCatalog } from '../lib/bendleCatalog.js'
+import { BENDLE_CATALOG_URL } from '../lib/bendleCatalogVersion.js'
 import { preloadUsMapData } from '../hooks/useUsMapData.js'
 import HorseRaceBoard from '../components/join/HorseRaceBoard.jsx'
 import ShrinkToFit from '../components/join/ShrinkToFit.jsx'
@@ -778,6 +781,9 @@ function SlideBody({ slide, show, theme, team, onInteractiveAnswered, overridePa
       if (d.isShiny && isPinShiny(d)) {
         return <PinBoard slide={slide} team={team} theme={theme} onAnswered={onInteractiveAnswered} />
       }
+      if (d.isShiny && isBendleShiny(d)) {
+        return <BendleBoard slide={slide} slides={show?.slides} team={team} theme={theme} onAnswered={onInteractiveAnswered} />
+      }
       if (d.isShiny && isMovieChainShiny(d)) {
         return <MovieChainBoard slide={slide} team={team} theme={theme} onAnswered={onInteractiveAnswered} />
       }
@@ -1371,7 +1377,8 @@ const REDUCED_SWIPE_VARIANTS = {
 }
 
 // ─── Live view ────────────────────────────────────────────────────────────────
-function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScores }) {
+// Exported for Join.bendle.test.jsx only.
+export function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScores }) {
   const pref = useReducedMotion()
   // Seeded from the host's actual position, not a hardcoded 0 (2026-08-26,
   // phone-suite audit — MEDIUM): LiveView mounts fresh whenever `phase`
@@ -1425,6 +1432,10 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
   // the slow path: warm it as soon as the show is known to contain one.
   const hasPinSlide = slides.some(sl => sl.data && isPinShiny(sl.data))
   useEffect(() => { if (hasPinSlide) preloadUsMapData() }, [hasPinSlide])
+  // Same for the Bendle song list: build the search index while the team
+  // waits, not on the first keystroke. Failure is fine, typing always works.
+  const hasBendleSlide = slides.some(sl => sl.data && isBendleShiny(sl.data))
+  useEffect(() => { if (hasBendleSlide && BENDLE_CATALOG_URL) loadBendleCatalog().catch(() => {}) }, [hasBendleSlide])
   const hostIndex = show?.current_slide_index ?? 0
   const liveSlide  = slides[hostIndex] ?? null
   const currentSlide = slides[viewedIndex] ?? null
@@ -1468,10 +1479,9 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
   // force-pinned to a dead "Answers locked" board with no Back button for
   // however long the host lingers on the reveal, which is often the loudest
   // moment of the round. Pinning only makes sense while input is possible.
-  const liveSlideIsInteractive = !!(
-    liveSlide?.type === 'question' && liveSlide.data?.isShiny &&
-    Object.values(PHONE_MECHANICS).some(m => m.guard(liveSlide.data) && !liveSlide.data?.[m.lockFields[m.lockFields.length - 1]])
-  )
+  // Bendle keeps its lock on the step-3 slide, so "still taking answers" and
+  // the phase key read the group's lock slide (slideStepping.js lockSlideFor).
+  const liveSlideIsInteractive = liveSlideOpenForPhones(show?.slides, liveSlide)
 
   // Whether THIS team has done what the live interactive slide currently
   // requires — reported by WagerBoard/MatchingBoard's onAnswered, reset
@@ -1486,10 +1496,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
   // interactiveSatisfied=true across the lock, and is never force-navigated
   // to the actual guess phase — the exact silent-miss bug this feature
   // exists to close, just narrowed to teams who back out after tiering.
-  const interactivePhaseKey = [
-    liveSlide?.id,
-    ...Object.values(PHONE_MECHANICS).flatMap(m => m.lockFields.map(f => liveSlide?.data?.[f])),
-  ].join(':')
+  const interactivePhaseKey = phonePhaseKey(show?.slides, liveSlide)
   const [interactiveSatisfied, setInteractiveSatisfied] = useState(false)
   useEffect(() => { setInteractiveSatisfied(false) }, [interactivePhaseKey])
 
@@ -1512,9 +1519,14 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
   // phase advances (see interactivePhaseKey reset above), so getting this
   // threshold too short is worse than too long.
   const [leftDuringQuestion, setLeftDuringQuestion] = useState(false)
+  // Bendle is exempt: three listening steps with phones face-down would trip
+  // the 30 s rule in normal play, and the song-ID-app cheat it would guard
+  // happens on a second device it cannot see. The database guard
+  // (guard_bendle_phone_answers) is the real integrity check.
+  const lockoutExempt = !!liveSlide?.data && isBendleShiny(liveSlide.data)
   useEffect(() => { setLeftDuringQuestion(false) }, [interactivePhaseKey])
   useEffect(() => {
-    if (!liveSlideIsInteractive) return
+    if (!liveSlideIsInteractive || lockoutExempt) return
     const LOCK_GRACE_MS = 30000
     let timer = null
     function arm() {
@@ -1537,7 +1549,7 @@ function LiveView({ show, team, powerupUsed, onInvokePowerup, theme, onOpenScore
       document.removeEventListener('visibilitychange', handleVisibility)
       if (timer) clearTimeout(timer)
     }
-  }, [liveSlideIsInteractive, interactivePhaseKey])
+  }, [liveSlideIsInteractive, interactivePhaseKey, lockoutExempt])
 
   // This team's own wager outcome, once revealed — win/lose and points only,
   // matched by name against wagerResults the same way scoring itself does
