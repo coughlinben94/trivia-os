@@ -44,4 +44,19 @@ describe('<BendleRevealList>', () => {
     render([])
     expect(host.querySelectorAll('[role="listitem"]')).toHaveLength(0)
   })
+  it('switches to two columns at 11 teams', () => {
+    render(Array.from({ length: 11 }, (_, i) => team(i, 0)))
+    expect(host.querySelector('[role="list"]').dataset.columns).toBe('2')
+  })
+  it('zero-point rows keep the 70% text level, never 50%, with no stacked opacity', () => {
+    render([team(1, 0)])
+    const row = host.querySelector('[role="listitem"]')
+    const [mark, , , step, pts] = row.children
+    const rowColor = row.style.color
+    expect(mark.style.color).toBe(rowColor)
+    expect(pts.style.color).toBe(rowColor)
+    expect(step.style.opacity).toBe('')
+    expect(mark.textContent).toBe('✗')
+    expect(pts.textContent).toBe('0')
+  })
 })

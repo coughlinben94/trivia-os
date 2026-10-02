@@ -48,11 +48,11 @@ export default function BendleRevealList({ results, theme }) {
               alignItems: 'baseline', columnGap: '1.2vmin', color: scored ? text : `${text}b3`,
             }}
           >
-            <span aria-hidden="true" style={{ color: scored ? SHINY_GOLD : `${text}80` }}>{scored ? '✓' : '✗'}</span>
+            <span aria-hidden="true" style={{ color: scored ? SHINY_GOLD : `${text}b3` }}>{scored ? '✓' : '✗'}</span>
             <span style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.teamName}</span>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontStyle: r.guess ? 'normal' : 'italic' }}>{label}</span>
-            <span style={{ opacity: 0.8 }}>{r.guess && r.stepIndex != null ? `Step ${r.stepIndex + 1}` : ''}</span>
-            <span style={{ color: scored ? SHINY_GOLD : `${text}80`, fontWeight: 700, textAlign: 'right' }}>{scored ? `+${r.points}` : '0'}</span>
+            <span style={scored ? { opacity: 0.8 } : undefined}>{r.guess && r.stepIndex != null ? `Step ${r.stepIndex + 1}` : ''}</span>
+            <span style={{ color: scored ? SHINY_GOLD : `${text}b3`, fontWeight: 700, textAlign: 'right' }}>{scored ? `+${r.points}` : '0'}</span>
           </motion.div>
         )
       })}
