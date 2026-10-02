@@ -29,7 +29,13 @@ export function makeRoute(seed, n = 13) {
   const KINDS = ['straight', 'straight', 'bendL', 'bendR', 'barn', 'house']
   for (let tries = 0; tries < 5000; tries++) {
     const ks = Array.from({ length: n }, (_, i) => i === 0 || i === CALM ? 'straight' : KINDS[Math.floor(rnd() * KINDS.length)])
-    if (ok(ks)) return ks.map(kind => ({ kind, variant: Math.floor(rnd() * 3) }))
+    // an interior kind never repeats its layout within one route (3 layouts, at most 2 of a kind)
+    const used = { barn: [], house: [] }
+    if (ok(ks)) return ks.map(kind => {
+      let variant = Math.floor(rnd() * 3)
+      if (used[kind]) { while (used[kind].includes(variant)) variant = (variant + 1) % 3; used[kind].push(variant) }
+      return { kind, variant }
+    })
   }
   throw new Error('makeRoute: no valid route for seed ' + seed)
 }
