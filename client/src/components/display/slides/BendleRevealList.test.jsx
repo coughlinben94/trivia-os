@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 // client/src/components/display/slides/BendleRevealList.test.jsx
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach } from 'vitest'
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
-import BendleRevealList from './BendleRevealList.jsx'
+import BendleRevealList, { fitStep, MIN_FIT_SCALE } from './BendleRevealList.jsx'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 const theme = { colors: { text: '#ffffff' }, fonts: { display: 'Boogaloo', body: 'DM Sans' } }
@@ -80,10 +80,11 @@ describe('<BendleRevealList>', () => {
     expect(guess.dataset.lines).toBe('2')
     expect(name.dataset.lines).toBe('2')
   })
-  it('two columns: guess wraps to 2 lines; name gets 3 lines up to 8 rows per column, 2 above', () => {
+  // Changed deliberately (round 4): the guess also gets 3 lines up to 8 rows.
+  it('two columns: name and guess get 3 lines up to 8 rows per column, 2 above', () => {
     render(Array.from({ length: 16 }, (_, i) => team(i, 0, sweet)))
     expect(cells().guess.style.whiteSpace).toBe('normal')
-    expect(cells().guess.dataset.lines).toBe('2')
+    expect(cells().guess.dataset.lines).toBe('3')
     expect(cells().name.dataset.lines).toBe('3')
     act(() => root.render(<BendleRevealList results={Array.from({ length: 17 }, (_, i) => team(i, 0, sweet))} theme={theme} />))
     expect(cells().name.dataset.lines).toBe('2')
@@ -94,6 +95,15 @@ describe('<BendleRevealList>', () => {
     const list = host.querySelector('[role="list"]')
     expect(list.dataset.nameColumn).toBe('fit-content(30%)')
   })
+  it('a (host) tag widens the step column and never wraps the step cell', () => {
+    render([{ ...team(1, 10), overridden: true }, team(2, 30)])
+    const list = host.querySelector('[role="list"]')
+    expect(list.dataset.stepColumn).toBe('6.5em')
+    const step = host.querySelector('[role="listitem"]').children[3]
+    expect(step.style.whiteSpace).toBe('nowrap')
+    act(() => root.render(<BendleRevealList results={[team(1, 10)]} theme={theme} />))
+    expect(host.querySelector('[role="list"]').dataset.stepColumn).toBe('4.2em')
+  })
   it('host-changed rows carry a (host) tag', () => {
     render([{ ...team(1, 10), overridden: true }, team(2, 30)])
     const rows = [...host.querySelectorAll('[role="listitem"]')]
@@ -102,5 +112,60 @@ describe('<BendleRevealList>', () => {
     expect(tag.style.display).toBe('inline')
     expect(rows[0].getAttribute('aria-label')).toContain('changed by the host')
     expect(rows[1].textContent).not.toContain('(host)')
+  })
+})
+
+describe('fit to the stage height', () => {
+  const sweet = { title: 'Sweet Dreams (Are Made of This)', artist: 'Eurythmics' }
+  const cells = () => { const [, name, guess] = host.querySelector('[role="listitem"]').children; return { name, guess } }
+  it('fitStep: fits as is, tightens first when it can, then scales with a 0.7 floor', () => {
+    expect(fitStep({ avail: 500, natural: 400, tight: false, canTighten: true })).toEqual({ tight: false, scale: 1 })
+    expect(fitStep({ avail: 420, natural: 510, tight: false, canTighten: true })).toEqual({ tight: true, scale: 1 })
+    expect(fitStep({ avail: 420, natural: 543, tight: false, canTighten: false }).scale).toBeCloseTo(420 / 543)
+    expect(fitStep({ avail: 420, natural: 435, tight: true, canTighten: true }).scale).toBeCloseTo(420 / 435)
+    expect(fitStep({ avail: 100, natural: 1000, tight: true, canTighten: true }).scale).toBe(MIN_FIT_SCALE)
+    expect(MIN_FIT_SCALE).toBe(0.7)
+    expect(fitStep({ avail: 0, natural: 400, tight: false, canTighten: true })).toEqual({ tight: false, scale: 1 })
+  })
+
+  // jsdom has no layout: stub the two sizes the fit reads and a ResizeObserver.
+  const sizes = { avail: 420, natural: 600 }
+  let restore
+  beforeEach(() => {
+    const ro = globalThis.ResizeObserver
+    const oh = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')
+    const ch = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight')
+    globalThis.ResizeObserver = class { observe() {} disconnect() {} }
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, get() { return this.dataset?.fit === 'content' ? sizes.natural : 0 } })
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get() { return this.dataset?.fit === 'outer' ? sizes.avail : 0 } })
+    restore = () => {
+      globalThis.ResizeObserver = ro
+      if (oh) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', oh)
+      if (ch) Object.defineProperty(HTMLElement.prototype, 'clientHeight', ch)
+    }
+  })
+  afterEach(() => restore())
+
+  it('two columns that overflow drop to 2-line cells, then scale down (origin top center)', () => {
+    Object.assign(sizes, { avail: 420, natural: 600 })
+    render(Array.from({ length: 16 }, (_, i) => team(i, 0, sweet)))
+    expect(cells().name.dataset.lines).toBe('2')
+    expect(cells().guess.dataset.lines).toBe('2')
+    const content = host.querySelector('[data-fit="content"]')
+    expect(content.dataset.scale).toBe('0.7')
+    expect(content.style.transformOrigin).toBe('top center')
+    expect(content.style.transform).toBe('scale(0.7)')
+  })
+  it('one column that overflows scales and keeps its 10/11 boundary', () => {
+    Object.assign(sizes, { avail: 420, natural: 543 })
+    render(Array.from({ length: 10 }, (_, i) => team(i, 0, sweet)))
+    expect(host.querySelector('[role="list"]').dataset.columns).toBe('1')
+    expect(Number(host.querySelector('[data-fit="content"]').dataset.scale)).toBeCloseTo(420 / 543, 3)
+  })
+  it('a list that fits is never scaled up', () => {
+    Object.assign(sizes, { avail: 900, natural: 300 })
+    render(Array.from({ length: 16 }, (_, i) => team(i, 0, sweet)))
+    expect(host.querySelector('[data-fit="content"]').dataset.scale).toBe('1')
+    expect(cells().name.dataset.lines).toBe('3')
   })
 })
