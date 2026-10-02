@@ -68,20 +68,31 @@ describe('<BendleRevealList>', () => {
     expect(right.getAttribute('aria-hidden')).toBe('true')
     expect(host.querySelector('[role="listitem"]').getAttribute('aria-label')).toContain('30 points')
   })
-  it('two columns let the name and guess wrap to two lines; one column stays one line', () => {
-    render(Array.from({ length: 11 }, (_, i) => team(i, 0, { title: 'Sweet Dreams (Are Made of This)', artist: 'Eurythmics' })))
-    const [, name, guess] = host.querySelector('[role="listitem"]').children
+  // Changed deliberately (browser re-check 2026-10-02): one column used to stay
+  // on one line and cut the correct answer at 10 teams; every mode wraps now.
+  const cells = () => { const [, name, guess] = host.querySelector('[role="listitem"]').children; return { name, guess } }
+  const sweet = { title: 'Sweet Dreams (Are Made of This)', artist: 'Eurythmics' }
+  it('one column: name and guess wrap to two lines, never cut to one', () => {
+    render(Array.from({ length: 10 }, (_, i) => team(i, 0, sweet)))
+    const { name, guess } = cells()
     expect(guess.style.whiteSpace).toBe('normal')
     expect(name.style.whiteSpace).toBe('normal')
-    act(() => root.render(<BendleRevealList results={[team(1, 0)]} theme={theme} />))
-    const [, name1, guess1] = host.querySelector('[role="listitem"]').children
-    expect(guess1.style.whiteSpace).toBe('nowrap')
-    expect(name1.style.whiteSpace).toBe('nowrap')
+    expect(guess.dataset.lines).toBe('2')
+    expect(name.dataset.lines).toBe('2')
   })
-  it('one column sizes the name column to the names (fit-content, capped at 40%)', () => {
+  it('two columns: guess wraps to 2 lines; name gets 3 lines up to 8 rows per column, 2 above', () => {
+    render(Array.from({ length: 16 }, (_, i) => team(i, 0, sweet)))
+    expect(cells().guess.style.whiteSpace).toBe('normal')
+    expect(cells().guess.dataset.lines).toBe('2')
+    expect(cells().name.dataset.lines).toBe('3')
+    act(() => root.render(<BendleRevealList results={Array.from({ length: 17 }, (_, i) => team(i, 0, sweet))} theme={theme} />))
+    expect(cells().name.dataset.lines).toBe('2')
+    expect(cells().guess.dataset.lines).toBe('2')
+  })
+  it('one column caps the name column at 30% (fit-content), leaving the guess the room', () => {
     render([team(1, 0)])
     const list = host.querySelector('[role="list"]')
-    expect(list.dataset.nameColumn).toBe('fit-content(40%)')
+    expect(list.dataset.nameColumn).toBe('fit-content(30%)')
   })
   it('host-changed rows carry a (host) tag', () => {
     render([{ ...team(1, 10), overridden: true }, team(2, 30)])

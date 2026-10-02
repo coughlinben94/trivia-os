@@ -2,20 +2,24 @@
 // Every team's Bendle guess on the TV after the host's A on step 3. Drawn
 // from bendleResults on the step-3 slide (already sorted: points, then
 // teams with a guess, then name). One column up to 10 teams, then two; text
-// never below 2.2vmin (~16px at 1280x720). In two columns a name or guess may
-// wrap to a second line instead of being cut (20 teams still fit at 720p).
-// One column shares its tracks across rows (subgrid) so the name column fits
-// the longest name, capped at 40%.
+// never below 2.2vmin (~16px at 1280x720). Names and guesses wrap instead of
+// being cut: guess up to 2 lines; name up to 2, or 3 in two columns with at
+// most 8 rows per column. Height budget at 2.2vmin (line 2.75vmin + 0.6vmin
+// gap): 10 rows x 2 lines = 61vmin (~440px of the ~612px stage at 720p);
+// 8 rows x 3 lines = 70.8vmin (~510px); 10 rows x 3 lines would be ~637px, too
+// tall, so 9-10 rows per column stay at 2. One column (2.8vmin) at 10 rows x
+// 2 lines = 75.4vmin. One column shares its tracks across rows (subgrid) so the
+// name column fits the longest name, capped at 30%.
 import { motion, useReducedMotion } from 'framer-motion'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { SHINY_GOLD } from '../../../lib/shinyGold.js'
 import { guessLabel } from '../../../lib/bendleGuessScoring.js'
 
 const ONE_COLUMN_MAX = 10
-const NAME_COLUMN = 'fit-content(40%)'
+const NAME_COLUMN = 'fit-content(30%)'
+const THREE_LINE_NAME_MAX_ROWS = 8
 
-const cut = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
-const wrap2 = { overflow: 'hidden', whiteSpace: 'normal', overflowWrap: 'anywhere', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2 }
+const wrap = lines => ({ overflow: 'hidden', whiteSpace: 'normal', overflowWrap: 'anywhere', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: lines })
 
 // Drawn, not a font glyph: DM Sans has no ✓, so the browser fell back to √.
 // Decorative: the row or line around it carries the meaning in words.
@@ -34,7 +38,7 @@ export default function BendleRevealList({ results, theme }) {
   const perCol = Math.max(twoCol ? Math.ceil(rows.length / 2) : rows.length, 1)
   const text = theme?.colors?.text ?? '#ffffff'
   const bodyFont = `'${theme?.fonts?.body ?? 'DM Sans'}', 'DM Sans', sans-serif`
-  const cell = twoCol ? wrap2 : cut
+  const nameLines = twoCol && perCol <= THREE_LINE_NAME_MAX_ROWS ? 3 : 2
   return (
     <div
       role="list"
@@ -71,8 +75,8 @@ export default function BendleRevealList({ results, theme }) {
             }}
           >
             <span aria-hidden="true" style={{ color: scored ? SHINY_GOLD : `${text}b3` }}><BendleMark right={scored} /></span>
-            <span style={{ fontWeight: 700, ...cell }}>{r.teamName}</span>
-            <span style={{ ...cell, fontStyle: r.guess ? 'normal' : 'italic' }}>{label}</span>
+            <span data-lines={nameLines} style={{ fontWeight: 700, ...wrap(nameLines) }}>{r.teamName}</span>
+            <span data-lines={2} style={{ ...wrap(2), fontStyle: r.guess ? 'normal' : 'italic' }}>{label}</span>
             <span style={scored ? { opacity: 0.8 } : undefined}>
               {r.guess && r.stepIndex != null ? `Step ${r.stepIndex + 1}` : ''}
               {r.overridden && <span style={{ display: 'inline', marginLeft: '0.3em' }}>(host)</span>}
