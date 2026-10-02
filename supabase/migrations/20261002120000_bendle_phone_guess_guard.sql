@@ -33,7 +33,7 @@ stable
 set search_path = public
 as $$
   select sl
-  from public.shows s, jsonb_array_elements(coalesce(s.slides, '[]'::jsonb)) sl
+  from public.shows s, jsonb_array_elements(case when jsonb_typeof(s.slides) = 'array' then s.slides else '[]'::jsonb end) sl
   where s.id::text = p_show_id
     and sl->>'id' = p_slide_id
     and sl->>'type' = 'question'
@@ -41,7 +41,9 @@ as $$
   limit 1
 $$;
 
--- Internal helper for the trigger and RPC below (both run as owner).
+-- Internal helper for the trigger below (runs as owner). A slides value that
+-- is not a json array (null, object, malformed row) counts as no slides, so one
+-- bad shows row can never make jsonb_array_elements throw on a phone write.
 revoke all on function public.bendle_step_slide(text, text) from public, anon, authenticated;
 
 create or replace function public.guard_bendle_phone_answers()
@@ -93,7 +95,8 @@ begin
     raise exception 'bendle_no_group' using errcode = '55000';
   end if;
 
-  select s.current_slide_id::text, s.slides into v_current, v_slides
+  select s.current_slide_id::text, case when jsonb_typeof(s.slides) = 'array' then s.slides else '[]'::jsonb end
+    into v_current, v_slides
   from public.shows s
   where s.id::text = v_team_show;
 
@@ -154,7 +157,7 @@ begin
   end if;
 
   select array_agg(sl->>'id') into v_ids
-  from public.shows s, jsonb_array_elements(coalesce(s.slides, '[]'::jsonb)) sl
+  from public.shows s, jsonb_array_elements(case when jsonb_typeof(s.slides) = 'array' then s.slides else '[]'::jsonb end) sl
   where s.id::text = p_show_id
     and sl->>'type' = 'question'
     and sl->'data'->'shinyInputSchema'->>'type' = 'bendle'

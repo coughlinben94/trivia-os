@@ -1,6 +1,10 @@
+\set ON_ERROR_STOP on
 -- supabase/tests/bendle_phone_guess_guard.sql
 -- Run ONLY against a throwaway database that has the production schema, never production:
---   psql "$THROWAWAY_DB_URL" -v I_AM_NOT_PRODUCTION=1 -v ON_ERROR_STOP=1 -f supabase/tests/bendle_phone_guess_guard.sql
+--   psql "$THROWAWAY_DB_URL" -v I_AM_NOT_PRODUCTION=1 -f supabase/tests/bendle_phone_guess_guard.sql
+-- Run it as a superuser (it uses session_replication_role and set role).
+-- ON_ERROR_STOP (line 1) makes the first failed check abort the script, so the
+-- closing "all checks passed" line only prints when every check passed.
 -- Everything runs in one transaction and is rolled back.
 \if :{?I_AM_NOT_PRODUCTION}
 \else
@@ -39,6 +43,17 @@ values ('bg_show', 'Bendle guard test', true, 1, 's1', jsonb_build_array(
 insert into public.shows (id, title, is_live, current_slide_index, current_slide_id, slides)
 values ('bg_other', 'Bendle guard other show', true, 0, null, '[]'::jsonb);
 insert into public.teams (id, show_id, name) values ('bg_a', 'bg_show', 'A'), ('bg_b', 'bg_show', 'B'), ('bg_c', 'bg_show', 'C'), ('bg_x', 'bg_other', 'X');
+-- bg_d is owned by a signed-in phone (owner_uid), for the checks that go through RLS.
+insert into public.teams (id, show_id, name, owner_uid) values ('bg_d', 'bg_show', 'D', '00000000-0000-0000-0000-00000000000d');
+-- A show whose slides is not a json array (malformed row) and a team in it.
+insert into public.shows (id, title, is_live, current_slide_index, current_slide_id, slides)
+values ('bg_bad', 'Bendle guard malformed show', true, 0, 'z1', '{"not":"an array"}'::jsonb);
+insert into public.teams (id, show_id, name) values ('bg_y', 'bg_bad', 'Y');
+
+-- A malformed slides value does not break the Bendle guard. The row is filed
+-- under bg_other (the movie-chain trigger expands the ROW's show unguarded, a
+-- separate mechanic); the Bendle guard still expands the TEAM's show, bg_bad.
+insert into public.phone_answers (show_id, slide_id, team_id, answer) values ('bg_other', 'z1', 'bg_y', '[]');
 
 -- A step slide with no group is refused even while live.
 update public.shows set current_slide_id = 'n1' where id = 'bg_show';
@@ -63,6 +78,19 @@ select pg_temp.expect_error($$insert into public.phone_answers (show_id, slide_i
 update public.shows set current_slide_id = 's2' where id = 'bg_show';
 select pg_temp.expect_error($$insert into public.phone_answers (show_id, slide_id, team_id, answer) values ('bg_show', 's2', 'bg_a', '{"title":"Other"}')$$, 'bendle_already_guessed');
 insert into public.phone_answers (show_id, slide_id, team_id, answer) values ('bg_show', 's2', 'bg_b', '{"title":"Africa"}');
+-- A signed-in phone that owns its team guesses through RLS (the real write path).
+set local role authenticated;
+set local request.jwt.claims = '{"role":"authenticated","sub":"00000000-0000-0000-0000-00000000000d"}';
+insert into public.phone_answers (show_id, slide_id, team_id, answer) values ('bg_show', 's2', 'bg_d', '{"title":"Africa"}');
+-- Non-Bendle boards still save and re-save through RLS.
+insert into public.phone_answers (show_id, slide_id, team_id, answer) values ('bg_show', 'q1', 'bg_d', '[]');
+update public.phone_answers set answer = '[2]' where slide_id = 'q1' and team_id = 'bg_d';
+reset role;
+do $$ begin
+  if (select answer::text from public.phone_answers where slide_id = 'q1' and team_id = 'bg_d') is distinct from '[2]' then
+    raise exception 'non-Bendle update as authenticated did not save';
+  end if;
+end $$;
 -- Moving a Bendle row to another slide (to free the team) is refused.
 select pg_temp.expect_error($$update public.phone_answers set slide_id = 'q1' where slide_id = 's2' and team_id = 'bg_b'$$, 'bendle_no_update');
 -- Back-dating to step 1 while step 2 is live is refused.
@@ -80,6 +108,25 @@ select pg_temp.expect_error($$insert into public.phone_answers (show_id, slide_i
 insert into public.phone_answers (show_id, slide_id, team_id, answer) values ('bg_show', 'q1', 'bg_c', '[]');
 update public.phone_answers set answer = '[1]' where slide_id = 'q1' and team_id = 'bg_c';
 
+-- A stray row filed under the wrong show_id (written before this guard, so
+-- inserted with triggers off) must still be cleared by Unlock: the RPC matches
+-- by team, not by the row's show_id.
+set local session_replication_role = replica;
+insert into public.phone_answers (show_id, slide_id, team_id, answer) values ('nope', 's1', 'bg_c', '{"title":"Stray"}');
+set local session_replication_role = origin;
+
+-- RPC: anon cannot call it at all.
+set local role anon;
+set local request.jwt.claims = '{"role":"anon"}';
+do $$ begin
+  begin
+    perform public.clear_bendle_group_answers('bg_show', 'g1');
+    raise exception 'expected permission denied for anon';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+
 -- RPC: refused without the host claim.
 set local role authenticated;
 set local request.jwt.claims = '{"role":"authenticated","app_metadata":{}}';
@@ -92,16 +139,19 @@ do $$ begin
   end;
 end $$;
 
--- RPC: a verified host clears exactly the group's two rows; q1 survives.
+-- RPC: a verified host clears exactly the group's four rows (bg_a s1, bg_b s2,
+-- bg_d s2, the stray bg_c s1); the q1 rows survive. A malformed show clears 0.
 set local request.jwt.claims = '{"role":"authenticated","app_metadata":{"host_verified":true}}';
 do $$ declare n int; begin
   n := public.clear_bendle_group_answers('bg_show', 'g1');
-  if n <> 2 then raise exception 'expected 2 rows cleared, got %', n; end if;
+  if n <> 4 then raise exception 'expected 4 rows cleared, got %', n; end if;
+  n := public.clear_bendle_group_answers('bg_bad', 'g1');
+  if n <> 0 then raise exception 'expected 0 rows cleared on the malformed show, got %', n; end if;
 end $$;
 reset role;
 do $$ begin
-  if (select count(*) from public.phone_answers where show_id = 'bg_show' and slide_id in ('s1','s2','s3')) <> 0 then raise exception 'group rows remain'; end if;
-  if (select count(*) from public.phone_answers where show_id = 'bg_show' and slide_id = 'q1') <> 1 then raise exception 'q1 row was touched'; end if;
+  if (select count(*) from public.phone_answers where team_id in ('bg_a','bg_b','bg_c','bg_d') and slide_id in ('s1','s2','s3')) <> 0 then raise exception 'group rows remain'; end if;
+  if (select count(*) from public.phone_answers where team_id in ('bg_c','bg_d') and slide_id = 'q1') <> 2 then raise exception 'q1 rows were touched'; end if;
   if exists (select 1 from pg_proc where proname = 'bendle_answer_counts') then raise exception 'bendle_answer_counts still exists'; end if;
 end $$;
 
