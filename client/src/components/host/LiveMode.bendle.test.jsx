@@ -7,10 +7,17 @@ import { createRoot } from 'react-dom/client'
 
 const calls = []
 let responses = {}
+// A response may be a pending promise (a stalled request); it rejects once the
+// caller's AbortSignal fires, like fetch does.
+const settle = (entry, key) => {
+  const p = Promise.resolve(responses[key] ?? { data: entry.table === 'rpc' ? 0 : [], error: null })
+  if (!entry.signal) return p
+  return Promise.race([p, new Promise((_, rej) => entry.signal.addEventListener('abort', () => rej(new Error('aborted'))))])
+}
 function builder(table) {
   const entry = { table, op: null, args: null, filters: [] }
   const q = {
-    abortSignal() { return q },
+    abortSignal(signal) { entry.signal = signal; return q },
     select(cols) { entry.op ??= 'select'; entry.args ??= cols; return q },
     upsert(payload) { entry.op = 'upsert'; entry.args = payload; return q },
     update(payload) { entry.op = 'update'; entry.args = payload; return q },
@@ -18,14 +25,18 @@ function builder(table) {
     eq(k, v) { entry.filters.push([k, v]); return q },
     in(k, v) { entry.filters.push([k, v]); return q },
     order() { return q }, single() { return q }, maybeSingle() { return q },
-    then(res, rej) { calls.push(entry); return Promise.resolve(responses[`${table}.${entry.op}`] ?? { data: [], error: null }).then(res, rej) },
+    then(res, rej) { calls.push(entry); return settle(entry, `${table}.${entry.op}`).then(res, rej) },
   }
   return q
 }
 vi.mock('../../lib/supabase.js', () => ({
   supabase: {
     from: t => builder(t),
-    rpc: (name, args) => { calls.push({ table: 'rpc', op: name, args }); return Promise.resolve(responses[`rpc.${name}`] ?? { data: 0, error: null }) },
+    rpc: (name, args) => {
+      const entry = { table: 'rpc', op: name, args }
+      const q = { abortSignal(signal) { entry.signal = signal; return q }, then(res, rej) { calls.push(entry); return settle(entry, `rpc.${name}`).then(res, rej) } }
+      return q
+    },
     channel: () => ({ on() { return this }, subscribe() { return this } }), removeChannel() {},
   },
 }))
@@ -194,6 +205,84 @@ describe('Bendle host flows', () => {
     const [id, { data }] = a.updateSlide.mock.calls.at(-1)
     expect(id).toBe('s3')
     expect(data).toMatchObject({ bendleLocked: false, bendleRevealed: false, bendleResults: null, bendleLockedAt: null, bendleOverrides: { p3: 20 } })
+  })
+  it('A after the reveal still toggles the answer after Prev back to step 1', async () => {
+    const a = actions()
+    render([step(0), step(1), step(2, { ...LOCKED, bendleRevealed: true, bendleResults: [] })], 0, a)
+    await pressA()
+    expect(a.setAnswerReveal).toHaveBeenCalledWith(true)
+    expect(host.textContent).not.toContain('after step 3 is locked')
+  })
+  describe('stalled wifi: Bendle reads time out and free the buttons', () => {
+    const NEVER = new Promise(() => {})
+    afterEach(() => { vi.useRealTimers() })
+    const stall = async () => { await act(async () => { await vi.advanceTimersByTimeAsync(10_500) }) }
+    it('reveal: a hung teams read gives up with an error and the button works again', async () => {
+      responses['teams.select'] = NEVER
+      const a = actions()
+      render([step(0), step(1), step(2, LOCKED)], 2, a)
+      vi.useFakeTimers()
+      await act(async () => button('Reveal & Score').click())
+      expect(button('Working')).toBeTruthy()
+      await stall()
+      expect(host.textContent).toContain('Could not finish reveal or scoring')
+      expect(button('Reveal & Score').disabled).toBe(false)
+      const read = calls.find(c => c.table === 'teams' && c.signal)
+      expect(read.signal.aborted).toBe(true)
+    })
+    it('reveal: a hung song read gives up too', async () => {
+      responses['bendle_songs.select'] = NEVER
+      const a = actions()
+      render([step(0), step(1), step(2, LOCKED)], 2, a)
+      vi.useFakeTimers()
+      await act(async () => button('Reveal & Score').click())
+      await stall()
+      expect(host.textContent).toContain('Could not finish reveal or scoring')
+      expect(a.updateSlide).not.toHaveBeenCalled()
+    })
+    it('override: a hung teams read gives up with an error', async () => {
+      const results = [{ teamId: 'p3', teamName: 'No Phone', guess: null, stepIndex: null, correct: false, autoPoints: 0, points: 0, overridden: false }]
+      responses['teams.select'] = NEVER
+      const a = actions()
+      render([step(0), step(1), step(2, { ...LOCKED, bendleRevealed: true, bendleResults: results })], 2, a)
+      vi.useFakeTimers()
+      const select = host.querySelector('select[aria-label="Set No Phone points"]')
+      await act(async () => { select.value = '20'; select.dispatchEvent(new Event('change', { bubbles: true })) })
+      await stall()
+      expect(host.textContent).toContain('Could not save the change')
+      expect(host.querySelector('select[aria-label="Set No Phone points"]').disabled).toBe(false)
+    })
+    it('unlock: a hung RPC gives up with an error and the slide stays locked', async () => {
+      responses['rpc.clear_bendle_group_answers'] = NEVER
+      const a = actions()
+      render([step(0), step(1), step(2, LOCKED)], 2, a)
+      vi.useFakeTimers()
+      await act(async () => button('Unlock').click())
+      await act(async () => { await vi.advanceTimersByTimeAsync(450) })
+      await act(async () => button('Tap again').click())
+      await stall()
+      expect(host.textContent).toContain('Could not unlock')
+      expect(a.updateSlide).not.toHaveBeenCalled()
+      expect(button('Unlock').disabled).toBe(false)
+    })
+  })
+  it('override merges onto the latest step-3 data, not the data at click time', async () => {
+    let release
+    const results = [{ teamId: 'p3', teamName: 'No Phone', guess: null, stepIndex: null, correct: false, autoPoints: 0, points: 0, overridden: false }]
+    const teamsRes = responses['teams.select']
+    responses['teams.select'] = new Promise(r => { release = () => r(teamsRes) })
+    const a = actions()
+    const s3 = { ...LOCKED, bendleRevealed: true, bendleResults: results }
+    render([step(0), step(1), step(2, s3)], 2, a)
+    const select = host.querySelector('select[aria-label="Set No Phone points"]')
+    await act(async () => { select.value = '20'; select.dispatchEvent(new Event('change', { bubbles: true })) })
+    // Another write lands on the step-3 slide while the override is in flight.
+    render([step(0), step(1), step(2, { ...s3, lockCountdownPhase: null, laterField: 'kept' })], 2, a)
+    await act(async () => { release(); await Promise.resolve() })
+    await tick(20)
+    const [, { data: saved }] = a.updateSlide.mock.calls.at(-1)
+    expect(saved.laterField).toBe('kept')
+    expect(saved.bendleOverrides).toEqual({ p3: 20 })
   })
   it('a failed RPC leaves the slide locked and says so', async () => {
     responses['rpc.clear_bendle_group_answers'] = { data: null, error: { message: 'not authorized' } }

@@ -8,8 +8,14 @@ const responses = {
   phone_answers: { data: [{ team_id: 'p1' }, { team_id: 'p2' }, { team_id: 'p1' }], error: null },
   teams: { data: [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }], error: null },
 }
+const calls = []
 const q = table => {
-  const b = { select: () => b, in: () => b, eq: () => b, then: (res, rej) => Promise.resolve(responses[table]).then(res, rej) }
+  const b = {
+    select: () => b,
+    in: (...a) => { calls.push([table, 'in', ...a]); return b },
+    eq: (...a) => { calls.push([table, 'eq', ...a]); return b },
+    then: (res, rej) => Promise.resolve(responses[table]).then(res, rej),
+  }
   return b
 }
 vi.mock('../../lib/supabase.js', () => ({ supabase: { from: t => q(t) } }))
@@ -61,12 +67,41 @@ describe('<BendleHostPanel>', () => {
     const p = await render({ slide: step(2), lockData: { bendleLocked: true, bendleRevealed: true, bendleResults: results } })
     expect(host.textContent).not.toContain('teams locked a guess')
     expect(button('Reveal & Score')).toBeUndefined()
-    expect(host.textContent).toContain('Alpha: Africa - Toto · step 1')
+    expect(host.textContent).toContain('Alpha: Africa — Toto · step 1')
     expect(host.textContent).toContain('Bravo: No guess')
     const select = host.querySelector('select[aria-label="Set Bravo points"]')
     expect([...select.options].map(o => o.value)).toEqual(['0', '10', '20', '30'])
     await act(async () => { select.value = '20'; select.dispatchEvent(new Event('change', { bubbles: true })) })
     expect(p.onOverride).toHaveBeenCalledWith('p2', 20)
+  })
+  it('counts only this show\'s rows (a copied show keeps the slide ids)', async () => {
+    calls.length = 0
+    await render({ slide: step(0) })
+    expect(calls).toContainEqual(['phone_answers', 'eq', 'show_id', 'show1'])
+    expect(calls).toContainEqual(['phone_answers', 'in', 'slide_id', ['s1', 's2', 's3']])
+  })
+  it('status is readable gray and says Quick Entry is not needed', async () => {
+    await render({ slide: step(0) })
+    expect(host.querySelector('.text-gray-400')).toBeNull()
+    expect(host.textContent).toContain('Points go in automatically; don’t use Quick Entry for this round.')
+  })
+  it('after reveal: the answer line, wrapped guesses and a (changed) tag on overrides', async () => {
+    const changed = [{ ...results[0], points: 10, overridden: true }, results[1]]
+    await render({ slide: step(2), lockData: { answer: 'Africa – Toto', bendleLocked: true, bendleRevealed: true, bendleResults: changed } })
+    expect(host.textContent).toContain('Answer: Africa – Toto')
+    expect(host.querySelector('.truncate')).toBeNull()
+    expect(host.querySelector('.max-h-72')).toBeNull()
+    const rows = [...host.querySelectorAll('[data-bendle-result]')]
+    expect(rows[0].textContent).toContain('(changed)')
+    expect(rows[1].textContent).not.toContain('(changed)')
+  })
+  it('Unlock explains what it does and turns red once armed', async () => {
+    await render({ slide: step(2), lockData: { bendleLocked: true } })
+    expect(host.textContent).toContain('Clears every team’s guess; new guesses score 10. Use the points menu after the reveal to restore a team.')
+    expect(button('Unlock').className).not.toContain('text-red-700')
+    await act(async () => button('Unlock').click())
+    expect(button('Tap again').className).toContain('text-red-700')
+    expect(button('Tap again').className).toContain('bg-red-50')
   })
   it('a revealed slide with an error offers Retry Scoring', async () => {
     await render({ slide: step(2), error: 'Could not finish', lockData: { bendleLocked: true, bendleRevealed: true, bendleResults: results } })

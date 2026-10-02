@@ -27,7 +27,9 @@ export default function BendleHostPanel({ slide, lockData = {}, stepIds = [], sh
     async function poll() {
       try {
         const [answers, teams] = await Promise.all([
-          supabase.from('phone_answers').select('team_id').in('slide_id', idsKey.split('|')),
+          // show_id too: a copied show keeps its slide ids, so ids alone would
+          // count the original show's teams as well.
+          supabase.from('phone_answers').select('team_id').eq('show_id', showId).in('slide_id', idsKey.split('|')),
           supabase.from('teams').select('id').eq('show_id', showId),
         ])
         if (dead || answers.error || teams.error) return
@@ -55,11 +57,13 @@ export default function BendleHostPanel({ slide, lockData = {}, stepIds = [], sh
       : locked
         ? 'Guesses locked. Press A to reveal and score.'
         : 'Step 3. Next plays the clip; the next Next locks guesses.'
+  const answer = typeof lockData.answer === 'string' ? lockData.answer.trim() : ''
   const mainLabel = busy ? 'Working…' : revealed ? '🔁 Retry Scoring' : locked ? 'Reveal & Score (A)' : '🔒 Lock Guesses'
 
   return (
     <div className="bg-white border border-gray-100 rounded-2xl p-5 shrink-0">
-      <p className="text-xs text-gray-400 mb-1">{status}</p>
+      <p className="text-xs text-gray-500 mb-1">{status}</p>
+      <p className="text-xs text-gray-500 mb-1">Points go in automatically; don’t use Quick Entry for this round.</p>
       {counts && !revealed && (
         <p className="text-sm font-semibold text-gray-700 mb-3">{counts.locked} of {counts.total} teams locked a guess</p>
       )}
@@ -76,12 +80,14 @@ export default function BendleHostPanel({ slide, lockData = {}, stepIds = [], sh
       )}
       {error && <p className="text-xs text-red-600 mt-2 text-center">{error}</p>}
       {isLockStep && revealed && results && (
-        <div className="mt-3 max-h-72 overflow-y-auto space-y-1.5">
+        <div className="mt-3 max-h-[60vh] overflow-y-auto space-y-1.5">
+          {answer && <p className="text-sm font-semibold text-gray-900">Answer: {answer}</p>}
           <p className="text-xs font-semibold text-gray-600">Team results · set points by hand</p>
           {results.map(r => (
-            <div key={r.teamId} className="flex items-center justify-between gap-2 text-xs text-gray-700">
-              <span className="truncate">
+            <div key={r.teamId} data-bendle-result className="flex items-center justify-between gap-2 text-xs text-gray-700">
+              <span className="min-w-0 break-words">
                 {r.points > 0 ? '✓' : '✗'} {r.teamName}: {guessLabel(r.guess)}{r.guess && r.stepIndex != null ? ` · step ${r.stepIndex + 1}` : ''}
+                {r.overridden && <span className="text-gray-500"> (changed)</span>}
               </span>
               <select
                 aria-label={`Set ${r.teamName} points`}
@@ -97,6 +103,7 @@ export default function BendleHostPanel({ slide, lockData = {}, stepIds = [], sh
         </div>
       )}
       {isLockStep && locked && (
+        <>
         <button
           onClick={() => {
             if (!confirmUnlock) { armedAt.current = Date.now(); setConfirmUnlock(true); return }
@@ -106,10 +113,14 @@ export default function BendleHostPanel({ slide, lockData = {}, stepIds = [], sh
           }}
           onBlur={() => setConfirmUnlock(false)}
           disabled={busy}
-          className="w-full mt-2 min-h-[44px] py-2 rounded-lg border border-gray-200 text-gray-500 text-xs font-semibold hover:bg-gray-50 disabled:opacity-40"
+          className={`w-full mt-2 min-h-[44px] py-2 rounded-lg border text-xs font-semibold disabled:opacity-40 ${
+            confirmUnlock ? 'border-red-300 text-red-700 bg-red-50' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+          }`}
         >
           {confirmUnlock ? 'Tap again: clears every team’s guess' : '🔓 Unlock — clear every guess and reopen phones'}
         </button>
+        <p className="text-xs text-gray-500 mt-1">Clears every team’s guess; new guesses score 10. Use the points menu after the reveal to restore a team.</p>
+        </>
       )}
     </div>
   )

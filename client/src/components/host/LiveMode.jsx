@@ -443,7 +443,11 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     && (PHONE_MECHANICS[phoneMechanic].lockHere?.(currentSlide.data) ?? true)
     && !currentSlide?.data?.[REVEAL_FIELD[phoneMechanic]]
   // Bendle: the step-3 slide holds the lock, results and overrides.
-  const bendleLockData = phoneMechanic === 'bendle' ? (lockSlideFor(slides, currentSlide)?.data ?? {}) : null
+  const bendleLockSlide = phoneMechanic === 'bendle' ? lockSlideFor(slides, currentSlide) : null
+  const bendleLockData = phoneMechanic === 'bendle' ? (bendleLockSlide?.data ?? {}) : null
+  // Latest step-3 slide, for handlers that merge onto its data after an await.
+  const bendleLockSlideRef = useRef(null)
+  bendleLockSlideRef.current = bendleLockSlide
   const bendleLockedNow = !!bendleLockData?.bendleLocked
   useEffect(() => { bendleLockingRef.current = false }, [bendleLockedNow, currentSlide?.id])
 
@@ -1350,15 +1354,17 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     bendleRunRef.current = true
     setBendleBusy(true); setBendleError(null)
     try {
-      const { data: teams, error: teamsError } = await supabase.from('teams').select('id, name').eq('show_id', show.id)
+      // Every read is time-boxed (withTimeout): on stalled wifi a hung request
+      // would otherwise hold bendleRunRef and leave the host with dead buttons.
+      const { data: teams, error: teamsError } = await withTimeout(signal => supabase.from('teams').select('id, name').eq('show_id', show.id).abortSignal(signal), SCORE_CALL_TIMEOUT_MS)
       if (teamsError) throw teamsError
       // Retry after the reveal rescores what the TV already shows.
       let results = slide.data.bendleRevealed && Array.isArray(slide.data.bendleResults) ? slide.data.bendleResults : null
       if (!results) {
         const stepIds = bendleStepIds(slides, slide)
         const [rowsRes, songRes] = await Promise.all([
-          supabase.from('phone_answers').select('team_id, slide_id, answer').eq('show_id', show.id).in('slide_id', stepIds.filter(Boolean)),
-          supabase.from('bendle_songs').select('title, answer, aliases, artist').eq('id', slide.data.bendleSongId).single(),
+          withTimeout(signal => supabase.from('phone_answers').select('team_id, slide_id, answer').eq('show_id', show.id).in('slide_id', stepIds.filter(Boolean)).abortSignal(signal), SCORE_CALL_TIMEOUT_MS),
+          withTimeout(signal => supabase.from('bendle_songs').select('title, answer, aliases, artist').eq('id', slide.data.bendleSongId).single().abortSignal(signal), SCORE_CALL_TIMEOUT_MS),
         ])
         for (const r of [rowsRes, songRes]) if (r.error) throw r.error
         if (!songRes.data) throw new Error('Bendle song row missing')
@@ -1374,17 +1380,20 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
 
   // One team's points by hand, after the reveal: rescore (same step-3 key),
   // then republish the results so the TV and phones show the new points.
-  async function overrideBendleTeam(slide, teamId, points) {
+  async function overrideBendleTeam(clicked, teamId, points) {
+    // The click handler holds render-time data; read the newest step-3 slide.
+    const latest = () => (bendleLockSlideRef.current?.id === clicked?.id ? bendleLockSlideRef.current : clicked)
+    const slide = latest()
     if (bendleRunRef.current || !isBendleLockSlide(slide) || !slide.data.bendleRevealed) return
     bendleRunRef.current = true
     setBendleBusy(true); setBendleError(null)
     try {
       const overrides = { ...(slide.data.bendleOverrides ?? {}), [teamId]: points }
       const results = applyBendleOverrides(slide.data.bendleResults, overrides)
-      const { data: teams, error: teamsError } = await supabase.from('teams').select('id, name').eq('show_id', show.id)
+      const { data: teams, error: teamsError } = await withTimeout(signal => supabase.from('teams').select('id, name').eq('show_id', show.id).abortSignal(signal), SCORE_CALL_TIMEOUT_MS)
       if (teamsError) throw teamsError
       await writeBendleScores(slide, results, teams ?? [])
-      actions.updateSlide(slide.id, { data: { ...slide.data, bendleOverrides: overrides, bendleResults: results } })
+      actions.updateSlide(slide.id, { data: { ...latest().data, bendleOverrides: overrides, bendleResults: results } })
       await actions.flushSlides()
       refreshScoresView()
     } catch (error) {
@@ -1401,7 +1410,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     bendleRunRef.current = true
     setBendleBusy(true); setBendleError(null)
     try {
-      const { error } = await supabase.rpc('clear_bendle_group_answers', { p_show_id: show.id, p_group_id: slide.data.shinyGroupId })
+      const { error } = await withTimeout(signal => supabase.rpc('clear_bendle_group_answers', { p_show_id: show.id, p_group_id: slide.data.shinyGroupId }).abortSignal(signal), SCORE_CALL_TIMEOUT_MS)
       if (error) throw error
       actions.updateSlide(slide.id, { data: { ...slide.data, ...unlockPatch('bendle', slide.data) } })
       await actions.flushSlides()
@@ -1600,7 +1609,8 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       revealPending: !!pendingReveal(currentSlide),
       // Bendle: A must not show the answer on steps 1-2 or before the step-3
       // lock. Once the step-3 result is up, A toggles the answer as usual.
-      answerHeld: phoneMechanic === 'bendle' && !pendingReveal(currentSlide) && !currentSlide.data?.bendleRevealed,
+      // Read from the step-3 slide, so Prev to step 1-2 after the reveal still toggles.
+      answerHeld: phoneMechanic === 'bendle' && !pendingReveal(currentSlide) && !bendleLockData?.bendleRevealed,
       scoreboardVisible: show.showState.scoreboardVisible,
       scoresRevealed: show.showState.scoresRevealed,
       // via:'remote' only (the keyboard and buttons never read these).
