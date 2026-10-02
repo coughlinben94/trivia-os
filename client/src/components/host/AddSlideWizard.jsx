@@ -2,8 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { nanoid } from 'nanoid'
 import { sortedSlides } from '../../hooks/useShow.js'
 import { insertAfterSlideId } from '../../lib/questionNumbering.js'
-import { JUKEBOX_LIBRARIES } from '../../lib/jukeboxLibraries.js'
-import { fetchJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
+import { useJukeboxLibraries } from '../../lib/jukeboxSupabase.js'
 import { makeQuestionPasteHandler, makeCleanPasteHandler } from '../../lib/cleanPaste.js'
 import { FIXED_SHAPE_KINDS } from '../../lib/shinyWizardKinds.jsx'
 import { withShinyTitleSlide, withShinyGroupId } from '../../lib/shinySeries.js'
@@ -255,17 +254,11 @@ export default function AddSlideWizard({ show, onAddSlide, onClose, onTypeChange
   // Grading-break
   const [jukeboxLib, setJukeboxLib]   = useState('random')
   const [skipTop3, setSkipTop3]       = useState(true)
-  const [jukeboxLibs, setJukeboxLibs] = useState(JUKEBOX_LIBRARIES)
+  const jukeboxLibs = useJukeboxLibraries()
 
   // PYL — Theme Picker board (persists as slide.type 'pyl-reveal' with
   // items/title set — PylRevealSlide's static branch).
   const [pylBoardNames, setPylBoardNames] = useState(['', '', ''])
-
-  useEffect(() => {
-    let alive = true
-    fetchJukeboxLibraries().then(libs => { if (alive && libs) setJukeboxLibs(libs) })
-    return () => { alive = false }
-  }, [])
 
   const sorted = sortedSlides(show)
 

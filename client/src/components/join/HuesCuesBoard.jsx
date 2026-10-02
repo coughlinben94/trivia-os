@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../lib/supabase.js'
+import { usePhoneAnswerSave } from '../../hooks/usePhoneAnswerSave.js'
 import { getHuesCuesGrid, getHuesCuesCell, HUES_CUES_COLS, HUES_CUES_ROWS } from '../../lib/huesCuesGrid.js'
 import { EASE_PANEL } from '../../lib/easings.js'
 import ShrinkToFit from './ShrinkToFit.jsx'
@@ -122,7 +123,7 @@ export default function HuesCuesBoard({ slide, team, theme, preview = false, onA
   const [committedCol, setCommittedCol] = useState(null)
   const [committedRow, setCommittedRow] = useState(null)
   const [saving, setSaving] = useState(false)
-  const [saveFailed, setSaveFailed] = useState(false)
+  const { saveAnswer, saveFailed } = usePhoneAnswerSave({ preview, slide, team, board: 'HuesCuesBoard', noun: 'hues-cues' })
 
   // Pan/zoom state for the browse phase — plain CSS transform, no library.
   const [pan, setPan] = useState({ x: 0, y: 0, scale: 1 })
@@ -132,7 +133,6 @@ export default function HuesCuesBoard({ slide, team, theme, preview = false, onA
   const panRafRef = useRef(null)
   useEffect(() => () => { if (panRafRef.current) cancelAnimationFrame(panRafRef.current) }, [])
 
-  const saveChainRef = useRef(Promise.resolve())
   // Set true the moment the team touches a wheel, so the restore-on-mount
   // fetch below (which can resolve after a slow/venue-wifi round trip)
   // never clobbers a pick already in progress — see handleColSelect/
@@ -141,34 +141,10 @@ export default function HuesCuesBoard({ slide, team, theme, preview = false, onA
   const handleColSelect = useCallback((v) => { userTouchedRef.current = true; setCol(v) }, [])
   const handleRowSelect = useCallback((v) => { userTouchedRef.current = true; setRow(v) }, [])
 
-  const save = useCallback((nextCol, nextRow) => {
-    if (preview) return Promise.resolve(true)
-    const run = saveChainRef.current.then(async () => {
-      const upsert = supabase.from('phone_answers').upsert(
-        {
-          show_id: slide.showId ?? team.showId,
-          slide_id: slide.id,
-          team_id: team.id,
-          answer: { col: nextCol, row: nextRow },
-        },
-        { onConflict: 'slide_id,team_id' }
-      )
-      let error
-      try {
-        ;({ error } = await Promise.race([
-          upsert,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('hues-cues save timed out')), 8000)),
-        ]))
-      } catch (err) {
-        error = err
-      }
-      if (error) console.error('[HuesCuesBoard] guess save failed:', error)
-      setSaveFailed(!!error)
-      return !error
-    })
-    saveChainRef.current = run.catch(() => false)
-    return run
-  }, [preview, slide.id, slide.showId, team.id, team.showId])
+  const save = useCallback(
+    (nextCol, nextRow) => (preview ? Promise.resolve(true) : saveAnswer({ col: nextCol, row: nextRow })),
+    [preview, saveAnswer]
+  )
 
   // Restore this team's own row so a phone reload mid-question keeps its pick.
   useEffect(() => {

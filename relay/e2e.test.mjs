@@ -11,6 +11,7 @@ import { createStubHost } from './stub-host.mjs'
 import { createStubDisplay } from './stub-display.mjs'
 import { createLocal } from './local.mjs'
 import { fakeRunner } from './fake-runner.mjs'
+import { makeUntil } from './test-helpers.mjs'
 
 const SECRET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 const quiet = { log() {}, warn() {}, error() {} }
@@ -49,15 +50,7 @@ afterEach(async () => {
   fs.rmSync(dir, { recursive: true, force: true })
 })
 
-async function until(fn, ms = 2000) {
-  const t0 = Date.now()
-  while (Date.now() - t0 < ms) {
-    const v = fn()
-    if (v) return v
-    await new Promise(r => setTimeout(r, 10))
-  }
-  throw new Error('timed out')
-}
+const until = makeUntil(2000)
 
 // What Remote.jsx does: hello first, keep the latest state, tap with the
 // shown slide id + gate and a laptop-time sentAt.

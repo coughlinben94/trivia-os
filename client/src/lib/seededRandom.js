@@ -26,3 +26,25 @@ export function mulberry32(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296
   }
 }
+
+// Seeded Fisher-Yates with an optional re-roll rule. `isBad(shuffled)` -> true
+// re-rolls (max 50 tries, so a pathological seed can't loop forever). Callers
+// own their rule on purpose (Order: whole row equals the answer; Matching: any
+// fixed point) — only the shuffle body is shared. Same seed => same output as
+// the old per-file copies; the rand stream is shared across re-rolls.
+export function seededShuffleWith(items, seed, isBad) {
+  const rand = mulberry32(hashSeed(String(seed)))
+  function shuffleOnce() {
+    const arr = [...items]
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1))
+      ;[arr[i], arr[j]] = [arr[j], arr[i]]
+    }
+    return arr
+  }
+  let arr = shuffleOnce()
+  if (isBad) {
+    for (let tries = 0; tries < 50 && isBad(arr); tries++) arr = shuffleOnce()
+  }
+  return arr
+}

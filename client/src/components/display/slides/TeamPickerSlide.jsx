@@ -8,7 +8,7 @@ import { useTheme } from '../../shared/ThemeProvider.jsx';
 import { EASE_OUT, EASE_PANEL } from '../../../lib/easings.js';
 import { nextSlideAfter, TEAM_PICKER_HOLD_MS } from '../../../lib/slideStepping.js';
 import { hexToRgb as hexToRgbArr } from '../../../lib/oklab.js';
-import { hashSeed, mulberry32 } from '../../../lib/seededRandom.js';
+import { seededShuffleWith } from '../../../lib/seededRandom.js';
 
 const DISP_CAP = 150, SS = 1.6;
 const CAP = DISP_CAP * SS, MAXW = 1520 * SS;
@@ -106,13 +106,7 @@ const STAR_HIGHLIGHT_FIXED = '#e8e8e8'
 // back/forward over the sequence doesn't reshuffle teams the host has
 // already announced.
 function seededShuffle(arr, seedStr) {
-  const rand = mulberry32(hashSeed(String(seedStr)));
-  const out = arr.slice();
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
+  return seededShuffleWith(arr, seedStr);
 }
 
 function hexToRgb(hex) {

@@ -377,7 +377,7 @@ export const LOCK_COUNTDOWN_MS = 3000
 // question is revealed).
 export const PHONE_MECHANICS = {
   matching: { guard: isMatchingShiny, lockFields: ['matchingLocked'], revealField: 'matchingRevealed' },
-  wager:    { guard: isWagerShiny,    lockFields: ['wagerTiersLocked', 'wagerGuessesLocked'], revealField: 'wagerRevealed' },
+  wager:    { guard: isWagerShiny,    lockFields: ['wagerTiersLocked', 'wagerGuessesLocked'], phaseNames: ['wager-tiers', 'wager-guesses'], revealField: 'wagerRevealed' },
   order:    { guard: isOrderShiny,    lockFields: ['orderLocked'], revealField: 'orderRevealed' },
   choice:   { guard: isChoiceShiny,   lockFields: ['choiceLocked'], revealField: 'choiceRevealed' },
   // The Drop: wrong tiles fall off one per Next after the lock (dropStep), so
@@ -417,15 +417,11 @@ export function pendingLockPhase(slide) {
     if (m.lockFields.length === 1) {
       return !data[m.lockFields[0]] ? key : null
     }
-    // Multi-phase (wager today): first unlocked field in order, phase-named
-    // as `${key}-${fieldSuffix}` to preserve the exact existing phase
-    // strings ('wager-tiers'/'wager-guesses') lockHandlersRef keys off.
-    for (const field of m.lockFields) {
-      if (!data[field]) {
-        const suffix = field === 'wagerTiersLocked' ? 'tiers' : field === 'wagerGuessesLocked' ? 'guesses' : field
-        return `${key}-${suffix}`
-      }
-    }
+    // Multi-phase (wager today): first unlocked field in order, named by the
+    // matching phaseNames entry ('wager-tiers'/'wager-guesses') that
+    // lockHandlersRef keys off.
+    const i = m.lockFields.findIndex(f => !data[f])
+    if (i !== -1) return m.phaseNames[i]
     return null
   }
   return null

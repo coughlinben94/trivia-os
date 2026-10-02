@@ -1,12 +1,13 @@
-import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { useState, useLayoutEffect, useMemo, useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { supabase } from '../../../lib/supabase.js'
+import { usePhoneSubmitCounts } from '../../../hooks/usePhoneSubmitCounts.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { fitToBox, SHINY_CHOICE_Q_BOX } from '../../../lib/autoFitText.js'
 import { dropOptions, dropSequence, survivorShifts } from '../../../lib/dropScoring.js'
 import { AnswersLockedBadge } from '../LockCountdownOverlay.jsx'
 import ShinySignal from '../ShinySignal.jsx'
+import { StatusSlot, useFontsReady } from './shinyParts.jsx'
 
 // The TV side of The Drop. Four tiles pop in; teams split their points over
 // them on their phones. Once Ben locks, each Next press drops one WRONG tile
@@ -49,30 +50,7 @@ export default function ShinyDropQuestion({ slide, show, theme }) {
     [options, droppedIds]
   )
 
-  const [submittedCount, setSubmittedCount] = useState(0)
-  const [teamCount, setTeamCount] = useState(0)
-
-  // Polled aggregate, same as ShinyChoiceQuestion: phone_answers' SELECT never
-  // opens to the anonymous TV, phone_answers_count is the narrow RPC for this.
-  useEffect(() => {
-    if (locked) return
-    let cancelled = false
-    async function load() {
-      const { data: count } = await supabase.rpc('phone_answers_count', { p_slide_id: slide.id })
-      if (!cancelled) setSubmittedCount(count ?? 0)
-    }
-    load()
-    const interval = setInterval(load, 2000)
-    return () => { cancelled = true; clearInterval(interval) }
-  }, [slide.id, locked])
-
-  useEffect(() => {
-    if (!show?.id || locked) return
-    let cancelled = false
-    supabase.from('teams').select('id', { count: 'exact', head: true }).eq('show_id', show.id)
-      .then(({ count }) => { if (!cancelled) setTeamCount(count ?? 0) })
-    return () => { cancelled = true }
-  }, [show?.id, locked])
+  const { submitted: submittedCount, teamCount } = usePhoneSubmitCounts(slide.id, show?.id, { pollStop: locked, teamsStop: locked })
 
   const results = data.dropResults
   // What the whole room put on each tile — aggregate only, shown from the lock
@@ -118,8 +96,7 @@ export default function ShinyDropQuestion({ slide, show, theme }) {
 
 // Same measure-to-fit question text as ShinyChoiceQuestion.
 function QuestionText({ text, theme }) {
-  const [fontsReady, setFontsReady] = useState(false)
-  useEffect(() => { document.fonts.ready.then(() => setFontsReady(true)) }, [])
+  const fontsReady = useFontsReady()
   const size = useMemo(
     () => fitToBox(text ?? '', { ...SHINY_CHOICE_Q_BOX, family: theme.fonts.display }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -135,22 +112,6 @@ function QuestionText({ text, theme }) {
       }}>
         {text}
       </p>
-    </div>
-  )
-}
-
-// Fixed-height slot so the count line / locked badge / all-in line never
-// shift the tiles when they swap.
-function StatusSlot({ theme, children }) {
-  return (
-    <div style={{
-      minHeight: '3.4rem', flexShrink: 0,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      color: `${theme.colors.text}d9`,
-      fontSize: 'clamp(1.6rem, 2vw, 2.3rem)',
-      fontFamily: `'${theme.fonts.body}', 'DM Sans', sans-serif`,
-    }}>
-      {children}
     </div>
   )
 }
