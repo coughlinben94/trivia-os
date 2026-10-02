@@ -1,0 +1,90 @@
+-- supabase/tests/bendle_phone_guess_guard.sql
+-- Run ONLY against a throwaway database that has the production schema, never production:
+--   psql "$THROWAWAY_DB_URL" -v I_AM_NOT_PRODUCTION=1 -v ON_ERROR_STOP=1 -f supabase/tests/bendle_phone_guess_guard.sql
+-- Everything runs in one transaction and is rolled back.
+\if :{?I_AM_NOT_PRODUCTION}
+\else
+  \echo 'Refusing to run: pass -v I_AM_NOT_PRODUCTION=1 and point at a throwaway database.'
+  \quit
+\endif
+
+begin;
+
+create function pg_temp.expect_error(p_sql text, p_msg text) returns void language plpgsql as $$
+begin
+  begin
+    execute p_sql;
+  exception when others then
+    if sqlerrm = p_msg then return; end if;
+    raise exception 'expected %, got %', p_msg, sqlerrm;
+  end;
+  raise exception 'expected %, but the statement succeeded', p_msg;
+end $$;
+
+-- Fixture: one show, a Bendle group g1 (steps s1/s2/s3) plus a matching slide q1.
+-- If this insert (or the teams insert below) fails on a NOT NULL column, add
+-- that column with a dummy value (\d public.shows and \d public.teams list them;
+-- Join.jsx:2510 shows the columns a real team insert sends).
+insert into public.shows (id, title, is_live, current_slide_index, current_slide_id, slides)
+values ('bg_show', 'Bendle guard test', true, 1, 's1', jsonb_build_array(
+  jsonb_build_object('id', 't1', 'type', 'shiny-title', 'order', 0, 'data', jsonb_build_object('isShiny', true, 'shinyGroupId', 'g1')),
+  jsonb_build_object('id', 's1', 'type', 'question', 'order', 1, 'data', jsonb_build_object('isShiny', true, 'shinyGroupId', 'g1', 'bendleStepIndex', 0, 'shinyInputSchema', jsonb_build_object('type', 'bendle'))),
+  jsonb_build_object('id', 's2', 'type', 'question', 'order', 2, 'data', jsonb_build_object('isShiny', true, 'shinyGroupId', 'g1', 'bendleStepIndex', 1, 'shinyInputSchema', jsonb_build_object('type', 'bendle'))),
+  jsonb_build_object('id', 's3', 'type', 'question', 'order', 3, 'data', jsonb_build_object('isShiny', true, 'shinyGroupId', 'g1', 'bendleStepIndex', 2, 'shinyInputSchema', jsonb_build_object('type', 'bendle'))),
+  jsonb_build_object('id', 'q1', 'type', 'question', 'order', 4, 'data', jsonb_build_object('isShiny', true, 'shinyInputSchema', jsonb_build_object('type', 'matching')))
+));
+insert into public.teams (id, show_id, name) values ('bg_a', 'bg_show', 'A'), ('bg_b', 'bg_show', 'B'), ('bg_c', 'bg_show', 'C');
+
+-- Live step only, first write wins, no second row, no update.
+insert into public.phone_answers (show_id, slide_id, team_id, answer) values ('bg_show', 's1', 'bg_a', '{"title":"Africa"}');
+select pg_temp.expect_error($$insert into public.phone_answers (show_id, slide_id, team_id, answer) values ('bg_show', 's1', 'bg_a', '{"title":"Other"}')$$, 'bendle_already_guessed');
+-- Upsert (the client's write path) is refused the same way.
+select pg_temp.expect_error($$insert into public.phone_answers (show_id, slide_id, team_id, answer) values ('bg_show', 's1', 'bg_a', '{"title":"Other"}') on conflict (slide_id, team_id) do update set answer = excluded.answer$$, 'bendle_already_guessed');
+select pg_temp.expect_error($$update public.phone_answers set answer = '{"title":"Other"}' where slide_id = 's1' and team_id = 'bg_a'$$, 'bendle_no_update');
+select pg_temp.expect_error($$insert into public.phone_answers (show_id, slide_id, team_id, answer) values ('bg_show', 's2', 'bg_b', '{"title":"Africa"}')$$, 'bendle_not_live');
+
+-- Step 2 live: team A (already locked on step 1) is refused; team B is accepted.
+update public.shows set current_slide_id = 's2' where id = 'bg_show';
+select pg_temp.expect_error($$insert into public.phone_answers (show_id, slide_id, team_id, answer) values ('bg_show', 's2', 'bg_a', '{"title":"Other"}')$$, 'bendle_already_guessed');
+insert into public.phone_answers (show_id, slide_id, team_id, answer) values ('bg_show', 's2', 'bg_b', '{"title":"Africa"}');
+-- Moving a Bendle row to another slide (to free the team) is refused.
+select pg_temp.expect_error($$update public.phone_answers set slide_id = 'q1' where slide_id = 's2' and team_id = 'bg_b'$$, 'bendle_no_update');
+-- Back-dating to step 1 while step 2 is live is refused.
+select pg_temp.expect_error($$insert into public.phone_answers (show_id, slide_id, team_id, answer) values ('bg_show', 's1', 'bg_c', '{"title":"Africa"}')$$, 'bendle_not_live');
+
+-- Step 3 live and locked: nobody can write.
+update public.shows set current_slide_id = 's3',
+  slides = jsonb_set(slides, '{3,data,bendleLocked}', 'true'::jsonb) where id = 'bg_show';
+select pg_temp.expect_error($$insert into public.phone_answers (show_id, slide_id, team_id, answer) values ('bg_show', 's3', 'bg_c', '{"title":"Africa"}')$$, 'bendle_locked');
+
+-- Other boards are untouched (insert and update on a non-Bendle slide work).
+insert into public.phone_answers (show_id, slide_id, team_id, answer) values ('bg_show', 'q1', 'bg_c', '[]');
+update public.phone_answers set answer = '[1]' where slide_id = 'q1' and team_id = 'bg_c';
+
+-- RPC: refused without the host claim.
+set local role authenticated;
+set local request.jwt.claims = '{"role":"authenticated","app_metadata":{}}';
+do $$ begin
+  begin
+    perform public.clear_bendle_group_answers('bg_show', 'g1');
+    raise exception 'expected not authorized';
+  exception when others then
+    if sqlerrm <> 'not authorized' then raise; end if;
+  end;
+end $$;
+
+-- RPC: a verified host clears exactly the group's two rows; q1 survives.
+set local request.jwt.claims = '{"role":"authenticated","app_metadata":{"host_verified":true}}';
+do $$ declare n int; begin
+  n := public.clear_bendle_group_answers('bg_show', 'g1');
+  if n <> 2 then raise exception 'expected 2 rows cleared, got %', n; end if;
+end $$;
+reset role;
+do $$ begin
+  if (select count(*) from public.phone_answers where show_id = 'bg_show' and slide_id in ('s1','s2','s3')) <> 0 then raise exception 'group rows remain'; end if;
+  if (select count(*) from public.phone_answers where show_id = 'bg_show' and slide_id = 'q1') <> 1 then raise exception 'q1 row was touched'; end if;
+  if exists (select 1 from pg_proc where proname = 'bendle_answer_counts') then raise exception 'bendle_answer_counts still exists'; end if;
+end $$;
+
+\echo 'bendle_phone_guess_guard: all checks passed'
+rollback;
