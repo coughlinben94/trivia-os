@@ -5,7 +5,6 @@ import AudioBlockedCue from './AudioBlockedCue.jsx'
 import { EASE_OUT, EASE_EXIT } from '../../lib/easings.js'
 import { timerView, shouldChime, calibrateOffset, TIMES_UP } from '../../lib/showTimer.js'
 import { playTimerChime, unlockTimerAudio } from '../../lib/timerChime.js'
-import { reportBlocked } from '../../lib/audioBlocked.js'
 
 // Host countdown timer, a layer over whatever slide is live (not a slide type).
 // Mounted ONCE in Display.jsx inside the stage, next to ScoreboardOverlay.
@@ -95,8 +94,7 @@ export default function TimerOverlay({ show }) {
     writeStore(PLAYED_KEY, view.id)
     playTimerChime().then(ok => {
       if (ok) return
-      reportBlocked('timer', { slideId: 'timer', part: 0 })
-      setBlocked(true)
+      setBlocked(true) // the director already reported why (once)
     })
   }, [view.phase, view.id]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (view.phase !== 'done') setBlocked(false) }, [view.phase])

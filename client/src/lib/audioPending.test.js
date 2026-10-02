@@ -32,9 +32,10 @@ describe('audioPlayPending', () => {
     expect(audioPlayPending(yt(), { slideId: 'q1', playing: true })).toBe(false)
   })
 
-  it('is true for a plain question with click-triggered audio, false when the trigger is not click', () => {
+  it('is true for a plain question with click-triggered audio, false only when the trigger is exactly advance', () => {
     expect(audioPlayPending(plain(), null)).toBe(true)
-    expect(audioPlayPending(plain({ audioTrigger: 'auto' }), null)).toBe(false)
+    expect(audioPlayPending(plain({ audioTrigger: 'advance' }), null)).toBe(false)
+    expect(audioPlayPending(plain({ audioTrigger: 'auto' }), null)).toBe(true) // the TV only autoplays on 'advance'
   })
 
   it('is false when the slide has no audio at all', () => {

@@ -30,7 +30,9 @@ import {
   ownsAutoRoll,
   TEAM_PICKER_HOLD_MS,
 } from '../lib/slideStepping.js'
-import { warmYoutubeAudio } from '../lib/youtubeWarmAudio.js'
+import { walkoutClip } from '../lib/walkoutAudio.js'
+import { director } from '../audio/director.js'
+import { resolveSlideClip } from '../lib/slideClip.js'
 import { keepAwake } from '../lib/keepAwake.js'
 import { useRemoteLink, useRemoteLinkFlag } from '../hooks/useRemoteLink.js'
 import { DISPLAY_RELAY_URL } from '../lib/remoteProtocol.js'
@@ -1484,20 +1486,22 @@ export default function Display() {
       ? [sorted[cur]] // gate is up — the next press reveals (and may invoke) this slide
       : [sorted[cur], sorted[cur + 1]]
     for (const s of targets) {
-      const clip = s?.data?.walkoutSong
-      if (clip?.videoId) warmYoutubeAudio(clip.videoId, clip.start ?? 0)
+      director.warm(walkoutClip(s?.data?.walkoutSong)) // same pool key as the slide's play: videoId:start:
       // Plain-question audio set to 'advance' (SlideEditor's "▶️ On Advance")
       // starts the instant the slide goes live, so like state-of-union's loop
       // it can only be warmed from the slide BEFORE. 'click' mode is left to
       // warm itself at mount — its press comes well after, same as a shiny
       // audio question's. end matters: warm and claim must agree on the pool
       // key, and QuestionAudio claims with the trim out-point.
-      if (s?.type === 'question' && !s.data?.isShiny && s.data?.audioTrigger === 'advance') {
-        const q = resolveShinyPart(s.data)
-        if (q.youtubeId) warmYoutubeAudio(q.youtubeId, q.youtubeStart ?? 0, q.youtubeEnd ?? null)
-      }
+      const qc = resolveSlideClip(s)
+      if (qc?.trigger === 'advance') director.warm(qc.clip)
     }
   }, [isPreview, isDemo, show?.is_live, show?.slides, show?.current_slide_index, show?.current_slide_id])
+
+  // Any real click/key on the TV unlocks the shared audio context and replays a blocked
+  // clip (the "Click for sound" cue is just a visible version of this). Capture phase,
+  // never stops the event: click-to-step and the fullscreen ritual are untouched.
+  useEffect(() => director.installGestureUnlock(window), [])
 
   // Capture Chrome's install prompt — only fires when not already installed
   useEffect(() => {
@@ -1549,25 +1553,11 @@ export default function Display() {
     }
     function onFirstInteraction() {
       enter()
-      // Prime Web Audio on whatever the first click/keydown of the show
-      // happens to be. On Chrome this is belt-and-suspenders — sticky user
-      // activation already unlocks any AudioContext created later in the
-      // same tab (including RulesSlide.jsx's own, built at slide-mount) the
-      // instant ANY gesture occurs, so this specific call doesn't unlock
-      // anything Chrome wouldn't already allow on its own. Kept anyway
-      // because it's zero-cost and WebKit/Safari autoplay gating is less
-      // consistently "sticky" per-context, where actually resuming inside
-      // the gesture handler can matter. This does NOT solve the genuinely
-      // cold case — zero interaction anywhere on the TV before Rules plays —
-      // there is no code-only fix for that; a tab that's never been touched
-      // still can't unlock audio no matter where the priming call lives. The
-      // real mitigation for that case stays physical: tap/click the TV once
-      // during setup, before the show goes live.
-      try {
-        const AC = window.AudioContext || window.webkitAudioContext
-        const ctx = new AC()
-        ctx.resume().then(() => ctx.close()).catch(() => {})
-      } catch {}
+      // Audio unlock is the audio director's job now (installGestureUnlock above, in capture
+      // phase): the first click/key of the show creates and resumes the ONE shared AudioContext
+      // that every sound on this page uses, so the old throwaway "prime" context is gone. This
+      // handler only enters fullscreen. A tab with zero interaction before a sound plays still
+      // cannot unlock; the "Click for sound" cue and the setup tap are the answer to that.
       window.removeEventListener('click', onFirstInteraction)
       window.removeEventListener('keydown', onFirstInteraction)
     }

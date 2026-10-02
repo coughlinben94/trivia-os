@@ -2,7 +2,20 @@
 
 Status: DRAFT for Ben's review, 2026-09-29. Next show: week of 2026-10-06.
 
-## Status update, 2026-10-01
+## Status update, 2026-10-01 (late): the director is BUILT, not yet shipped
+
+Branch `feat/audio-director` (unpushed at time of writing) implements this spec in three plans
+(`docs/superpowers/plans/2026-10-01-audio-director-{1-foundation,2-questions,3-everything-else}.md`):
+one `audio/director.js` owns every /display sound (question clips, walkouts, team intro, rules,
+last-call bell, host timer chime, winner drum roll, race), `lib/slideClip.js` is the one "what clip
+does this slide have" function, and failure is loud (blocked -> cue + Sentry, failed -> Sentry, ends
+unheard -> Sentry). Four independent reviews found and fixed real bugs along the way. NOT done from
+this spec: Display owning a single mark-reading trigger effect (both mark effects still live in
+QuestionSlide), `audioPlayPending` calling `resolveSlideClip` (an agreement test pins them instead),
+Bendle played through `director.play`, the Safari run, a 6x-CPU-throttle run, and a real-YouTube
+Playwright test. Everything below this note is the original draft; where it disagrees, the plans win.
+
+## Earlier status update, 2026-10-01
 
 Shipped since this draft (main, PR #7 merge `f8e3468`, Bendle commit `e8c93fe`): Bendle-only fix for the
 2026-09-22 stall. Range-loads only the played ~30 s of each stem, starts once
@@ -20,6 +33,11 @@ Next show: week of 2026-10-06. Before then, the cheapest YouTube change is
 the "failure is loud" part alone: breadcrumbs plus the locked-audio cue, with
 no director refactor. Decision needed: ship that first, or go straight to
 stage 1.
+
+Plan 1 of 3 (foundation: `audio/director.js` + `lib/slideClip.js`, no slide changed)
+is built on branch `feat/audio-director` (2026-10-01). Plan 2 moves the question
+clips and the Next triggers onto it; Plan 3 moves everything else and deletes dead
+code. Plan: `docs/superpowers/plans/2026-10-01-audio-director-1-foundation.md`.
 
 ## Problem
 

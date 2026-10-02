@@ -6,13 +6,11 @@ const GAIN_MAX_DB = 12
 export async function analyzeAudioGain(file) {
   try {
     const arrayBuffer = await file.arrayBuffer()
-    const ctx = new AudioContext()
-    let audioBuffer
-    try {
-      audioBuffer = await ctx.decodeAudioData(arrayBuffer)
-    } finally {
-      ctx.close()
-    }
+    // An OfflineAudioContext only decodes: no running context to leak, no per-tab context cap,
+    // and nothing here competes with (or needs) the audio director's shared context.
+    const Offline = globalThis.OfflineAudioContext || globalThis.webkitOfflineAudioContext
+    const ctx = new Offline(1, 1, 44100)
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer)
 
     let sumSquares = 0
     let totalSamples = 0

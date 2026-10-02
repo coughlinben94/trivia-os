@@ -79,7 +79,9 @@ const reset = async (slideId, audio_playing = null) => {
   return updateShowVerified(sb, ID, { slides: fresh, current_slide_id: slideId, current_slide_index: i, audio_playing })
 }
 const audioState = page => page.evaluate(() => {
-  const a = document.querySelector('audio')
+  // Warmed-but-unplayed clips also sit in the DOM (preload): prefer the one that is sounding.
+  const all = [...document.querySelectorAll('audio')]
+  const a = all.find(x => !x.paused) ?? all[0]
   return a ? { exists: true, paused: a.paused, t: a.currentTime, ended: a.ended, src: a.getAttribute('src') } : { exists: false }
 })
 
@@ -103,6 +105,18 @@ test.afterAll(async () => {
 async function openTv(page) {
   const errors = []
   page.on('pageerror', e => errors.push(e.message))
+  // count real play() calls so a test can tell "finished" from "never started"
+  await page.addInitScript(() => {
+    window.__plays = 0
+    window.__overlap = 0 // most OTHER clips still sounding at the moment a new clip is asked to play
+    const orig = HTMLMediaElement.prototype.play
+    HTMLMediaElement.prototype.play = function () {
+      window.__plays++
+      const others = [...document.querySelectorAll('audio')].filter(a => a !== this && !a.paused && !a.ended).length
+      window.__overlap = Math.max(window.__overlap, others)
+      return orig.apply(this, arguments)
+    }
+  })
   await page.goto(`/display?show=${ID}`, { waitUntil: 'networkidle' })
   await page.locator('body').click({ position: { x: 5, y: 5 } }) // the real setup ritual: one click on the TV
   return errors
@@ -118,7 +132,7 @@ test('1 TV ArrowRight on a title steps to the audio question', async ({ page }) 
 test('2 TV ArrowRight on the audio question PLAYS it and does NOT advance', async ({ page }) => {
   await reset('q1')
   await openTv(page)
-  await expect(page.locator('audio')).toHaveCount(1, { timeout: 8000 })
+  await expect(page.getByText('e2e audio question')).toBeVisible({ timeout: 8000 })
   await page.keyboard.press('ArrowRight')
   const r = await waitFor(x => x.audio_playing?.slideId === 'q1', 8000, 'audio_playing written')
   expect(r.current_slide_id).toBe('q1') // stayed put
@@ -139,10 +153,10 @@ test('4 ArrowLeft back to the question does NOT autoplay on arrival', async ({ p
   await openTv(page)
   await page.keyboard.press('ArrowLeft')
   await waitFor(x => x.current_slide_id === 'q1', 8000, 'step back to q1')
-  await expect(page.locator('audio')).toHaveCount(1, { timeout: 8000 })
+  await expect(page.getByText('e2e audio question')).toBeVisible({ timeout: 8000 })
   await page.waitForTimeout(1500)
   const a = await audioState(page)
-  expect(a.paused).toBe(true)
+  expect(a.exists && a.paused === false).toBe(false) // nothing started playing
   expect((await row()).audio_playing).toBeNull()
 })
 
@@ -190,7 +204,7 @@ const tvPlaying = (page, srcEnd) => expect.poll(async () => {
 test('8 multi-part series: Next plays part 0, then each Next steps AND plays the next part, then leaves', async ({ page }) => {
   await reset('m1')
   await openTv(page)
-  await expect(page.locator('audio')).toHaveCount(1, { timeout: 8000 })
+  await expect(page.getByText('part 0').first()).toBeVisible({ timeout: 8000 })
 
   await page.keyboard.press('ArrowRight') // press 1: plays part 0
   let r = await waitFor(x => x.audio_playing?.slideId === 'm1' && (x.audio_playing.part ?? 0) === 0, 8000, 'play part 0')
@@ -202,6 +216,9 @@ test('8 multi-part series: Next plays part 0, then each Next steps AND plays the
   r = await waitFor(x => partNow(x) === 1 && x.audio_playing?.part === 1, 8000, 'step to part 1 + its mark')
   expect(r.current_slide_id).toBe('m1')
   await tvPlaying(page, 'p=1')
+  // Stepping to a new part hands the old clip back FIRST: never part 0 still sounding when
+  // part 1 is asked to play.
+  expect(await page.evaluate(() => window.__overlap)).toBe(0)
 
   await page.waitForTimeout(500)
   await page.keyboard.press('ArrowRight') // press 3: steps to part 2 AND plays it
@@ -218,8 +235,9 @@ test('9 multi-part series: ArrowLeft back to an earlier part plays it (as before
   await reset('m1', null)
   await updateShowVerified(sb, ID, { slides: slides.map(s => s.id === 'm1' ? { ...s, data: { ...s.data, currentPart: 1 } } : s) })
   await openTv(page)
-  await expect(page.locator('audio')).toHaveCount(1, { timeout: 8000 })
-  expect((await audioState(page)).paused).toBe(true) // nothing playing before the press (no mark)
+  await expect(page.getByText('part 1').first()).toBeVisible({ timeout: 8000 })
+  const before = await audioState(page)
+  expect(before.exists && before.paused === false).toBe(false) // nothing playing before the press (no mark)
   await page.keyboard.press('ArrowLeft')
   const r = await waitFor(x => partNow(x) === 0 && x.audio_playing?.part === 0, 8000, 'back to part 0 + its mark')
   expect(r.current_slide_id).toBe('m1')
@@ -235,7 +253,7 @@ test('9 multi-part series: ArrowLeft back to an earlier part plays it (as before
 test('11 series ending in a silent part: stepping back from it replays the previous part', async ({ page }) => {
   await reset('m2')
   await openTv(page)
-  await expect(page.locator('audio')).toHaveCount(1, { timeout: 8000 })
+  await expect(page.getByText('loud 0').first()).toBeVisible({ timeout: 8000 })
 
   await page.keyboard.press('ArrowRight') // press 1: plays part 0
   await waitFor(x => x.audio_playing?.slideId === 'm2', 8000, 'play part 0')
@@ -246,6 +264,7 @@ test('11 series ending in a silent part: stepping back from it replays the previ
   let r = await waitFor(x => partNow(x, 'm2') === 1 && x.audio_playing?.part === 1, 8000, 'step to part 1 + its mark')
   const markA = r.audio_playing
   await tvPlaying(page, 'p=1')
+  expect(await page.evaluate(() => window.__overlap)).toBe(0) // part 0 was released on the step
 
   await page.waitForTimeout(500)
   await page.keyboard.press('ArrowRight') // press 3: steps to the SILENT part 2: no clip, mark unchanged
@@ -268,13 +287,17 @@ test('11 series ending in a silent part: stepping back from it replays the previ
 test('10 a finished clip is not replayed by an unrelated update (the host pressing A)', async ({ page }) => {
   await reset('q1', null)
   await openTv(page)
-  await expect(page.locator('audio')).toHaveCount(1, { timeout: 8000 })
+  await expect(page.getByText('e2e audio question')).toBeVisible({ timeout: 8000 })
   await page.waitForTimeout(2500) // let the live-update subscription come up
   await updateShowVerified(sb, ID, { audio_playing: { slideId: 'q1', playing: true, part: 0 } })
-  await expect.poll(async () => (await audioState(page)).ended, { timeout: 20000 }).toBe(true) // played through
+  // The director removes a finished clip's element, so "played through" = it started, then is gone.
+  const state = () => page.evaluate(() => ({ plays: window.__plays ?? 0, has: !!document.querySelector('audio') }))
+  await expect.poll(async () => { const s = await state(); return s.plays >= 1 && !s.has }, { timeout: 20000 }).toBe(true)
+  const playsBefore = (await state()).plays
   await updateShowVerified(sb, ID, { answer_reveal: true }) // host presses A: a flag-only write
   await page.waitForTimeout(3000)
-  const a = await audioState(page)
-  console.log('[e2e] after A press on a finished clip:', JSON.stringify(a))
-  expect(a.paused).toBe(true) // still finished, not restarted
+  const after = await state()
+  console.log('[e2e] after A press on a finished clip:', JSON.stringify(after))
+  expect(after.plays).toBe(playsBefore) // not restarted
+  expect(after.has).toBe(false)
 })

@@ -4,6 +4,7 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ThemeProvider } from '../../shared/ThemeProvider.jsx'
 import RaceSlide from './RaceSlide.jsx'
+import { director } from '../../../audio/director.js'
 
 const baseData = {
   text: 'Which movie made the most money?',
@@ -149,6 +150,97 @@ describe('<RaceSlide>', () => {
     // count; the final leg still plays slower than a normal one within
     // that fixed envelope.
     expect(styleTag.textContent).toMatch(/31100ms/)
+  })
+
+  // Race sounds go through the audio director (one context, one unlock, one trail).
+  describe('sounds', () => {
+    const els = () => [...document.querySelectorAll('audio')]
+    const bySrc = frag => els().find(a => (a.getAttribute('src') ?? '').includes(frag))
+
+    beforeEach(() => {
+      vi.useFakeTimers()
+      director._internals.reset()
+      HTMLMediaElement.prototype.play = vi.fn(() => Promise.resolve())
+    })
+    afterEach(() => {
+      director._internals.reset()
+      vi.useRealTimers()
+    })
+
+    it('starting a race rings the gate bell and starts the crowd loop at their old levels', () => {
+      render(makeSlide({ raceStartedAt: null }))
+      expect(els()).toHaveLength(0)
+      render(makeSlide({ raceStartedAt: Date.now() }))
+      expect(bySrc('gate-bell.mp3')).toBeTruthy()
+      expect(bySrc('crowd-hoofbeats-loop.mp3')).toBeTruthy()
+      expect(bySrc('gate-bell.mp3').volume).toBeCloseTo(0.7, 2)
+      expect(bySrc('crowd-hoofbeats-loop.mp3').volume).toBeCloseTo(0.32, 2)
+      expect(bySrc('crowd-hoofbeats-loop.mp3').loop).toBe(true)
+    })
+
+    it('a finish ends the crowd loop and blows the horn', () => {
+      render(makeSlide({ raceStartedAt: null }))
+      render(makeSlide({ raceStartedAt: Date.now() }))
+      act(() => { vi.advanceTimersByTime(120_000) })
+      expect(bySrc('crowd-hoofbeats-loop.mp3')).toBeFalsy()
+      expect(bySrc('finish-horn.mp3')).toBeTruthy()
+      expect(bySrc('finish-horn.mp3').volume).toBeCloseTo(0.75, 2)
+    })
+
+    it('mounting mid-race or after the race stays silent (no replay of the cue set)', () => {
+      render(makeSlide({ raceStartedAt: Date.now() - 60_000 }))
+      expect(els()).toHaveLength(0)
+    })
+
+    it('leaving the slide cuts every race sound', () => {
+      render(makeSlide({ raceStartedAt: null }))
+      render(makeSlide({ raceStartedAt: Date.now() }))
+      expect(els().length).toBeGreaterThan(0)
+      act(() => root.unmount())
+      expect(els()).toHaveLength(0)
+      root = createRoot(container) // so afterEach can unmount
+    })
+
+    it('a Seek into an already-finished race does not ring the gate bell or start the loop', () => {
+      render(makeSlide({ raceStartedAt: null }))
+      render(makeSlide({ raceStartedAt: Date.now() - 60_000 }))
+      expect(bySrc('gate-bell.mp3')).toBeFalsy()
+      expect(bySrc('crowd-hoofbeats-loop.mp3')).toBeFalsy()
+    })
+
+    it('leaving after the finish cuts the horn too', () => {
+      render(makeSlide({ raceStartedAt: null }))
+      render(makeSlide({ raceStartedAt: Date.now() }))
+      act(() => { vi.advanceTimersByTime(120_000) })
+      expect(bySrc('finish-horn.mp3')).toBeTruthy()
+      act(() => root.unmount())
+      expect(els()).toHaveLength(0)
+      root = createRoot(container)
+    })
+
+    it('on a locked tab the one-shot cues are released, so a later click cannot ring them late (the loop stays retryable)', async () => {
+      HTMLMediaElement.prototype.play = vi.fn(() => Promise.reject(new DOMException('blocked', 'NotAllowedError')))
+      render(makeSlide({ raceStartedAt: null }))
+      render(makeSlide({ raceStartedAt: Date.now() }))
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      expect(bySrc('gate-bell.mp3')).toBeFalsy()
+      expect(bySrc('crowd-hoofbeats-loop.mp3')).toBeTruthy()
+    })
+
+    it('a refused finish horn is released too', async () => {
+      render(makeSlide({ raceStartedAt: null }))
+      render(makeSlide({ raceStartedAt: Date.now() }))
+      HTMLMediaElement.prototype.play = vi.fn(() => Promise.reject(new DOMException('blocked', 'NotAllowedError')))
+      await act(async () => { await vi.advanceTimersByTimeAsync(120_000) })
+      expect(bySrc('finish-horn.mp3')).toBeFalsy()
+    })
+
+    it('Reset mid-race stops the loop', () => {
+      render(makeSlide({ raceStartedAt: null }))
+      render(makeSlide({ raceStartedAt: Date.now() }))
+      render(makeSlide({ raceStartedAt: null }))
+      expect(bySrc('crowd-hoofbeats-loop.mp3')).toBeFalsy()
+    })
   })
 })
 

@@ -9,6 +9,7 @@ import * as Tone from 'tone'
 import * as Sentry from '@sentry/react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { supabase } from '../../../lib/supabase.js'
+import { director } from '../../../audio/director.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import { EASE_OUT } from '../../../lib/easings.js'
 import { clampBendleOffset, buildBendleTiers } from '../../../lib/bendleScoring.js'
@@ -134,6 +135,16 @@ async function fetchRange(url, range) {
   }
 }
 
+// Tone must run on the director's ONE shared AudioContext: a second context would be
+// suspended until it gets its own gesture and would sit outside the "Click for sound"
+// unlock. Must happen before Tone creates any node, so every Tone entry point calls it.
+let toneBoundTo = null
+function bindToneToDirector() {
+  const c = director.getContext()
+  if (!c || c === toneBoundTo) return
+  try { Tone.setContext(c); toneBoundTo = c } catch (e) { report('could not bind Tone to the shared context', { error: String(e) }, 'error', 'tone-bind') }
+}
+
 function getClip(song, url, fromSec, toSec) {
   if (clipsSongId !== song.id) { clips.clear(); clipsSongId = song.id }
   const key = `${url}|${fromSec}|${toSec}`
@@ -226,6 +237,7 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
   // load + play + teardown: the Transport is a global singleton.
   useEffect(() => {
     if (!song || isPreview) return
+    bindToneToDirector()
     const transport = Tone.getTransport()
     let killed = false
     const players = []

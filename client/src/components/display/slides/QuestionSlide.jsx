@@ -1,6 +1,7 @@
 import { audioPartOf } from '../../../lib/audioPending.js'
-import { watchPlayStart, youtubeIsSounding, mediaIsSounding } from '../../../lib/audioBlocked.js'
-import AudioBlockedCue, { useBlockedCue } from '../AudioBlockedCue.jsx'
+import { useClipPlayback } from '../../../audio/useClipPlayback.js'
+import { clipFromPart } from '../../../lib/slideClip.js'
+import AudioBlockedCue from '../AudioBlockedCue.jsx'
 import { Fragment, useState, useRef, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useTheme } from '../../shared/ThemeProvider.jsx'
@@ -22,7 +23,6 @@ import { EASE_OUT, EASE_PANEL } from '../../../lib/easings.js'
 import { SHINY_GOLD, SHINY_GOLD_GLOW } from '../../../lib/shinyGold.js'
 import ShinySignal from '../ShinySignal.jsx'
 import { youtubeEmbedUrl } from '../../../lib/youtube.js'
-import { warmYoutubeAudio, claimYoutubeAudio } from '../../../lib/youtubeWarmAudio.js'
 import { warmImages, slideImageUrls } from '../../../lib/warmImages.js'
 import { regionTransformCSS, regionFontSizeCSS } from '../../../lib/regionTransform.js'
 
@@ -35,15 +35,10 @@ import { regionTransformCSS, regionFontSizeCSS } from '../../../lib/regionTransf
 // upload audible in a loud room, so a bare <audio> tag isn't a substitute —
 // but nothing else shiny: no intro beat, no waveform bars.
 //
-// Source is either an uploaded file (<audio> + gain graph) or a trimmed
-// YouTube clip, resolved identically to the shiny path: the clip lives in
-// data.mediaSlots[0] and resolveShinyPart flattens it to youtubeId/Start/End/
-// volume. The YouTube half mirrors ShinyAudioQuestion's warm-player handling
-// (warm at mount, claim on first press, park at the trim point on pause)
-// rather than reimplementing playback — see youtubeWarmAudio.js. Kept as a
-// parallel implementation on purpose: this one has no parts/currentPart
-// churn, and folding both into one hook would mean editing the shiny path
-// that already works live.
+// Source is either an uploaded file or a trimmed YouTube clip (data.mediaSlots[0],
+// flattened by resolveShinyPart). Playback itself belongs to the audio director
+// (audio/director.js) through useClipPlayback: this component only describes the
+// clip and draws the button. The same hook drives ShinyAudioQuestion.
 //
 // Two trigger modes, same pair the walkout song already offers (SlideEditor's
 // "▶️ On Advance" / "👆 On Click" pills), stored in data.audioTrigger:
@@ -58,176 +53,31 @@ import { regionTransformCSS, regionFontSizeCSS } from '../../../lib/regionTransf
 // back into the question remounts this and the clip plays again. Hearing it
 // again is what "go back to that question" means on a live show.
 function QuestionAudio({ part, gainDb, theme, isPreview, autoPlay, show, slideId }) {
-  const { youtubeId, youtubeStart, youtubeEnd, volume, mediaUrl } = part
-  const isYoutube = !!youtubeId
-  const [playing, setPlaying] = useState(autoPlay && !isPreview)
-  const audioRef = useRef(null)
-  const audioCtxRef = useRef(null)
-  const ytHandleRef = useRef(null)
-  const watchRef = useRef(null)
-  const { blocked, markBlocked, clearBlocked } = useBlockedCue(slideId, 0)
-  // The play effect is keyed on the mark's VALUES, not the audio_playing object:
-  // every realtime UPDATE re-delivers that column as a fresh object (a flag-only
-  // write like the A answer reveal carries it too), so keying on identity
-  // restarted a finished clip whenever the host revealed the answer.
+  const playback = useClipPlayback(clipFromPart(part, gainDb, 0), { slideId, autoPlay, isPreview })
+  const { active: playing, blocked, play } = playback
+  // Click mode's remote trigger — LiveMode/Display "Next plays audio" writes show.audio_playing.
+  // Keyed on the mark's VALUES, not the object: every realtime UPDATE re-delivers that column
+  // as a fresh object, and keying on identity restarted a finished clip whenever the host
+  // revealed the answer. autoPlay mode never gets the mark (its writer gates on 'click').
   const apSlideId = show?.audio_playing?.slideId
   const apPlaying = !!show?.audio_playing?.playing
-
-  useEffect(() => {
-    return () => { audioCtxRef.current?.close(); watchRef.current?.() }
-  }, [])
-
-  // The cue only means something while a clip is supposed to be playing.
-  useEffect(() => {
-    if (playing) return
-    // The clip stopped (ENDED, auto-stop, pause): a pending 2s check, including the
-    // one a cue-retry arms, must not raise a false cue + Sentry report afterwards.
-    watchRef.current?.()
-    clearBlocked()
-  }, [playing, clearBlocked])
-
-  useEffect(() => {
-    if (!isYoutube || isPreview) return
-    warmYoutubeAudio(youtubeId, youtubeStart ?? 0, youtubeEnd ?? null)
-  }, [isYoutube, isPreview, youtubeId, youtubeStart, youtubeEnd])
-
-  useEffect(() => {
-    if (!isYoutube) return
-    return () => {
-      ytHandleRef.current?.destroy()
-      ytHandleRef.current = null
-    }
-  }, [isYoutube, youtubeId, youtubeStart, youtubeEnd])
-
-  useEffect(() => {
-    if (!isYoutube) return
-    if (playing) {
-      let cancelled = false
-      if (!ytHandleRef.current) {
-        ytHandleRef.current = claimYoutubeAudio(youtubeId, youtubeStart ?? 0, youtubeEnd ?? null)
-        ytHandleRef.current.onStateChange(state => {
-          if (state === 0 /* ENDED */) setPlaying(false)
-        })
-      }
-      const handle = ytHandleRef.current
-      let stopWatch = () => {}
-      handle.whenReady(player => {
-        if (cancelled || handle !== ytHandleRef.current) return
-        player.setVolume(volume ?? 100)
-        player.unMute()
-        player.seekTo(youtubeStart ?? 0, true)
-        player.playVideo()
-        // Asked to play: 2s later, is it really making sound?
-        stopWatch = watchPlayStart(() => youtubeIsSounding(player), () => markBlocked('youtube', () => youtubeIsSounding(player)))
-      })
-      return () => { cancelled = true; stopWatch() }
-    }
-    const handle = ytHandleRef.current
-    handle?.whenReady(player => {
-      if (handle !== ytHandleRef.current) return
-      player.pauseVideo()
-      player.seekTo(youtubeStart ?? 0, true)
-    })
-  }, [isYoutube, playing, youtubeId, youtubeStart, youtubeEnd, volume])
-
-  // A YouTube clip gives no ended event of its own, so the configured clip
-  // length times the auto-stop — backstop to the player's own `end` param.
-  useEffect(() => {
-    if (!isYoutube || !playing || !youtubeEnd) return
-    const ms = Math.max(0, (youtubeEnd - (youtubeStart || 0)) * 1000)
-    if (ms <= 0) return
-    const t = setTimeout(() => setPlaying(false), ms)
-    return () => clearTimeout(t)
-  }, [isYoutube, playing, youtubeEnd, youtubeStart])
-
-  async function play() {
-    // The 2s check starts NOW, at the request — not after play() finishes. With no
-    // user gesture Chrome's AudioContext.resume() never rejects, it just never
-    // settles, so play() can hang forever before it ever throws (seen in a real
-    // Chromium run, 2026-10-01); a check that waited for play() would never run.
-    watchRef.current?.()
-    watchRef.current = watchPlayStart(() => mediaIsSounding(audioRef.current, audioCtxRef.current), () => markBlocked('upload', () => mediaIsSounding(audioRef.current, audioCtxRef.current)))
-    if (!audioCtxRef.current && audioRef.current) {
-      const ctx = new AudioContext()
-      const gainNode = ctx.createGain()
-      gainNode.gain.value = Math.pow(10, (gainDb ?? 0) / 20)
-      ctx.createMediaElementSource(audioRef.current).connect(gainNode)
-      gainNode.connect(ctx.destination)
-      audioCtxRef.current = ctx
-    }
-    const ctx = audioCtxRef.current
-    if (ctx?.state === 'suspended') await ctx.resume()
-    await audioRef.current.play()
-    setPlaying(true)
-  }
-
-  // The "Tap for sound" press is a real user gesture — drive playback directly.
-  function retryFromCue() {
-    clearBlocked()
-    if (isYoutube) {
-      setPlaying(true)
-      ytHandleRef.current?.whenReady(player => {
-        player.setVolume(volume ?? 100)
-        player.unMute()
-        player.seekTo(youtubeStart ?? 0, true)
-        player.playVideo()
-        // setPlaying(true) above may be a no-op (already true), so no play effect
-        // re-runs: arm the 2s check here or a second silent attempt raises nothing.
-        watchRef.current?.()
-        watchRef.current = watchPlayStart(() => youtubeIsSounding(player), () => markBlocked('youtube', () => youtubeIsSounding(player)))
-      })
-    } else {
-      play().catch(() => markBlocked('upload', () => mediaIsSounding(audioRef.current, audioCtxRef.current)))
-    }
-  }
-
-  // Upload path, 'advance' mode: the YouTube half already starts itself off
-  // the `playing` state seeded above, but an <audio> element needs the
-  // explicit play() call (and the gain graph built inside it). Mount-only on
-  // purpose — see the replay note on the component.
-  useEffect(() => {
-    if (!autoPlay || isPreview || isYoutube || !mediaUrl) return
-    play().catch(() => markBlocked('upload', () => mediaIsSounding(audioRef.current, audioCtxRef.current)))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Click mode's remote trigger — LiveMode's "Next plays audio" (Ben,
-  // 2026-09-01, live: read the question to the room first, THEN have his own
-  // next press start the clip, not a literal tap on the TV). Same
-  // show.audio_playing field ShinyAudioQuestion already reacts to, but
-  // covering YouTube too — unlike that upload-only path, a plain question's
-  // clip is just as likely to be YouTube-sourced (it's what's actually
-  // attached to tonight's slide) and sticky user-activation from the show's
-  // own setup ritual covers unmuted play here the same as it does there.
-  // autoPlay mode never sets this field in the first place (LiveMode gates
-  // its writer on 'click'), so the guard is redundant defense, not load-bearing.
   useEffect(() => {
     if (autoPlay || isPreview) return
     if (apSlideId !== slideId || !apPlaying) return
-    if (isYoutube) setPlaying(true)
-    else play().catch(() => markBlocked('upload', () => mediaIsSounding(audioRef.current, audioCtxRef.current)))
+    play()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apSlideId, apPlaying, slideId, isYoutube, autoPlay, isPreview])
+  }, [apSlideId, apPlaying, slideId, autoPlay, isPreview])
 
   return (
     <>
-      {/* YouTube renders no element here — its player lives in a body-level
-          container owned by youtubeWarmAudio.js (an iframe reparented into
-          this tree reloads and drops its buffer). */}
-      {!isYoutube && (
-        <audio ref={audioRef} src={mediaUrl} onEnded={() => setPlaying(false)} preload="auto" />
-      )}
+      {/* No element here: the audio director owns playback (audio/director.js). */}
       {!autoPlay && (
       <div
         data-no-step
         role="button"
         aria-label={playing ? 'Pause audio' : 'Play audio'}
         className="w-20 h-20 rounded-full flex items-center justify-center cursor-pointer shrink-0"
-        onClick={() => {
-          if (isYoutube) { setPlaying(p => !p) }
-          else if (playing) { watchRef.current?.(); audioRef.current?.pause(); setPlaying(false) }
-          else play().catch(() => {})
-        }}
+        onClick={playback.toggle}
         style={{
           background: theme.colors.accent,
           boxShadow: playing ? 'none' : `0 0 40px ${theme.colors.highlight}50`,
@@ -239,7 +89,7 @@ function QuestionAudio({ part, gainDb, theme, isPreview, autoPlay, show, slideId
         </span>
       </div>
       )}
-      <AudioBlockedCue show={blocked && !isPreview} onRetry={retryFromCue} theme={theme} />
+      <AudioBlockedCue show={blocked && !isPreview} onRetry={playback.retry} theme={theme} />
     </>
   )
 }
@@ -719,12 +569,12 @@ function ShinyAudioQuestion({ slide, show, theme, isPreview }) {
   const { data } = slide
   const part = resolveShinyPart(data)
   const isYoutubeSource = !!part.youtubeId
-  const [playing, setPlaying] = useState(false)
-  const audioRef = useRef(null)
-  const audioCtxRef = useRef(null)
-  const ytHandleRef = useRef(null)
-  const watchRef = useRef(null)
-  const { blocked, markBlocked, clearBlocked } = useBlockedCue(slide.id, audioPartOf(data))
+  // A multi-part series keeps one slide.id across its parts: the clip carries the part
+  // number, so stepping to the next part is a different clip and useClipPlayback releases
+  // the old one (never a phantom blip of the new part). Warm-at-mount, unmount cleanup,
+  // the "Click for sound" state and the sound check all live in the audio director.
+  const playback = useClipPlayback(clipFromPart(part, data.audioGainDb, audioPartOf(data)), { slideId: slide.id, isPreview })
+  const { active: playing, blocked, play } = playback
   // Keyed on the mark's VALUES, not the object (see QuestionAudio): a fresh object
   // on every realtime UPDATE must not restart a finished clip.
   const apSlideId = show?.audio_playing?.slideId
@@ -732,201 +582,21 @@ function ShinyAudioQuestion({ slide, show, theme, isPreview }) {
   const apPart = show?.audio_playing?.part ?? 0
   const apAt = show?.audio_playing?.at // part-step marks carry a nonce: a repeat of the same slide+part is still a new request
 
-  // A multi-part series keeps the same slide.id across parts, so this
-  // component never remounts when the host steps to a new part — only
-  // data.currentPart changes. `playing` is local state, so on the very
-  // render where the part changes it still reads whatever it was for the
-  // OLD part (true, if that clip was still playing when Next was pressed).
-  // The play/pause effect below runs in the SAME commit against THIS
-  // render's `playing` value — resetting it in a separate, later-declared
-  // effect is too late; that effect's state update only takes effect next
-  // render, after the play effect already fired once using the stale
-  // `true` and claimed+started the NEW part's clip with sound (a phantom
-  // blip immediately paused behind it, and a claimed-but-never-really-
-  // pressed-play handle left behind). Resetting during render — React's
-  // own documented pattern for "state derived from a changed prop" —
-  // reruns synchronously before any effect sees the stale value.
-  const partKey = `${slide.id}:${data.currentPart ?? 0}`
-  const [lastPartKey, setLastPartKey] = useState(partKey)
-  if (partKey !== lastPartKey) {
-    setLastPartKey(partKey)
-    if (playing) setPlaying(false)
-  }
-
-  useEffect(() => {
-    return () => { audioCtxRef.current?.close(); watchRef.current?.() }
-  }, [])
-
-  // The cue only means something while a clip is supposed to be playing.
-  useEffect(() => {
-    if (playing) return
-    // The clip stopped (ENDED, auto-stop, pause): a pending 2s check, including the
-    // one a cue-retry arms, must not raise a false cue + Sentry report afterwards.
-    watchRef.current?.()
-    clearBlocked()
-  }, [playing, clearBlocked])
-
-  // Pre-build the whole player at slide mount, not just the API script
-  // (2026-08-24, Ben: close the build/load/buffer latency "on any slide
-  // with audio... unless the audio is downloaded"). warmYoutubeAudio builds
-  // a muted player buffered at the clip start and parks it paused in a
-  // hidden body-level container (see youtubeWarmAudio.js), so the PLAY
-  // press below is unmute+play instead of API-load/build/buffer/seek —
-  // the "first shiny-audio play of the night stalls" gap, closed. Not in
-  // the host's preview pane: a warm iframe there would stack on top of
-  // YoutubeClipEditor's own preview player for no benefit.
-  useEffect(() => {
-    if (!isYoutubeSource || isPreview) return
-    warmYoutubeAudio(part.youtubeId, part.youtubeStart ?? 0, part.youtubeEnd ?? null)
-  }, [isYoutubeSource, isPreview, part.youtubeId, part.youtubeStart, part.youtubeEnd])
-
-  // One claimed player per clip, destroyed when the clip changes (a
-  // multi-part series keeps the same slide.id across parts) or on unmount.
-  // Declared BEFORE the play/pause effect below so that on a part change
-  // this cleanup runs first and the play effect sees a clean slate.
-  useEffect(() => {
-    if (!isYoutubeSource) return
-    return () => {
-      ytHandleRef.current?.destroy()
-      ytHandleRef.current = null
-    }
-  }, [isYoutubeSource, part.youtubeId, part.youtubeStart, part.youtubeEnd, slide.id, data.currentPart])
-
-  // Real YT.Player instead of a bare iframe (2026-08-19) — needed for
-  // .setVolume(part.volume), which a plain embed URL has no equivalent for.
-  // Since the warm-player rework the player persists across pause/replay
-  // within one clip — but the SEMANTICS are unchanged from the old
-  // mount-on-play/destroy-on-pause pattern: pause fully stops playback, and
-  // replay restarts from the clip start (the explicit seekTo on both the
-  // pause and play paths below), never resume-mid-clip.
-  // `end` in the warm player's playerVars (2026-08-19, Opus review) makes
-  // YouTube's own player the real stop; the wall-clock timeout below stays
-  // as a backstop for the rare case `end` doesn't fire.
-  useEffect(() => {
-    if (!isYoutubeSource) return
-    if (playing) {
-      let cancelled = false
-      if (!ytHandleRef.current) {
-        ytHandleRef.current = claimYoutubeAudio(part.youtubeId, part.youtubeStart ?? 0, part.youtubeEnd ?? null)
-        ytHandleRef.current.onStateChange(state => {
-          if (state === 0 /* ENDED */) setPlaying(false)
-        })
-      }
-      const handle = ytHandleRef.current
-      let stopWatch = () => {}
-      handle.whenReady(player => {
-        if (cancelled || handle !== ytHandleRef.current) return
-        player.setVolume(part.volume ?? 100)
-        player.unMute()
-        player.seekTo(part.youtubeStart ?? 0, true)
-        player.playVideo()
-        // Asked to play: 2s later, is it really making sound?
-        stopWatch = watchPlayStart(() => youtubeIsSounding(player), () => markBlocked('youtube', () => youtubeIsSounding(player)))
-      })
-      return () => { cancelled = true; stopWatch() }
-    }
-    // playing false — an explicit pause press, the auto-stop timeout, or
-    // YouTube's own `end`/ENDED. Park the player back at the clip start,
-    // still claimed and buffered, so a replay is instant too.
-    const handle = ytHandleRef.current
-    handle?.whenReady(player => {
-      if (handle !== ytHandleRef.current) return
-      player.pauseVideo()
-      player.seekTo(part.youtubeStart ?? 0, true)
-    })
-  }, [isYoutubeSource, playing, part.youtubeId, part.youtubeStart, part.youtubeEnd, part.volume, slide.id, data.currentPart])
-
-  // `playing` itself is already reset synchronously during render above —
-  // this only pauses the real <audio> element (non-YouTube path), which is
-  // an imperative DOM call and has to stay in an effect.
-  useEffect(() => {
-    audioRef.current?.pause()
-    // The old part's 2s check and cue belong to the old part: left running they
-    // see this paused element and raise a false cue + Sentry report for a clip
-    // nobody asked to play.
-    watchRef.current?.()
-    clearBlocked()
-  }, [partKey, clearBlocked])
-
-  // A YouTube-sourced clip has no <audio onEnded> equivalent — a plain
-  // embed gives us no ended event — so we time the auto-stop ourselves
-  // from the configured clip length, same effect the "Preview clip"
-  // button gets in the host editor via getCurrentTime() polling.
-  useEffect(() => {
-    if (!isYoutubeSource || !playing || !part.youtubeEnd) return
-    const ms = Math.max(0, (part.youtubeEnd - (part.youtubeStart || 0)) * 1000)
-    if (ms <= 0) return
-    const t = setTimeout(() => setPlaying(false), ms)
-    return () => clearTimeout(t)
-  }, [isYoutubeSource, playing, part.youtubeEnd, part.youtubeStart])
-
-  function ensureAudioGraph() {
-    if (!audioRef.current || audioCtxRef.current) return audioCtxRef.current
-    const ctx = new AudioContext()
-    const src = ctx.createMediaElementSource(audioRef.current)
-    const gainNode = ctx.createGain()
-    gainNode.gain.value = Math.pow(10, (data.audioGainDb ?? 0) / 20)
-    src.connect(gainNode)
-    gainNode.connect(ctx.destination)
-    audioCtxRef.current = ctx
-    return ctx
-  }
-
-  async function playWithGain() {
-    // Check starts at the request, not after play() finishes: with no user
-    // gesture AudioContext.resume() never settles, so play() can hang forever.
-    watchRef.current?.()
-    watchRef.current = watchPlayStart(() => mediaIsSounding(audioRef.current, audioCtxRef.current), () => markBlocked('upload', () => mediaIsSounding(audioRef.current, audioCtxRef.current)))
-    const ctx = ensureAudioGraph()
-    if (ctx?.state === 'suspended') await ctx.resume()
-    await audioRef.current.play()
-    setPlaying(true)
-  }
-
-  // The "Tap for sound" press is a real user gesture — drive playback directly.
-  function retryFromCue() {
-    clearBlocked()
-    if (isYoutubeSource) {
-      setPlaying(true)
-      ytHandleRef.current?.whenReady(player => {
-        player.setVolume(part.volume ?? 100)
-        player.unMute()
-        player.seekTo(part.youtubeStart ?? 0, true)
-        player.playVideo()
-        // same as QuestionAudio: setPlaying(true) may be a no-op, so arm the check here
-        watchRef.current?.()
-        watchRef.current = watchPlayStart(() => youtubeIsSounding(player), () => markBlocked('youtube', () => youtubeIsSounding(player)))
-      })
-    } else {
-      playWithGain().catch(() => markBlocked('upload', () => mediaIsSounding(audioRef.current, audioCtxRef.current)))
-    }
-  }
-
-  // React to show.audio_playing from Supabase — LiveMode's "Next plays
-  // audio" gate (maybeStartAudioPlay) now fires this for a shiny audio
-  // question once its intro is dismissed (Ben, 2026-09-01, P1 live: "One Hit
-  // Unwonder" in Round 2 — "hitting next skips to next question, doesn't
-  // play audio"). Originally upload-only (a YouTube clip "has no gain graph
-  // to hook into and is driven purely by the on-screen button") — but
-  // tonight's actual clip is YouTube-sourced, same gap QuestionAudio's
-  // plain-question remote trigger had before it covered both source types.
-  // isPreview: the host's build-mode preview pane must not play the clip out
-  // loud on the laptop while the show is being built — same gate RulesSlide,
-  // WinnerRevealSlide, PreShowSlide and StateOfUnionSlide put on their audio.
-  // Only this remote-driven path is gated; the on-screen PLAY button below is
-  // an explicit press and still works in preview.
+  // LiveMode's / Display's "Next plays audio" gate writes the mark when a shiny audio
+  // question's intro is dismissed or a part is stepped. isPreview: the host's build-mode
+  // preview pane must not play the clip out loud on the laptop while the show is being
+  // built. Only this remote-driven path is gated; the on-screen PLAY button is an explicit
+  // press and still works in preview.
   useEffect(() => {
     if (isPreview) return
     if (apSlideId !== slide.id || !apPlaying) return
-    // A series keeps one slide.id across its parts: only the part the mark
-    // names plays. A stale mark for another part must not autoplay on arrival.
-    // data.currentPart is read at run time, NOT a dependency — a part step
+    // Only the part the mark names plays; a stale mark for another part must not autoplay
+    // on arrival. data.currentPart is read at run time, NOT a dependency — a part step
     // alone never replays; only a fresh mark does.
     if (apPart !== audioPartOf(data)) return
-    if (isYoutubeSource) setPlaying(true)
-    else if (audioRef.current) playWithGain().catch(() => markBlocked('upload', () => mediaIsSounding(audioRef.current, audioCtxRef.current)))
+    play()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apSlideId, apPlaying, apPart, apAt, slide.id, isYoutubeSource, isPreview])
+  }, [apSlideId, apPlaying, apPart, apAt, slide.id, isPreview])
 
   return (
     <div
@@ -982,19 +652,6 @@ function ShinyAudioQuestion({ slide, show, theme, isPreview }) {
           is identical either way. */}
       {(isYoutubeSource ? part.youtubeId : part.mediaUrl) && (
         <>
-          {/* YouTube source renders no element here anymore — the hidden
-              player lives in a body-level container owned by
-              youtubeWarmAudio.js so it can be pre-built/buffered before the
-              PLAY press (and an iframe can't be reparented into this tree
-              without reloading and dropping its buffer). */}
-          {!isYoutubeSource && (
-            <audio
-              ref={audioRef}
-              src={part.mediaUrl}
-              onEnded={() => setPlaying(false)}
-              preload="auto"
-            />
-          )}
           <motion.div
             initial={{ scale: 0.85, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -1004,15 +661,7 @@ function ShinyAudioQuestion({ slide, show, theme, isPreview }) {
             <div
               data-no-step
               className="w-24 h-24 rounded-full flex items-center justify-center cursor-pointer"
-              onClick={() => {
-                if (isYoutubeSource) {
-                  setPlaying(p => !p)
-                } else if (playing) {
-                  watchRef.current?.(); audioRef.current?.pause(); setPlaying(false)
-                } else {
-                  playWithGain()
-                }
-              }}
+              onClick={playback.toggle}
               style={{
                 background: theme.colors.accent,
                 boxShadow: playing ? 'none' : `0 0 40px ${SHINY_GOLD_GLOW}50`,
@@ -1024,7 +673,7 @@ function ShinyAudioQuestion({ slide, show, theme, isPreview }) {
               </span>
             </div>
           </motion.div>
-          <AudioBlockedCue show={blocked && !isPreview} onRetry={retryFromCue} theme={theme} />
+          <AudioBlockedCue show={blocked && !isPreview} onRetry={playback.retry} theme={theme} />
         </>
       )}
     </div>

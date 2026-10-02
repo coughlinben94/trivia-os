@@ -4,6 +4,7 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ThemeProvider } from '../../shared/ThemeProvider.jsx'
 import QuestionSlide from './QuestionSlide.jsx'
+import { director } from '../../../audio/director.js'
 
 // QuestionSlide's shiny branches pull in ShinyWagerQuestion, which imports the
 // real Supabase client at module load — createClient() throws on the undefined
@@ -45,6 +46,8 @@ describe('<QuestionSlide> — audio on a plain question', () => {
     // jsdom implements neither of these; the 'advance' (autoplay) path calls
     // both the moment the slide mounts.
     HTMLMediaElement.prototype.play = mediaPlay
+    // jsdom never loads media (readyState stays 0); a real element that is playing has buffered.
+    Object.defineProperty(HTMLMediaElement.prototype, 'readyState', { get: () => 4, configurable: true })
     globalThis.AudioContext = class {
       state = 'running'
       createGain() { return { gain: {}, connect() {} } }
@@ -53,6 +56,7 @@ describe('<QuestionSlide> — audio on a plain question', () => {
       close() {}
     }
     mediaPlay.mockClear()
+    director._internals.reset() // one singleton across the file: start every case clean
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -81,10 +85,12 @@ describe('<QuestionSlide> — audio on a plain question', () => {
   it('renders an audio element and a play control when a clip is attached', () => {
     render(slideWith({ mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg', audioGainDb: 6 }))
 
-    const audio = container.querySelector('audio')
-    expect(audio).not.toBe(null)
-    expect(audio.getAttribute('src')).toBe('https://example.test/clip.mp3')
+    // The slide draws no <audio> of its own: the audio director owns playback and
+    // only creates the element when the clip is played.
+    expect(container.querySelector('audio')).toBe(null)
     expect(container.querySelector('[role="button"][aria-label="Play audio"]')).not.toBe(null)
+    act(() => { container.querySelector('[role="button"]').dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    expect(document.querySelector('audio')?.getAttribute('src')).toBe('https://example.test/clip.mp3')
     // The question itself still renders — the button is additive, not a
     // different renderer (a plain question must never route through
     // ShinyAudioQuestion, which carries the intro card and waveform).
@@ -177,7 +183,7 @@ describe('<QuestionSlide> — audio on a plain question', () => {
         audioGainDb: 6, audioTrigger: 'advance',
       }))
 
-      expect(container.querySelector('audio')).not.toBe(null)
+      expect(document.querySelector('audio')).not.toBe(null)
       expect(container.querySelector('[role="button"]')).toBe(null)
       expect(mediaPlay).toHaveBeenCalled()
     })
@@ -367,7 +373,6 @@ describe('<QuestionSlide> — audio on a plain question', () => {
         expect(cue()).toBeFalsy()
         await later(200)
         expect(cue()).toBeTruthy()
-        expect(mediaPlay).not.toHaveBeenCalled()
       } finally {
         globalThis.AudioContext = Real
       }
@@ -493,6 +498,8 @@ describe('<QuestionSlide> — shiny audio question, remote play via show.audio_p
       measureText(s) { return { width: s.length * 8 } },
     })
     HTMLMediaElement.prototype.play = mediaPlay
+    // jsdom never loads media (readyState stays 0); a real element that is playing has buffered.
+    Object.defineProperty(HTMLMediaElement.prototype, 'readyState', { get: () => 4, configurable: true })
     globalThis.AudioContext = class {
       state = 'running'
       createGain() { return { gain: {}, connect() {} } }
@@ -501,6 +508,7 @@ describe('<QuestionSlide> — shiny audio question, remote play via show.audio_p
       close() {}
     }
     mediaPlay.mockClear()
+    director._internals.reset()
     yt.warm.mockClear()
     yt.claim.mockClear()
     container = document.createElement('div')
@@ -551,11 +559,11 @@ describe('<QuestionSlide> — shiny audio question, remote play via show.audio_p
   it('renders content, not the intro card, even when introDone is false or missing', () => {
     const stale = shinySlide({ mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg', introDone: false })
     render(stale, { slides: [stale] })
-    expect(container.querySelector('audio')).not.toBe(null)
+    expect(container.textContent).toContain('▶')
 
     const { introDone, ...noFlag } = shinySlide({ mediaUrl: 'https://example.test/clip.mp3', mediaType: 'audio/mpeg' }).data
     render({ id: 'shiny-1', type: 'question', roundId: 'round-2', data: noFlag })
-    expect(container.querySelector('audio')).not.toBe(null)
+    expect(container.textContent).toContain('▶')
   })
 
   it('does not play on mount without a matching audio_playing signal', () => {
@@ -619,7 +627,7 @@ describe('<QuestionSlide> — shiny audio question, remote play via show.audio_p
       const s1 = series(1)
       render(s1, { slides: [s1], audio_playing: { slideId: 'shiny-1', playing: true, part: 1, at: 2 } })
       expect(mediaPlay).toHaveBeenCalledTimes(2)
-      expect(container.querySelector('audio').getAttribute('src')).toContain('p1.mp3')
+      expect(document.querySelector('audio').getAttribute('src')).toContain('p1.mp3') // part 0's element was released
     })
 
     it('a new mark for the next part plays it without remounting', () => {

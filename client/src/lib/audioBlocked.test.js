@@ -2,19 +2,13 @@
 // 2026-09-29 runner-up cause: Chrome blocks UNMUTED playback on a tab that
 // has had no click/key since it loaded (a reloaded /display), and nothing
 // ever checked that the clip actually started. Spec: "Failure is loud".
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('@sentry/react', () => ({ captureMessage: vi.fn() }))
-
-let mod, Sentry
+let mod
 beforeEach(async () => {
-  vi.useFakeTimers()
   vi.resetModules()
-  Sentry = await import('@sentry/react')
-  Sentry.captureMessage.mockClear()
   mod = await import('./audioBlocked.js')
 })
-afterEach(() => vi.useRealTimers())
 
 const yt = (state, muted = false) => ({ getPlayerState: () => state, isMuted: () => muted })
 
@@ -36,6 +30,13 @@ describe('youtubeIsSounding', () => {
   })
 })
 
+describe('mediaIsSounding readiness', () => {
+  it('an element that is not paused but has not buffered (readyState < 3) is not sounding yet', () => {
+    expect(mod.mediaIsSounding({ paused: false, ended: false, readyState: 1 }, { state: 'running' })).toBe(false)
+    expect(mod.mediaIsSounding({ paused: false, ended: false, readyState: 3 }, { state: 'running' })).toBe(true)
+  })
+})
+
 describe('mediaIsSounding', () => {
   it('is sounding only when not paused and the context is running', () => {
     expect(mod.mediaIsSounding({ paused: false }, { state: 'running' })).toBe(true)
@@ -46,54 +47,5 @@ describe('mediaIsSounding', () => {
   })
   it('a clip that already ENDED played (shorter than the check delay)', () => {
     expect(mod.mediaIsSounding({ paused: true, ended: true }, { state: 'running' })).toBe(true)
-  })
-})
-
-describe('watchPlayStart', () => {
-  it('calls onBlocked after the delay when the check still fails', () => {
-    const onBlocked = vi.fn()
-    mod.watchPlayStart(() => false, onBlocked, 2000)
-    vi.advanceTimersByTime(1999)
-    expect(onBlocked).not.toHaveBeenCalled()
-    vi.advanceTimersByTime(1)
-    expect(onBlocked).toHaveBeenCalledTimes(1)
-  })
-  it('stays quiet when the check passes', () => {
-    const onBlocked = vi.fn()
-    mod.watchPlayStart(() => true, onBlocked, 2000)
-    vi.advanceTimersByTime(5000)
-    expect(onBlocked).not.toHaveBeenCalled()
-  })
-  it('cancel stops it (clip paused, part changed, unmount)', () => {
-    const onBlocked = vi.fn()
-    const cancel = mod.watchPlayStart(() => false, onBlocked, 2000)
-    cancel()
-    vi.advanceTimersByTime(5000)
-    expect(onBlocked).not.toHaveBeenCalled()
-  })
-  it('a check or callback that throws never escapes', () => {
-    mod.watchPlayStart(() => { throw new Error('boom') }, () => {}, 100)
-    mod.watchPlayStart(() => false, () => { throw new Error('boom') }, 100)
-    expect(() => vi.advanceTimersByTime(500)).not.toThrow()
-  })
-})
-
-describe('reportBlocked', () => {
-  it('sends one Sentry warning tagged area:audio per clip per page load', () => {
-    mod.reportBlocked('youtube', { slideId: 's1', part: 0 })
-    mod.reportBlocked('youtube', { slideId: 's1', part: 0 })
-    expect(Sentry.captureMessage).toHaveBeenCalledTimes(1)
-    expect(Sentry.captureMessage.mock.calls[0][0]).toBe('audio: play blocked (youtube)')
-    expect(Sentry.captureMessage.mock.calls[0][1]).toMatchObject({ level: 'warning', tags: { area: 'audio' }, extra: { slideId: 's1', part: 0 } })
-  })
-  it('different clips and kinds report separately', () => {
-    mod.reportBlocked('youtube', { slideId: 's1', part: 0 })
-    mod.reportBlocked('youtube', { slideId: 's1', part: 1 })
-    mod.reportBlocked('upload', { slideId: 's1', part: 0 })
-    expect(Sentry.captureMessage).toHaveBeenCalledTimes(3)
-  })
-  it('never throws if Sentry does', () => {
-    Sentry.captureMessage.mockImplementation(() => { throw new Error('down') })
-    expect(() => mod.reportBlocked('upload', { slideId: 'x' })).not.toThrow()
   })
 })

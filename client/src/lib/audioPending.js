@@ -31,7 +31,7 @@ export function audioPlayPending(slide, audioPlaying) {
     // is the play press (2026-09-01, P1 live: "hitting next skips to next
     // question, doesnt play audio").
     if (!isAudioShiny(data)) return false
-  } else if ((data.audioTrigger ?? 'click') !== 'click') {
+  } else if (data.audioTrigger === 'advance') {
     return false
   }
   const part = resolveShinyPart(data)
