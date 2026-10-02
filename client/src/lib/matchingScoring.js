@@ -1,5 +1,5 @@
 import { applyPhoneScoreUpdates } from './scoreboardMath.js'
-import { hashSeed, mulberry32 } from './seededRandom.js'
+import { seededShuffleWith } from './seededRandom.js'
 
 // A matching submission is scored purely from its own shape — no answer-key
 // lookup needed. Each pair in slide.data.pairs shares one `id` between its
@@ -47,22 +47,8 @@ export function buildMatchAnswer(connections) {
 // loop forever; the tiny leftover fixed-point risk beyond that is far
 // better than never terminating.
 export function seededShuffle(items, seed) {
-  const rand = mulberry32(hashSeed(String(seed)))
-  function shuffleOnce() {
-    const arr = [...items]
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(rand() * (i + 1))
-      ;[arr[i], arr[j]] = [arr[j], arr[i]]
-    }
-    return arr
-  }
-  let arr = shuffleOnce()
-  if (items.length >= 3) {
-    for (let tries = 0; tries < 50 && arr.some((item, i) => item === items[i]); tries++) {
-      arr = shuffleOnce()
-    }
-  }
-  return arr
+  const isBad = items.length >= 3 ? a => a.some((item, i) => item === items[i]) : null
+  return seededShuffleWith(items, seed, isBad)
 }
 
 // Pure fold-in: given phone_answers + live team registrations + the admin

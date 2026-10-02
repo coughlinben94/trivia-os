@@ -1,3 +1,4 @@
+import { normalizeTeamName } from './teamColors.js'
 // Single source of truth for the scoreboard's round columns, team totals, and
 // medal emoji — used by ScoreboardModal (host), ScoreboardOverlay (TV), Join's
 // scores drawer (phone), and ShowDetail (post-show history) so all four
@@ -107,12 +108,12 @@ export function normalizeRoundScore(raw) {
 // specific scoring first (scoreWagerRound, scoreHuesCuesRound, per-answer
 // scoreChoiceSubmission, …) and hands the {teamId, points} pairs in here.
 export function applyPhoneScoreUpdates({ results, teams, scoreboardTeams, roundKey, slideId }) {
-  const teamIdToName = new Map((teams ?? []).map(t => [t.id, t.name.trim().toLowerCase()]))
+  const teamIdToName = new Map((teams ?? []).map(t => [t.id, normalizeTeamName(t.name)]))
   const updates = []
   for (const r of results ?? []) {
     const teamName = teamIdToName.get(r.teamId)
     if (!teamName) continue // no live registration — nothing to attribute this to
-    const sbTeam = (scoreboardTeams ?? []).find(t => t.name.trim().toLowerCase() === teamName)
+    const sbTeam = (scoreboardTeams ?? []).find(t => normalizeTeamName(t.name) === teamName)
     if (!sbTeam) continue // host hasn't added this team to the admin scoreboard yet
     const prevSplit = normalizeRoundScore(sbTeam.scores?.[roundKey])
     const nextPhone = { ...prevSplit.phoneBySlide, [slideId]: r.points }
@@ -318,4 +319,14 @@ export function revealStagger(teamCount) {
 export function revealRowDelay(rank, teamCount) {
   const { base, step } = revealStagger(teamCount)
   return base + (Math.max(teamCount, 1) - rank) * step
+}
+
+// Shared guard stack for all-or-nothing phone scorers (Choice, Order): not
+// arrays, EMPTY answer key (vacuously "equal" to an empty answer, would pay full
+// points for a question nobody set a key on), length mismatch -> 0. Otherwise
+// `isMatch(answer, key)` decides; a match pays Number(points) || 0.
+export function scoreAllOrNothing(answer, key, points, isMatch) {
+  if (!Array.isArray(answer) || !Array.isArray(key)) return 0
+  if (key.length === 0 || answer.length !== key.length) return 0
+  return isMatch(answer, key) ? Number(points) || 0 : 0
 }

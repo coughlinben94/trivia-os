@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test'
+import { SHOW_ID } from './constants.js'
 
 // show_fQtKIq7M no longer exists in the DB (2026-09-02) — was silently breaking
 // global-setup.js for every spec in this suite. show_NyRe6x2Q is real, verified.
-const SHOW_ID = process.env.PLAYWRIGHT_SHOW_ID || 'show_NyRe6x2Q'
 
 async function loadAndCollect(page, path) {
   const errors = []

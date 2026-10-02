@@ -20,8 +20,8 @@
 
 import { chromium } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
+import { SHOW_ID } from './constants.js'
 
-const SHOW_ID = process.env.PLAYWRIGHT_SHOW_ID || 'show_NyRe6x2Q'
 const STORAGE_STATE_PATH = 'e2e/.auth/host.json'
 
 export default async function globalSetup(config) {

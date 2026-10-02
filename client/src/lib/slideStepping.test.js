@@ -775,6 +775,13 @@ describe('C1 regression', () => {
     }
   })
 
+  it('every multi-phase mechanic names one phase per lockField (pendingLockPhase indexes phaseNames)', () => {
+    for (const m of Object.values(PHONE_MECHANICS)) {
+      if (m.lockFields.length > 1) expect(m.phaseNames).toHaveLength(m.lockFields.length)
+    }
+    expect(PHONE_MECHANICS.wager.phaseNames).toEqual(['wager-tiers', 'wager-guesses'])
+  })
+
   // Bendle used to be the example here (it's how C1 was originally found) —
   // now manually graded and deliberately out of PHONE_MECHANICS (2026-09-08
   // rebuild), so 'order' carries the same regression coverage instead.

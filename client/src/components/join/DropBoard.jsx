@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase.js'
+import { usePhoneAnswerSave } from '../../hooks/usePhoneAnswerSave.js'
 import ShrinkToFit from './ShrinkToFit.jsx'
 import { DEFAULT_DROP_TOTAL, dropChip, dropOptions, dropSequence, isValidAlloc } from '../../lib/dropScoring.js'
 
@@ -32,7 +33,7 @@ export default function DropBoard({ slide, team, theme, preview = false, onAnswe
   const [alloc, setAlloc] = useState({})
   const [committed, setCommitted] = useState(null)
   const [saving, setSaving] = useState(false)
-  const [saveFailed, setSaveFailed] = useState(false)
+  const { saveAnswer: submit, saveFailed, setSaveFailed } = usePhoneAnswerSave({ preview, slide, team, board: 'DropBoard', noun: 'drop' })
 
   const placed = optionIds.reduce((sum, id) => sum + (alloc[id] ?? 0), 0)
   const remaining = total - placed
@@ -61,30 +62,6 @@ export default function DropBoard({ slide, team, theme, preview = false, onAnswe
     setAlloc(a => ({ ...a, [id]: a[id] - amt }))
   }
 
-  const saveChainRef = useRef(Promise.resolve())
-  const submit = useCallback((next) => {
-    if (preview) return Promise.resolve(true)
-    const run = saveChainRef.current.then(async () => {
-      const upsert = supabase.from('phone_answers').upsert(
-        { show_id: slide.showId ?? team.showId, slide_id: slide.id, team_id: team.id, answer: next },
-        { onConflict: 'slide_id,team_id' }
-      )
-      let error
-      try {
-        ;({ error } = await Promise.race([
-          upsert,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('drop save timed out')), 8000)),
-        ]))
-      } catch (err) {
-        error = err
-      }
-      if (error) console.error('[DropBoard] answer save failed:', error)
-      setSaveFailed(!!error)
-      return !error
-    })
-    saveChainRef.current = run.catch(() => false)
-    return run
-  }, [preview, slide.id, slide.showId, team.id, team.showId])
 
   function lockIn() {
     if (locked || !complete || !dirty || saving) return

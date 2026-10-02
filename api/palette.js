@@ -54,7 +54,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!response.ok) {
+      return res.status(502).json({ error: `Image fetch failed (${response.status})` });
+    }
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
