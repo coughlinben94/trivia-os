@@ -213,7 +213,7 @@ export default function BendleBoard({ slide, slides, team, theme, preview = fals
         )}
         {guess && <p style={{ margin: 0 }}>Your guess: <strong>{guessLabel(guess)}</strong></p>}
         <button type="button" ref={lockBtnRef} onClick={lockIn} disabled={!guess || busy || lockedOut}
-          style={{ color: ink, border: `2px solid ${accent}`, borderRadius: 12, minHeight: 48, padding: '0.9rem', fontFamily: display, fontSize: '1.2rem', opacity: !guess || busy || lockedOut ? 0.5 : 1 }}>
+          style={{ color: ink, border: `2px solid ${accent}`, borderRadius: 12, minHeight: 48, padding: '0.9rem', scrollMarginBottom: '1rem', fontFamily: display, fontSize: '1.2rem', opacity: !guess || busy || lockedOut ? 0.5 : 1 }}>
           {busy ? 'Saving…' : `Lock In at step ${stepIndex + 1}`}
         </button>
         <p style={{ margin: 0, fontSize: '0.85rem', opacity: 0.75 }}>One guess for the whole Bendle. Earlier steps score more.</p>

@@ -195,6 +195,8 @@ describe('<BendleBoard>', () => {
       expect(button('Toto').querySelector('svg[data-mark="right"]')).not.toBeNull()
       expect(spy).toHaveBeenCalledWith({ block: 'nearest' })
       expect(spy.mock.contexts.at(-1)).toBe(button('Lock In'))
+      // Leaves room above the phone's home bar instead of sitting flush.
+      expect(button('Lock In').style.scrollMarginBottom).toBe('1rem')
       spy.mockClear()
       await act(async () => button('Use what I typed').click())
       expect(host.textContent).not.toMatch(/[✓✗]/)
