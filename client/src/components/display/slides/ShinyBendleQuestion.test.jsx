@@ -331,6 +331,37 @@ describe('<ShinyBendleQuestion>', () => {
       expect(players()).toHaveLength(4)
       expect(transport.start).toHaveBeenCalledTimes(1) // reveal needs no separate press
     })
+    it('reveals on bendleRevealed alone (no answer_reveal) and lists every team', async () => {
+      const song = mkSong()
+      const results = [
+        { teamId: 'p1', teamName: 'Alpha', guess: { title: 'Crazy On You', artist: 'Heart' }, stepIndex: 0, correct: true, autoPoints: 30, points: 30, overridden: false },
+        { teamId: 'p2', teamName: 'Bravo', guess: null, stepIndex: null, correct: false, autoPoints: 0, points: 0, overridden: false },
+      ]
+      await render(slideFor(song, { bendleStepIndex: 2, text: 'Name it', bendleLocked: true, bendleRevealed: true, bendleResults: results }), playing('s1'))
+      await settle()
+      expect(players()).toHaveLength(4) // drums bass other vocals
+      expect(container.textContent).toContain('Crazy On You — Heart')
+      expect(container.querySelectorAll('[role="listitem"]')).toHaveLength(2)
+      expect(container.textContent).toContain('No guess')
+      expect(container.textContent).not.toContain('Name it')
+      expect(container.textContent).not.toContain('pts')
+    })
+    it('a locked but unrevealed step 3 stays on the step mix', async () => {
+      const song = mkSong()
+      await render(slideFor(song, { bendleStepIndex: 2, bendleLocked: true }), playing('s1'))
+      await settle()
+      expect(players()).toHaveLength(3)
+      expect(container.querySelectorAll('[role="listitem"]')).toHaveLength(0)
+    })
+    it('bendleRevealed without bendleResults keeps the old layout (text and steps, no list)', async () => {
+      const song = mkSong()
+      await render(slideFor(song, { bendleStepIndex: 2, text: 'Name it', bendleRevealed: true }), playing('s1'))
+      await settle()
+      expect(players()).toHaveLength(4)
+      expect(container.textContent).toContain('Name it')
+      expect(container.textContent).toContain('pts')
+      expect(container.querySelectorAll('[role="listitem"]')).toHaveLength(0)
+    })
   })
 
   describe('(e) nothing plays past 30 s', () => {
