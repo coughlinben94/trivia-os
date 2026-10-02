@@ -18,7 +18,7 @@ Today a Bendle team writes its guess on paper and the host walks the room to rea
 
 ## Song list (catalog)
 
-- A static file, `client/public/bendle-catalog.<version>.json`, built by `scripts/build-bendle-catalog.mjs` from Wikidata: songs, singles, musical works and recordings (Q7366, Q134556, Q105543609, Q55850593) that have a performer (P175) and at least 3 Wikipedia articles. Queries run one at a time and split by item type to stay under the SPARQL limit; the script sends a User-Agent with contact info; duplicates merge on normalized title+artist keeping the highest article count. Output: `[title, artist, rank]` rows, about 50-60k rows, ~0.6 MB gzipped (estimate; the spike's partial export was 413 KB for ~35k rows).
+- A static file, `public/bendle-catalog.<version>.json` (repo-root `public/`; vite `publicDir` is `../public`), built by `scripts/build-bendle-catalog.mjs` from Wikidata: songs, singles, musical works and recordings (Q7366, Q134556, Q105543609, Q55850593) that have a performer (P175) and at least 3 Wikipedia articles. Queries run one at a time and split by item type to stay under the SPARQL limit; the script sends a User-Agent with contact info; duplicates merge on normalized title+artist keeping the highest article count. Output: `[title, artist, rank]` rows, about 50-60k rows, ~0.6 MB gzipped (estimate; the spike's partial export was 413 KB for ~35k rows).
 - Rank = Wikipedia article count (CC0). Search ranks by it.
 - Refresh is a manual rerun a few times a year. No server, table, or API route is involved at show time. No credit line is required (CC0); a small "Song list: Wikidata (CC0)" footer is optional.
 - Known gaps: very new songs and songs Wikidata lacks a performer for (e.g. Uptown Funk). The typed-guess path covers these.
@@ -78,7 +78,7 @@ Because `submitted_at` is restamped on UPDATE, "earliest wins" is dropped. Forgi
 
 ## Files (expected)
 
-- New: `scripts/build-bendle-catalog.mjs`, `client/public/bendle-catalog.<version>.json`, `client/src/lib/bendleGuessScoring.js` (+ test: normalization, title/artist match, typo tolerance, step points, overrides, idempotent score updates), `client/src/lib/bendleCatalog.js` (+ test: load, word-prefix search, ranking), `client/src/components/join/BendleBoard.jsx` (+ test), a Supabase migration (trigger + host delete RPC).
+- New: `scripts/build-bendle-catalog.mjs`, `public/bendle-catalog.<version>.json`, `client/src/lib/bendleGuessScoring.js` (+ test: normalization, title/artist match, typo tolerance, step points, overrides, idempotent score updates), `client/src/lib/bendleCatalog.js` (+ test: load, word-prefix search, ranking), `client/src/components/join/BendleBoard.jsx` (+ test), a Supabase migration (trigger + host delete RPC).
 - Changed: `slideStepping.js` (mechanic entry, `lockHere`), `Join.jsx`, `LiveMode.jsx`, `hostCommands.js` / `nextPressGate` / `nextPressCue` / `remoteFix`, `ShinyBendleQuestion.jsx` (reveal), `BendleAdmin.jsx` (alias prompt), `shinyExplainers.js` + `BendleExplainer.jsx`, `references/shiny-rules-card.md`, SKILL.md notes.
 - Removed from the previous design: the public search route, `getSpotifyToken` use, artwork, `spotify_id` grading.
 
@@ -103,3 +103,4 @@ Because `submitted_at` is restamped on UPDATE, "earliest wins" is dropped. Forgi
 - The catalog is ~0.6 MB per phone on first load (CDN cached, versioned filename).
 - Wikidata's catalog export needs a User-Agent with contact info; the existing `api/_lib/wikidata.js` header lacks one (separate fix, flagged).
 - Songs the host adds by hand upload have no artist: title-only grading applies and the editor prompts for aliases.
+- Deploy order and owner checklist. (1) Apply the migration to a throwaway database first and run `supabase/tests/bendle_phone_guess_guard.sql` there (it sets `ON_ERROR_STOP`, so "all checks passed" prints only if every check passed). (2) Then apply it to production (project `qwtbgusqfoypvehnungr`). (3) Run `BENDLE_CATALOG_CONTACT=... node scripts/build-bendle-catalog.mjs --dry-run`, then a real run, and commit the generated `public/bendle-catalog.<version>.json` and `client/src/lib/bendleCatalogVersion.js`. (4) Merge and deploy ONLY after the migration is in production: without it Unlock fails and nothing enforces one guess per team. (5) Rehearse on a duplicate show, not the real one: a rehearsed Bendle that was locked and revealed stays locked until Unlock on step 3. (6) Do a two-device rehearsal (laptop host + phone). (7) Measure catalog load and search speed on a real iPhone.

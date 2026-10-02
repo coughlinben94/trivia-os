@@ -25,7 +25,7 @@
 - Fonts: Boogaloo + DM Sans only. Respect reduced motion. Phone inputs use a 16px font so iOS does not zoom.
 - Tests run from the repo root: `VITE_SUPABASE_URL=http://127.0.0.1:9 VITE_SUPABASE_ANON_KEY=dummy npx vitest run <paths>`.
 - Commit messages end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` (shown as a second `-m` below).
-- Static files live in the repo-root `public/` folder (`vite.config.js`: `root: 'client'`, `publicDir: '../public'`). The spec's `client/public/` path is wrong; this plan uses `public/`.
+- Static files live in the repo-root `public/` folder (`vite.config.js`: `root: 'client'`, `publicDir: '../public'`). The spec now says `public/` too (it said `client/public/` before the final fix wave).
 
 ## Shared Types (every task uses these names exactly)
 
