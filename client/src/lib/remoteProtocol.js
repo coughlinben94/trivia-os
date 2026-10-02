@@ -63,7 +63,7 @@ export const REFUSAL_TEXT = {
   'bad-target': 'That slide moved — open Jump again',
   'nothing-to-fix': 'No phone question on this slide',
   'nothing-locked': 'Nothing is locked yet',
-  'not-locked': 'Answers are not locked yet — press Next to lock them',
+  'not-locked': 'Answers are not locked yet — press Next on the lock slide to lock them',
   'already-revealed': 'The TV already shows the result — unlock first if you need to redo it',
   'answer-held': 'Bendle shows the answer after step 3 is locked',
   'laptop-only': 'Rescore a horse race on the laptop',

@@ -22,19 +22,21 @@ import { computeHorseRaceScoreUpdates, DEFAULT_RACE_POINTS } from '../../lib/rac
 import { buildPinRound, isValidPin, pinMissingSpot, pinLockedStatus, PIN_SPOT_ERROR } from '../../lib/pinScoring.js'
 import { movieChainConfigError, resolveMovieChainAnswers, computeMovieChainScoreUpdates, eligibleMovieChainAnswers } from '../../lib/movieChainScoring.js'
 import { movieChainRequest } from '../../lib/movieChainApi.js'
+import { gradeBendleGroup, applyBendleOverrides, computeBendleScoreUpdates, bendleStepIds, bendleConfigError } from '../../lib/bendleGuessScoring.js'
+import BendleHostPanel from './BendleHostPanel.jsx'
 import PinRoomControl from './PinRoomControl.jsx'
 import { HUES_CUES_CODE_RE } from '../../lib/huesCuesGrid.js'
 import { lockRefusal, DROP_ANSWER_ERROR, HUES_CUES_ANSWER_ERROR, WAGER_ANSWER_ERROR, WAGER_TIERS_ERROR } from '../../lib/lockRefusal.js'
 import { nextPressGate } from '../../lib/nextPressCue.js'
 import { planHostCommand } from '../../lib/hostCommands.js'
 import { useRemoteLink } from '../../hooks/useRemoteLink.js'
-import { REMOTE_LINK_KEY } from '../../lib/remoteProtocol.js'
+import { REMOTE_LINK_KEY, refusalText } from '../../lib/remoteProtocol.js'
 import { buildSnapshot, hostChipText } from '../../lib/remoteSnapshot.js'
 import { createScoreChain, createScoreRemote, withTimeout, SCORE_CALL_TIMEOUT_MS } from '../../lib/scoreCellWrite.js'
 import { scoreChangeText } from '../../lib/remoteProtocol.js'
 import { EASE_OUT, EASE_EXIT } from '../../lib/easings.js'
 import { fixFor } from '../../lib/remoteFix.js'
-import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, unlockPatch, PHONE_MECHANICS, REVEAL_FIELD, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
+import { isAutoRollPart, TEAM_PICKER_HOLD_MS, pendingLockPhase, pendingReveal, unlockPatch, lockSlideFor, PHONE_MECHANICS, REVEAL_FIELD, LOCK_COUNTDOWN_MS } from '../../lib/slideStepping.js'
 
 // Named so the UI can recognize this ONE specific refusal and offer a manual
 // override for it — every other wager error is a real, unrecoverable-by-
@@ -270,6 +272,12 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   const [movieChainBusy, setMovieChainBusy] = useState(false)
   const [movieChainError, setMovieChainError] = useState(null)
   const movieChainRunRef = useRef(false)
+  const [bendleBusy, setBendleBusy] = useState(false)
+  const [bendleError, setBendleError] = useState(null)
+  const bendleRunRef = useRef(false)
+  // Set by a Lock until the lock lands on the step-3 slide (effect below), so
+  // a second Lock in between can't write a second lock time.
+  const bendleLockingRef = useRef(false)
   const [raceBusy, setRaceBusy] = useState(false)
   const [raceScoreError, setRaceScoreError] = useState(null)
   const [endShowConfirm, setEndShowConfirm] = useState(false)
@@ -296,7 +304,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // a real scoring round (three SELECTs + one upsert, normally 1-2s); past
   // that the host gets Next back and any real failure is already showing
   // its error on-screen via the Retry Scoring button.
-  const scoringBusy = matchingBusy || orderBusy || wagerBusy || choiceBusy || dropBusy || huesCuesBusy || pinBusy || movieChainBusy
+  const scoringBusy = matchingBusy || orderBusy || wagerBusy || choiceBusy || dropBusy || huesCuesBusy || pinBusy || movieChainBusy || bendleBusy
   const scoringSinceRef = useRef(0)
   useEffect(() => { scoringSinceRef.current = scoringBusy ? Date.now() : 0 }, [scoringBusy])
   // iPad remote only (spec §6): horse-race scoring with its own 12s cap.
@@ -413,6 +421,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     setHuesCuesScoreError(null)
     setPinScoreError(null)
     setMovieChainError(null)
+    setBendleError(null)
     setRaceScoreError(null)
   }, [currentSlide?.id])
   // Which phone-scored mechanic (if any) this slide is — the ONE lookup the
@@ -429,8 +438,14 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // next — gate the modal-open trigger instead of fighting z-index against a
   // deliberately full-screen modal. Was wager-only when B6 was found; it is
   // the same trap on all four phone mechanics, so it now covers all four.
+  // Bendle steps 1-2 have no lock or score button (lockHere), so nothing to cover.
   const phoneActionShowing = !!phoneMechanic
+    && (PHONE_MECHANICS[phoneMechanic].lockHere?.(currentSlide.data) ?? true)
     && !currentSlide?.data?.[REVEAL_FIELD[phoneMechanic]]
+  // Bendle: the step-3 slide holds the lock, results and overrides.
+  const bendleLockData = phoneMechanic === 'bendle' ? (lockSlideFor(slides, currentSlide)?.data ?? {}) : null
+  const bendleLockedNow = !!bendleLockData?.bendleLocked
+  useEffect(() => { bendleLockingRef.current = false }, [bendleLockedNow, currentSlide?.id])
 
   // The iPad Fix drawer's state for this slide: same busy/error pair the
   // lock/score panel below reads for each mechanic, horse race's own pair.
@@ -445,6 +460,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
         huesCues: [huesCuesBusy, huesCuesScoreError],
         pin: [pinBusy, pinScoreError],
         movieChain: [movieChainBusy, movieChainError],
+        bendle: [bendleBusy, bendleError],
       }[phoneMechanic] ?? [false, null])
   const remoteFix = fixFor(currentSlide, { busy: fixBusy, error: fixError })
 
@@ -1286,10 +1302,120 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     } finally { movieChainRunRef.current = false; setMovieChainBusy(false) }
   }
 
+  // Bendle (spec 2026-10-02). The lock, results and overrides live on the
+  // step-3 slide; teams' rows sit on whichever step was live when they
+  // locked (bendleStepIds). Scores go to the step-3 slide's bucket. Every
+  // handler takes the step-3 slide and no-ops on any other step.
+  const isBendleLockSlide = slide => slide?.data?.bendleStepIndex === 2
+
+  async function handleLockBendle(slide) {
+    if (bendleRunRef.current || bendleLockingRef.current || !isBendleLockSlide(slide) || slide.data.bendleLocked) return
+    const issue = bendleConfigError(slide.data)
+    if (issue) { setBendleError(issue); return }
+    bendleRunRef.current = true
+    bendleLockingRef.current = true
+    setBendleBusy(true); setBendleError(null)
+    try {
+      // Lock only: no results until A, so nobody learns correctness early.
+      actions.updateSlide(slide.id, { data: { ...slide.data, bendleLocked: true, bendleLockedAt: new Date().toISOString() } })
+      await actions.flushSlides()
+    } catch (error) {
+      console.error('Bendle lock failed:', error)
+      bendleLockingRef.current = false
+      setBendleError('Could not lock guesses. Check connection and retry.')
+    } finally { bendleRunRef.current = false; setBendleBusy(false) }
+  }
+
+  async function writeBendleScores(slide, results, teams) {
+    await scoreChainRef.current.run(async () => {
+      const { data: scoreboardTeams, error: sbError } = await withTimeout(signal => supabase.from('scoreboard_teams')
+        .select('id, show_id, name, scores, sort_order').eq('show_id', show.id).abortSignal(signal), SCORE_CALL_TIMEOUT_MS)
+      if (sbError) throw sbError
+      const updates = computeBendleScoreUpdates({ results, teams, scoreboardTeams, roundKey: roundKeyFor(show, slide), lockSlideId: slide.id })
+      if (results.length > 0 && updates.length === 0) throw new Error('No team matched a scoreboard row')
+      if (!slide.data.bendleRevealed) {
+        // Publish results and the reveal together: nothing public before A.
+        actions.updateSlide(slide.id, { data: { ...slide.data, bendleResults: results, bendleRevealed: true } })
+        await actions.flushSlides()
+      }
+      if (updates.length > 0) {
+        const { error: writeError } = await withTimeout(signal => supabase.from('scoreboard_teams').upsert(updates).abortSignal(signal), SCORE_CALL_TIMEOUT_MS)
+        if (writeError) throw writeError
+      }
+    })
+  }
+
+  async function handleRevealBendle(slide) {
+    if (bendleRunRef.current || !isBendleLockSlide(slide) || !slide.data.bendleLocked) return
+    bendleRunRef.current = true
+    setBendleBusy(true); setBendleError(null)
+    try {
+      const { data: teams, error: teamsError } = await supabase.from('teams').select('id, name').eq('show_id', show.id)
+      if (teamsError) throw teamsError
+      // Retry after the reveal rescores what the TV already shows.
+      let results = slide.data.bendleRevealed && Array.isArray(slide.data.bendleResults) ? slide.data.bendleResults : null
+      if (!results) {
+        const stepIds = bendleStepIds(slides, slide)
+        const [rowsRes, songRes] = await Promise.all([
+          supabase.from('phone_answers').select('team_id, slide_id, answer').eq('show_id', show.id).in('slide_id', stepIds.filter(Boolean)),
+          supabase.from('bendle_songs').select('title, answer, aliases, artist').eq('id', slide.data.bendleSongId).single(),
+        ])
+        for (const r of [rowsRes, songRes]) if (r.error) throw r.error
+        if (!songRes.data) throw new Error('Bendle song row missing')
+        results = gradeBendleGroup({ rows: rowsRes.data, stepIds, song: songRes.data, teams: teams ?? [], overrides: slide.data.bendleOverrides })
+      }
+      await writeBendleScores(slide, results, teams ?? [])
+      refreshScoresView()
+    } catch (error) {
+      console.error('Bendle reveal failed:', error)
+      setBendleError('Could not finish reveal or scoring. Check connection and use Retry below.')
+    } finally { bendleRunRef.current = false; setBendleBusy(false) }
+  }
+
+  // One team's points by hand, after the reveal: rescore (same step-3 key),
+  // then republish the results so the TV and phones show the new points.
+  async function overrideBendleTeam(slide, teamId, points) {
+    if (bendleRunRef.current || !isBendleLockSlide(slide) || !slide.data.bendleRevealed) return
+    bendleRunRef.current = true
+    setBendleBusy(true); setBendleError(null)
+    try {
+      const overrides = { ...(slide.data.bendleOverrides ?? {}), [teamId]: points }
+      const results = applyBendleOverrides(slide.data.bendleResults, overrides)
+      const { data: teams, error: teamsError } = await supabase.from('teams').select('id, name').eq('show_id', show.id)
+      if (teamsError) throw teamsError
+      await writeBendleScores(slide, results, teams ?? [])
+      actions.updateSlide(slide.id, { data: { ...slide.data, bendleOverrides: overrides, bendleResults: results } })
+      await actions.flushSlides()
+      refreshScoresView()
+    } catch (error) {
+      console.error('Bendle override failed:', error)
+      setBendleError('Could not save the change. Check connection and retry.')
+    } finally { bendleRunRef.current = false; setBendleBusy(false) }
+  }
+
+  // Deletes every team's guess for this Bendle (host-only RPC), then reopens.
+  // Rows go first: a phone that taps after the flag flips must not have its
+  // new guess wiped, and if the delete fails the slide stays locked.
+  async function unlockBendle(slide) {
+    if (bendleRunRef.current || !isBendleLockSlide(slide) || !slide.data.bendleLocked) return
+    bendleRunRef.current = true
+    setBendleBusy(true); setBendleError(null)
+    try {
+      const { error } = await supabase.rpc('clear_bendle_group_answers', { p_show_id: show.id, p_group_id: slide.data.shinyGroupId })
+      if (error) throw error
+      actions.updateSlide(slide.id, { data: { ...slide.data, ...unlockPatch('bendle', slide.data) } })
+      await actions.flushSlides()
+    } catch (error) {
+      console.error('Bendle unlock failed:', error)
+      setBendleError('Could not unlock. Check connection and retry.')
+    } finally { bendleRunRef.current = false; setBendleBusy(false) }
+  }
+
   function revealCurrentSlide() {
     const mechanic = pendingReveal(currentSlide)
     if (!mechanic) return false
     if (mechanic === 'movieChain') { handleRevealMovieChain(currentSlide); return true }
+    if (mechanic === 'bendle') { handleRevealBendle(currentSlide); return true }
     actions.updateSlide(currentSlide.id, {
       data: { ...currentSlide.data, [REVEAL_FIELD[mechanic]]: true },
     })
@@ -1306,6 +1432,8 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
   // already revealed.
   function unlockCurrentSlide() {
     if (!phoneMechanic || !currentSlide) return
+    // Bendle unlocks on step 3 only, through the host RPC (unlockBendle).
+    if (phoneMechanic === 'bendle') { unlockBendle(currentSlide); return }
     const patch = unlockPatch(phoneMechanic, currentSlide.data)
     if (!patch) return
     actions.updateSlide(currentSlide.id, { data: { ...currentSlide.data, ...patch } })
@@ -1340,6 +1468,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       huesCues: () => handleLockAndScoreHuesCues(slide),
       pin: () => handleLockAndScorePin(slide),
       movieChain: () => slide.data.movieChainLocked ? handleRevealMovieChain(slide) : handleLockMovieChain(slide),
+      bendle: () => slide.data.bendleLocked ? handleRevealBendle(slide) : handleLockBendle(slide),
     }[mechanic] ?? null
   }
 
@@ -1363,6 +1492,7 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
     huesCues: handleLockAndScoreHuesCues,
     pin: handleLockAndScorePin,
     movieChain: handleLockMovieChain,
+    bendle: handleLockBendle,
   }
 
   // Mirrors currentSlide into a ref for the same reason actionsRef exists —
@@ -1468,6 +1598,9 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       // answer overlay (unrelated flag, unrelated mechanism — see
       // revealCurrentSlide). Every other slide keeps the original toggle.
       revealPending: !!pendingReveal(currentSlide),
+      // Bendle: A must not show the answer on steps 1-2 or before the step-3
+      // lock. Once the step-3 result is up, A toggles the answer as usual.
+      answerHeld: phoneMechanic === 'bendle' && !pendingReveal(currentSlide) && !currentSlide.data?.bendleRevealed,
       scoreboardVisible: show.showState.scoreboardVisible,
       scoresRevealed: show.showState.scoresRevealed,
       // via:'remote' only (the keyboard and buttons never read these).
@@ -1495,8 +1628,11 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
       if (ph === 'huesCues') setHuesCuesScoreError(plan.message)
       else if (ph === 'wager-guesses') setWagerError(plan.message)
       else if (ph === 'movieChain') setMovieChainError(plan.message)
+      else if (ph === 'bendle') setBendleError(plan.message)
       else setPinScoreError(plan.message)
     }
+    // The keyboard's A is otherwise silent when Bendle holds the answer.
+    if (plan.refuse === 'answer-held') setBendleError(refusalText('answer-held'))
     if (plan.refuse) return plan
     switch (plan.run) {
       case 'start-lock-countdown': startLockCountdown(plan.phase); break
@@ -1887,6 +2023,30 @@ export default function LiveMode({ show, actions, onExitLive, onThemeChange, onO
               to prevent. */}
           {(() => {
             if (!phoneMechanic) return null
+            if (phoneMechanic === 'bendle') {
+              const onLockStep = isBendleLockSlide(currentSlide)
+              return (
+                <>
+                  {!onLockStep && bendleLockedNow && (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 shrink-0">
+                      Step 3 is still locked from an earlier run, so phones can’t send guesses. Unlock it on step 3.
+                    </p>
+                  )}
+                  <BendleHostPanel
+                    slide={currentSlide}
+                    lockData={bendleLockData}
+                    stepIds={bendleStepIds(slides, currentSlide)}
+                    showId={show.id}
+                    busy={bendleBusy}
+                    error={bendleError}
+                    onLock={() => handleLockBendle(currentSlide)}
+                    onReveal={() => handleRevealBendle(currentSlide)}
+                    onUnlock={() => unlockBendle(currentSlide)}
+                    onOverride={(teamId, points) => overrideBendleTeam(currentSlide, teamId, points)}
+                  />
+                </>
+              )
+            }
             const d = currentSlide.data ?? {}
             const panel = {
               matching: {
