@@ -21,8 +21,9 @@
 // Callers own the write + their own local-state update; nothing here
 // touches the network or React.
 
-import { isMatchingShiny, isWagerShiny, isOrderShiny, isChoiceShiny, isDropShiny, isHuesCuesShiny, isPinShiny, isMovieChainShiny, isConcurrentShiny, isConcurrentMediaShiny, audioMarkForPart } from './shinySeries.js'
+import { isMatchingShiny, isWagerShiny, isOrderShiny, isChoiceShiny, isBendleShiny, isDropShiny, isHuesCuesShiny, isPinShiny, isMovieChainShiny, isConcurrentShiny, isConcurrentMediaShiny, audioMarkForPart } from './shinySeries.js'
 import { dropStepCount } from './dropScoring.js'
+import { bendleLockSlide } from './bendleGuessScoring.js'
 
 // Chunks `parts` into fixed-size reveal groups of `groupSize`, in authored
 // order — the single implementation both revealStepCount's Next/Prev step
@@ -138,8 +139,11 @@ export function withEntryState(slides, slide, { currentPart, protectInProgress =
   // slide that wasn't already live, so a locked flag it finds there is stale
   // (left over from an earlier test/rehearsal), not a question actually in
   // progress — regressing it is the correct, expected fresh-entry reset.
+  // Bendle keeps its lock on the group's step-3 slide (lockSlideFor), so
+  // entering ANY step judges and clears that slide's flags, not its own.
+  const lockSlide = lockSlideFor(slides, slide)
   const protectLockedFlags = protectInProgress &&
-    Object.values(PHONE_MECHANICS).some(m => m.lockFields.some(f => slide.data?.[f]))
+    Object.values(PHONE_MECHANICS).some(m => m.lockFields.some(f => lockSlide.data?.[f]))
   // Fresh entry clears stale phone-scored lock+reveal flags (2026-08-31,
   // Ben — found by sequencing audit ahead of live show; extended to cover
   // every PHONE_MECHANICS entry, not just the three restated here at the
@@ -148,14 +152,15 @@ export function withEntryState(slides, slide, { currentPart, protectInProgress =
   // (liveSlideIsInteractive) — left true from a rehearsal, the phones never
   // unlock: the boards see already-locked/revealed and stay on the teaser
   // screen, silently skipping the whole audience-interaction round.
-  if (slide.data?.isShiny && !protectLockedFlags) {
+  const lockPatch = {}
+  if (lockSlide.data?.isShiny && !protectLockedFlags) {
     for (const m of Object.values(PHONE_MECHANICS)) {
       for (const f of m.lockFields) {
-        if (slide.data?.[f]) patch[f] = false
+        if (lockSlide.data?.[f]) lockPatch[f] = false
       }
-      if (slide.data?.[m.revealField]) patch[m.revealField] = false
+      if (lockSlide.data?.[m.revealField]) lockPatch[m.revealField] = false
       for (const f of [...(m.clearFields ?? []), ...(m.freshClearFields ?? [])]) {
-        if (slide.data?.[f] != null) patch[f] = null
+        if (lockSlide.data?.[f] != null) lockPatch[f] = null
       }
     }
   }
@@ -192,8 +197,10 @@ export function withEntryState(slides, slide, { currentPart, protectInProgress =
   if (!protectInProgress && slide.data?.raceStartedAt != null) {
     patch.raceStartedAt = null
   }
-  if (Object.keys(patch).length === 0) return slides
-  return patchSlideData(slides, slide.id, patch)
+  let out = slides
+  if (Object.keys(lockPatch).length > 0) out = patchSlideData(out, lockSlide.id, lockPatch)
+  if (Object.keys(patch).length > 0) out = patchSlideData(out, slide.id, patch)
+  return out
 }
 
 // team-picker slides step through [intro, ...teams, outro, landed] using the
@@ -362,9 +369,8 @@ export const LOCK_COUNTDOWN_MS = 3000
 // place that used to restate this list by hand (pendingLockPhase,
 // pendingReveal, REVEAL_FIELD, withEntryState's clear/protect lists,
 // Join.jsx's liveSlideIsInteractive/interactivePhaseKey) now derives from
-// here. Bendle shipped without its lockFields being added to withEntryState's
-// clear list (2026-09-05 whole-branch audit, C1) — a rehearsal-locked Bendle
-// slide stayed locked live, silently. One table instead of seven hand-written
+// here. A mechanic once shipped without its lockFields in withEntryState's
+// clear list (2026-09-05 audit, C1) and stayed locked live. One table instead of seven hand-written
 // lists is how the next mechanic doesn't repeat that.
 //
 // lockFields order matters: wager is the one two-phase mechanic (a blind
@@ -391,13 +397,49 @@ export const PHONE_MECHANICS = {
             // fresh entry only (withEntryState); Unlock keeps the host's override
             freshClearFields: ['pinRoomSizeOverride'] },
   movieChain: { guard: isMovieChainShiny, lockFields: ['movieChainLocked'], revealField: 'movieChainRevealed', clearFields: ['movieChainResults', 'movieChainLockedAt'] },
+  // Bendle (2026-10-02): three step slides, one guess per team for the
+  // group. Lock, results and overrides live on the step-3 slide only
+  // (lockHere), so Next on steps 1-2 only advances, the countdown runs once
+  // on step 3, and A refuses until then. guard stays true on all three steps
+  // so Join, the remote and the host pane keep working. lockSlideFor finds
+  // the step-3 slide from any step. lockHere is optional on any mechanic:
+  // when present and false, pendingLockPhase and pendingReveal return null.
+  bendle:   { guard: isBendleShiny, lockHere: d => d.bendleStepIndex === 2, lockFields: ['bendleLocked'], revealField: 'bendleRevealed', clearFields: ['bendleResults', 'bendleLockedAt'],
+            // fresh entry only; Unlock keeps the host's per-team points
+            freshClearFields: ['bendleOverrides'] },
+}
+
+// The slide that holds a mechanic's lock state: the slide itself, or for
+// Bendle the group's step-3 slide (falls back to itself without a group).
+export function lockSlideFor(slides, slide) {
+  if (!slide?.data || !isBendleShiny(slide.data)) return slide
+  return bendleLockSlide(slides, slide) ?? slide
+}
+
+function sameBendleGroup(a, b) {
+  const g = a?.data?.shinyGroupId
+  return !!g && g === b?.data?.shinyGroupId && isBendleShiny(a.data) && !!b.data && isBendleShiny(b.data)
+}
+
+// Join.jsx: phones are pinned to the board while the live slide still takes
+// answers (last lock field unset on the lock slide).
+export function liveSlideOpenForPhones(slides, slide) {
+  if (slide?.type !== 'question' || !slide.data?.isShiny) return false
+  const lockData = lockSlideFor(slides, slide)?.data ?? {}
+  return Object.values(PHONE_MECHANICS).some(m => m.guard(slide.data) && !lockData[m.lockFields[m.lockFields.length - 1]])
+}
+
+// Join.jsx: resets "this team answered" whenever the slide or a lock flag changes.
+export function phonePhaseKey(slides, slide) {
+  const lockData = lockSlideFor(slides, slide)?.data
+  return [slide?.id, ...Object.values(PHONE_MECHANICS).flatMap(m => m.lockFields.map(f => lockData?.[f]))].join(':')
 }
 
 // True when a slide already finished a phone-scored round (every lock field
 // AND the reveal flag set). elimStep/raceStartedAt are deliberately NOT
 // protected: withEntryState resets those on fresh entry (stale rehearsals).
-function isScoredOrStarted(slide) {
-  const d = slide?.data
+function isScoredOrStarted(slides, slide) {
+  const d = lockSlideFor(slides, slide)?.data
   if (!d) return false
   return Object.values(PHONE_MECHANICS).some(m => m.lockFields.every(f => d[f]) && d[m.revealField])
 }
@@ -414,6 +456,9 @@ export function pendingLockPhase(slide) {
   if (!data) return null
   for (const [key, m] of Object.entries(PHONE_MECHANICS)) {
     if (!m.guard(data)) continue
+    // A mechanic that locks on one slide of a group (Bendle: step 3) has no
+    // lock phase and nothing to reveal on its other slides.
+    if (m.lockHere && !m.lockHere(data)) return null
     if (m.lockFields.length === 1) {
       return !data[m.lockFields[0]] ? key : null
     }
@@ -450,6 +495,9 @@ export function pendingReveal(slide) {
   for (const [key, m] of Object.entries(PHONE_MECHANICS)) {
     if (!m.guard(data)) continue
     if (key === 'drop') return null // Next steps the reveal, not the A key
+    // A mechanic that locks on one slide of a group (Bendle: step 3) has no
+    // lock phase and nothing to reveal on its other slides.
+    if (m.lockHere && !m.lockHere(data)) return null
     const lastField = m.lockFields[m.lockFields.length - 1]
     return data[lastField] && !data[m.revealField] ? key : null
   }
@@ -600,7 +648,7 @@ export async function computeNextStep(show, fetchTeamCount) {
   // keep its state so the room's answers aren't reopened. Only fully
   // locked+revealed slides are protected — a half-finished rehearsal
   // leftover still gets the fresh-entry reset.
-  const newSlides = withEntryState(bakedSlides, resolvedNext, { currentPart: 0, protectInProgress: isScoredOrStarted(resolvedNext) })
+  const newSlides = withEntryState(bakedSlides, resolvedNext, { currentPart: 0, protectInProgress: isScoredOrStarted(bakedSlides, resolvedNext) || sameBendleGroup(curSlide, resolvedNext) })
   return {
     slides: newSlides,
     current_slide_index: target,
@@ -683,7 +731,7 @@ export function computeJumpStep(show, target, { furthest = -1, slides = show?.sl
   const resolved = slides.find(s => s.id === targetSlide.id) ?? targetSlide
   const visited = target <= Math.max(furthest, show?.currentSlideIndex ?? 0)
   return {
-    slides: withEntryState(slides, resolved, { currentPart: 0, protectInProgress: visited || isScoredOrStarted(resolved) }),
+    slides: withEntryState(slides, resolved, { currentPart: 0, protectInProgress: visited || isScoredOrStarted(slides, resolved) || sameBendleGroup(sorted[show?.currentSlideIndex ?? 0], resolved) }),
     current_slide_index: target,
     current_slide_id: targetSlide.id,
     answer_reveal: false,
