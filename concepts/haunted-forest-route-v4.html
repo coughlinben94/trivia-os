@@ -497,7 +497,7 @@ function treeItem(Z,X,w,r,sp='dec',o={}){
   // bark furrows: dark vertical ribbons across the lit side, below 6 m
   const fur=sp==='birch'?[]:[0.1,0.2,0.29].slice(0,2+Math.floor(r()*2)).map(f=>{const ph=r()*6,h0=rr(r,0.5,1.4),h1=Math.min(rr(r,3.5,6),top-.2);const at2=h=>{let i=0;while(i<sh.HS.length-2&&sh.HS[i+1]<h)i++;const t=clamp((h-sh.HS[i])/(sh.HS[i+1]-sh.HS[i]));return[sh.cx[i]+(sh.cx[i+1]-sh.cx[i])*t,sh.ww[i]+(sh.ww[i+1]-sh.ww[i])*t]};
     return [...Array(9)].map((_,i)=>{const t=i/8,h=h0+(h1-h0)*t,[c,ww]=at2(h);return[c+inner*ww*(0.5-f)+Math.sin(h*2.1+ph)*ww*0.03,h,w*0.05*Math.sin(Math.PI*(0.08+t*0.84))]})});
-  const bark=TRK(BARK[sp]||BARK.dec),pale=sp==='birch'?mix(FOG('#8e8c86'),TRK('#7a7262'),.3):null;
+  const bark=TRK(BARK[sp]||BARK.dec),pale=sp==='birch'?mix(FOG('#686660'),TRK('#5e584c'),.3):null;
   return {grp:'w',Z,X,kind:'tree',sp,fastDim:2,op:z=>clamp((ZFAR-z)/FADE),
     veil:[1],lops:[null,z=>fogAmt(z)*(pale?0.85:1),z=>litAmt(X,z)*(1-fogAmt(z))],
     geom(z,id){
@@ -1315,8 +1315,8 @@ const ITEMS=[], OCC=[], EXCL=[], BARNS=[], LMLIST=[];
           P2(z,z1,sd*w,0,sd*w,wh,b.pt.wall,lines,{insets:ins});
           if(!(b.v===2&&second(z)&&sd===mr))P2(z,z1,sd*w,wh,0,pk,b.pt.roof,[[.33,.06,'#0e0a07'],[.66,.06,'#0e0a07']])}}
       if(b.v===0){add(stove(A+6.2,-1.42*mr,false,b));add(bunk(A+4.6,-1.45*mr,true));add(table(A+5.5,1.12*mr,true));add(pelts(A+5.9,1.62*mr,rb));add(traps(A+6.85,.8*mr));
-        add(shLantern(A+5.4,1.55*mr,wh-.05,true));add(motes(A+5,1.0*mr,rb))}
-      else if(b.v===1){add(sawhorse(A+5.4,-.95*mr));add(hangTools(A+6.3,-1.62*mr));add(coat(A+4.8,1.66*mr));add(shLantern(A+5.4,-1.6*mr,wh-.05,true));
+        add(shLantern(A+4.6,1.62*mr,wh-.05,true));add(motes(A+5,1.0*mr,rb))}
+      else if(b.v===1){add(sawhorse(A+5.4,-.95*mr));add(hangTools(A+6.3,-1.62*mr));add(coat(A+4.8,1.66*mr));add(shLantern(A+4.6,-1.62*mr,wh-.05,true));
         add(prop(A+6.5,1.25*mr,logEnds(-.55,.55,1.3,rb,7),[],{}));add(prop(A+6.0,.55*mr,[{p:[[-.28,-.05],[.28,-.05],[.25,.55],[-.25,.55]],c:'#3a2c1e'},{e:[0,.55,.25,.06],c:'#5a4630'},{s:[[-.05,.55,.05],[.3,1.15,.045]],c:'#4a3a28'},{p:[[-.12,.5],[.1,.5],[.08,.66],[-.12,.7]],c:'#5a5650'}],[],{}));add(motes(A+5,-1.0*mr,rb))}
       else{add(moonShaft(A+5,.6*mr,b));add(sapling(A+5.3,.75*mr));add(stove(A+6.4,-1.45*mr,true,b));add(bunk(A+5.8,-1.3*mr,false));add(fallenPlanks(A+4.6,1.4*mr,rb));add(vines(A+3.6,b));add(motes(A+5,.6*mr,rb))}
     }
@@ -1401,10 +1401,10 @@ stage.style.setProperty('--walk',DUR+'ms');
    <div class="fill sl" data-st="pins"><svg width="1920" height="1080" viewBox="0 0 1920 1080" style="position:absolute;inset:0">${moonSvg()}</svg></div>`;
   { const tm=[95,-20],bm=[390,990],ux=bm[0]-tm[0],uy=bm[1]-tm[1],ul=Math.hypot(ux,uy),nx=-uy/ul,ny=ux/ul,hw=165,c=[(tm[0]+bm[0])/2,(tm[1]+bm[1])/2];
     $('lightsTop').innerHTML=`<div class="fill sl" data-st="glade" style="opacity:0"><svg width="1920" height="1080" viewBox="0 0 1920 1080" style="position:absolute;inset:0"><defs>${lgrad('msa',c[0]-nx*hw,c[1]-ny*hw,c[0]+nx*hw,c[1]+ny*hw,[[0,'#a8bcd8',0],[.5,'#b4c6de',.21],[1,'#a8bcd8',0]])}${lgrad('msv',0,-20,0,990,[[0,'#fff',.45],[.7,'#fff',1],[1,'#fff',.2]])}<mask id="msk"><rect x="0" y="-20" width="900" height="1030" fill="url(#msv)"/></mask></defs><path mask="url(#msk)" d="M${tm[0]-hw} -20L${tm[0]+hw} -20L${bm[0]+hw} 990L${bm[0]-hw} 990Z" fill="url(#msa)"/></svg></div>`; }
-  $('topdark').style.background='linear-gradient(to bottom,rgba(8,8,10,.5) 48px,rgba(8,8,10,.3) 120px,rgba(8,8,10,0) 250px)';
+  $('topdark').style.background='linear-gradient(to bottom,rgba(8,8,10,.38) 48px,rgba(8,8,10,.22) 120px,rgba(8,8,10,0) 250px)';
   // the question box stays dark and calm (>= 7:1 for cream text even over a lit doorway); the frame around it is lifted
   $('hush').style.background='radial-gradient(ellipse 900px 400px at 960px 540px,rgba(4,4,5,.56),rgba(4,4,5,.5) 50%,rgba(4,4,5,.28) 75%,rgba(4,4,5,0) 100%)';
-  $('vig').style.background='radial-gradient(ellipse 78% 74% at 50% 52%,transparent 62%,rgba(6,6,8,.28) 100%)';
+  $('vig').style.background='radial-gradient(ellipse 78% 74% at 50% 52%,transparent 62%,rgba(6,6,8,.2) 100%)';
 })();
 function moonSvg(){const cx=1650,cy=158,R=84;
   return `<defs><radialGradient id="mh"><stop offset="0" stop-color="${MOON('#e88a3a')}" stop-opacity=".4"/><stop offset=".35" stop-color="${MOON('#c8662a')}" stop-opacity=".15"/><stop offset="1" stop-color="${MOON('#c8662a')}" stop-opacity="0"/></radialGradient>
