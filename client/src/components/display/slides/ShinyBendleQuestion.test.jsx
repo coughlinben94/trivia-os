@@ -698,4 +698,15 @@ describe('<ShinyBendleQuestion>', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
     expect(container.textContent).toContain('Crazy On You — Heart')
   })
+  it('reveal reads that never bring the title send one Sentry warning when retries run out', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const song = mkSong()
+    await render(slideFor(song, { bendleStepIndex: 2, bendleRevealed: true }), playing('s1'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(10000) })
+    const missing = Sentry.captureMessage.mock.calls.filter(c => c[0] === 'bendle: reveal title missing')
+    expect(missing).toHaveLength(1)
+    expect(missing[0][1]).toMatchObject({ level: 'warning', tags: { area: 'audio' } })
+    expect(container.textContent).not.toContain('Crazy On You')
+  })
 })
+

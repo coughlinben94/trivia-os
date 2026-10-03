@@ -9,9 +9,11 @@
 --      table stays in the Realtime publication: the host's status listeners
 --      (BendleAdmin, Host.jsx) need it, and Realtime applies this RLS policy,
 --      so other subscribers get no rows. The worker uses the service role.
---   2. strips `answer` from Bendle step slides, now and on every later write
---      (a trigger, so a stale host tab cannot put it back). Everything else in
---      the slide, and every non-Bendle slide, is left as is.
+--   2. strips `answer` from Bendle step slides, and `bendleAnswer` (written
+--      at the reveal) from any Bendle step slide whose bendleRevealed is not
+--      true, now and on every later write (a trigger, so a stale host tab or
+--      a rehearsed copy cannot publish it early). Everything else in the
+--      slide, and every non-Bendle slide, is left as is.
 --   3. adds get_bendle_song_for_show(show, slide) for the TV: stem URLs and
 --      start/end marks always; title and artist only once the group is
 --      revealed (bendleRevealed on any step slide of the group, or
@@ -25,6 +27,7 @@
 --   drop trigger if exists shows_strip_bendle_answers on public.shows;
 --   drop function if exists public.strip_bendle_answers_trigger();
 --   drop function if exists public.bendle_strip_answers(jsonb);
+--   drop function if exists public.bendle_slide_leaks(jsonb);
 --   drop function if exists public.get_bendle_song_for_show(text, text);
 --   drop policy if exists "host read bendle_songs" on public.bendle_songs;
 --   create policy "public read bendle_songs" on public.bendle_songs for select to public using (true);
@@ -37,8 +40,20 @@ create policy "host read bendle_songs" on public.bendle_songs
   for select to public
   using (coalesce((((select auth.jwt()) -> 'app_metadata') ->> 'host_verified')::boolean, false));
 
--- 2. Strip `answer` from Bendle step slides. A slides value that is not a
+-- 2. Strip the song from Bendle step slides. A slides value that is not a
 -- json array passes through untouched.
+-- True when this slide holds something phones must not see yet.
+create or replace function public.bendle_slide_leaks(p_slide jsonb)
+returns boolean
+language sql
+immutable
+set search_path = public
+as $$
+  select coalesce(p_slide->'data'->'shinyInputSchema'->>'type' = 'bendle'
+    and (p_slide->'data' ? 'answer'
+         or (p_slide->'data' ? 'bendleAnswer' and p_slide->'data'->>'bendleRevealed' is distinct from 'true')), false)
+$$;
+
 create or replace function public.bendle_strip_answers(p_slides jsonb)
 returns jsonb
 language sql
@@ -47,14 +62,12 @@ set search_path = public
 as $$
   select case
     when jsonb_typeof(p_slides) is distinct from 'array' then p_slides
-    when not exists (
-      select 1 from jsonb_array_elements(p_slides) sl
-      where sl->'data'->'shinyInputSchema'->>'type' = 'bendle' and sl->'data' ? 'answer'
-    ) then p_slides
+    when not exists (select 1 from jsonb_array_elements(p_slides) sl where public.bendle_slide_leaks(sl)) then p_slides
     else (
       select jsonb_agg(
-        case when sl->'data'->'shinyInputSchema'->>'type' = 'bendle' and sl->'data' ? 'answer'
-             then jsonb_set(sl, '{data}', (sl->'data') - 'answer')
+        case when public.bendle_slide_leaks(sl)
+             then jsonb_set(sl, '{data}', (sl->'data') - 'answer'
+                    - case when sl->'data'->>'bendleRevealed' = 'true' then '' else 'bendleAnswer' end)
              else sl end
         order by ord)
       from jsonb_array_elements(p_slides) with ordinality as t(sl, ord)
@@ -79,14 +92,27 @@ create trigger shows_strip_bendle_answers
   for each row
   execute function public.strip_bendle_answers_trigger();
 
--- One-off clean of every saved show (the trigger does the work).
-update public.shows
-set slides = slides
-where jsonb_typeof(slides) = 'array'
-  and exists (
-    select 1 from jsonb_array_elements(slides) sl
-    where sl->'data'->'shinyInputSchema'->>'type' = 'bendle' and sl->'data' ? 'answer'
-  );
+-- One-off clean of every saved show (the trigger does the work). updated_at
+-- is left alone: /host treats a recently updated live show as one to resume,
+-- so bumping it would pull a stale show back into live mode. The disable is
+-- part of this migration's transaction (re-enabled before commit).
+do $$
+declare
+  v_guard boolean := exists (
+    select 1 from pg_trigger
+    where tgrelid = 'public.shows'::regclass and tgname = 'shows_set_updated_at' and not tgisinternal);
+begin
+  if v_guard then
+    execute 'alter table public.shows disable trigger shows_set_updated_at';
+  end if;
+  update public.shows
+  set slides = slides
+  where jsonb_typeof(slides) = 'array'
+    and exists (select 1 from jsonb_array_elements(slides) sl where public.bendle_slide_leaks(sl));
+  if v_guard then
+    execute 'alter table public.shows enable trigger shows_set_updated_at';
+  end if;
+end $$;
 
 -- 3. The TV's read. Null unless p_slide_id is a Bendle step of p_show_id.
 create or replace function public.get_bendle_song_for_show(p_show_id text, p_slide_id text)

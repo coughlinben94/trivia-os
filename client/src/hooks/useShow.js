@@ -13,6 +13,7 @@ import { HOST_PHOTOS_BUCKET, listHostPhotos } from '../lib/hostPhotos.js'
 import { archiveShow } from '../lib/questionRows.js'
 import {
   withEntryState,
+  withPhoneStateCleared,
   bakeTeamPickerParts as bakeParts,
   computeNextStep,
   computePrevStep,
@@ -741,7 +742,9 @@ export function useShow() {
     const sorted = sortedSlides(show)
     const first = sorted[0] ?? null
     const now = new Date().toISOString()
-    const bakedSlides = await bakeTeamPickerParts(show.slides, first)
+    // A fresh start: no slide keeps a rehearsal's locks, reveals or results
+    // (a revealed Bendle's answer would otherwise reach phones before the reveal).
+    const bakedSlides = withPhoneStateCleared(await bakeTeamPickerParts(show.slides, first))
     const newSlides = withEntryState(bakedSlides, bakedSlides.find(s => s.id === first?.id) ?? first, { currentPart: 0 })
     const goLivePatch = withAudioReset({
       slides: newSlides,

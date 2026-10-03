@@ -80,6 +80,8 @@ export function slideToArchiveRow(slide, show) {
       // to, not data.isShiny, decides the archived `type`).
       // Pin It's true spot lives in data.pinAnswer, which the bank has no column for.
       if (data.shinyInputSchema?.type === 'pin') return null
+      // Bendle slides carry no answer (the song stays host-only in bendle_songs), so a row would be a bare "Name that song".
+      if (data.shinyInputSchema?.type === 'bendle') return null
       if (blank(data.text) && blank(data.answer)) return null
       const type = data.isShiny
         ? 'shiny'

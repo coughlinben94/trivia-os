@@ -44,3 +44,10 @@ describe('questionRows — pin it', () => {
     expect(slideToArchiveRow(slide, show)).not.toBeNull()
   })
 })
+
+describe('questionRows — bendle', () => {
+  it('skips Bendle step slides: the song lives in bendle_songs, not the slide', () => {
+    const slide = { id: 'b1', type: 'question', data: { isShiny: true, shinyInputSchema: { type: 'bendle' }, bendleStepIndex: 0, text: 'Name that song' } }
+    expect(slideToArchiveRow(slide, { id: 's', title: 'T', rounds: [] })).toBeNull()
+  })
+})

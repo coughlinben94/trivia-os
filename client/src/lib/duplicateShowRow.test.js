@@ -30,3 +30,26 @@ describe('duplicateShowRow', () => {
     expect(original.special_event.timer.id).toBe('t1')
   })
 })
+
+describe('duplicateShowRow: phone-mechanic state (a rehearsed Bendle must not leak in the copy)', () => {
+  const bendle = (id, i, extra = {}) => ({ id, type: 'question', data: { isShiny: true, shinyInputSchema: { type: 'bendle' }, shinyGroupId: 'g1', bendleSongId: 'bnd_1', bendleStepIndex: i, ...extra } })
+  const rehearsed = {
+    ...original,
+    slides: [
+      bendle('s1', 0), bendle('s2', 1),
+      bendle('s3', 2, { bendleLocked: true, bendleLockedAt: 'x', bendleRevealed: true, bendleAnswer: 'Crazy On You — Heart', bendleResults: [{ teamId: 't' }], bendleOverrides: { t: 30 } }),
+      { id: 'w', type: 'question', data: { isShiny: true, text: 'How many?', wagerGuessesLocked: true, wagerRevealed: true } },
+    ],
+  }
+  const row = duplicateShowRow(rehearsed, { newId: 'show_new', now: '2026-10-08T00:00:00Z' })
+  it('clears every lock, reveal and result field on every slide', () => {
+    const s3 = row.slides.find(s => s.id === 's3').data
+    expect(s3).toMatchObject({ bendleLocked: false, bendleRevealed: false, bendleAnswer: null, bendleResults: null, bendleLockedAt: null, bendleOverrides: null })
+    expect(row.slides.find(s => s.id === 'w').data).toMatchObject({ wagerGuessesLocked: false, wagerRevealed: false, text: 'How many?' })
+    expect(JSON.stringify(row.slides)).not.toContain('Crazy On You')
+  })
+  it('keeps the song pick and leaves the original alone', () => {
+    expect(row.slides.find(s => s.id === 's3').data.bendleSongId).toBe('bnd_1')
+    expect(rehearsed.slides[2].data.bendleRevealed).toBe(true)
+  })
+})

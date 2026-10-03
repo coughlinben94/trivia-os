@@ -78,3 +78,26 @@ describe('going live ends other live shows', () => {
     expect(db.calls.some(c => c.patch.is_live === true)).toBe(true)
   })
 })
+
+describe('goLive starts every phone mechanic fresh (a rehearsed Bendle must not leak)', () => {
+  it('no slide keeps bendleRevealed / bendleAnswer / results, not just the first', async () => {
+    const bendle = (id, order, i, extra = {}) => ({ id, order, type: 'question', data: { isShiny: true, shinyInputSchema: { type: 'bendle' }, shinyGroupId: 'g1', bendleSongId: 'bnd_1', bendleStepIndex: i, ...extra } })
+    db.row = { ...db.row, slides: [
+      { id: 'a', order: 0, type: 'question', data: { questionNumber: 1 } },
+      bendle('s1', 1, 0), bendle('s2', 2, 1),
+      bendle('s3', 3, 2, { bendleLocked: true, bendleRevealed: true, bendleAnswer: 'Crazy On You — Heart', bendleResults: [{ teamId: 't' }] }),
+    ] }
+    const host = document.createElement('div')
+    await act(async () => createRoot(host).render(<Probe />))
+    await flush()
+    await act(async () => { await api.goLive() })
+    await flush()
+    const live = db.calls.find(c => c.table === 'shows' && c.patch.is_live === true)
+    const s3 = live.patch.slides.find(s => s.id === 's3').data
+    expect(s3.bendleRevealed).toBe(false)
+    expect(s3.bendleLocked).toBe(false)
+    expect(s3.bendleAnswer ?? null).toBeNull()
+    expect(s3.bendleResults ?? null).toBeNull()
+    expect(JSON.stringify(live.patch.slides)).not.toContain('Crazy On You')
+  })
+})

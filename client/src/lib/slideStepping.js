@@ -152,18 +152,7 @@ export function withEntryState(slides, slide, { currentPart, protectInProgress =
   // (liveSlideIsInteractive) — left true from a rehearsal, the phones never
   // unlock: the boards see already-locked/revealed and stay on the teaser
   // screen, silently skipping the whole audience-interaction round.
-  const lockPatch = {}
-  if (lockSlide.data?.isShiny && !protectLockedFlags) {
-    for (const m of Object.values(PHONE_MECHANICS)) {
-      for (const f of m.lockFields) {
-        if (lockSlide.data?.[f]) lockPatch[f] = false
-      }
-      if (lockSlide.data?.[m.revealField]) lockPatch[m.revealField] = false
-      for (const f of [...(m.clearFields ?? []), ...(m.freshClearFields ?? [])]) {
-        if (lockSlide.data?.[f] != null) lockPatch[f] = null
-      }
-    }
-  }
+  const lockPatch = lockSlide.data?.isShiny && !protectLockedFlags ? phoneStateResetPatch(lockSlide.data) : {}
   // Fresh entry always re-arms invoke-gated audio too — a stale `invoked:
   // true` from an earlier rehearsal/visit would otherwise skip straight
   // past the silent hold and autoplay again on this new entry.
@@ -407,6 +396,29 @@ export const PHONE_MECHANICS = {
   bendle:   { guard: isBendleShiny, lockHere: d => d.bendleStepIndex === 2, lockFields: ['bendleLocked'], revealField: 'bendleRevealed', clearFields: ['bendleResults', 'bendleLockedAt', 'bendleAnswer'],
             // fresh entry only; Unlock keeps the host's per-team points
             freshClearFields: ['bendleOverrides'] },
+}
+
+// Every PHONE_MECHANICS lock/reveal/result field set on `data`, reset (lock
+// and reveal to false, results to null). Fields that are not set stay absent.
+export function phoneStateResetPatch(data) {
+  const patch = {}
+  for (const m of Object.values(PHONE_MECHANICS)) {
+    for (const f of m.lockFields) if (data?.[f]) patch[f] = false
+    if (data?.[m.revealField]) patch[m.revealField] = false
+    for (const f of [...(m.clearFields ?? []), ...(m.freshClearFields ?? [])]) if (data?.[f] != null) patch[f] = null
+  }
+  return patch
+}
+
+// goLive and a duplicated show start every slide fresh: a rehearsal's
+// bendleRevealed/bendleAnswer (or any other mechanic's lock/results) left on a
+// later slide would otherwise sit in shows.slides, where phones read it.
+export function withPhoneStateCleared(slides) {
+  if (!Array.isArray(slides)) return slides
+  return slides.map(s => {
+    const patch = phoneStateResetPatch(s?.data)
+    return Object.keys(patch).length ? { ...s, data: { ...s.data, ...patch } } : s
+  })
 }
 
 // The slide that holds a mechanic's lock state: the slide itself, or for

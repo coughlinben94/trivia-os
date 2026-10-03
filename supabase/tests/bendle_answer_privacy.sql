@@ -42,13 +42,27 @@ select pg_temp.check((select sl->'data'->>'answer' from public.shows s, jsonb_ar
 select pg_temp.check((select sl->'data'->>'bendleSongId' from public.shows s, jsonb_array_elements(s.slides) sl where s.id = 'bp_show' and sl->>'id' = 's2') = 'bnd_priv', 'bendleSongId was lost');
 select pg_temp.check((select slides from public.shows where id = 'bp_bad') = '{"not":"an array"}'::jsonb, 'malformed slides changed');
 
+-- bendleAnswer (written at the reveal) survives only on a revealed slide: a
+-- stale tab or a rehearsed copy must not publish it before the reveal.
+insert into public.shows (id, title, slides) values ('bp_ans', 'bendleAnswer test', jsonb_build_array(
+  jsonb_build_object('id', 'a1', 'type', 'question', 'data', jsonb_build_object('shinyGroupId', 'ga', 'bendleStepIndex', 2, 'bendleAnswer', 'Crazy On You — Heart', 'shinyInputSchema', jsonb_build_object('type', 'bendle'))),
+  jsonb_build_object('id', 'a2', 'type', 'question', 'data', jsonb_build_object('shinyGroupId', 'gb', 'bendleStepIndex', 2, 'bendleRevealed', true, 'bendleAnswer', 'Africa — Toto', 'shinyInputSchema', jsonb_build_object('type', 'bendle'))),
+  jsonb_build_object('id', 'a3', 'type', 'question', 'data', jsonb_build_object('bendleAnswer', 'not a bendle slide'))
+));
+select pg_temp.check(not (select slides->0->'data' ? 'bendleAnswer' from public.shows where id = 'bp_ans'), 'unrevealed bendleAnswer kept');
+select pg_temp.check((select slides->1->'data'->>'bendleAnswer' from public.shows where id = 'bp_ans') = 'Africa — Toto', 'revealed bendleAnswer stripped');
+select pg_temp.check((select slides->2->'data'->>'bendleAnswer' from public.shows where id = 'bp_ans') = 'not a bendle slide', 'non-Bendle slide touched');
+update public.shows set slides = jsonb_set(slides, '{1,data,bendleRevealed}', 'false') where id = 'bp_ans';
+select pg_temp.check(not (select slides->1->'data' ? 'bendleAnswer' from public.shows where id = 'bp_ans'), 'bendleAnswer kept after the reveal flag went false');
+
 -- An update that puts the answer back (a stale host tab) is stripped too.
 update public.shows set slides = jsonb_set(slides, '{1,data,answer}', '"Crazy On You"') where id = 'bp_show';
 select pg_temp.check(not (select slides->1->'data' ? 'answer' from public.shows where id = 'bp_show'), 'update kept an answer on a Bendle step');
 -- Every saved show is clean (the migration's one-off strip ran).
 select pg_temp.check(not exists (
   select 1 from public.shows s, jsonb_array_elements(case when jsonb_typeof(s.slides) = 'array' then s.slides else '[]'::jsonb end) sl
-  where sl->'data'->'shinyInputSchema'->>'type' = 'bendle' and sl->'data' ? 'answer'
+  where sl->'data'->'shinyInputSchema'->>'type' = 'bendle'
+    and (sl->'data' ? 'answer' or (sl->'data' ? 'bendleAnswer' and sl->'data'->>'bendleRevealed' is distinct from 'true'))
 ), 'a saved show still has a Bendle answer');
 
 -- anon (phones, the TV before PIN): no rows from bendle_songs.

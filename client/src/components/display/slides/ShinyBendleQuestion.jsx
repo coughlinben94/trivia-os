@@ -249,17 +249,25 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
   }, [data.bendleSongId, isPreview])
 
   // The title is not in the cached row (it was read before the reveal), so the
-  // reveal asks again, uncached. A read that races the reveal write and comes
-  // back without it tries again a few times.
+  // reveal asks again, uncached. A read that fails, or races the reveal write
+  // and comes back without it, tries again a few times; then Sentry hears
+  // once. Re-entering the slide (a remount) starts over.
   useEffect(() => {
     if (!revealed || isPreview || !data.bendleSongId) return undefined
     let cancelled = false
     let timer
-    const ask = tries => readSong(show?.id, slide.id).then(row => {
-      if (cancelled) return
-      if (row.title) setNames({ title: row.title, artist: row.artist })
-      else if (tries > 1) timer = setTimeout(() => ask(tries - 1), REVEAL_RETRY_MS)
-    }, e => { if (!cancelled) report('reveal title fetch failed', { songId: data.bendleSongId, error: String(e) }, 'warning', data.bendleSongId) })
+    const ask = tries => {
+      const again = error => {
+        if (cancelled) return
+        if (tries > 1) { timer = setTimeout(() => ask(tries - 1), REVEAL_RETRY_MS); return }
+        report('reveal title missing', { songId: data.bendleSongId, slideId: slide.id, error }, 'warning', `${data.bendleSongId}|${slide.id}`)
+      }
+      readSong(show?.id, slide.id).then(row => {
+        if (cancelled) return
+        if (row.title) setNames({ title: row.title, artist: row.artist })
+        else again('no title (not revealed in the database yet?)')
+      }, e => again(String(e)))
+    }
     ask(REVEAL_TRIES)
     return () => { cancelled = true; clearTimeout(timer) }
   }, [revealed, isPreview, data.bendleSongId, slide.id, show?.id])
