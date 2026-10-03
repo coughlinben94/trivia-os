@@ -363,7 +363,7 @@ const segLen=k=>INNER(ROUTE[k].kind)?BARN_IN:isExit(k)?ILEN[ROUTE[(k+NS-1)%NS].k
 // the shell of each interior: half width w, wall height wh, ridge pk, door half widths (front dF, back dB) and height dh,
 // facade outline (half width fw, eave fh, peak fpk) used to know what the facade hides
 const SHELL={barn:()=>({w:BW,wh:WH,pk:PK,dF:1.6,dB:1.8,dh:3.5,fw:BW+.15,fh:WH,fpk:PK}),
-  shack:v=>{const w=[1.9,2.1,2.0][v];return{w,wh:2.25,pk:3.25,dF:.62,dB:.62,dh:1.95,fw:w+.2,fh:2.3,fpk:3.5}}};
+  shack:v=>{const w=[1.9,2.1,2.0][v];return{w,wh:2.4,pk:3.4,dF:.82,dB:.82,dh:2.18,fw:w+.2,fh:2.45,fpk:3.65}}};
 const S=[0];for(let k=1;k<NS;k++)S.push(S[k-1]+segLen(k));
 const L=S[NS-1]+segLen(0);                 // loop length (arc metres)
 const walkDur=n=>Math.round(DUR*Math.sqrt(segLen(n)/D));
@@ -491,7 +491,7 @@ function litStrip(sh,inner,frac){
 // bark tone of the silhouette layer per species (pale birch is the one light trunk; snags are weathered grey)
 const BARK={dec:'#17140f',pine:'#15120e',birch:'#77736a',snag:'#26231f',oak:'#16120d',apple:'#1a150f'};
 function treeItem(Z,X,w,r,sp='dec',o={}){
-  const sh=treeShape(r,w,sp==='apple'?1.5:Math.abs(X)<4?8:4,sp,o); const inner=X>0?-1:1;
+  const sh=treeShape(r,w,sp==='apple'?1.5:Math.abs(X)<(sp==='oak'?6.5:4)?8:4,sp,o); const inner=X>0?-1:1;
   const LF=0.35,litA=litStrip(sh,inner,LF),top=sh.HS[sh.HS.length-1];
   const edgeAt=h=>{h=Math.min(h,top);const i=Math.max(0,sh.HS.findIndex(v=>v>=h));const e=sh.cx[i]+inner*sh.ww[i]/2;return[e,e-inner*LF*sh.ww[i]]};
   // bark furrows: dark vertical ribbons across the lit side, below 6 m
@@ -737,7 +737,9 @@ function prop(Z,X,body,lit,opts={}){
   // LEAN (per seed and landmark): the whole prop stands crooked, rotated about its foot
   const ln=opts.lean??LEAN,tilt=sh=>ln?rotS(sh,ln,0,0):sh;
   body=body.map(norm).map(tilt);lit=lit.map(norm).map(tilt);const glows=(opts.glows||[]).map(g=>{if(!ln)return g;const[q]=rot([[g.x,g.h]],ln,0,0);return{...g,x:q[0],h:q[1]}});
-  return {grp:'w',Z,X,kind:'lm',veil:[2],op:z=>clamp((ZFAR-z)/FADE),
+  // thru: a doorway the walk passes through lets go of its last metre (the door frame sweeping past the frame edges fades
+  // over 0.45 m instead of being rastered at 10 000 px wide right in front of the lens)
+  return {grp:'w',Z,X,kind:'lm',veil:[2],op:z=>clamp((ZFAR-z)/FADE)*(opts.thru?clamp((z-.75)/.45):1),
     // the light switches on as you come out of the fog, so a landmark two stations ahead never lights up the text box
     // thru: an item the walk passes THROUGH (a doorway): its glows thin out over the last metres instead of
     // swelling into a full-screen haze, so nothing is left to vanish when the camera is past it
@@ -1189,13 +1191,20 @@ function shackFront(Z,b,r){
   if(v===0)body.push({s:[[0,dh+.32,.05],[-.32,dh+.62,.04],[-.42,dh+.85,.03]],c:'#a89c84'},{s:[[0,dh+.32,.05],[.32,dh+.62,.04],[.42,dh+.85,.03]],c:'#a89c84'},{s:[[-.2,dh+.5,.03],[-.12,dh+.72,.025]],c:'#a89c84'},{s:[[.2,dh+.5,.03],[.12,dh+.72,.025]],c:'#a89c84'});
   if(v===1){const x=hs*(dF+.95);body.push({p:[[x-.3,-.05],[x+.3,-.05],[x+.27,.5],[x-.27,.5]],c:'#3a2c1e'},{e:[x,.5,.27,.06],c:'#5a4630'},{s:[[x-.05,.5,.05],[x+.35,1.15,.045]],c:'#4a3a28'},{p:[[x-.12,.46],[x+.1,.46],[x+.08,.62],[x-.12,.66]],c:'#5a5650'})}
   if(v===2)for(let i=0;i<4;i++){const x=(i%2?1:-1)*rr(r,dF+.15,fw);body.push({s:[[x,0,.04],[x+rr(r,-.2,.2),rr(r,.8,1.8),.035],[x+rr(r,-.3,.3),rr(r,1.6,2.2),.03]],c:'#1c2416'})}
-  return prop(Z,0,body,lit,{zr:BDOOR,thru:1,flick:v===0?1:0,glows:[...glows,{x:0,h:.3,r:1.5,c:v===2?'#8094b4':'#ffa850',a:v===2?.1:.1,sy:.35}]})}
+  return doorSplit(Z,dF,body,lit,{zr:BDOOR,thru:1,flick:v===0?1:0,glows:[...glows,{x:0,h:.3,r:1.5,c:v===2?'#8094b4':'#ffa850',a:v===2?.1:.1,sy:.35}]})}
+// a shack's door is small, so its wall stays in the frame until the camera is almost in the doorway: as ONE item the
+// last depth band was rastered at the whole facade's size (60+ Mpx). Split into the wall left of the door, right of it
+// and above it, each item's layer is only as big as its own piece (each still leaves the frame on its own)
+function doorSplit(Z,dw,body,lit,opts,dh=2.18){
+  const cx=sh=>{const pts=sh.s?sh.s.map(q=>[q[0],q[1]]):sh.e?[[sh.e[0],sh.e[1]]]:sh.p;let x=0,y=0;for(const q of pts){x+=q[0];y+=q[1]}return[x/pts.length,y/pts.length]};
+  const part=sh=>{const pts=sh.s?sh.s:sh.e?[[sh.e[0],sh.e[1]-sh.e[3]]]:sh.p;if(Math.min(...pts.map(q=>q[1]))>dh+.2)return 3;const[x]=cx(sh);return Math.abs(x)<dw+.03?1:x<0?0:2};
+  return [0,1,2,3].map(i=>prop(Z,0,body.filter(sh=>part(sh)===i),lit.filter(sh=>part(sh)===i),{...opts,glows:i===1?opts.glows:[],flick:i===1?0:opts.flick}))}
 // the back wall seen from inside: the doorway open onto the moonlit forest
 function shackBack(Z,b){
   const{w,wh,pk,dB,dh}=b,pt=b.pt,c=mix(pt.wall,'#000000',.15),body=[...shWall(w,wh,pk,dB,dh,c)];
   for(let x=-w+.14;x<w;x+=.27){if(Math.abs(x)<dB+.05)continue;body.push({s:[[x,-.05,.04],[x,wh+(pk-wh)*(1-Math.abs(x)/w)-.05,.04]],c:pt.bd})}
   for(const sd of[-1,1])body.push({s:[[sd*(dB+.05),0,.1],[sd*(dB+.05),dh+.05,.1]],c:pt.trim});body.push({s:[[-dB-.12,dh+.05,.1],[dB+.12,dh+.05,.1]],c:pt.trim});
-  return prop(Z,0,body,[],{zr:b.len,thru:1,glows:[{x:0,h:1.1,r:1.4,c:'#8094b4',a:.22,back:1}]})}
+  return doorSplit(Z,dB,body,[],{zr:b.len,thru:1,glows:[{x:0,h:1.1,r:1.4,c:'#8094b4',a:.22,back:1}]})}
 function shRafter(Z,b,broken){const{w,wh,pk}=b,c='#2e2016';
   const body=[{s:[[-w,wh-.08,.13],[w,wh-.08,.13]],c},{s:[[-w-.05,wh,.13],[0,pk,.12]],c:'#26180f'}];
   body.push(broken?{s:[[w+.05,wh,.13],[w*.7,wh+.3,.12],[w*.62,wh-.55,.1]],c:'#26180f'}:{s:[[w+.05,wh,.13],[0,pk,.12]],c:'#26180f'});
@@ -1224,11 +1233,11 @@ function sawhorse(Z,X){const c='#3e2e1e';return prop(Z,X,[{s:[[-.5,0,.06],[-.3,.
 function hangTools(Z,X){return prop(Z,X,[{s:[[-.5,1.9,.04],[.5,1.9,.04]],c:'#2a1e14'},{s:[[-.35,1.88,.04],[-.35,1.1,.04]],c:'#4a3a28'},{p:[[-.45,1.1],[-.2,1.1],[-.22,1.25],[-.45,1.2]],c:'#5a5650'},
   {s:[[.05,1.88,.03],[.35,1.5,.03],[-.2,1.3,.03],[.05,1.88,.03]],c:'#3a2a1a'},{s:[[.35,1.5,.02],[-.2,1.3,.02]],c:'#6a6866'},{s:[[.45,1.88,.04],[.48,1.2,.04]],c:'#3a2a1a'}],[],{})}
 function coat(Z,X){return prop(Z,X,[{s:[[0,1.95,.04],[0,1.88,.04]],c:'#2a1e14'},{p:[[-.12,1.88],[.12,1.88],[.24,1.75],[.27,1.1],[.15,1.05],[0,1.12],[-.15,1.05],[-.27,1.1],[-.24,1.75]],c:'#241a14'},{p:[[-.1,1.86],[.1,1.86],[.12,2.02],[0,2.08],[-.12,2.02]],c:'#2c2018'}],[],{})}
-function moonShaft(Z,X,b){return prop(Z,X,[{p:[[-.9,0],[.9,0],[.75,.04],[-.75,.04]],c:'#2a2c30',o:.5}],[{p:[[-.35,b.pk+.4],[.45,b.pk+.4],[1.0,0],[-.8,0]],c:'#9fb4d0',o:'.09'},{p:[[-.12,b.pk+.4],[.25,b.pk+.4],[.55,0],[-.4,0]],c:'#b8c8e0',o:'.07'}],{glows:[{x:.1,h:.02,r:1.4,c:'#9fb4d0',a:.24,sy:.3}]})}
-function sapling(Z,X){return prop(Z,X,[{s:[[0,0,.12],[.05,1.5,.09],[-.04,2.6,.06],[.08,3.6,.04]],c:'#5e5a52'},{s:[[.03,1.9,.04],[.5,2.5,.03]],c:'#5e5a52'},{s:[[-.02,2.4,.035],[-.45,2.9,.025]],c:'#5e5a52'},
+function moonShaft(Z,X,b){return prop(Z,X,[{p:[[-.9,0],[.9,0],[.75,.04],[-.75,.04]],c:'#2a2c30',o:.5}],[],{glows:[{x:.1,h:1.3,r:.4,c:'#a8bcd8',a:.14,sy:3},{x:.1,h:.02,r:1.4,c:'#9fb4d0',a:.24,sy:.3}]})}
+function sapling(Z,X){return prop(Z,X,[{s:[[0,0,.12],[.05,1.5,.09],[-.04,2.4,.06],[.06,3.1,.04]],c:'#5e5a52'},{s:[[.03,1.9,.04],[.5,2.5,.03]],c:'#5e5a52'},{s:[[-.02,2.4,.035],[-.45,2.9,.025]],c:'#5e5a52'},
   ...[[.0,1.2],[.02,2.0],[-.02,2.9]].map(([x,h])=>({s:[[x-.05,h,.03],[x+.05,h+.01,.03]],c:'#1a1816'}))],[],{})}
 function fallenPlanks(Z,X,r){const b=[];for(let i=0;i<3;i++){const x=rr(r,-.6,.6),a=rr(r,.6,1.1)*(r()<.5?-1:1);b.push({p:rot([[x-.1,0],[x+.1,0],[x+.1,1.8],[x-.1,1.8]],a*.5,x,0),c:mix('#2a2016','#3a2c1e',r())})}return prop(Z,X,b,[],{})}
-function vines(Z,b){const body=[];for(const x of[-1.2,-.4,.5,1.3])body.push({s:[[x,b.wh-.05,.035],[x+.05,b.wh-.6,.03],[x-.04,b.wh-1.1,.02]],c:'#1c2618'});return prop(Z,0,body,[],{})}
+function vines(Z,b){return [-1.5,-1.1,1.2,1.6].map(X=>prop(Z+Math.abs(X)*.4,X,[{s:[[0,b.wh-.05,.035],[.05,b.wh-.6,.03],[-.04,b.wh-1.1,.02]],c:'#1c2618'}],[],{}))}
 // ---------- barn layout extras ----------
 function ladder(Z,X){const body=[{s:[[-.22,0,.07],[-.15,3.4,.06]],c:'#3a2a1a'},{s:[[.22,0,.07],[.15,3.4,.06]],c:'#3a2a1a'}];
   for(let h=.3;h<3.3;h+=.35)body.push({s:[[-.21+h*.02,h,.05],[.21-h*.02,h,.05]],c:'#4a3826'});return prop(Z,X,body,[],{})}
@@ -1305,7 +1314,7 @@ const ITEMS=[], OCC=[], EXCL=[], BARNS=[], LMLIST=[];
       // falling through onto a sapling, a cold stove, a broken cot, fallen planks, vines). One room, low ceiling.
       b.pt=SPAINT[b.v];const{w,wh,pk,len}=b,SB=len/2,second=z=>z>A+.1;
       b.hay=b.v===2?[...Array(30)].map(()=>[A+rr(rb,.4,len-.4),rr(rb,-w+.2,w-.2),rr(rb,0,Math.PI),rr(rb,.15,.3)]):[];
-      add(shackFront(A,b,rngFor(97,SEED,b.k)));add(shackBack(B,b));
+      shackFront(A,b,rngFor(97,SEED,b.k)).forEach(add);shackBack(B,b).forEach(add);
       for(const z of[A+1.3,A+3.5,A+5.7])add(shRafter(z,b,b.v===2&&z>A+3));
       for(let z=A;z<B-.01;z+=SB){const z1=Math.min(z+SB,B);
         for(const sd of[-1,1]){
@@ -1318,7 +1327,7 @@ const ITEMS=[], OCC=[], EXCL=[], BARNS=[], LMLIST=[];
         add(shLantern(A+4.6,1.62*mr,wh-.05,true));add(motes(A+5,1.0*mr,rb))}
       else if(b.v===1){add(sawhorse(A+5.4,-.95*mr));add(hangTools(A+6.3,-1.62*mr));add(coat(A+4.8,1.66*mr));add(shLantern(A+4.6,-1.62*mr,wh-.05,true));
         add(prop(A+6.5,1.25*mr,logEnds(-.55,.55,1.3,rb,7),[],{}));add(prop(A+6.0,.55*mr,[{p:[[-.28,-.05],[.28,-.05],[.25,.55],[-.25,.55]],c:'#3a2c1e'},{e:[0,.55,.25,.06],c:'#5a4630'},{s:[[-.05,.55,.05],[.3,1.15,.045]],c:'#4a3a28'},{p:[[-.12,.5],[.1,.5],[.08,.66],[-.12,.7]],c:'#5a5650'}],[],{}));add(motes(A+5,-1.0*mr,rb))}
-      else{add(moonShaft(A+5,.6*mr,b));add(sapling(A+5.3,.75*mr));add(stove(A+6.4,-1.45*mr,true,b));add(bunk(A+5.8,-1.3*mr,false));add(fallenPlanks(A+4.6,1.4*mr,rb));add(vines(A+3.6,b));add(motes(A+5,.6*mr,rb))}
+      else{add(moonShaft(A+5,1.05*mr,b));add(sapling(A+5.3,1.3*mr));add(stove(A+6.4,-1.45*mr,true,b));add(bunk(A+5.8,-1.3*mr,false));add(fallenPlanks(A+4.6,1.4*mr,rb));vines(A+3.6,b).forEach(add);add(motes(A+5,.6*mr,rb))}
     }
     for(const it of its){const dA=(it.kind==='plane'?it.Z:it.Z)-A;it.dA=dA;
       if(it.kind!=='plane'){const o=it.op;it.op=z=>o(z)*GATE(z-dA)}ITEMS.push(it)}
@@ -1348,14 +1357,14 @@ const ITEMS=[], OCC=[], EXCL=[], BARNS=[], LMLIST=[];
     const dens=DENS[bA]*(1-0)+0,pinSeg=PINS.includes(seg);
     for(let rep=0;rep<Math.round(f);rep++){const o0=rep*D;
       if(orchard){   // an old orchard: rows of gnarled apple trees, some dead, the woods standing back beyond them
-        for(const sd of[-1,1])for(const dz of[1.2,4.6])for(let j=0;j<3;j++){if(r()<.12)continue;const X=sd*(3.3+3.4*j+rr(r,-.25,.25)),Z=Z0+o0+dz+rr(r,-.3,.3);
+        for(const sd of[-1,1])for(const dz of[1.2,4.6])for(let j=0;j<2;j++){if(r()<.12)continue;const X=sd*(3.9+3.4*j+rr(r,-.25,.25)),Z=Z0+o0+dz+rr(r,-.3,.3);
           if(clear(X,Z,.4)&&!inMoon(X,Z))ITEMS.push(treeItem(Z,X,.27,rngFor(seg,rep,j,Math.round(dz*10),sd,SEED),'apple',{dead:r()<.15}))}
         for(let i=0;i<2;i++){const sd=r()<.5?-1:1;add(sd*rr(r,12,17),o0+rr(r,0,D),rr(r,0.4,0.75))}
         continue}
       for(const sd of[-1,1]){
         const off=o0+rr(r,3.0,5.4); let k=rr(r,0.5,0.72); if(pinSeg&&sd>0)k=0.8;
         add(sd*Math.max(2.1,(off-o0)*k),off,rr(r,0.7,1.1),true);                         // near frame trunk
-        const n2=1+Math.floor(r()*2+dens*.6);for(let i=0;i<n2;i++)add(sd*rr(r,3.8,9),o0+rr(r,1.5,6),rr(r,0.45,0.9));
+        const n2=1+Math.floor(r()*2);for(let i=0;i<n2;i++)add(sd*rr(r,3.8,9),o0+rr(r,1.5,6),rr(r,0.45,0.9));
       }
       const nf=Math.round((3+Math.floor(r()*3))*dens);for(let i=0;i<nf;i++){const sd=r()<.5?-1:1;add(sd*rr(r,2.4,16),o0+rr(r,0,D),rr(r,0.35,0.75))}
     }
@@ -1486,7 +1495,7 @@ function lifeBB(it,Zabs,cutU){
     const seg=raw.slice(i0,i2+1),rz=Math.max(ZMIN,raw[i1].z),rs=raw[i1];
     const id='i'+(uid++);XOFF=rs.x-it.X;const g=it.geom(rz,id),pbs=g.pb||[g.bb];
     const ks=seg.map(s=>{const zz=Math.max(s.z,ZMIN),k=rz/zz,tx=(s.x-rs.x*zz/zz)*F/zz-(rs.x*F/rz)*k+rs.x*F/zz,gone=bx=>offBox(bx,k,tx);
-      const t2=(s.x-rs.x)*F/zz,bb=g.bb,on=!(pbs.every(bx=>offBox(bx,k,t2))&&(g.pg||[]).every(([bx,li])=>offBox(bx,k,t2)||(it.lops[li]?it.lops[li](zz):1)<0.01));
+      const t2=(s.x-rs.x)*F/zz,bb=g.bb,on=it.op(zz)>0.002&&!(pbs.every(bx=>offBox(bx,k,t2))&&(g.pg||[]).every(([bx,li])=>offBox(bx,k,t2)||(it.lops[li]?it.lops[li](zz):1)<0.01));
       const hid=on&&hiddenBy(s.u,it.Z,it.X,[VX+(bb[0]-VX)*k+t2,VY+(bb[1]-VY)*k,VX+(bb[2]-VX)*k+t2,VY+(bb[3]-VY)*k]);
       return{u:s.u,k,zz,tx:t2,hid,on:on&&!hid}});
     ks.forEach((s,j)=>{if(s.on&&j<=i1-i0){lastOn=out.length;lastOnBand=out.length}});
