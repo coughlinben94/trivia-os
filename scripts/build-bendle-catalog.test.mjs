@@ -81,7 +81,8 @@ describe('build-bendle-catalog', () => {
   describe('write path (temp dir, never the real public/)', () => {
     const env = { BENDLE_CATALOG_CONTACT: 'me@example.com' }
     const many = Array.from({ length: MIN_ROWS }, (_, i) => b(`Q${i + 10}`, `Song ${i}`, `Artist ${i}`, 3 + (i % 50)))
-    const okFetcher = async () => ok({ results: { bindings: many } })
+    // Rows come back once (first call), not on all 20 band queries: 400k rows made these tests time out under load.
+    const okFetcher = () => { let first = true; return async () => ok({ results: { bindings: first ? (first = false, many) : [] } }) }
     const setup = () => {
       const root = realFs.mkdtempSync(join(tmpdir(), 'bendle-'))
       const publicDir = pathToFileURL(join(root, 'public') + '/')
@@ -95,30 +96,30 @@ describe('build-bendle-catalog', () => {
 
     it('writes catalog + version file and removes the old catalog', async () => {
       const { publicDir, versionFile } = setup()
-      const file = await main({ argv: [], env, fetcher: okFetcher, publicDir, versionFile })
+      const file = await main({ argv: [], env, fetcher: okFetcher(), publicDir, versionFile })
       expect(names(publicDir)).toEqual([file.name])
       expect(realFs.readFileSync(versionFile, 'utf8')).toBe(versionModule(file.name))
     })
     it('creates public/ if missing', async () => {
       const { root, versionFile } = setup()
       const publicDir = pathToFileURL(join(root, 'fresh') + '/')
-      const file = await main({ argv: [], env, fetcher: okFetcher, publicDir, versionFile })
+      const file = await main({ argv: [], env, fetcher: okFetcher(), publicDir, versionFile })
       expect(names(publicDir)).toEqual([file.name])
     })
     it('a failure between steps leaves the old catalog and version module, no .tmp files', async () => {
       const { publicDir, versionFile } = setup()
       const fs = { ...realFs, renameSync: vi.fn(realFs.renameSync) }
       fs.renameSync.mockImplementationOnce(realFs.renameSync).mockImplementationOnce(() => { throw new Error('disk') })
-      await expect(main({ argv: [], env, fetcher: okFetcher, publicDir, versionFile, fs })).rejects.toThrow('disk')
+      await expect(main({ argv: [], env, fetcher: okFetcher(), publicDir, versionFile, fs })).rejects.toThrow('disk')
       expect(names(publicDir)).toEqual(['bendle-catalog.old0000000.json'])
       expect(realFs.readFileSync(versionFile, 'utf8')).toBe(versionModule('bendle-catalog.old0000000.json'))
       expect(realFs.readdirSync(new URL('.', versionFile)).filter(f => f.endsWith('.tmp'))).toEqual([])
     })
     it('re-running with the same data is idempotent', async () => {
       const { publicDir, versionFile } = setup()
-      const a = await main({ argv: [], env, fetcher: okFetcher, publicDir, versionFile })
+      const a = await main({ argv: [], env, fetcher: okFetcher(), publicDir, versionFile })
       const ver = realFs.readFileSync(versionFile, 'utf8')
-      const c = await main({ argv: [], env, fetcher: okFetcher, publicDir, versionFile })
+      const c = await main({ argv: [], env, fetcher: okFetcher(), publicDir, versionFile })
       expect(c.name).toBe(a.name)
       expect(names(publicDir)).toEqual([a.name])
       expect(realFs.readFileSync(versionFile, 'utf8')).toBe(ver)
@@ -126,7 +127,7 @@ describe('build-bendle-catalog', () => {
     it('--dry-run touches no files', async () => {
       const { publicDir, versionFile } = setup()
       const fs = Object.fromEntries(['mkdirSync', 'writeFileSync', 'renameSync', 'unlinkSync', 'rmSync'].map(k => [k, vi.fn()]))
-      await main({ argv: ['--dry-run'], env, fetcher: okFetcher, publicDir, versionFile, fs: { ...realFs, ...fs } })
+      await main({ argv: ['--dry-run'], env, fetcher: okFetcher(), publicDir, versionFile, fs: { ...realFs, ...fs } })
       for (const k in fs) expect(fs[k]).not.toHaveBeenCalled()
       expect(names(publicDir)).toEqual(['bendle-catalog.old0000000.json'])
     })
