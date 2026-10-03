@@ -167,7 +167,7 @@ async function sampleWalk(a, framesDir) {
   const page = await openPage(), api = page.api
   await page.evaluate(([api, a]) => window[api].jump(a), [api, a])
   await freeze(page, 0)
-  const dur = await page.evaluate(([api, a]) => api === '__route' ? window.__route.walkDur((a + 1) % 13)
+  const dur = await page.evaluate(([api, a]) => api === '__route' ? window.__route.walkDur((a + 1) % window.__route.stations)
     : parseFloat(getComputedStyle(document.getElementById('stage')).getPropertyValue('--walk')), [api, a])
   const shots = [{ t: 'rest', png: await shotPng(page, REBUILD_SETTLE) }]
   await page.evaluate(api => window[api].advance(), api)

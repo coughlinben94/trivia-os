@@ -7,7 +7,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i < 0 ? d : args[i + 1] }
 const b = await chromium.launch({ args: ['--use-angle=metal', '--enable-gpu-rasterization', '--ignore-gpu-blocklist', '--force-gpu-mem-available-mb=4096'] })
 const p = await b.newPage({ viewport: { width: 1920, height: 1080 } })
-await p.goto(pathToFileURL(path.join(ROOT, 'concepts/haunted-forest-route-v4.html')).href + `?seed=${opt('--seed', '7')}&bare#s=${opt('--from', '4')}`)
+await p.goto(opt('--url', pathToFileURL(path.join(ROOT, 'concepts/haunted-forest-route-v4.html')).href) + `?seed=${opt('--seed', '7')}&bare#s=${opt('--from', '4')}`)
 await p.waitForFunction(() => window.__route); await p.waitForTimeout(1500)
 const snap = () => p.evaluate(() => {
   const by = {}, top = []; let anims = document.getElementById('stage').getAnimations({ subtree: true }).length, px = 0
