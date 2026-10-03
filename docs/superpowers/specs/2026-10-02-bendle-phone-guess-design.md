@@ -22,6 +22,7 @@ Today a Bendle team writes its guess on paper and the host walks the room to rea
 - Rank = Wikipedia article count (CC0). Search ranks by it.
 - Refresh is a manual rerun a few times a year. No server, table, or API route is involved at show time. No credit line is required (CC0); a small "Song list: Wikidata (CC0)" footer is optional.
 - Known gaps: very new songs and songs Wikidata lacks a performer for (e.g. Uptown Funk). The typed-guess path covers these.
+- Fail-safe (2026-10-03): when the host picks a song in the Bendle builder, it checks the list (same normalized title+artist key as the build) and, if the song is missing, adds it to `bendle_song_extras` through the host-only RPC `add_bendle_song_extra` (migration `20261002130000_bendle_song_extras.sql`). The builder shows "In song list", "Added to song list", or an error with Retry; a failure never blocks the slide. Phones merge the extras into search (a failed extras load leaves the main list working). Rows carry no show or date, so nothing marks tonight's answer. A song with no artist cannot be added; teams type its title.
 
 ## Rules
 

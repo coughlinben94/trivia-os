@@ -29,6 +29,7 @@ import { DEFAULT_CHOICE_POINTS } from '../../lib/choiceScoring.js'
 import { DEFAULT_DROP_TOTAL } from '../../lib/dropScoring.js'
 import { WAGER_TIERS, parseWagerNumber } from '../../lib/wagerScoring.js'
 import { DEFAULT_STEP_ORDER, STEM_LABELS, AVAILABLE_STEMS, buildBendleTiers } from '../../lib/bendleScoring.js'
+import BendleSongListStatus from './BendleSongListStatus.jsx'
 import { getHuesCuesGrid, HUES_CUES_COLS, nearestHuesCuesCell } from '../../lib/huesCuesGrid.js'
 import { useTheme } from '../shared/ThemeProvider.jsx'
 import { overflowsBox, QUESTION_BOX } from '../../lib/autoFitText.js'
@@ -2184,7 +2185,7 @@ function BendleBuilder({ songId, onChangeSongId, tierOrder, onChangeTierOrder, s
   const [songs, setSongs] = useState([])
   useEffect(() => {
     let cancelled = false
-    supabase.from('bendle_songs').select('id, title, answer, aliases, guitar_url').eq('status', 'ready').order('title')
+    supabase.from('bendle_songs').select('id, title, answer, aliases, artist, guitar_url').eq('status', 'ready').order('title')
       .then(({ data }) => { if (!cancelled) setSongs(data ?? []) })
     return () => { cancelled = true }
   }, [])
@@ -2227,6 +2228,8 @@ function BendleBuilder({ songId, onChangeSongId, tierOrder, onChangeTierOrder, s
         {!selected && (
           <p className="text-xs text-amber-600 mt-1">⚠️ Pick a song — without one this slide has no audio to play.</p>
         )}
+        {/* Makes sure teams can find this song in the phone song list; adds it if missing. */}
+        {selected && <BendleSongListStatus song={selected} />}
       </div>
       <div>
         <label className="block text-xs font-medium text-gray-700 mb-1">Instrument order</label>

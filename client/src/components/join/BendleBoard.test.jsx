@@ -4,8 +4,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 
-const db = { rows: [], insertError: null, inserts: [], readGate: null }
-vi.mock('../../lib/supabase.js', () => ({ supabase: { from: () => ({
+const db = { rows: [], insertError: null, inserts: [], readGate: null, extras: [], extrasError: null }
+vi.mock('../../lib/supabase.js', () => ({ supabase: { from: table => table === 'bendle_song_extras' ? ({
+  select: async () => (db.extrasError ? { data: null, error: db.extrasError } : { data: db.extras, error: null }),
+}) : ({
   select: () => ({ eq: () => ({ in: (_c, ids) => {
     const res = { data: db.rows.filter(r => ids.includes(r.slide_id)), error: null } // snapshot at call time
     return db.readGate ? db.readGate.then(() => res) : Promise.resolve(res)
@@ -23,7 +25,7 @@ const step = (i, extra = {}) => ({ id: `s${i + 1}`, showId: 'show1', type: 'ques
 const team = { id: 'p1', showId: 'show1' }
 let root, host, lastProps
 beforeEach(() => {
-  db.rows = []; db.insertError = null; db.inserts = []; db.readGate = null
+  db.rows = []; db.insertError = null; db.inserts = []; db.readGate = null; db.extras = []; db.extrasError = null
   globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ rows: ROWS }) }))
 })
 afterEach(() => { act(() => root?.unmount()); host?.remove(); vi.useRealTimers() })
@@ -63,6 +65,20 @@ describe('<BendleBoard>', () => {
     expect(host.querySelector('[role="status"] svg[data-mark="right"]')).not.toBeNull()
     expect(onAnswered).toHaveBeenLastCalledWith(true)
     expect(host.textContent).not.toMatch(/correct|wrong/i)
+  })
+  it('a song the host added (extras) is searchable on the phone', async () => {
+    db.extras = [{ title: 'Uptown Funk', artist: 'Mark Ronson', norm_key: 'uptown funk|mark ronson' }]
+    await render(step(0))
+    await type('Search for the song', 'uptown')
+    await act(async () => button('Uptown Funk').click())
+    expect(host.textContent).toContain('Your guess: Uptown Funk — Mark Ronson')
+  })
+  it('an extras load failure leaves catalog search working', async () => {
+    db.extrasError = { message: 'boom' }
+    await render(step(0))
+    await type('Search for the song', 'mr bright')
+    expect(button('Mr. Brightside')).toBeTruthy()
+    expect(host.textContent).not.toContain('Song list did not load')
   })
   it('"Use what I typed" with an optional artist', async () => {
     await render(step(1))
