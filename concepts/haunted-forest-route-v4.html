@@ -738,8 +738,8 @@ function prop(Z,X,body,lit,opts={}){
   const ln=opts.lean??LEAN,tilt=sh=>ln?rotS(sh,ln,0,0):sh;
   body=body.map(norm).map(tilt);lit=lit.map(norm).map(tilt);const glows=(opts.glows||[]).map(g=>{if(!ln)return g;const[q]=rot([[g.x,g.h]],ln,0,0);return{...g,x:q[0],h:q[1]}});
   // thru: a doorway the walk passes through lets go of its last metre (the door frame sweeping past the frame edges fades
-  // over 0.45 m instead of being rastered at 10 000 px wide right in front of the lens)
-  return {grp:'w',Z,X,kind:'lm',veil:[2],op:z=>clamp((ZFAR-z)/FADE)*(opts.thru?clamp((z-.75)/.45):1),
+  // over 0.9 m instead of being rastered at 10 000 px wide right in front of the lens)
+  return {grp:'w',Z,X,kind:'lm',veil:[2],op:z=>clamp((ZFAR-z)/FADE)*(opts.thru?clamp((z-.7)/.9):1),
     // the light switches on as you come out of the fog, so a landmark two stations ahead never lights up the text box
     // thru: an item the walk passes THROUGH (a doorway): its glows thin out over the last metres instead of
     // swelling into a full-screen haze, so nothing is left to vanish when the camera is past it
@@ -1351,7 +1351,9 @@ const ITEMS=[], OCC=[], EXCL=[], BARNS=[], LMLIST=[];
     const spAt=(off,rs)=>{const t=off/len;if(stand&&(t<.75||!standN))return pickW(stand,rs);if(standN&&t>.4)return pickW(standN,rs);
       const wa=MIX[bA],wb=MIX[bB],m={};for(const k in wa)m[k]=(m[k]||0)+wa[k]*(1-t);for(const k in wb)m[k]=(m[k]||0)+wb[k]*t;return pickW(m,rs)};
     const add=(X,off,w,near)=>{X=Math.sign(X)*Math.max(Math.abs(X),2.3+w*0.6);const Z=Z0+off;if(!clear(X,Z,w)||inMoon(X,Z))return;const tr=rngFor(seg,Math.round(off*97),Math.round(X*131),SEED);
-      const sp=spAt(off,tr),o={moss:moss||(bA==='bog'&&tr()<.3)};
+      // no pale birch within 16 m past an interior: seen through a doorway (the shell shows outside items only once they
+      // overlap the door) a pale trunk would switch on as a visible pop where a dark one does not
+      let sp=spAt(off,tr);if(sp==='birch'&&BARNS.some(b=>((Z-b.A)%L+L)%L<b.len+16))sp='dec';const o={moss:moss||(bA==='bog'&&tr()<.3)};
       if(sp==='snag'&&!near&&tr()<.3)o.stump=1;if(!near&&tr()<.1)o.lean=Math.sign(X)*rr(tr,.1,.2);
       ITEMS.push(treeItem(Z,X,w,tr,sp,o))};
     const dens=DENS[bA]*(1-0)+0,pinSeg=PINS.includes(seg);
