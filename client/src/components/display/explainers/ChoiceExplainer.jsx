@@ -15,12 +15,12 @@ const SAMPLES = [
     variant: 'single',
     heading: 'Pick one',
     glyph: '○',
-    prompt: 'Which is spelled right?',
-    options: [{ id: 'a', label: 'Neccessary' }, { id: 'b', label: 'Necessary' }],
-    correctIds: ['b'],
+    prompt: 'Which is a fruit?',
+    options: [{ id: 'apple', label: 'Apple' }, { id: 'granite', label: 'Granite' }],
+    correctIds: ['apple'],
     answers: [
-      { ids: ['b'], note: 'Right pick' },
-      { ids: ['a'], note: 'Wrong pick' },
+      { ids: ['apple'], note: 'Right pick' },
+      { ids: ['granite'], note: 'Wrong pick' },
     ],
   },
   {
@@ -68,7 +68,7 @@ export default function ChoiceExplainer({ data } = {}) {
           ? 'Example: a pick-every-one question. Only the exact right picks score; a missing or extra pick scores 0.'
           : 'Example: a pick-one question and a pick-every-one question. Only the exact right picks score; a wrong, missing or extra pick scores 0.'}
       style={{
-        width: variant ? 'min(100%, 1000px)' : 'min(100%, 1600px)', display: 'flex',
+        width: variant ? 'min(100%, max(1000px, 93vmin))' : 'min(100%, max(1600px, 148vmin))', display: 'flex',
         alignItems: 'center', justifyContent: 'center', gap: '4vmin',
       }}
     >
@@ -77,10 +77,10 @@ export default function ChoiceExplainer({ data } = {}) {
         const labelOf = id => sample.options.find(o => o.id === id).label
         return (
           <div key={sample.key} style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.6vmin' }}>
-            <motion.p {...enter(base)} style={{ margin: 0, fontFamily: displayFont, fontSize: 'clamp(2rem, 3.4vmin, 3.8rem)', lineHeight: 1, color: SHINY_GOLD }}>
+            <motion.p {...enter(base)} style={{ margin: 0, fontFamily: displayFont, fontSize: 'max(2rem, 3.4vmin)', lineHeight: 1, color: SHINY_GOLD }}>
               {sample.heading}
             </motion.p>
-            <motion.p {...enter(base + 0.06)} style={{ margin: 0, fontSize: 'clamp(1.4rem, 2.8vmin, 2.9rem)', color: text }}>
+            <motion.p {...enter(base + 0.06)} style={{ margin: 0, fontSize: 'max(1.4rem, 2.8vmin)', color: text }}>
               {sample.prompt}
             </motion.p>
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '1vmin' }}>
@@ -88,7 +88,7 @@ export default function ChoiceExplainer({ data } = {}) {
                 <motion.span key={opt.id} {...enter(base + 0.12 + i * 0.05)} style={{
                   padding: '0.9vmin 2vmin', borderRadius: 999, whiteSpace: 'nowrap',
                   background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.22)',
-                  fontSize: 'clamp(1.3rem, 2.6vmin, 2.7rem)', color: text,
+                  fontSize: 'max(1.3rem, 2.6vmin)', color: text,
                 }}>
                   <span aria-hidden="true" style={{ marginRight: '0.4em', opacity: 0.7 }}>{sample.glyph}</span>
                   {opt.label}
@@ -100,13 +100,14 @@ export default function ChoiceExplainer({ data } = {}) {
                 const scored = answer.points > 0
                 return (
                   <motion.div key={answer.note} {...enter(base + 0.45 + row * 0.2, 10)} style={{
-                    display: 'grid', gridTemplateColumns: 'auto 1fr auto', alignItems: 'center', columnGap: '1.6vmin',
+                    // Fixed mark and result columns so ✓ and ✗ rows line up.
+                    display: 'grid', gridTemplateColumns: '1.6em 1fr minmax(4.5em, auto)', alignItems: 'center', columnGap: '1.6vmin',
                     padding: '1.1vmin 2vmin', borderRadius: 12, textAlign: 'left',
                     background: scored ? `${SHINY_GOLD}24` : 'rgba(255,255,255,0.05)',
                     outline: scored ? `2px solid ${SHINY_GOLD}aa` : 'none', outlineOffset: '-2px',
-                    fontSize: 'clamp(1.3rem, 2.5vmin, 2.6rem)', color: text,
+                    fontSize: 'max(1.3rem, 2.5vmin)', color: text,
                   }}>
-                    <span aria-hidden="true" style={{ fontFamily: displayFont, fontSize: '1.4em', lineHeight: 1, color: scored ? SHINY_GOLD : `${text}c8` }}>
+                    <span aria-hidden="true" style={{ justifySelf: 'center', fontFamily: displayFont, fontSize: '1.4em', lineHeight: 1, color: scored ? SHINY_GOLD : `${text}c8` }}>
                       {scored ? '✓' : '✗'}
                     </span>
                     <span>

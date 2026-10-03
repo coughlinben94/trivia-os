@@ -504,6 +504,18 @@ function partStepPatch(slides, curSlide, newPart) {
   return { slides: newSlides, answer_reveal: false, ...(mark ? { audio_playing: mark } : {}) }
 }
 
+// A shiny-title with a rules card (two beats) must never be LEFT on beat 1:
+// the anon break advance (Display.jsx advanceAfterBreak, advance_show RPC) can
+// only write the index, so it would land back on a stale beat 1 and open on
+// the rules card instead of the announce card. Scoped to shiny-title on
+// purpose: other multi-part slides (series questions, audio parts,
+// team-picker) keep their state when left, exactly as before. Prev still
+// enters a title at its last beat explicitly (computePrevStep).
+function withTitleLeftAtBeat0(slides, leaving) {
+  if (leaving?.type !== 'shiny-title' || !((leaving.data?.currentPart ?? 0) > 0)) return slides
+  return patchSlideData(slides, leaving.id, { currentPart: 0 })
+}
+
 export async function computeNextStep(show, fetchTeamCount) {
   const slides = show?.slides ?? []
   const sorted = sortSlides(slides)
@@ -593,7 +605,7 @@ export async function computeNextStep(show, fetchTeamCount) {
   // steps into its first content sibling via the plain "shiny-title is a
   // plain slide" branch above.
   const targetSlide = sorted[target]
-  const bakedSlides = await bakeTeamPickerParts(slides, targetSlide, fetchTeamCount)
+  const bakedSlides = await bakeTeamPickerParts(withTitleLeftAtBeat0(slides, curSlide), targetSlide, fetchTeamCount)
   const resolvedNext = bakedSlides.find(s => s.id === targetSlide?.id) ?? targetSlide
   // Walking Prev then Next lands back on a question that was already scored
   // . That's a re-entry:
@@ -682,8 +694,10 @@ export function computeJumpStep(show, target, { furthest = -1, slides = show?.sl
   if (!targetSlide || target < 0) return null
   const resolved = slides.find(s => s.id === targetSlide.id) ?? targetSlide
   const visited = target <= Math.max(furthest, show?.currentSlideIndex ?? 0)
+  const leaving = sorted[show?.currentSlideIndex ?? -1]
+  const left = leaving && leaving.id !== targetSlide.id ? withTitleLeftAtBeat0(slides, slides.find(s => s.id === leaving.id) ?? leaving) : slides
   return {
-    slides: withEntryState(slides, resolved, { currentPart: 0, protectInProgress: visited || isScoredOrStarted(resolved) }),
+    slides: withEntryState(left, resolved, { currentPart: 0, protectInProgress: visited || isScoredOrStarted(resolved) }),
     current_slide_index: target,
     current_slide_id: targetSlide.id,
     answer_reveal: false,

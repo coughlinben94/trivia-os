@@ -6,10 +6,10 @@ import { useTheme } from '../../shared/ThemeProvider.jsx'
 // biggest text on the card; example headings stay at or under ~3.4vmin and no
 // example text goes below ~2.2vmin.
 export const FRAME_TEXT = Object.freeze({
-  action: 'clamp(2.2rem, 4.4vmin, 5rem)',
-  scoringFirst: 'clamp(1.8rem, 3.2vmin, 3.6rem)',
-  scoringRest: 'clamp(1.5rem, 2.7vmin, 3rem)',
-  label: 'clamp(1.1rem, 2.2vmin, 2.4rem)',
+  action: 'max(2.2rem, 4.4vmin)',
+  scoringFirst: 'max(1.8rem, 3.2vmin)',
+  scoringRest: 'max(1.5rem, 2.7vmin)',
+  label: 'max(1.1rem, 2.2vmin)',
 })
 
 // Scale (never above 1) that fits the example block's natural height into the
@@ -63,7 +63,7 @@ export default function ShinyExampleFrame({ action, scoring = [], children }) {
 
       {scoring.length > 0 && (
         <div style={{
-          width: 'min(100%, 1600px)', display: 'flex', flexDirection: 'column',
+          width: 'min(100%, max(1600px, 148vmin))', display: 'flex', flexDirection: 'column',
           alignItems: 'center', gap: '0.6vmin', padding: '1.1vmin 1.5vmin',
           borderTop: `1px solid ${SHINY_GOLD}66`, borderBottom: `1px solid ${SHINY_GOLD}66`,
         }}>

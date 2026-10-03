@@ -69,6 +69,8 @@ export function nextPressGate({ slide, nextSlide, audioPending = false, scoringB
   const steps = revealStepCount(d)
   if (Array.isArray(d?.parts) && steps > 1) {
     const cur = d.currentPart ?? 0
+    // A shiny-title's only part step is its rules card (shinyExplainers.js).
+    if (cur < steps - 1 && slide?.type === 'shiny-title') return { label: 'Show rules card', gate: 'reveal-part' }
     if (cur < steps - 1) return { label: `Reveal ${cur + 2} of ${steps}`, gate: 'reveal-part' }
   }
   const label = landingLabel(nextSlide)

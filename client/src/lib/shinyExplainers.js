@@ -13,14 +13,16 @@ const notSoDifferentPhotos = ['harry', 'niall', 'louis', 'zayn']
   .map(name => `/explainers/not-so-different/${name}.jpg`)
 
 // Thresholds in words, not percentages: wagerTierBar rounds bars up and bumps
-// colliding tiers apart, so in a room of 10 or fewer Sun means beating every
-// other team. "At least" keeps every word a true lower bound; the phone shows
-// the exact head count. A threshold missing here falls back to its percent.
-const WAGER_THRESHOLD_WORDS = { 0.5: 'half', 0.75: 'three-quarters', 0.9: 'nearly all' }
-export const wagerThresholdWords = WAGER_TIERS
-  .map(tier => WAGER_THRESHOLD_WORDS[tier.threshold] ?? `${Math.round(tier.threshold * 100)}%`)
-  .join(' / ')
-const wagerPoints = WAGER_TIERS.map(tier => `+${tier.points}`).join(' / ')
+// colliding tiers apart, so in a room of 10 or fewer answering teams the top
+// tier means beating EVERY other team (from 11 up it is 90%+). "At least"
+// keeps every word a true lower bound; the phone shows the exact head count
+// and greys out tiers a tiny room can't reach.
+const WAGER_THRESHOLD_WORDS = { 0.5: 'half the other teams', 0.75: 'three-quarters' }
+const topTier = WAGER_TIERS[WAGER_TIERS.length - 1]
+const wagerTierWords = tier => tier === topTier
+  ? `all of them (${Math.round(tier.threshold * 100)}% in a big room)`
+  : WAGER_THRESHOLD_WORDS[tier.threshold] ?? `${Math.round(tier.threshold * 100)}%`
+export const wagerScoringLine = `Beat at least ${WAGER_TIERS.map(tier => `${wagerTierWords(tier)}: +${tier.points}`).join(' · ')}.`
 
 const pinPercent = Math.round(100 * PIN_WINNER_FRACTION.numerator / PIN_WINNER_FRACTION.denominator)
 
@@ -38,12 +40,13 @@ export const SHINY_EXPLAINERS = Object.freeze([
     inputType: 'bendle',
     mode: 'rules',
     rendererKey: 'bendle',
-    action: 'Write down the song title as each mix step plays.',
-    // Ben, 2026-10-02: Bendle is 30 / 20 / 10 and the card must show the
-    // grading rule — the step you get it right on sets your points.
+    action: 'The mix adds a layer each step; write the song title down when you know it.',
+    // Owner rule, 2026-10-02: ONE guess per team. The step a team guesses
+    // on sets its points if right (30 / 20 / 10). No penalty and no way of
+    // marking the step is defined in code, so the card states neither.
     scoring: [
-      `Get it right on step 1 for ${BENDLE_STEP_POINTS[0]}, step 2 for ${BENDLE_STEP_POINTS[1]}, step 3 for ${BENDLE_STEP_POINTS[2]}.`,
-      'No phone entry. Ben checks answers by hand.',
+      `One guess per team. Right on step 1: ${BENDLE_STEP_POINTS[0]}. Step 2: ${BENDLE_STEP_POINTS[1]}. Step 3: ${BENDLE_STEP_POINTS[2]}.`,
+      'No phone entry. The host checks answers by hand.',
     ],
     assets: [],
   }),
@@ -63,7 +66,7 @@ export const SHINY_EXPLAINERS = Object.freeze([
     inputType: 'hues-cues',
     mode: 'rules',
     rendererKey: 'huesCues',
-    action: 'Choose a color square on your phone and lock it in.',
+    action: 'Pick the letter and number of your color on your phone, then lock it in.',
     scoring: [
       `Exact +${HUES_CUES_SCORE_BANDS[0].points} · one square +${HUES_CUES_SCORE_BANDS[1].points} · two squares +${HUES_CUES_SCORE_BANDS[2].points}.`,
       'Diagonal neighbors count as one square.',
@@ -76,8 +79,9 @@ export const SHINY_EXPLAINERS = Object.freeze([
     rendererKey: 'wager',
     action: 'Pick a wager before you see the question, then enter a number on your phone and lock it in.',
     scoring: [
-      `Beat at least ${wagerThresholdWords} of the other teams to win ${wagerPoints}.`,
-      `Ties don't count as beating. Miss your bar: 0. No wager = ${getWagerTier(DEFAULT_TIER_ID).label}.`,
+      wagerScoringLine,
+      // No number entered: scoreWagerRound scores 0 and leaves the team out of the pool.
+      `Ties don't count as beating. Miss your bar or enter no number: 0. No wager = ${getWagerTier(DEFAULT_TIER_ID).label}.`,
     ],
     assets: [],
   }),
@@ -129,7 +133,7 @@ export const SHINY_EXPLAINERS = Object.freeze([
     inputType: 'choice',
     mode: 'rules',
     rendererKey: 'choice',
-    action: 'Tap your answer on your phone and lock it in; your phone says to pick one or every one that fits.',
+    action: 'Tap your answer on your phone, then lock it in. Your phone says pick one or pick all.',
     scoring: [
       'All or nothing: only the exact right picks score.',
       'One wrong, missing or extra pick scores 0.',

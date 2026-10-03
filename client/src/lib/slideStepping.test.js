@@ -1001,6 +1001,28 @@ describe('two-beat shiny-title (explainer)', () => {
     expect(patch.current_slide_index).toBe(0)
     expect(dataOf(patch, 't').currentPart).toBe(1)
   })
+  it('leaving the title resets it to beat 0, so an index-only advance (break RPC) lands on the announce card', async () => {
+    const slides = [twoBeat(1), slide('a', 1, 'question', grp)]
+    const patch = await computeNextStep(live(slides, 0), noTeams)
+    expect(patch.current_slide_index).toBe(1)
+    expect(dataOf(patch, 't').currentPart).toBe(0)
+    // Prev back still enters at the rules card (explicit lastPartIdx).
+    const back = await computePrevStep(live(patch.slides, 1), noTeams)
+    expect(dataOf(back, 't').currentPart).toBe(1)
+  })
+  it('leaving any other multi-part slide keeps its part (scoped to shiny-title)', async () => {
+    const slides = [slide('s', 0, 'question', { isShiny: true, parts: [{}, {}, {}], currentPart: 2 }), slide('a', 1)]
+    const patch = await computeNextStep(live(slides, 0), noTeams)
+    expect(patch.current_slide_index).toBe(1)
+    expect(dataOf(patch, 's').currentPart).toBe(2)
+  })
+  it('jumping away from the title on its rules card resets it to beat 0', async () => {
+    const { computeJumpStep } = await import('./slideStepping.js')
+    const slides = [twoBeat(1), slide('a', 1, 'question', grp), slide('b', 2)]
+    const patch = computeJumpStep({ slides, currentSlideIndex: 0 }, 2)
+    expect(dataOf(patch, 't').currentPart).toBe(0)
+    expect(patch.current_slide_index).toBe(2)
+  })
   it('Prev on the explainer beat goes back to the title beat, same slide', async () => {
     const slides = [twoBeat(1), slide('a', 1, 'question', grp)]
     const patch = await computePrevStep(live(slides, 0), noTeams)
