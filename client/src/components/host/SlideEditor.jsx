@@ -1170,7 +1170,8 @@ function QuestionEditor({ data, onChange, onBatchChange, onChangeBendleField, up
               field too gave the host two "what's correct" controls on
               screen, only one of which scoring ever reads — found live
               2026-09-06 walking through a real Mandela Effect slide. */}
-          {schema.type !== 'choice' && schema.type !== 'drop' && schema.type !== 'hues-cues' && schema.type !== 'movie-chain' && (
+          {/* Not for Bendle: the song lives in bendle_songs, and a typed answer here would sit in shows.slides where phones read it (the DB strips it anyway, 20261002140000). */}
+          {schema.type !== 'choice' && schema.type !== 'drop' && schema.type !== 'hues-cues' && schema.type !== 'movie-chain' && schema.type !== 'bendle' && (
             <Field
               label={schema.type === 'wager' ? 'Answer — the true number' : schema.type === 'pin' ? 'Place name' : 'Answer'}
               hint={schema.type === 'wager' ? 'Every guess is scored by how close it lands to this. Must be a number.' : schema.type === 'pin' ? 'Shown on the TV at the reveal, e.g. "Apple Valley, MN". The true spot is set on the map below.' : undefined}

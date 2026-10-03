@@ -98,22 +98,32 @@ async function clipByteRange(url, fromSec, toSec) {
 // ponytail: cleared per song, never size-bounded — one song is ~5 x 11 MB of
 // PCM. Add an LRU if a show ever runs Bendle songs back to back.
 const SONG_ROW_TTL_MS = 20000 // host edits to start/end marks reach the TV within ~20 s
+const REVEAL_TRIES = 3
+const REVEAL_RETRY_MS = 1500
 const songRows = new Map() // id -> { p: Promise<row>, at, last: row|null }
 const clips = new Map() // `${url}|${from}|${to}` -> Promise<{ buffer, clipStartSec }>
 let clipsSongId = null
 
-function getSong(id) {
-  const hit = songRows.get(id)
-  if (hit && Date.now() - hit.at < SONG_ROW_TTL_MS) return hit.p
-  const fetchRow = retry(async () => {
+// The TV is anon until the host PIN, and bendle_songs is host-only: the song
+// comes from get_bendle_song_for_show (migration 20261002140000), which gives
+// stems and marks always and the title/artist only once the group is revealed.
+function readSong(showId, slideId) {
+  return retry(async () => {
     const ac = new AbortController()
     const timer = setTimeout(() => ac.abort(), SONG_FETCH_TIMEOUT_MS)
     try {
-      const { data, error } = await supabase.from('bendle_songs').select('*').eq('id', id).abortSignal(ac.signal).single()
+      const { data, error } = await supabase.rpc('get_bendle_song_for_show', { p_show_id: showId, p_slide_id: slideId }).abortSignal(ac.signal)
       if (error || !data) throw error ?? new Error('song row missing')
       return data
     } finally { clearTimeout(timer) }
   }, 'song fetch')
+}
+
+// Cached by song id: the three step slides share one row (stems + marks).
+function getSong(id, showId, slideId) {
+  const hit = songRows.get(id)
+  if (hit && Date.now() - hit.at < SONG_ROW_TTL_MS) return hit.p
+  const fetchRow = readSong(showId, slideId)
   // A refresh that fails keeps serving the last good row: an edit that cannot
   // be picked up beats a beat that cannot start.
   const p = hit?.last ? fetchRow.catch(() => hit.last) : fetchRow
@@ -194,6 +204,7 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
   const shouldReduceMotion = useReducedMotion()
 
   const [song, setSong] = useState(null)
+  const [names, setNames] = useState(null) // { title, artist }, read fresh at the reveal
   const [loadState, setLoadState] = useState('loading') // 'loading' | 'ready' | 'error'
   const readyRef = useRef(false)
   const startedRef = useRef(false)
@@ -227,7 +238,7 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
     let cancelled = false
     if (!data.bendleSongId) { setLoadState('error'); return }
     if (isPreview) return // the host's build-mode preview loads no audio, so it needs no song row
-    getSong(data.bendleSongId)
+    getSong(data.bendleSongId, show?.id, slide.id)
       .then(row => { if (!cancelled) setSong(row) })
       .catch(e => {
         if (cancelled) return
@@ -236,6 +247,22 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
       })
     return () => { cancelled = true }
   }, [data.bendleSongId, isPreview])
+
+  // The title is not in the cached row (it was read before the reveal), so the
+  // reveal asks again, uncached. A read that races the reveal write and comes
+  // back without it tries again a few times.
+  useEffect(() => {
+    if (!revealed || isPreview || !data.bendleSongId) return undefined
+    let cancelled = false
+    let timer
+    const ask = tries => readSong(show?.id, slide.id).then(row => {
+      if (cancelled) return
+      if (row.title) setNames({ title: row.title, artist: row.artist })
+      else if (tries > 1) timer = setTimeout(() => ask(tries - 1), REVEAL_RETRY_MS)
+    }, e => { if (!cancelled) report('reveal title fetch failed', { songId: data.bendleSongId, error: String(e) }, 'warning', data.bendleSongId) })
+    ask(REVEAL_TRIES)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [revealed, isPreview, data.bendleSongId, slide.id, show?.id])
 
   // Loads and plays exactly what this beat should sound like. One effect owns
   // load + play + teardown: the Transport is a global singleton.
@@ -348,7 +375,7 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
         </p>
       )}
 
-      {revealed && song?.title && (
+      {revealed && names?.title && (
         <motion.p
           initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, transform: 'translateY(10px)' }}
           animate={{ opacity: 1, transform: 'translateY(0px)' }}
@@ -358,7 +385,7 @@ export default function ShinyBendleQuestion({ slide, show, theme, isPreview }) {
             color: SHINY_GOLD, textAlign: 'center', maxWidth: 1200,
           }}
         >
-          {song.title}{song.artist ? ` — ${song.artist}` : ''}
+          {names.title}{names.artist ? ` — ${names.artist}` : ''}
         </motion.p>
       )}
 

@@ -255,3 +255,20 @@ describe('buildRaceSlide', () => {
     expect(new Set(ids).size).toBe(4)
   })
 })
+
+describe('Bendle wizard slides keep the song secret', () => {
+  it('no step slide carries the answer, title or artist (phones read shows.slides)', () => {
+    const song = { id: 'bnd_1', title: 'Crazy On You (Remastered)', answer: 'Crazy On You', artist: 'Heart', aliases: ['Crazy on You'] }
+    const { slides } = FIXED_SHAPE_KINDS.bendle.buildSlideData({
+      qNum: 1, roundId: 'r1', afterId: null, selectedShinyFmt: baseFmt, shinyQuestion: 'Name that song',
+      bendleSongId: song.id, bendleSongs: [song],
+    })
+    expect(slides).toHaveLength(3)
+    for (const s of slides) {
+      expect(s.data).not.toHaveProperty('answer')
+      expect(s.data.bendleSongId).toBe('bnd_1')
+      const json = JSON.stringify(s.data)
+      for (const secret of ['Crazy On You', 'Heart']) expect(json).not.toContain(secret)
+    }
+  })
+})

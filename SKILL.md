@@ -227,6 +227,8 @@ client/src/
                                  (PHONE_MECHANICS.bendle.lockHere). Points 30/20/10 by the step live when the team locks.
                                  DB trigger guard_bendle_phone_answers: live step only, one row per team per group, no update.
                                  Host Unlock deletes guesses via clear_bendle_group_answers, then reopens.
+                                 Answer privacy (20261002140000): bendle_songs is host-only; slides carry no Bendle `answer` (DB trigger strips it);
+                                 the TV reads get_bendle_song_for_show (title/artist only after the reveal). Stem URLs stay public.
                                  Do not use Quick Entry for a phone-played Bendle (points would count twice).
                                  Spec docs/superpowers/specs/2026-10-02-bendle-phone-guess-design.md, plan docs/superpowers/plans/2026-10-02-bendle-phone-guess.md.
                                  STATUS (branch feat/bendle-phone-guess): not merged, migration not applied to production.

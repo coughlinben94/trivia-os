@@ -269,14 +269,14 @@ export function bendleExtraControls(ctx) {
 // three different slides. one each for each diff step" — not parts on one
 // slide). Teams lock ONE guess on their phones across the three steps
 // (BendleBoard); the lock, results and overrides live on the step-3 slide
-// (PHONE_MECHANICS.bendle, lockHere). Each slide still carries the real
-// `answer` field for the song editor and AnswerRevealOverlay.
+// (PHONE_MECHANICS.bendle, lockHere). No slide carries the song's title,
+// artist or answer: phones read shows.slides, so the song stays in
+// bendle_songs (host-only) until the reveal (migration 20261002140000).
 const BENDLE_STEP_COUNT = 3
 
 // ctx: { qNum, roundId, afterId, selectedShinyFmt, shinyQuestion, bendleSongId, bendleSongs }
 export function buildBendleSlide(ctx) {
   const fmt = ctx.selectedShinyFmt
-  const song = (ctx.bendleSongs ?? []).find(s => s.id === ctx.bendleSongId)
   const slides = Array.from({ length: BENDLE_STEP_COUNT }, (_, i) => ({
     type: 'question',
     roundId: ctx.roundId ?? null,
@@ -295,7 +295,6 @@ export function buildBendleSlide(ctx) {
       bendleTierOrder: null,
       bendleStepIndex: i,
       text:            ctx.shinyQuestion.trim(),
-      answer:          song?.answer ?? '',
     },
   }))
   return { afterSlideId: ctx.afterId, slides }

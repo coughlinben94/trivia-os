@@ -25,22 +25,28 @@ const H = vi.hoisted(() => ({
   songPending: false,
   songFetchCount: 0,
   ctxState: undefined, // 'running' | 'suspended' | undefined
+  slideSong: new Map(), // slide id -> song id (what the slide's bendleSongId points at)
+  revealed: false, // the database's reveal state, as get_bendle_song_for_show sees it
+  rpcCalls: [],
 }))
 
 vi.mock('@sentry/react', () => ({ captureMessage: vi.fn() }))
 
+// The TV reads the song through get_bendle_song_for_show (migration
+// 20261002140000): stems always, title/artist only once H.revealed is set
+// (the database's reveal flags), never from bendle_songs directly.
 vi.mock('../../../lib/supabase.js', () => ({
   supabase: {
-    from: () => ({
-      select: () => ({
-        eq: (_col, id) => ({
-          abortSignal: signal => ({
-            single: () => (H.songFetchCount++, H.songPending
-              ? new Promise((_, rej) => signal.addEventListener('abort', () => rej(new Error('aborted'))))
-              : Promise.resolve({ data: H.songs.get(id) ?? null, error: null })),
-          }),
-        }),
-      }),
+    from: () => { throw new Error('the TV must not read bendle_songs directly') },
+    rpc: (fn, args) => ({
+      abortSignal: signal => {
+        H.songFetchCount++
+        H.rpcCalls.push({ fn, args })
+        if (H.songPending) return new Promise((_, rej) => signal.addEventListener('abort', () => rej(new Error('aborted'))))
+        const song = H.songs.get(H.slideSong.get(args.p_slide_id))
+        if (fn !== 'get_bendle_song_for_show' || !song) return Promise.resolve({ data: null, error: null })
+        return Promise.resolve({ data: { ...song, title: H.revealed ? song.title : null, artist: H.revealed ? song.artist : null }, error: null })
+      },
     }),
   },
 }))
@@ -125,7 +131,7 @@ function mkSong(extra = {}) {
   H.songs.set(id, song)
   return song
 }
-const slideFor = (song, data = {}, id = 's1') => ({
+const slideFor = (song, data = {}, id = 's1') => (H.slideSong.set(id, song.id), {
   id, data: { isShiny: true, shinyInputSchema: { type: 'bendle' }, bendleSongId: song.id, bendleStepIndex: 0, ...data },
 })
 const playing = slideId => ({ id: 'show1', audio_playing: { slideId, playing: true } })
@@ -140,7 +146,7 @@ describe('<ShinyBendleQuestion>', () => {
   let container, root
 
   beforeEach(() => {
-    H.log = []; H.mode = {}; H.gates = {}; H.songLen = 240; H.songPending = false; H.songFetchCount = 0; H.ctxState = undefined
+    H.log = []; H.mode = {}; H.gates = {}; H.songLen = 240; H.songPending = false; H.songFetchCount = 0; H.ctxState = undefined; H.revealed = false; H.rpcCalls = []
     Object.assign(transport, { seconds: 0, stop: vi.fn(), start: vi.fn(), cancel: vi.fn(), scheduleOnce: vi.fn() })
     vi.clearAllMocks()
     globalThis.fetch = vi.fn(fakeFetch)
@@ -302,6 +308,7 @@ describe('<ShinyBendleQuestion>', () => {
       await render(slideFor(song, { bendleStepIndex: 2 }), playing('s1'))
       await settle()
       const n = H.log.length
+      H.revealed = true
       await render(slideFor(song, { bendleStepIndex: 2 }), { ...playing('s1'), answer_reveal: true })
       await settle()
       expect(H.log.length).toBe(n)
@@ -337,6 +344,7 @@ describe('<ShinyBendleQuestion>', () => {
         { teamId: 'p1', teamName: 'Alpha', guess: { title: 'Barracuda', artist: 'Heart' }, stepIndex: 0, correct: true, autoPoints: 30, points: 30, overridden: false },
         { teamId: 'p2', teamName: 'Bravo', guess: null, stepIndex: null, correct: false, autoPoints: 0, points: 0, overridden: false },
       ]
+      H.revealed = true
       await render(slideFor(song, { bendleStepIndex: 2, text: 'Name it', bendleLocked: true, bendleRevealed: true, bendleResults: results }), playing('s1'))
       await settle()
       expect(players()).toHaveLength(4) // drums bass other vocals
@@ -651,5 +659,43 @@ describe('<ShinyBendleQuestion>', () => {
     const stop = Math.max(...schedTimes())
     expect(stop).toBeGreaterThan(0)
     expect(stop).toBeLessThanOrEqual(4) // the 236..240 clip holds 4 s of audio
+  })
+
+  // Answer privacy (migration 20261002140000).
+  it('asks the database for this show + slide, not the song id', async () => {
+    const song = mkSong()
+    await render(slideFor(song, {}, 's1'))
+    await settle()
+    expect(H.rpcCalls[0]).toEqual({ fn: 'get_bendle_song_for_show', args: { p_show_id: 'show1', p_slide_id: 's1' } })
+  })
+  it('shows no title before the reveal, even if the row had one', async () => {
+    const song = mkSong()
+    H.revealed = true // a row with the title must still not show while the slide is unrevealed
+    await render(slideFor(song, { bendleStepIndex: 2 }), playing('s1'))
+    await settle()
+    expect(container.textContent).not.toContain('Crazy On You')
+    expect(container.textContent).not.toContain('Heart')
+  })
+  it('at the reveal it re-asks the database, so the 20 s row cache cannot hide the title', async () => {
+    const song = mkSong()
+    await render(slideFor(song, { bendleStepIndex: 2 }), playing('s1'))
+    await settle()
+    expect(container.textContent).not.toContain('Crazy On You')
+    const before = H.songFetchCount
+    H.revealed = true
+    await render(slideFor(song, { bendleStepIndex: 2, bendleRevealed: true }), playing('s1'))
+    await settle()
+    expect(H.songFetchCount).toBeGreaterThan(before)
+    expect(container.textContent).toContain('Crazy On You — Heart')
+  })
+  it('a reveal read that comes back without the title tries again', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const song = mkSong()
+    await render(slideFor(song, { bendleStepIndex: 2, bendleRevealed: true }), playing('s1'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(100) })
+    expect(container.textContent).not.toContain('Crazy On You')
+    H.revealed = true // the database catches up
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+    expect(container.textContent).toContain('Crazy On You — Heart')
   })
 })
