@@ -9,6 +9,7 @@ import { BENDLE_CATALOG_URL } from '../../lib/bendleCatalogVersion.js'
 import { ensureSongInList, fetchExtras, songKey } from '../../lib/bendleSongExtras.js'
 
 const DEBOUNCE_MS = 400
+const TIMEOUT_MS = 10000
 const settled = new Map() // song key -> 'present' | 'added' | 'no-artist'; once per distinct song per page
 
 const LABELS = {
@@ -16,9 +17,10 @@ const LABELS = {
   present: '✓ In song list',
   added: '✓ Added to song list',
   'no-artist': 'Not in the phone song list (this song has no artist). Teams can type the title.',
+  'no-title': 'Not added to the phone song list: the title has nothing searchable once brackets are removed. Teams can type it.',
 }
 
-export default function BendleSongListStatus({ song, catalogUrl = BENDLE_CATALOG_URL }) {
+export default function BendleSongListStatus({ song, catalogUrl = BENDLE_CATALOG_URL, timeoutMs = TIMEOUT_MS }) {
   // `answer` is the cleaned title (no "- Remastered"); bendle_songs.title can be Spotify's raw one.
   const title = String(song?.answer || song?.title || '').trim()
   const artist = String(song?.artist ?? '').trim()
@@ -32,17 +34,22 @@ export default function BendleSongListStatus({ song, catalogUrl = BENDLE_CATALOG
     let dead = false
     setState({ key, status: 'checking', message: '' })
     const t = setTimeout(async () => {
+      let timer
       try {
-        const [catalogRows, extras] = await Promise.all([
-          catalogUrl ? loadBendleCatalog(catalogUrl) : [],
-          fetchExtras().catch(() => null), // the add is idempotent, so a failed read only costs one RPC
-        ])
-        const status = await ensureSongInList({ title, artist }, { catalogRows, extras, rpc: (fn, args) => supabase.rpc(fn, args) })
+        const work = (async () => {
+          // Either read failing only costs one RPC: the add is idempotent.
+          const [catalogRows, extras] = await Promise.all([
+            catalogUrl ? loadBendleCatalog(catalogUrl).catch(() => []) : [],
+            fetchExtras().catch(() => null),
+          ])
+          return ensureSongInList({ title, artist }, { catalogRows, extras, rpc: (fn, args) => supabase.rpc(fn, args) })
+        })()
+        const status = await Promise.race([work, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timed out')), timeoutMs) })])
         settled.set(key, status)
         if (!dead) setState({ key, status, message: '' })
       } catch (e) {
         if (!dead) setState({ key, status: 'error', message: e?.message ?? 'unknown error' })
-      }
+      } finally { clearTimeout(timer) }
     }, DEBOUNCE_MS)
     return () => { dead = true; clearTimeout(t) }
   }, [key, tries]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -56,6 +63,6 @@ export default function BendleSongListStatus({ song, catalogUrl = BENDLE_CATALOG
       </p>
     )
   }
-  const tone = state.status === 'no-artist' ? 'text-amber-600' : state.status === 'checking' ? 'text-gray-400' : 'text-[#1a6b4a]'
+  const tone = state.status === 'no-artist' || state.status === 'no-title' ? 'text-amber-600' : state.status === 'checking' ? 'text-gray-400' : 'text-[#1a6b4a]'
   return <p role="status" className={`text-xs mt-1 ${tone}`}>{LABELS[state.status]}</p>
 }

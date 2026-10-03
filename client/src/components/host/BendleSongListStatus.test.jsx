@@ -6,8 +6,7 @@ import { createRoot } from 'react-dom/client'
 
 const rpc = vi.fn()
 vi.mock('../../lib/supabase.js', () => ({ supabase: {
-  rpc: (...a) => rpc(...a),
-  from: () => ({ select: async () => ({ data: [], error: null }) }),
+  rpc: async (fn, args) => (fn === 'list_bendle_song_extras' ? { data: [], error: null } : rpc(fn, args)),
 } }))
 const { default: BendleSongListStatus } = await import('./BendleSongListStatus.jsx')
 
@@ -19,9 +18,9 @@ beforeEach(() => {
 })
 afterEach(() => { act(() => root?.unmount()); host?.remove() })
 const tick = (ms = 0) => act(() => new Promise(r => setTimeout(r, ms)))
-async function render(song) {
+async function render(song, props = {}) {
   host = document.createElement('div'); document.body.append(host); root = createRoot(host)
-  await act(async () => root.render(<BendleSongListStatus song={song} catalogUrl={`/cat-status-${++urlN}.json`} />))
+  await act(async () => root.render(<BendleSongListStatus song={song} catalogUrl={`/cat-status-${++urlN}.json`} {...props} />))
   await tick(600) // past the debounce
 }
 
@@ -45,5 +44,23 @@ describe('<BendleSongListStatus>', () => {
     await act(async () => [...host.querySelectorAll('button')].find(b => b.textContent === 'Retry').click())
     await tick(600)
     expect(host.textContent).toContain('Added to song list')
+  })
+  it('a catalog load failure still adds the song', async () => {
+    globalThis.fetch = vi.fn(async () => { throw new TypeError('offline') })
+    rpc.mockResolvedValue({ data: true, error: null })
+    await render({ id: 'd', title: 'Levitating', answer: 'Levitating', artist: 'Dua Lipa' })
+    expect(rpc).toHaveBeenCalledWith('add_bendle_song_extra', expect.objectContaining({ p_norm_key: 'levitating|dua lipa' }))
+    expect(host.textContent).toContain('Added to song list')
+  })
+  it('a hung add times out into the error with Retry', async () => {
+    rpc.mockReturnValue(new Promise(() => {}))
+    await render({ id: 'e', title: 'Hung Song', answer: 'Hung Song', artist: 'Nobody' }, { timeoutMs: 50 })
+    expect(host.querySelector('[role="alert"]').textContent).toContain('timed out')
+    expect([...host.querySelectorAll('button')].some(b => b.textContent === 'Retry')).toBe(true)
+  })
+  it('a title with nothing searchable is not added and says why', async () => {
+    await render({ id: 'f', title: '(Intro)', answer: '(Intro)', artist: 'Toto' })
+    expect(rpc).not.toHaveBeenCalled()
+    expect(host.textContent).toContain('Not added to the phone song list')
   })
 })

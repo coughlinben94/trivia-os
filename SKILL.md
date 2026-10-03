@@ -221,7 +221,7 @@ client/src/
                                  (static Wikidata CC0 song list, built once by scripts/build-bendle-catalog.mjs, owner-run;
                                  bendleCatalogVersion.js is null until built, so phones can only type; no Spotify in the phone path),
                                  plus bendle_song_extras (bendleSongExtras.js): the builder's BendleSongListStatus auto-adds a picked
-                                 song the list lacks (host RPC add_bendle_song_extra, migration 20261002130000); phones merge extras into search.
+                                 song the list lacks (host RPC add_bendle_song_extra, migration 20261002130000); phones read list_bendle_song_extras (table not readable) and merge into search.
                                  BendleRevealList.jsx (TV), BendleHostPanel.jsx (host).
                                  One guess per team; lock/reveal/results/overrides live on the step-3 slide
                                  (PHONE_MECHANICS.bendle.lockHere). Points 30/20/10 by the step live when the team locks.

@@ -28,17 +28,27 @@ begin
 end $$;
 grant execute on function pg_temp.expect_refused(text, text) to anon, authenticated;
 
--- A row that already exists (added by the host on an earlier night).
+-- Rows that already exist, 'aaa' inserted last so the
+-- list order below proves it follows norm_key, not insertion.
 insert into public.bendle_song_extras (title, artist, norm_key) values ('Uptown Funk', 'Mark Ronson', 'uptown funk|mark ronson');
+insert into public.bendle_song_extras (title, artist, norm_key) values ('Aaa', 'Bbb', 'aaa|bbb');
+do $$ begin
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'bendle_song_extras' and column_name = 'created_at') then
+    raise exception 'created_at must not exist (it would date tonight''s song)';
+  end if;
+end $$;
 
--- anon: phones read the list, but cannot write it or call the RPC.
+-- anon: phones read the list only through list_bendle_song_extras (no id, no
+-- date, sorted by norm_key); the table itself, writes and the add RPC are refused.
 set local role anon;
 set local request.jwt.claims = '{"role":"anon"}';
 do $$ begin
-  if (select count(*) from public.bendle_song_extras where norm_key = 'uptown funk|mark ronson') <> 1 then
-    raise exception 'anon cannot read extras';
+  if (select string_agg(norm_key, ',') from public.list_bendle_song_extras()) <> 'aaa|bbb,uptown funk|mark ronson' then
+    raise exception 'anon list wrong or not sorted by norm_key: %', (select string_agg(norm_key, ',') from public.list_bendle_song_extras());
   end if;
 end $$;
+select pg_temp.expect_refused($$select id from public.bendle_song_extras$$);
+select pg_temp.expect_refused($$select title, artist, norm_key from public.bendle_song_extras$$);
 select pg_temp.expect_refused($$insert into public.bendle_song_extras (title, artist, norm_key) values ('X', 'Y', 'x|y')$$);
 select pg_temp.expect_refused($$update public.bendle_song_extras set title = 'Hacked'$$);
 select pg_temp.expect_refused($$delete from public.bendle_song_extras$$);
@@ -49,8 +59,9 @@ reset role;
 set local role authenticated;
 set local request.jwt.claims = '{"role":"authenticated","app_metadata":{}}';
 do $$ begin
-  if (select count(*) from public.bendle_song_extras) <> 1 then raise exception 'authenticated cannot read extras'; end if;
+  if (select count(*) from public.list_bendle_song_extras()) <> 2 then raise exception 'authenticated cannot list extras'; end if;
 end $$;
+select pg_temp.expect_refused($$select id from public.bendle_song_extras$$);
 select pg_temp.expect_refused($$insert into public.bendle_song_extras (title, artist, norm_key) values ('X', 'Y', 'x|y')$$);
 select pg_temp.expect_refused($$select public.add_bendle_song_extra('X', 'Y', 'x|y')$$, 'not authorized');
 
@@ -60,8 +71,8 @@ do $$ begin
   if public.add_bendle_song_extra('  Africa ', ' Toto ', 'africa|toto') is not true then raise exception 'first add did not return true'; end if;
   if public.add_bendle_song_extra('Africa', 'Toto', 'africa|toto') is not false then raise exception 'second add did not return false'; end if;
   if public.add_bendle_song_extra('Uptown Funk', 'Mark Ronson', 'uptown funk|mark ronson') is not false then raise exception 'existing row add did not return false'; end if;
-  if (select count(*) from public.bendle_song_extras where norm_key = 'africa|toto') <> 1 then raise exception 'expected one africa row'; end if;
-  if (select title || '|' || artist from public.bendle_song_extras where norm_key = 'africa|toto') <> 'Africa|Toto' then raise exception 'title/artist not trimmed'; end if;
+  if (select count(*) from public.list_bendle_song_extras() l where l.norm_key = 'africa|toto') <> 1 then raise exception 'expected one africa row'; end if;
+  if (select l.title || '|' || l.artist from public.list_bendle_song_extras() l where l.norm_key = 'africa|toto') <> 'Africa|Toto' then raise exception 'title/artist not trimmed'; end if;
 end $$;
 
 -- Empty and over-long values are refused.
@@ -88,7 +99,7 @@ do $$ begin
 end $$;
 
 do $$ begin
-  if (select count(*) from public.bendle_song_extras) <> 2 then raise exception 'expected 2 rows, got %', (select count(*) from public.bendle_song_extras); end if;
+  if (select count(*) from public.bendle_song_extras) <> 3 then raise exception 'expected 3 rows, got %', (select count(*) from public.bendle_song_extras); end if;
 end $$;
 
 \echo 'bendle_song_extras: all checks passed'

@@ -1,7 +1,7 @@
 // client/src/lib/bendleSongExtras.test.js
 import { describe, it, expect, vi } from 'vitest'
 import { buildCatalogIndex, searchCatalog } from './bendleCatalog.js'
-import { songKey, isInSongList, ensureSongInList, fetchExtras, mergeExtras } from './bendleSongExtras.js'
+import { songKey, isInSongList, ensureSongInList, fetchExtras, loadExtras, clearExtrasCache, mergeExtras } from './bendleSongExtras.js'
 
 const catalog = buildCatalogIndex([['Mr. Brightside', 'The Killers', 60], ['Africa', 'Toto', 50]])
 const okRpc = (data = true) => vi.fn(async () => ({ data, error: null }))
@@ -43,6 +43,11 @@ describe('ensureSongInList', () => {
   it('still adds when the extras failed to load (extras = null)', async () => {
     expect(await ensureSongInList({ title: 'Uptown Funk', artist: 'Mark Ronson' }, { catalogRows: catalog, extras: null, rpc: okRpc(true) })).toBe('added')
   })
+  it('returns no-title for a title that normalizes to empty, without adding', async () => {
+    const rpc = okRpc()
+    expect(await ensureSongInList({ title: '(Intro)', artist: 'Toto' }, { catalogRows: catalog, extras: [], rpc })).toBe('no-title')
+    expect(rpc).not.toHaveBeenCalled()
+  })
   it('throws when the RPC fails', async () => {
     const rpc = vi.fn(async () => ({ data: null, error: { message: 'not authorized' } }))
     await expect(ensureSongInList({ title: 'Uptown Funk', artist: 'Mark Ronson' }, { catalogRows: catalog, extras: [], rpc })).rejects.toThrow('not authorized')
@@ -55,10 +60,22 @@ describe('ensureSongInList', () => {
 })
 
 describe('fetchExtras', () => {
-  it('returns rows, throws on error', async () => {
-    const client = err => ({ from: () => ({ select: async () => ({ data: err ? null : [{ title: 'A', artist: 'B', norm_key: 'a|b' }], error: err }) }) })
-    expect(await fetchExtras(client(null))).toEqual([{ title: 'A', artist: 'B', norm_key: 'a|b' }])
+  const client = (err, rows = [{ title: 'A', artist: 'B', norm_key: 'a|b' }]) => ({ rpc: vi.fn(async () => ({ data: err ? null : rows, error: err })) })
+  it('reads through the list RPC, throws on error', async () => {
+    const c = client(null)
+    expect(await fetchExtras(c)).toEqual([{ title: 'A', artist: 'B', norm_key: 'a|b' }])
+    expect(c.rpc).toHaveBeenCalledWith('list_bendle_song_extras')
     await expect(fetchExtras(client({ message: 'boom' }))).rejects.toThrow('boom')
+  })
+  it('loadExtras fetches once per page, but retries after a failure', async () => {
+    clearExtrasCache()
+    const bad = client({ message: 'boom' })
+    await expect(loadExtras(bad)).rejects.toThrow('boom')
+    await Promise.resolve()
+    const good = client(null)
+    expect(await loadExtras(good)).toHaveLength(1)
+    expect(await loadExtras(good)).toHaveLength(1)
+    expect(good.rpc).toHaveBeenCalledTimes(1)
   })
 })
 

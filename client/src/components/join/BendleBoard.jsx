@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import { loadBendleCatalog, searchCatalog } from '../../lib/bendleCatalog.js'
 import { BENDLE_CATALOG_URL } from '../../lib/bendleCatalogVersion.js'
-import { fetchExtras, mergeExtras } from '../../lib/bendleSongExtras.js'
+import { loadExtras, mergeExtras } from '../../lib/bendleSongExtras.js'
 import { bendleLockSlide, bendleStepIds, guessLabel, parseGuess } from '../../lib/bendleGuessScoring.js'
 import { BendleMark } from '../display/slides/BendleRevealList.jsx'
 
@@ -72,7 +72,7 @@ export default function BendleBoard({ slide, slides, team, theme, preview = fals
     // arrive; if they never load, the song list alone still works.
     const show = () => { if (!dead && ix) setCatalog(mergeExtras(ix, extras)) }
     loadBendleCatalog(catalogUrl).then(v => { ix = v; show() }, () => { if (!dead) setCatalog('error') })
-    fetchExtras().then(v => { extras = v; show() }, () => {})
+    loadExtras().then(v => { extras = v; show() }, () => {})
     return () => { dead = true }
   }, [catalogUrl])
 

@@ -13,11 +13,25 @@ export const songKey = ({ title, artist }) => `${normalizeText(title)}|${normali
 // Extras rank with the least-known catalog songs (the build keeps 3+ articles).
 const EXTRA_RANK = 3
 
+// Read through an RPC sorted by norm_key: the table itself is not readable, so
+// neither row order nor any id/date can hint which song was added last.
 export async function fetchExtras(client = supabase) {
-  const { data, error } = await client.from('bendle_song_extras').select('title, artist, norm_key')
+  const { data, error } = await client.rpc('list_bendle_song_extras')
   if (error) throw new Error(error.message ?? 'could not load song list extras')
   return data ?? []
 }
+
+// Phones: one fetch per page load, like the catalog. A failure is not kept,
+// so the next board mount tries again.
+let extrasCache = null
+export function loadExtras(client = supabase) {
+  if (!extrasCache) {
+    extrasCache = fetchExtras(client)
+    extrasCache.catch(() => { extrasCache = null })
+  }
+  return extrasCache
+}
+export function clearExtrasCache() { extrasCache = null }
 
 export function isInSongList(song, catalogRows, extras) {
   const key = songKey(song)
@@ -25,8 +39,10 @@ export function isInSongList(song, catalogRows, extras) {
     || (catalogRows ?? []).some(r => songKey(r) === key)
 }
 
-// 'present' | 'added' | 'no-artist' (missing, and a row needs an artist); throws if the add fails.
+// 'present' | 'added' | 'no-artist' (missing, and a row needs an artist) |
+// 'no-title' (nothing searchable left after normalizing); throws if the add fails.
 export async function ensureSongInList(song, { catalogRows, extras, rpc }) {
+  if (!normalizeText(song.title)) return 'no-title'
   if (isInSongList(song, catalogRows, extras)) return 'present'
   const title = String(song.title ?? '').trim()
   const artist = String(song.artist ?? '').trim()
