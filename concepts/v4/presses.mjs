@@ -11,9 +11,10 @@ let fails = 0; const check = (ok, msg) => { console.log((ok ? 'PASS ' : 'FAIL ')
 const open = async (q, vp = { width: 1920, height: 1080 }) => {
   const ctx = await b.newContext({ viewport: vp }); const p = await ctx.newPage(); p.warns = []
   p.on('console', m => { if (m.type() === 'warning') p.warns.push(m.text()) }); p.on('pageerror', e => p.warns.push('ERR ' + e.message))
-  await p.goto(PAGE + q); await p.waitForFunction(() => window.__route); return p
+  await p.goto(PAGE + q); await p.waitForFunction(() => window.__route); NS = await p.evaluate(() => window.__route.stations); return p
 }
 const R = (p, f, a) => p.evaluate(f, a)
+let NS = 36   // the lap length, read from the page on open (stations are modulo it)
 // 1. 30 Next presses in 3 s: goal = start + 30, and the walk arrives there
 for (const rm of [false, true]) {
   const p = await open('?seed=7&bare&noq')
@@ -21,10 +22,10 @@ for (const rm of [false, true]) {
   const s0 = await R(p, () => window.__route.station)
   for (let i = 0; i < 30; i++) { await R(p, () => window.__route.advance()); await p.waitForTimeout(100) }
   const goal = await R(p, () => window.__route.goal)
-  check(goal === (s0 + 30) % 13, `${rm ? 'reduced motion' : 'wander'}: 30 presses in 3 s from station ${s0} -> goal ${goal} (want ${(s0 + 30) % 13})`)
+  check(goal === (s0 + 30) % NS, `${rm ? 'reduced motion' : 'wander'}: 30 presses in 3 s from station ${s0} -> goal ${goal} (want ${(s0 + 30) % NS})`)
   await p.waitForTimeout(rm ? 1500 : 14000)
   const st = await R(p, () => window.__route.station)
-  check(st === (s0 + 30) % 13, `${rm ? 'reduced motion' : 'wander'}: arrived at station ${st}`)
+  check(st === (s0 + 30) % NS, `${rm ? 'reduced motion' : 'wander'}: arrived at station ${st}`)
   await p.context().close()
 }
 // 2. Back mid-quicken: target one earlier, motion continues (no cut); Back with no pending press = covered cut
@@ -32,11 +33,11 @@ for (const rm of [false, true]) {
   const p = await open('?seed=7&bare&noq'); const s0 = await R(p, () => window.__route.station)
   await R(p, () => { window.__route.advance(); window.__route.advance() }); await p.waitForTimeout(500)
   await R(p, () => window.__route.back())
-  check(await R(p, () => window.__route.goal) === (s0 + 1) % 13, `Next,Next,Back mid-walk: goal ${await R(p, () => window.__route.goal)} (want ${(s0 + 1) % 13})`)
+  check(await R(p, () => window.__route.goal) === (s0 + 1) % NS, `Next,Next,Back mid-walk: goal ${await R(p, () => window.__route.goal)} (want ${(s0 + 1) % NS})`)
   await p.waitForTimeout(9000)
-  check(await R(p, () => window.__route.station) === (s0 + 1) % 13, `...arrived at ${await R(p, () => window.__route.station)}`)
+  check(await R(p, () => window.__route.station) === (s0 + 1) % NS, `...arrived at ${await R(p, () => window.__route.station)}`)
   const before = await R(p, () => window.__route.station); await R(p, () => window.__route.back()); await p.waitForTimeout(600)
-  check(await R(p, () => window.__route.station) === (before + 12) % 13, `Back at rest: covered cut to ${await R(p, () => window.__route.station)}`)
+  check(await R(p, () => window.__route.station) === (before + NS - 1) % NS, `Back at rest: covered cut to ${await R(p, () => window.__route.station)}`)
   // Back then Next within 30 ms: no stray timer keeps anything running (all animations follow the schedule speed)
   await R(p, () => { window.__route.back(); setTimeout(() => window.__route.advance(), 30) }); await p.waitForTimeout(400)
   const odd = await R(p, () => document.getElementById('stage').getAnimations({ subtree: true }).filter(a => /^(creep|idle)/.test(a.animationName || '')).length)
@@ -59,4 +60,6 @@ for (const q of ['abc', 'NaN', '', '-5', '4294967296', '1.5']) {
   await p.context().close()
 }
 { const p = await open('?seed=4294967295&bare'); check(await R(p, () => window.__route.seed) === 4294967295 && !p.warns.length, '?seed=4294967295 accepted silently'); await p.context().close() }
+for (const q of ['7', '81', 'abc', '', '12.5']) { const p = await open('?seed=7&bare&stations=' + q); const n = await R(p, () => window.__route.stations); check(n === 36 && p.warns.length === 1 && p.warns[0].includes('stations'), `?stations=${q}: lap ${n}, warnings ${p.warns.length}`); await p.context().close() }
+for (const q of ['8', '13', '80']) { const p = await open('?seed=7&bare&stations=' + q); const n = await R(p, () => window.__route.stations), chips = await R(p, () => document.querySelectorAll('#hud span').length); check(n === +q && chips === n && !p.warns.length, `?stations=${q}: lap ${n}, ${chips} chips`); await p.context().close() }
 await b.close(); console.log(fails ? `${fails} FAILED` : 'all passed'); process.exit(fails ? 1 : 0)

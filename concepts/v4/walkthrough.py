@@ -17,7 +17,7 @@ CF = sorted(glob.glob(os.path.join(D, 'cast', '*.jpg')), key=lambda f: float(os.
 PT = [float(os.path.basename(f)[:-4]) * 1000 - E['epochOff'] for f in CF]   # page ms of each compositor frame
 info = E['info']; S = info['S']; L = info['L']; route = info['route']; NS = 13
 kind = lambda k: route[k][:-1]
-inner = lambda k: kind(k) in ('barn', 'house')
+inner = lambda k: kind(k) in ('barn', 'shack')
 def lab(k):
     if inner((k - 1) % NS): return kind((k - 1) % NS) + 'OUT'
     return kind(k) + ('IN' if inner(k) else '')

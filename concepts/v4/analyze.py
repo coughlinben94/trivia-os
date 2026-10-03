@@ -24,8 +24,8 @@ walks = ev['walks']; WAIT = 1200
 def label(ms):
     for w in walks:
         if w['t0'] - 200 <= ms <= w['t0'] + w['T'] + WAIT:
-            kind = (w['kind'] + 'IN') if w['kind'] in ('barn', 'house') else ('OUT' if w['exit'] else w['kind'])
-            if w['exit']: kind = 'barnOUT' if ev['route']['route'][w['from']] == 'barn' else 'houseOUT'
+            kind = (w['kind'] + 'IN') if w['kind'] in ('barn', 'shack') else ('OUT' if w['exit'] else w['kind'])
+            if w['exit']: kind = 'barnOUT' if ev['route']['route'][w['from']] == 'barn' else 'shackOUT'
             return f"w{w['from']}>{w['to']}", kind
     return 'wander', 'wander'
 

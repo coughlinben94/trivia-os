@@ -45,8 +45,8 @@ for (let i = 0; i < WALKS; i++) {
   const from = await page.evaluate(() => window.__route.station), t0 = Date.now() - T0
   const T = await page.evaluate(() => window.__route.advance())
   const pk = await idle(T + WAIT)
-  const to = (from + 1) % 13
-  walks.push({ from, to, kind: route.route[to], exit: route.route[from] === 'barn' || route.route[from] === 'house', t0, T, peakAnims: pk.anims, peakMpx: pk.mpx })
+  const to = (from + 1) % route.route.length
+  walks.push({ from, to, kind: route.route[to], exit: route.route[from] === 'barn' || route.route[from] === 'shack', t0, T, peakAnims: pk.anims, peakMpx: pk.mpx })
   console.log(JSON.stringify(walks[walks.length - 1]))
 }
 const fd = await page.evaluate(() => window.__fd)

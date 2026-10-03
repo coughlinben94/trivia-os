@@ -85,13 +85,13 @@
   #hud{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;max-width:1100px;margin:6px auto 0}
   #hud span{font-size:.72rem;padding:3px 7px;border-radius:5px;background:#1a1712;color:#8a8478;border:1px solid #2c2620;font-variant-numeric:tabular-nums}
   #hud span.cur{background:#5a4a36;color:#f0e2c4;border-color:#8a7050}
-  #hud span.k-bendL,#hud span.k-bendR{color:#b8c4d8}#hud span.k-barn{color:#e0a070}#hud span.k-house{color:#d0a0d8}
+  #hud span.k-bendL,#hud span.k-bendR{color:#b8c4d8}#hud span.k-barn{color:#e0a070}#hud span.k-shack{color:#d0b890}
   body.bare #hud,body.nohud #hud{display:none}
 </style>
 </head>
 <body>
-<h1>Haunted route v4: turns and a barn you walk through</h1>
-<div class="sub">Prototype. You wander through without stopping; <b>Next</b> quickens the walk to the next stretch, then it eases back to a stroll. A seeded route (<b>?seed=N</b>) picks each of the 13 stretches: straight, bend left, bend right, or a barn you walk into and out of; same seed, same route, every reload. CSS transforms and opacity only, chained timers, no animation loop. <b>?dur=</b> ms for a 6 m quicken, <b>?wander=</b> m/s stroll pace (0.42), <b>?step=</b> metres per stretch, <b>?bare</b> for a clean 1920x1080 frame. Back or a click on the strip is a covered cut.</div>
+<h1>Haunted forest v4: a long woodland walk, barns and shacks</h1>
+<div class="sub">Prototype. You wander through dark woods without stopping; <b>Next</b> quickens the walk to the next station, then it eases back to a stroll. Each show draws its own lap (<b>?seed=N</b>, <b>?stations=N</b> 8..80, default 36) from a pool of woodland stations: pine stands, birch groves, an old orchard, a creek with a plank bridge, a moonlit glade, deer, owls, crows, a few eerie human traces, and a barn or a shack to walk through every 7 or 8 stations; same seed, same lap, every reload. CSS transforms and opacity only, chained timers, no animation loop. <b>?dur=</b> ms for a 6 m quicken, <b>?wander=</b> m/s stroll pace (0.42), <b>?bare</b> for a clean 1920x1080 frame. Back or a click on the strip is a covered cut.</div>
 
 <div id="fit">
   <div id="stage" class="showSafe">
@@ -130,7 +130,10 @@
 const qs=new URLSearchParams(location.search);
 const W=1920, H=1080, VX=960, VY=700;      // vanishing point = horizon, low in frame
 const F=1371, E=1.7;                        // focal length px, eye height m
-const D=Math.max(2,+qs.get('step')||6), NS=13, REST=9;   // metres per forest walk, 13 stations, landmark rest distance
+const D=Math.max(2,+qs.get('step')||6), REST=9;   // metres per forest walk, landmark rest distance
+// ?stations= the lap length (the app passes its count of ring-visible slides): a whole number 8..80, else ONE warning and 36
+const NS=(()=>{if(!qs.has('stations'))return 36;const v=qs.get('stations').trim();if(/^\d+$/.test(v)&&+v>=8&&+v<=80)return +v;
+  console.warn(`haunted route: ?stations=${JSON.stringify(v)} is not a whole number 8..80; using 36`);return 36})();
 const ZFAR=42, FADE=7, ZMIN=0.3, M=48, ZG0=2.5, ZG1=34;
 const DUR=Math.max(1000,+qs.get('dur')||6000), STOPS=24, PAUSE=3000;
 // ?seed= must be a whole number 0..2^32-1; anything else (abc, NaN, empty, negative, 2^32) falls back to 1031 with ONE
@@ -138,56 +141,229 @@ const DUR=Math.max(1000,+qs.get('dur')||6000), STOPS=24, PAUSE=3000;
 const SEED=(()=>{if(!qs.has('seed'))return 1031;const v=qs.get('seed').trim();
   if(/^\d+$/.test(v)&&+v<=4294967295)return +v;console.warn(`haunted route: ?seed=${JSON.stringify(v)} is not a whole number 0..4294967295; using 1031`);return 1031})();
 const EASE=bez(.45,.05,.25,1);
-const NAMES=['forest edge, broken fence gate','lantern on a post','scarecrow with a pumpkin head','leaning gravestone row','row of jack-o\'-lanterns','crow on a stump','stone well, glowing green','abandoned cart','fallen log, glowing mushrooms','will-o\'-wisps over a bog','harvest moon through the canopy','cabin with a lit window','signpost with a skull'];
 
 // ---------- route: copy of client/src/worlds/forest/forestRoute.js (forestRoute.test.js checks they match) ----------
-/*ROUTE*/
-function makeRoute(seed, n = 13) {
-  let a = (seed >>> 0) ^ 0x9e3779b9
-  const rnd = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296 }
-  const CALM = 10
-  const ok = ks => {
-    const cnt = k => ks.filter(x => x === k).length
-    const inner = k => k === 'barn' || k === 'house', bend = k => k === 'bendL' || k === 'bendR'
-    if (ks[0] !== 'straight' || ks[CALM] !== 'straight' || inner(ks[n - 1])) return false
-    const ni = cnt('barn') + cnt('house')
-    if (ni < 1 || ni > 3 || cnt('barn') > 2 || cnt('house') > 2 || cnt('bendL') < 1 || cnt('bendL') > 3 || cnt('bendL') !== cnt('bendR')) return false
-    for (let i = 0; i < n; i++) {
-      const k = ks[i], p = ks[(i + n - 1) % n], pp = ks[(i + n - 2) % n]
-      if (inner(p) && k !== 'straight') return false
-      if (bend(k) && bend(p) && bend(pp)) return false
-    }
-    return true
-  }
-  const KINDS = ['straight', 'straight', 'bendL', 'bendR', 'barn', 'house']
-  for (let tries = 0; tries < 5000; tries++) {
-    const ks = Array.from({ length: n }, (_, i) => i === 0 || i === CALM ? 'straight' : KINDS[Math.floor(rnd() * KINDS.length)])
-    // an interior kind never repeats its layout within one route (3 layouts, at most 2 of a kind)
-    const used = { barn: [], house: [] }
-    if (ok(ks)) return ks.map(kind => {
-      let variant = Math.floor(rnd() * 3)
-      if (used[kind]) { while (used[kind].includes(variant)) variant = (variant + 1) % 3; used[kind].push(variant) }
-      return { kind, variant }
-    })
-  }
-  throw new Error('makeRoute: no valid route for seed ' + seed)
+// <inline> (concepts/haunted-forest-route-v4.html carries this block byte-identically, minus the word "export ")
+function hash32(x, seed) {
+  let h = (x | 0) ^ (seed | 0)
+  h = Math.imul(h ^ (h >>> 16), 2246822507)
+  h = Math.imul(h ^ (h >>> 13), 3266489909)
+  return (h ^ (h >>> 16)) >>> 0
 }
-/*/ROUTE*/
-const ROUTE=makeRoute(SEED,NS);
-// interior geometry (metres): you walk BARN_IN into a barn or house (door at 9 m from the station before) and
-// BARN_OUT out of it (far door at 11 m from the inside station). Longer stretches, so those two walks take longer.
-const BARN_IN=11, BARN_OUT=13, BW=4, WH=3.6, PK=6.2, BDOOR=9, BLEN=13;
-const INNER=k=>k==='barn'||k==='house';
+function rng(i, seed) {
+  let n = hash32(i, seed)
+  return () => { n = hash32(n, 0x9E3779B9); return n / 4294967296 }
+}
+function seedFrom(text) {
+  let h = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) }
+  return h >>> 0
+}
+// [kind, family, silhouette class, flags: i interior, a accent, n natural]
+const FOREST_KINDS = [
+  ['barn', 'interior', 'building', 'i'], ['shack', 'interior', 'building', 'i'],
+  ['pine stand', 'stand', 'stand', 'n'], ['birch grove', 'stand', 'stand', 'n'], ['dead snag field', 'stand', 'stand', 'n'],
+  ['old orchard', 'stand', 'stand', 'na'], ['gnarled oaks', 'stand', 'stand', 'n'], ['hanging moss', 'stand', 'stand', 'n'],
+  ['fern drift', 'floor', 'low', 'n'], ['mushroom ring', 'floor', 'low', 'n'], ['hollow log', 'floor', 'wide', 'n'],
+  ['fallen tree, roots up', 'floor', 'wide', 'n'], ['mossy boulders', 'floor', 'low', 'n'],
+  ['creek and plank bridge', 'water', 'water', 'na'], ['will-o\'-wisps over a bog', 'water', 'light', 'na'],
+  ['moonlit glade', 'clear', 'light', 'na'], ['lone apple tree', 'clear', 'tree', 'n'], ['charcoal-burner clearing', 'clear', 'light', 'a'],
+  ['crow tree', 'creature', 'tree', 'n'], ['crow on a stump', 'creature', 'low', 'n'], ['deer in the trees', 'creature', 'figure', 'n'],
+  ['owl on a snag', 'creature', 'tree', 'n'], ['eyes in the dark', 'creature', 'figure', 'n'],
+  ['lantern on a post', 'trace', 'post', ''], ['crooked signpost', 'trace', 'post', ''], ['stone well', 'trace', 'well', ''],
+  ['rusted cart', 'trace', 'wide', ''], ['lantern tree', 'trace', 'tree', ''],
+  ['gravestones', 'grave', 'low', ''], ['stone wall ruin', 'grave', 'wide', ''],
+  ['scarecrow', 'farm', 'post', ''], ['jack-o\'-lanterns', 'farm', 'low', ''], ['stacked cordwood', 'farm', 'wide', ''],
+  ['deer-stand ladder', 'farm', 'tree', ''], ['rope swing', 'farm', 'tree', ''],
+]
+const FOREST_POOL = FOREST_KINDS.flatMap(([kind, family, sil, f]) => [0, 1, 2].map(variant => ({
+  key: kind + '#' + variant, kind, variant, family, sil, interior: f.includes('i'), accent: f.includes('a'), natural: f.includes('n') })))
+const GATE_ST = { key: 'gate', kind: 'gate', variant: 0, family: 'gate', sil: 'gate', interior: false, accent: false, natural: false }
+const PIN_ST = { key: 'moonrise', kind: 'moonrise', variant: 0, family: 'calm', sil: 'calm', interior: false, accent: false, natural: true }
+const pinsOf = n => { const p = []; for (let i = 10; i < n; i += 13) p.push(i); if (!p.length) p.push(n - 1); return p }
+const capsOf = n => ({ perKind: n > 60 ? 3 : 2, accents: Math.max(2, Math.round(n / 9)), interiors: Math.min(6, Math.max(1, Math.round(n / 7.5))) })
+const cyc = (a, b, n) => Math.min(Math.abs(a - b), n - Math.abs(a - b))
+const isCalm = s => s.natural && !s.accent && !s.interior && s.family !== 'water'
+
+function assertRoute(order, { stations = order.length } = {}) {
+  const n = stations, fail = m => { throw new Error('assertRoute: ' + m) }
+  if (order.length !== n) fail(`length ${order.length} != ${n}`)
+  const pins = pinsOf(n), caps = capsOf(n)
+  if (order[0].key !== 'gate') fail('station 0 is not the gate')
+  for (const p of pins) if (order[p].key !== 'moonrise') fail(`no moonrise pin at ${p}`)
+  const keys = new Set(), kinds = {}
+  let accents = 0, interiors = 0, lm = 0, nat = 0
+  for (let i = 0; i < n; i++) {
+    const s = order[i]
+    if (s.key !== 'moonrise' && s.role !== 'approach') { if (keys.has(s.key)) fail(`duplicate key ${s.key}`); keys.add(s.key) }
+    if (s.role === 'approach') { const t = order[(i + 1) % n]; if (!t.interior || t.key !== s.of) fail(`approach at ${i} not followed by its interior`); continue }
+    if (s.key === 'gate' || s.key === 'moonrise') continue
+    kinds[s.kind] = (kinds[s.kind] || 0) + 1; if (s.accent) accents++
+    if (s.interior) {
+      interiors++
+      if (i === 0 || i === n - 1 || pins.includes(i)) fail(`interior at ${i}`)
+      if (order[i - 1].role !== 'approach') fail(`interior at ${i} has no approach`)
+      const x = order[(i + 1) % n]
+      if (!(isCalm(x) || x.key === 'moonrise') || x.seg !== 'straight') fail(`exit after interior ${i} is not a calm straight`)
+      if (s.seg !== s.kind) fail(`interior ${i} seg ${s.seg}`)
+    } else { lm++; if (s.natural) nat++ }
+    for (let j = i + 1; j < n; j++) {
+      const o = order[j], d = cyc(i, j, n)
+      if (o.role === 'approach' || o.key === 'gate' || o.key === 'moonrise') continue
+      if (o.family === s.family && d < 3) fail(`family ${s.family} at ${i} and ${j}`)
+      if (o.kind === s.kind && d < 4) fail(`kind ${s.kind} at ${i} and ${j}`)
+    }
+    const nx = order[(i + 1) % n]
+    if (nx.sil === s.sil && nx.role !== 'approach') fail(`silhouette ${s.sil} adjacent at ${i}`)
+  }
+  for (const [k, c] of Object.entries(kinds)) if (c > (k === 'barn' || k === 'shack' ? 3 : caps.perKind)) fail(`kind ${k} x${c}`)
+  if (accents > caps.accents) fail(`${accents} accents`)
+  if (interiors < 1 || interiors > caps.interiors) fail(`${interiors} interiors`)
+  const ib = order.filter(s => s.kind === 'barn').length, is = order.filter(s => s.kind === 'shack').length
+  if (interiors >= 2 && (!ib || !is)) fail('two or more interiors but not both a barn and a shack')
+  if (nat < Math.ceil(lm * 0.6)) fail(`only ${nat} of ${lm} landmark stations natural`)
+  let run = 0, L = 0, R = 0
+  for (let i = 0; i < 2 * n; i++) {
+    const s = order[i % n], b = s.seg === 'bendL' || s.seg === 'bendR'
+    run = b ? run + 1 : 0; if (run > 2) fail(`three bends in a row at ${i % n}`)
+    if (i < n) { if (s.seg === 'bendL') L++; if (s.seg === 'bendR') R++ }
+    if (i < n && b && (s.interior || s.key === 'gate' || s.key === 'moonrise' || order[(i + n - 1) % n].interior)) fail(`bend at ${i}`)
+  }
+  if (L !== R || L < 1) fail(`bends L${L} R${R}`)
+  return true
+}
+
+function drawRoute(pool, { seed, stations = 36 } = {}) {
+  const n = stations
+  if (!Number.isInteger(n) || n < 8 || n > 80) throw new Error('drawRoute: stations must be an integer 8..80')
+  const r = rng(seed === 'authored' ? 0 : typeof seed === 'number' ? seed : seedFrom(String(seed)), 0xF0E5)
+  const pins = pinsOf(n), caps = capsOf(n), pick = a => a[Math.floor(r() * a.length)]
+  const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1));[a[i], a[j]] = [a[j], a[i]] } return a }
+  let lastError
+  for (let attempt = 0; attempt < 50; attempt++) {
+    try {
+      const order = new Array(n).fill(null)
+      order[0] = GATE_ST; for (const p of pins) order[p] = PIN_ST
+      // 1. interiors: count, kinds (both a barn and a shack from two on), distinct layouts, then their slots
+      const ni = Math.max(1, Math.min(caps.interiors, Math.round(n / 7.5 + (r() - 0.5))))
+      const inner = shuffle(pool.filter(s => s.interior)), barns = inner.filter(s => s.kind === 'barn'), shacks = inner.filter(s => s.kind === 'shack')
+      const chosenI = ni >= 2 ? [barns[0], shacks[0], ...shuffle([...barns.slice(1), ...shacks.slice(1)]).slice(0, ni - 2)] : [pick(inner)]
+      shuffle(chosenI)
+      // an interior at i needs i-1 (approach) and i+1 (exit) free, i-1 >= 1, i+1 <= n-1, i <= n-2; interiors >= 4 apart
+      const freeAt = i => i > 0 && i < n && order[i] === null
+      const iSlots = []
+      for (const st of chosenI) {
+        const cand = []; for (let i = 2; i <= n - 2; i++) if (freeAt(i - 1) && freeAt(i) && freeAt(i + 1) && iSlots.every(j => cyc(i, j, n) >= 4)) cand.push(i)
+        if (!cand.length) throw new Error('no room for the interiors')
+        const i = pick(cand); iSlots.push(i)
+        order[i - 1] = { key: st.key + '@approach', kind: 'approach', variant: st.variant, family: 'approach', sil: 'approach', interior: false, accent: false, natural: false, role: 'approach', of: st.key }
+        order[i] = { ...st, seg: st.kind }
+      }
+      // 2. the landmark stations: kinds drawn so each is used once before any is used twice (most distinct kinds per
+      // lap), at least 60% natural, accents capped, then placed by backtracking under the spacing rules
+      const free = []; for (let i = 1; i < n; i++) if (order[i] === null) free.push(i)
+      const exits = new Set(iSlots.map(i => i + 1))
+      const lmCount = free.length, natMin = Math.ceil(lmCount * 0.6)
+      const kindsN = shuffle([...new Set(pool.filter(s => !s.interior && s.natural).map(s => s.kind))])
+      const kindsH = shuffle([...new Set(pool.filter(s => !s.interior && !s.natural).map(s => s.kind))])
+      const variants = {}; for (const s of pool) if (!s.interior) (variants[s.kind] = variants[s.kind] || []).push(s)
+      for (const k in variants) shuffle(variants[k])
+      const take = (list, count) => { const out = []; let round = 0; while (out.length < count) { const k = list[out.length % list.length]; round = Math.floor(out.length / list.length); if (round >= caps.perKind) throw new Error('pool too small'); out.push(variants[k][round]) } return out }
+      const nNat = natMin + Math.floor(r() * (lmCount - natMin + 1) * 0.5)
+      let chosen = [...take(kindsN, nNat), ...take(kindsH, lmCount - nNat)]
+      // accents over the cap swap for a calm natural station of an unused kind or variant
+      let acc = chosen.filter(s => s.accent).length
+      if (acc > caps.accents) { chosen = shuffle(chosen); for (let i = 0; i < chosen.length && acc > caps.accents; i++) if (chosen[i].accent) { const alt = pool.find(s => s.natural && !s.accent && !s.interior && !chosen.includes(s) && chosen.filter(c => c.kind === s.kind).length < caps.perKind); if (alt) { chosen[i] = alt; acc-- } } }
+      if (acc > caps.accents) throw new Error('too many accents')
+      if (chosen.filter(isCalm).length < exits.size) throw new Error('not enough calm stations for the exits')
+      const used = new Array(chosen.length).fill(false), ix = chosen.map((_, i) => i)
+      const fits = (s, i) => {
+        if (exits.has(i) && !isCalm(s)) return false
+        for (let d = -3; d <= 3; d++) {
+          if (!d) continue; const o = order[((i + d) % n + n) % n]; if (!o || o.role === 'approach' || o.key === 'gate' || o.key === 'moonrise') continue
+          const ad = Math.abs(d)
+          if (ad < 3 && o.family === s.family) return false
+          if (o.kind === s.kind) return false
+          if (ad === 1 && o.sil === s.sil) return false
+        }
+        return true
+      }
+      let budget = 40000
+      const bt = f => {
+        if (f === free.length) return true
+        if (--budget < 0) throw new Error('placement budget')
+        const i = free[f]
+        for (const c of shuffle(ix.slice())) {
+          if (used[c] || !fits(chosen[c], i)) continue
+          order[i] = { ...chosen[c], seg: 'straight' }; used[c] = true
+          if (bt(f + 1)) return true
+          order[i] = null; used[c] = false
+        }
+        return false
+      }
+      if (!bt(0)) throw new Error('no arrangement')
+      for (let i = 0; i < n; i++) if (!order[i].seg) order[i] = { ...order[i], seg: 'straight' }
+      // 3. bends: about one left/right pair per 10 stations
+      const nb = Math.max(1, Math.round(n / 10)), ok = i => { const s = order[i]; return !s.interior && s.key !== 'gate' && s.key !== 'moonrise' && !order[i - 1].interior }
+      const bslots = shuffle(Array.from({ length: n }, (_, i) => i).filter(i => i > 0 && ok(i))), seg = order.map(s => s.seg), bent = []
+      const isB = i => seg[(i + n) % n] === 'bend'
+      for (const i of bslots) { if (bent.length >= 2 * nb) break; seg[i] = 'bend'; if ((isB(i - 1) && isB(i - 2)) || (isB(i - 1) && isB(i + 1)) || (isB(i + 1) && isB(i + 2))) { seg[i] = order[i].seg; continue } bent.push(i) }
+      if (bent.length < 2) throw new Error('no room for bends')
+      if (bent.length % 2) { const i = bent.pop(); seg[i] = order[i].seg }
+      const dirs = shuffle([...Array(bent.length / 2).fill('bendL'), ...Array(bent.length / 2).fill('bendR')])
+      bent.forEach((i, j) => { order[i] = { ...order[i], seg: dirs[j], bend: Math.floor(r() * 3) } })
+      assertRoute(order, { stations: n })
+      return order
+    } catch (e) { lastError = e }
+  }
+  throw lastError
+}
+
+// Never throws: salted retries of the show seed (as ringWorldFor.js's autoDrawWorld), then the authored lap.
+function makeRoute(seed, stations = 36) {
+  for (let attempt = 0; attempt < 20; attempt++) { try { return drawRoute(FOREST_POOL, { seed: hash32(seed >>> 0, 0x464f5245 ^ attempt), stations }) } catch { /* next salt */ } }
+  try { return drawRoute(FOREST_POOL, { seed: 'authored', stations }) } catch { /* the plain loop below */ }
+  return Array.from({ length: stations }, (_, i) => i === 0 ? { ...GATE_ST, seg: 'straight' } : { ...PIN_ST, seg: 'straight' })
+}
+
+// The forest's character per station: stretches of 5 to 8 stations, each a woodland type, the first one the seed's own
+// (the type changes between stretches; the page blends tree mix, density and the sky tint over a station).
+const BIOMES = ['pine', 'birch', 'oak', 'deadwood', 'bog', 'ridge']
+function forestStretches(seed, stations = 36) {
+  const r = rng(seed >>> 0, 0xB10E), base = BIOMES[Math.floor(r() * 4)], out = []
+  let cur = base, prev = null
+  while (out.length < stations) {
+    const len = 5 + Math.floor(r() * 4)
+    for (let i = 0; i < len && out.length < stations; i++) out.push(cur)
+    const others = BIOMES.filter(b => b !== cur && b !== prev); prev = cur; cur = others[Math.floor(r() * others.length)]
+  }
+  // the lap closes: a last stretch shorter than 3 stations joins its neighbour, and it never matches the first
+  const runStart = () => { let k = stations - 1; while (k > 0 && out[k - 1] === out[stations - 1]) k--; return k }
+  let k = runStart()
+  if (k > 0 && stations - k < 3) { for (let i = k; i < stations; i++) out[i] = out[k - 1]; k = runStart() }
+  if (k > 0 && out[stations - 1] === base) { const b = BIOMES.find(x => x !== base && x !== out[k - 1]); for (let i = k; i < stations; i++) out[i] = b }
+  return { base, biome: out }
+}
+// </inline>
+// ROUTE[k]: kind/variant = the SEGMENT walked into station k (straight, bendL, bendR, barn, shack; variant = bend size or
+// interior layout), lm/role = the station's landmark or set piece from the drawn lap
+const ROUTE=makeRoute(SEED,NS).map(r=>({...r,lm:r.kind,lv:r.variant,kind:r.seg,variant:r.interior?r.variant:(r.bend||0)}));
+const PINS=ROUTE.map((r,i)=>r.lm==='moonrise'?i:-1).filter(i=>i>=0), BIOME=forestStretches(SEED,NS).biome;
+// interior geometry (metres): you walk BARN_IN into a barn or shack (door at 9 m from the station before, the inside
+// station rests 2 m past the door) and out of it over the interior's length (far door 2 m before the end of that
+// stretch). A barn is 13 m deep, a shack 7 m (one room). Longer stretches, so those walks take longer.
+const BARN_IN=11, BW=4, WH=3.6, PK=6.2, BDOOR=9, BLEN=13, ILEN={barn:BLEN,shack:7};
+const INNER=k=>k==='barn'||k==='shack';
 // an interior (and all of its pieces) comes out of the fog only as the NEXT stop: d = distance to its front door.
 // Hidden beyond 12.5 m (two stations back the door is 15 m of path off, only ~13 m in depth across a sharp bend), full
 // from 9.5 m (the station before rests at 9 m)
 const GATE=d=>clamp((12.5-d)/3);
 const isExit=k=>INNER(ROUTE[(k+NS-1)%NS].kind);
-const segLen=k=>INNER(ROUTE[k].kind)?BARN_IN:isExit(k)?BARN_OUT:D;
+const segLen=k=>INNER(ROUTE[k].kind)?BARN_IN:isExit(k)?ILEN[ROUTE[(k+NS-1)%NS].kind]:D;
 // the shell of each interior: half width w, wall height wh, ridge pk, door half widths (front dF, back dB) and height dh,
 // facade outline (half width fw, eave fh, peak fpk) used to know what the facade hides
 const SHELL={barn:()=>({w:BW,wh:WH,pk:PK,dF:1.6,dB:1.8,dh:3.5,fw:BW+.15,fh:WH,fpk:PK}),
-  house:v=>{const w=[1.9,2.7,2.2][v];return{w,wh:2.9,pk:2.9,dF:.8,dB:.85,dh:2.3,fw:w+1.3,fh:3.3,fpk:5.7}}};
+  shack:v=>{const w=[1.9,2.1,2.0][v];return{w,wh:2.4,pk:3.4,dF:.82,dB:.82,dh:2.18,fw:w+.2,fh:2.45,fpk:3.65}}};
 const S=[0];for(let k=1;k<NS;k++)S.push(S[k-1]+segLen(k));
 const L=S[NS-1]+segLen(0);                 // loop length (arc metres)
 const walkDur=n=>Math.round(DUR*Math.sqrt(segLen(n)/D));
@@ -237,6 +413,7 @@ const PAL=(()=>{const r=rngFor(4711,SEED*7+3);for(let i=0;i<4;i++)r();const pick
 const FOG=h=>{const[L]=toLCh(h);return fromLCh(L,PAL.fog[1],PAL.fog[0])};
 const HUE=(h,p)=>{const[L,C]=toLCh(h);return fromLCh(L,Math.max(C*p[1],.008),p[0])};
 const TRK=h=>HUE(h,PAL.trunk),GRD=h=>HUE(h,PAL.ground),MOON=h=>HUE(h,PAL.moon);
+const TINT={pine:'#3e5a50',birch:'#8a8e96',oak:'#6a5238',deadwood:'#6a6660',bog:'#4e6a3a',ridge:'#4a5a78'};   // sky tint per woodland type
 const RGBA=(h,a)=>`rgba(${[1,3,5].map(i=>parseInt(h.substr(i,2),16)).join(',')},${a})`;
 function bez(x1,y1,x2,y2){const cx=3*x1,bx=3*(x2-x1)-cx,ax=1-cx-bx,cy=3*y1,by=3*(y2-y1)-cy,ay=1-cy-by;
   const sx=t=>((ax*t+bx)*t+cx)*t, sy=t=>((ay*t+by)*t+cy)*t;
@@ -256,51 +433,88 @@ function lgrad(id,x1,y1,x2,y2,stops){return `<linearGradient id="${id}" gradient
 function rgrad(id,cx,cy,r,stops,sy=1){return `<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="${fm(cx)}" cy="${fm(cy)}" r="${fm(r)}" gradientTransform="translate(${fm(cx)} ${fm(cy)}) scale(1 ${sy}) translate(${fm(-cx)} ${fm(-cy)})">${stops.map(s=>`<stop offset="${s[0]}" stop-color="${s[1]}" stop-opacity="${s[2]??1}"/>`).join('')}</radialGradient>`}
 
 // ---------- trees (world-space shape, projected per pose) ----------
-function treeShape(r,w,hmin){
-  const lean=r()<0.4?(r()-0.5)*0.14:(r()-0.5)*0.03;
-  const HS=[-0.12,0,0.5,1.4,4,8,13,19,26,34];
+// FOREST FIRST: six species with silhouettes that differ at 30 ft. dec = the v4 bare tree; pine = straight trunk,
+// dead stubs low, drooping needle tiers high (a cone in the fog); birch = slim, pale bark with dark marks, thin upswept
+// twigs; snag = dead and broken off (a stump when short), jagged top, a few bare spikes; oak = thick, short, huge low
+// limbs spreading wide; apple = short gnarled orchard tree, a split trunk and a wide twiggy crown with a few dark
+// apples. moss: grey-green strands hang from the limbs. lean: a leaning tree.
+const HS_TALL=[-0.12,0,0.5,1.4,4,8,13,19,26,34];
+function treeShape(r,w,hmin,sp='dec',o={}){
+  let lean=r()<0.4?(r()-0.5)*0.14:(r()-0.5)*0.03;
+  if(o.lean)lean=o.lean;
+  let HS=HS_TALL.slice(),jit=0.4,taper=h=>Math.max(0.5,1-(h-1.4)/42);
+  if(sp==='pine'){lean*=.35;jit=.08;taper=h=>Math.max(.13,1-(h-1.4)/36)}
+  else if(sp==='birch'){w*=.6;jit=.25;taper=h=>Math.max(.3,1-(h-1.4)/40)}
+  else if(sp==='oak'){w*=1.4;HS=[-0.12,0,0.5,1.4,3,5,7.5,10,12.5];jit=.5;taper=h=>Math.max(.45,1-(h-1.4)/18)}
+  else if(sp==='snag'){const T=o.stump?rr(r,1.7,2.8):rr(r,6,15);HS=HS_TALL.filter(h=>h<T-0.5).concat([T]);lean*=1.6;taper=h=>Math.max(.55,1-(h-1.4)/30)}
+  else if(sp==='apple'){w=rr(r,.2,.3)*(o.big||1);HS=[-0.12,0,0.4,0.9,1.5,2.2,3,3.8,4.6,5.4].map(h=>h*(o.big||1));jit=.6;taper=h=>Math.max(.4,1-h/9);lean=(r()-0.5)*.16}
   const cx=[],ww=[];let k=0;
-  HS.forEach((h,i)=>{if(i>=4)k+=(r()-0.5)*w*0.4;cx.push(lean*Math.max(0,h)+k);
-    ww.push(w*(h<=0?1.5:h<=0.5?1.18:h<=1.4?1.03:Math.max(0.5,1-(h-1.4)/42)))});
-  const b0=cx[0],bw0=ww[0];
-  const trunk=[[b0-bw0*0.62,-0.06],[b0-bw0*0.5,0.1]].concat(HS.slice(1).map((h,i)=>[cx[i+1]-ww[i+1]/2,h]),HS.slice(1).map((h,i)=>[cx[i+1]+ww[i+1]/2,h]).reverse(),[[b0+bw0*0.5,0.1],[b0+bw0*0.62,-0.06],[b0+bw0*0.25,-0.12],[b0-bw0*0.25,-0.12]]);
-  const at=h=>{let i=0;while(i<HS.length-2&&HS[i+1]<h)i++;const t=(h-HS[i])/(HS[i+1]-HS[i]);return[cx[i]+(cx[i+1]-cx[i])*t,ww[i]+(ww[i+1]-ww[i])*t]};
-  const branches=[];const nb=2+Math.floor(r()*3);const bias=r()<.5?-1:1;
-  for(let b=0;b<nb;b++){
-    const h0=rr(r,hmin,Math.max(hmin+2,22)); const side=r()<0.75?bias:-bias; const [c0,w0]=at(h0);
-    let ang=rr(r,0.45,1.15); const len=rr(r,2.2,6.5)*Math.sqrt(w/0.7); const bw=Math.max(0.2,w0*rr(r,0.28,0.4));
-    let x=c0+side*w0*0.3, y=h0; const sp=[[x,y,bw]];
-    for(let s=1;s<=3;s++){ang+=(r()-0.35)*0.4;x+=side*Math.sin(ang)*len/3;y+=Math.cos(ang)*len/3;sp.push([x,y,bw*(1-s*0.22)])}
-    branches.push(sp);
-    if(r()<0.55){const q=sp[1];let a2=ang-0.5;const l2=len*0.45;branches.push([[q[0],q[1],bw*0.55],[q[0]+side*Math.sin(a2)*l2*0.5,q[1]+Math.cos(a2)*l2*0.5,bw*0.42],[q[0]+side*Math.sin(a2-0.2)*l2,q[1]+Math.cos(a2-0.2)*l2,bw*0.3]])}
-  }
-  return {trunk,branches,cx,ww,HS};
+  HS.forEach((h,i)=>{if(i>=4)k+=(r()-0.5)*w*jit;cx.push(lean*Math.max(0,h)+k);
+    ww.push(w*(h<=0?1.5:h<=0.5?1.18:h<=1.4?1.03:taper(h)))});
+  const b0=cx[0],bw0=ww[0],n=HS.length;
+  const left=HS.slice(1).map((h,i)=>[cx[i+1]-ww[i+1]/2,h]),right=HS.slice(1).map((h,i)=>[cx[i+1]+ww[i+1]/2,h]).reverse();
+  if(sp==='snag'){const T=HS[n-1],c=cx[n-1],q=ww[n-1];left.push([c-q*.2,T+rr(r,.5,1.4)],[c+q*.05,T+rr(r,.05,.3)],[c+q*.3,T+rr(r,.3,.9)])}
+  const trunk=[[b0-bw0*0.62,-0.06],[b0-bw0*0.5,0.1]].concat(left,right,[[b0+bw0*0.5,0.1],[b0+bw0*0.62,-0.06],[b0+bw0*0.25,-0.12],[b0-bw0*0.25,-0.12]]);
+  const at=h=>{let i=0;while(i<HS.length-2&&HS[i+1]<h)i++;const t=clamp((h-HS[i])/(HS[i+1]-HS[i]));return[cx[i]+(cx[i+1]-cx[i])*t,ww[i]+(ww[i+1]-ww[i])*t]};
+  const branches=[],polys=[],marks=[],fruit=[];const bias=r()<.5?-1:1;
+  const limb=(h0,side,ang,len,bw,steps=3,curl=.4)=>{const [c0,w0]=at(h0);let x=c0+side*w0*0.3,y=h0;const s=[[x,y,bw]];
+    for(let i=1;i<=steps;i++){ang+=(r()-0.35)*curl;x+=side*Math.sin(ang)*len/steps;y+=Math.cos(ang)*len/steps;s.push([x,y,bw*(1-i*0.7/steps)])}branches.push(s);return s};
+  const twig=(p,side,ang,l,bw)=>branches.push([[p[0],p[1],bw],[p[0]+side*Math.sin(ang)*l*.5,p[1]+Math.cos(ang)*l*.5,bw*.75],[p[0]+side*Math.sin(ang-.2)*l,p[1]+Math.cos(ang-.2)*l,bw*.55]]);
+  const top=HS[n-1];
+  if(sp==='dec'||sp==='snag'){const nb=sp==='snag'?1+Math.floor(r()*3):2+Math.floor(r()*3);
+    for(let b=0;b<nb;b++){const h0=rr(r,Math.min(hmin,top*.5),Math.max(Math.min(hmin,top*.5)+1,Math.min(22,top-.8)));const side=r()<0.75?bias:-bias;
+      const len=(sp==='snag'?rr(r,1,3.2):rr(r,2.2,6.5))*Math.sqrt(w/0.7),bw=Math.max(0.2,at(h0)[1]*rr(r,0.28,0.4));const s=limb(h0,side,rr(r,0.45,1.15),len,bw);
+      if(r()<0.55)twig(s[1],side,rr(r,0,.8),len*.45,bw*.55)}}
+  else if(sp==='pine'){
+    for(let h=Math.max(2.5,hmin-4);h<(hmin>=8?Math.min(hmin+5,26):3);h+=rr(r,.9,1.6)){const side=r()<.5?-1:1;limb(h,side,rr(r,1.7,2.1),rr(r,.5,1.3),.09,2,.1)}
+    const t0=hmin>=8?Math.max(hmin,rr(r,6,10)):rr(r,2.6,4.5),R=rr(r,2.2,3.1)*Math.sqrt(w/0.7);
+    for(let h=t0;h<33;h+=rr(r,1.7,2.4)){const [c]=at(h),hw=R*Math.pow(1-(h-t0)/(36-t0),0.9)+.3,pts=[[c-hw,h-.75]];
+      for(let i=1;i<8;i++){const t=i/8;pts.push([c-hw+2*hw*t,h-.75+Math.sin(Math.PI*t)*.25+(i%2?-.18:.08)])}
+      pts.push([c+hw,h-.75],[c+hw*.4,h+.35],[c+.12,h+1.25],[c-.12,h+1.25],[c-hw*.4,h+.35]);polys.push(pts)}}
+  else if(sp==='birch'){const nb=4+Math.floor(r()*4);for(let b=0;b<nb;b++){const h0=rr(r,hmin,Math.max(hmin+3,24)),side=r()<.5?-1:1;const s=limb(h0,side,rr(r,.25,.6),rr(r,1.6,4),Math.max(.07,at(h0)[1]*.3),3,.25);if(r()<.6)twig(s[2],side,rr(r,-.3,.3),1.2,.05)}
+    for(let h=.5;h<Math.min(11,top);h+=rr(r,.3,.75)){const [c,q]=at(h),a=rr(r,.05,.45),b2=rr(r,.05,.45);marks.push([[c-q*(.5-a),h,.05],[c+q*(.5-b2),h+rr(r,-.02,.02),.05]])}
+    for(let i=0;i<3;i++){const h=rr(r,1.5,9),[c,q]=at(h);marks.push([[c-q*.5,h+.12,.06],[c,h-.05,.07],[c+q*.5,h+.12,.06]])}}
+  else if(sp==='oak'){const nb=4+Math.floor(r()*3);
+    for(let b=0;b<nb;b++){const h0=rr(r,Math.max(2.6,Math.min(hmin,6)-1),Math.max(Math.min(hmin,6.5),4)),side=b%2?bias:-bias;const len=rr(r,4,8)*Math.sqrt(w/1),bw=Math.max(.25,at(h0)[1]*rr(r,.4,.55));
+      const s=limb(h0,side,rr(r,.95,1.45),len,bw,4,.55);for(const q of[s[1],s[2],s[3]])if(r()<.7)twig(q,side,rr(r,-.2,.7),len*.35,bw*.4)}}
+  else if(sp==='apple'){const big=o.big||1,nb=3+Math.floor(r()*2);
+    for(let b=0;b<nb;b++){const side=b%2?1:-1,h0=rr(r,1.3,1.9)*big;const s=limb(h0,side,rr(r,.35,.95),rr(r,1.2,1.9)*big,.09*big,3,.6);
+      for(const q of s.slice(1))if(r()<.6)twig(q,side,rr(r,-.4,.9),rr(r,.5,.9)*big,.035*big)
+      if(!o.dead)for(let i=0;i<3;i++){const q=s[1+Math.floor(r()*3)];const fx=q[0]+rr(r,-.4,.4),fh=q[1]-rr(r,.1,.4);fruit.push([fx,fh])}}}
+  if(o.moss)for(const s of branches.slice(0,6)){if(s[0][2]<.08)continue;for(const q of s.slice(1)){if(r()<.45)continue;const l=rr(r,.8,2.4);branches.push([[q[0],q[1],.08],[q[0]+rr(r,-.1,.1),q[1]-l*.5,.06],[q[0]+rr(r,-.15,.15),q[1]-l,.04]])}}
+  return {trunk,branches,polys,marks,fruit,cx,ww,HS,sp};
 }
 function litStrip(sh,inner,frac){
   const pts=[],back=[];sh.HS.forEach((h,i)=>{if(h>6.5)return;const e=sh.cx[i]+inner*sh.ww[i]/2;pts.push([e,h]);back.push([e-inner*frac*sh.ww[i],h])});
   return pts.concat(back.reverse());
 }
-function treeItem(Z,X,w,r){
-  const sh=treeShape(r,w,Math.abs(X)<4?8:4); const inner=X>0?-1:1;
-  const LF=0.35,litA=litStrip(sh,inner,LF);
-  const edgeAt=h=>{const i=sh.HS.findIndex(v=>v>=h);const e=sh.cx[i]+inner*sh.ww[i]/2;return[e,e-inner*LF*sh.ww[i]]};
+// bark tone of the silhouette layer per species (pale birch is the one light trunk; snags are weathered grey)
+// darkened with Fable patch 10 (depth needs near trunks near-black so far trunks read lighter against the haze)
+const BARK={dec:'#0b0907',pine:'#0a0806',birch:'#77736a',snag:'#1a1815',oak:'#0b0907',apple:'#0d0a07'};
+function treeItem(Z,X,w,r,sp='dec',o={}){
+  const sh=treeShape(r,w,sp==='apple'?1.5:Math.abs(X)<(sp==='oak'?6.5:4)?8:4,sp,o); const inner=X>0?-1:1;
+  const LF=0.35,litA=litStrip(sh,inner,LF),top=sh.HS[sh.HS.length-1];
+  const edgeAt=h=>{h=Math.min(h,top);const i=Math.max(0,sh.HS.findIndex(v=>v>=h));const e=sh.cx[i]+inner*sh.ww[i]/2;return[e,e-inner*LF*sh.ww[i]]};
   // bark furrows: dark vertical ribbons across the lit side, below 6 m
-  const fur=[0.1,0.2,0.29].slice(0,2+Math.floor(r()*2)).map(f=>{const ph=r()*6,h0=rr(r,0.5,1.4),h1=rr(r,3.5,6);const at2=h=>{let i=0;while(i<sh.HS.length-2&&sh.HS[i+1]<h)i++;const t=(h-sh.HS[i])/(sh.HS[i+1]-sh.HS[i]);return[sh.cx[i]+(sh.cx[i+1]-sh.cx[i])*t,sh.ww[i]+(sh.ww[i+1]-sh.ww[i])*t]};
+  const fur=sp==='birch'?[]:[0.1,0.2,0.29].slice(0,2+Math.floor(r()*2)).map(f=>{const ph=r()*6,h0=rr(r,0.5,1.4),h1=Math.min(rr(r,3.5,6),top-.2);const at2=h=>{let i=0;while(i<sh.HS.length-2&&sh.HS[i+1]<h)i++;const t=clamp((h-sh.HS[i])/(sh.HS[i+1]-sh.HS[i]));return[sh.cx[i]+(sh.cx[i+1]-sh.cx[i])*t,sh.ww[i]+(sh.ww[i+1]-sh.ww[i])*t]};
     return [...Array(9)].map((_,i)=>{const t=i/8,h=h0+(h1-h0)*t,[c,ww]=at2(h);return[c+inner*ww*(0.5-f)+Math.sin(h*2.1+ph)*ww*0.03,h,w*0.05*Math.sin(Math.PI*(0.08+t*0.84))]})});
-  return {grp:'w',Z,X,kind:'tree',fastDim:2,op:z=>clamp((ZFAR-z)/FADE),
-    veil:[1],lops:[null,z=>fogAmt(z),z=>litAmt(X,z)*(1-fogAmt(z))],
+  const bark=TRK(BARK[sp]||BARK.dec),pale=sp==='birch'?mix(FOG('#686660'),TRK('#5e584c'),.3):null;
+  return {grp:'w',Z,X,kind:'tree',sp,fastDim:2,op:z=>clamp((ZFAR-z)/FADE),
+    veil:[1],lops:[null,z=>fogAmt(z)*(pale?0.85:1),z=>litAmt(X,z)*(1-fogAmt(z))],
     geom(z,id){
       const pr=p=>P(X+p[0],p[1],z);
-      const tr=sh.trunk.map(pr), br=sh.branches.map(b=>wRib(b,X,z));
-      const all=dPoly(tr)+br.map(dPoly).join('');
+      const tr=sh.trunk.map(pr), br=sh.branches.map(b=>wRib(b,X,z)), pl=sh.polys.map(q=>q.map(pr));
+      const all=dPoly(tr)+br.map(dPoly).join('')+pl.map(dPoly).join('');
       const fy0=P(0,-0.2,z)[1],fy2=P(0,18,z)[1],ly1=P(0,0.3,z)[1],ly2=P(0,4.8,z)[1];const [e0,e1]=edgeAt(1.5);const ex0=P(X+e0,1.5,z)[0],ex1=P(X+e1,1.5,z)[0];const lb=bbox([litA.map(pr)]);
       const warm=clamp(1.25-z/9)*(X>0?1:0.75),c0=mix(TRK('#3a3229'),TRK('#4e3a26'),warm),c1=mix(TRK('#2c251e'),TRK('#3a2c1e'),warm);
       const furs=w*F/z>=70?fur.map(sp=>`<path d="${dPoly(wRib(sp,X,z))}" fill="${TRK('#120e09')}" opacity=".75"/>`).join(''):'';
-      // on-frame test per trunk SECTION: one bbox for a leaning 34 m trunk spans the frame long after its foot has left
+      const mk=sh.marks.length&&w*F/z>=26?`<path d="${sh.marks.map(m=>dPoly(wRib(m,X,z))).join('')}" fill="#1a1816"/>`:'';
+      const fr=sh.fruit.length&&F/z>=60?`<path d="${sh.fruit.map(([x,h])=>dPoly(ell(x,h,.045,.045,8).map(pr))).join('')}" fill="#3a1a10"/>`:'';
       const secs=sh.HS.slice(0,-1).map((h,i)=>[[sh.cx[i]-sh.ww[i]/2,h],[sh.cx[i]+sh.ww[i]/2,h],[sh.cx[i+1]+sh.ww[i+1]/2,sh.HS[i+1]],[sh.cx[i+1]-sh.ww[i+1]/2,sh.HS[i+1]]].map(pr));
-      return {bb:bbox([tr,...br]),pb:[...secs,...br].map(l=>bbox([l])),lbb:[null,null,lb],layers:[
-        `<path d="${all}" fill="${TRK('#0b0907')}"/>`,
-        // fog tint: a step darker than the haze behind, so a far trunk stays a readable silhouette (a1)
+      const base=pale?`<path d="${dPoly(tr)}" fill="${pale}"/><path d="${br.map(dPoly).join('')+pl.map(dPoly).join('')}" fill="${mix(pale,'#000000',.35)}"/>${mk}`:`<path d="${all}" fill="${bark}"/>${fr}`;
+      return {bb:bbox([tr,...br,...pl]),pb:[...secs,...br,...pl].map(l=>bbox([l])),lbb:[null,null,lb],layers:[
+        base,
+        // fog tint: a step darker than the haze behind, so a far trunk stays a readable silhouette (Fable patch 10)
         `<defs>${lgrad(id+'f',0,fy0,0,fy2,[[0,FOG('#2a2b2f')],[.07,FOG('#27282c')],[.16,FOG('#24252a')],[.55,FOG('#1a1b1f')],[1,FOG('#111215')]])}</defs><path d="${all}" fill="url(#${id}f)"/>`,
         `<defs>${lgrad(id+'l',ex0,0,ex1,0,[[0,c0,1],[.35,c1,.55],[1,'#2A2620',0]])}${lgrad(id+'v',0,ly1,0,ly2,[[0,'#fff',1],[.4,'#fff',.8],[1,'#fff',0]])}<mask id="${id}k" maskUnits="userSpaceOnUse" x="${fm(lb[0]-4)}" y="${fm(lb[1]-4)}" width="${fm(lb[2]-lb[0]+8)}" height="${fm(lb[3]-lb[1]+8)}"><rect x="${fm(lb[0]-4)}" y="${fm(lb[1]-4)}" width="${fm(lb[2]-lb[0]+8)}" height="${fm(lb[3]-lb[1]+8)}" fill="url(#${id}v)"/></mask></defs><g mask="url(#${id}k)"><path d="${dPoly(litA.map(pr))}" fill="url(#${id}l)"/>${furs}</g>`
       ]};
@@ -368,6 +582,40 @@ function patch(Z,X,r){
   const c=GRD(r()<.5?'#2a2219':'#5c4f3b');
   gi(Z,X,z=>`<path d="${dPoly(sh.map(([x,d])=>P(X+x,0,z+d)))}" fill="${c}" opacity=".8"/>`);
 }
+// FOREST FIRST floor kit (all low, drawn into the ground tiles): ferns, moss, mushrooms, twigs, bog pools
+function fern(Z,X,r){
+  const nf=5+Math.floor(r()*4),s=rr(r,.7,1.15),c=GRD(r()<.5?'#2c3a20':'#36472a'),fr=[];
+  for(let i=0;i<nf;i++){const a=-1.25+2.5*i/(nf-1)+rr(r,-.12,.12),l=s*rr(r,.35,.55),dz=rr(r,-.15,.15);fr.push([a,l,dz])}
+  gi(Z,X,z=>fr.map(([a,l,dz])=>{const tip=[X+Math.sin(a)*l,Math.cos(a)*l*.55,z+dz+Math.cos(a)*.1],mid=[X+Math.sin(a)*l*.5,Math.cos(a)*l*.62,z+dz*.5];
+    const p0=P(X,0,z),p1=P(...mid),p2=P(...tip),wd=Math.max(.07*F/z,5);const nx=-(p2[1]-p0[1]),ny=p2[0]-p0[0],m=Math.hypot(nx,ny)||1;
+    return `<path d="${dPoly([p0,[p1[0]+nx/m*wd,p1[1]+ny/m*wd],p2,[p1[0]-nx/m*wd,p1[1]-ny/m*wd]])}" fill="${c}"/>`}).join(''));
+}
+function mossPatch(Z,X,r){const w=rr(r,.5,1.1),dz=rr(r,.4,.9),n=10,sh=[];for(let i=0;i<n;i++){const a=i/n*TAU;sh.push([Math.cos(a)*w/2*(0.75+r()*0.35),Math.sin(a)*dz/2*(0.75+r()*0.35)])}
+  const c=GRD(r()<.5?'#2a3a1c':'#33442a');gi(Z,X,z=>`<path d="${dPoly(sh.map(([x,d])=>P(X+x,0,z+d)))}" fill="${c}" opacity=".85"/>`)}
+function shrooms(Z,X,r){const m=[...Array(3+Math.floor(r()*4))].map(()=>[rr(r,-.2,.2),rr(r,-.1,.1),rr(r,.05,.09)]);
+  gi(Z,X,z=>m.map(([dx,dz,s])=>{const b=P(X+dx,0,z+dz),t=P(X+dx,s*1.4,z+dz),rx=Math.max(s*F/z,4);return `<path d="${dPoly([[b[0]-rx*.25,b[1]],[b[0]+rx*.25,b[1]],[t[0]+rx*.2,t[1]],[t[0]-rx*.2,t[1]]])}" fill="#8a8270"/><ellipse cx="${fm(t[0])}" cy="${fm(t[1])}" rx="${fm(rx)}" ry="${fm(rx*.45)}" fill="#c8bca0"/>`}).join(''))}
+function twig(Z,X,r){const a=rr(r,0,Math.PI),l=rr(r,.6,1.4),sp=[[X-Math.cos(a)*l/2,Z-Math.sin(a)*l/2],[X,Z+rr(r,-.05,.05)],[X+Math.cos(a)*l/2,Z+Math.sin(a)*l/2]];
+  gi(Z,X,z=>`<path d="${dPoly(ribbon(sp.map(([x,zz])=>{const p=P(x,0.03,z+zz-Z);return[p[0],p[1],Math.max(.04*F/z,5)]})))}" fill="${TRK('#2a2016')}"/>`)}
+function pool(Z,X,r){const w=rr(r,.8,1.6),dz=rr(r,.6,1.1),sh=[...Array(12)].map((_,i)=>{const a=i/12*TAU;return[Math.cos(a)*w/2*(0.8+r()*0.3),Math.sin(a)*dz/2*(0.8+r()*0.3)]});
+  gi(Z,X,z=>`<path d="${dPoly(sh.map(([x,d])=>P(X+x,0,z+d)))}" fill="${FOG('#0d1114')}"/><path d="${dPoly(sh.slice(1,5).map(([x,d])=>P(X+x*.7,0,z+d*.5)))}" fill="${FOG('#3a4450')}" opacity=".6"/>`)}
+// a creek crossing the path (CREEKS, drawn by lifeTile): dark water winding across, moonlit glints, muddy banks with
+// stones, and a way over: v0 a plank bridge on two stringers, v1 a felled log with a plank laid along it, v2 stepping
+// stones with a broken plank
+const CREEKS=[];
+function creekSvg(c,Pw,z0,z1){
+  // Pw(Z,X) -> screen point or null. Polygons are clipped to the tile's own stretch [z0,z1) so tiles never double up
+  const zc=X=>c.Zc+.55*Math.sin(X*.33+c.ph)+.22*Math.sin(X*.9+c.ph*2);
+  const strip=(off0,off1,col)=>{const A=[],B=[];for(let X=-11;X<=11.01;X+=.5){const a=zc(X)+off0,b=zc(X)+off1;const za=Math.min(Math.max(a,z0),z1),zb=Math.min(Math.max(b,z0),z1);if(zb-za<.01)continue;const p=Pw(za,X),q=Pw(zb,X);if(p&&q){A.push(p);B.push(q)}}
+    return A.length>1?`<path d="${dPoly(A.concat(B.reverse()))}" fill="${col}"/>`:''};
+  let s=strip(-c.w/2-.35,c.w/2+.35,GRD('#1e1a14'))+strip(-c.w/2,c.w/2,FOG('#10161b'))+strip(-c.w*.18,c.w*.12,FOG('#1e2730'));
+  for(let i=0;i<14;i++){const X=-9+i*1.4+Math.sin(i*7.1)*.4,dz=Math.sin(i*3.3+c.ph)*c.w*.3,Z=zc(X)+dz;if(Z<z0||Z>=z1)continue;const p=Pw(Z,X-.35),q=Pw(Z,X+.35);if(p&&q)s+=`<path d="${dPoly(ribbon([[p[0],p[1],6],[q[0],q[1],6]]))}" fill="${MOON('#8a9aaa')}"/>`}
+  const pc=pathC(c.Zc),wpx=(Z,X,h)=>{const a=Pw(Z,X-h),b=Pw(Z,X+h);return a&&b?Math.max(5,Math.hypot(b[0]-a[0],b[1]-a[1])/2):6};
+  if(c.v===0){for(const sx of[-.75,.75]){const a=Pw(Math.max(z0,c.Zc-c.w/2-.5),pc+sx),b=Pw(Math.min(z1,c.Zc+c.w/2+.5),pc+sx);if(a&&b&&z1>c.Zc-c.w/2-.5&&z0<c.Zc+c.w/2+.5)s+=`<path d="${dPoly(ribbon([[a[0],a[1],7],[b[0],b[1],7]]))}" fill="${GRD('#1c150e')}"/>`}
+    for(let Z=c.Zc-c.w/2-.4,i=0;Z<c.Zc+c.w/2+.4;Z+=.3,i++){if(i===3||Z<z0||Z+.24>z1)continue;const sk=i===5?.12:0;const q=[Pw(Z,pc-.85),Pw(Z+sk,pc+.85),Pw(Z+.24+sk,pc+.85),Pw(Z+.24,pc-.85)];if(q.every(Boolean))s+=`<path d="${dPoly(q)}" fill="${GRD(i%2?'#5a4a36':'#4e4030')}"/>`}}
+  else if(c.v===1){const a=Pw(Math.max(z0,c.Zc-c.w/2-.8),pc-.2),b=Pw(Math.min(z1,c.Zc+c.w/2+.8),pc+.15);if(a&&b&&z1>c.Zc-c.w/2-.8&&z0<c.Zc+c.w/2+.8){s+=`<path d="${dPoly(ribbon([[a[0],a[1],wpx(Math.max(z0,c.Zc-c.w/2-.8),pc,.28)],[b[0],b[1],wpx(Math.min(z1,c.Zc+c.w/2+.8),pc,.25)]]))}" fill="${GRD('#2e2418')}"/>`}}
+  else{for(const [dz,dx] of[[-.6,.2],[-.1,-.25],[.4,.15],[.8,-.1]]){const Z=c.Zc+dz;if(Z<z0||Z>=z1)continue;const p=Pw(Z,pc+dx);if(p){const rx=wpx(Z,pc+dx,.25);s+=`<ellipse cx="${fm(p[0])}" cy="${fm(p[1])}" rx="${fm(rx)}" ry="${fm(rx*.4)}" fill="#3a3834"/>`}}}
+  for(let i=0;i<10;i++){const X=-6+i*1.3,side=i%2?1:-1,Z=zc(X)+side*(c.w/2+.25);if(Z<z0||Z>=z1)continue;const p=Pw(Z,X);if(p){const rx=wpx(Z,X,.18);s+=`<ellipse cx="${fm(p[0])}" cy="${fm(p[1])}" rx="${fm(rx)}" ry="${fm(rx*.45)}" fill="#34322e"/>`}}
+  return s}
 // the path itself: a world-space strip whose centre and width wander (periodic in the loop length, so 12 -> 0 closes)
 const pathC=Z=>0.35*Math.sin(TAU*2*Z/L)+0.15*Math.sin(TAU*5*Z/L+1.3);
 const pathHW=Z=>1.3+0.16*Math.sin(TAU*9*Z/L+0.4)+0.07*Math.sin(TAU*23*Z/L+2);
@@ -492,7 +740,9 @@ function prop(Z,X,body,lit,opts={}){
   // LEAN (per seed and landmark): the whole prop stands crooked, rotated about its foot
   const ln=opts.lean??LEAN,tilt=sh=>ln?rotS(sh,ln,0,0):sh;
   body=body.map(norm).map(tilt);lit=lit.map(norm).map(tilt);const glows=(opts.glows||[]).map(g=>{if(!ln)return g;const[q]=rot([[g.x,g.h]],ln,0,0);return{...g,x:q[0],h:q[1]}});
-  return {grp:'w',Z,X,kind:'lm',veil:[2],op:z=>clamp((ZFAR-z)/FADE),
+  // thru: a doorway the walk passes through lets go of its last metre (the door frame sweeping past the frame edges fades
+  // over 0.9 m instead of being rastered at 10 000 px wide right in front of the lens)
+  return {grp:'w',Z,X,kind:'lm',veil:[2],op:z=>clamp((ZFAR-z)/FADE)*(opts.thru?clamp((z-.7)/.9):1),
     // the light switches on as you come out of the fog, so a landmark two stations ahead never lights up the text box
     // thru: an item the walk passes THROUGH (a doorway): its glows thin out over the last metres instead of
     // swelling into a full-screen haze, so nothing is left to vanish when the camera is past it
@@ -637,22 +887,6 @@ function bogWisps(Z,X){
   it.geom=(z,id)=>{const r=g(z,id);const wp=water.map(([x,dz])=>P(X+x,0,z+Math.sign(dz)*Math.min(Math.abs(dz),z*0.3)));r.layers[1]=`<path d="${dPoly(wp)}" fill="#0b1113"/>`+r.layers[1];r.bb=bbox([[[r.bb[0],r.bb[1]],[r.bb[2],r.bb[3]]],wp]);return r};
   return it;
 }
-// station 11 — PASS = "a small cabin in the woods with a lit window (and someone in it)"
-function cabin(Z,X,zr){
-  const logs=[.3,.6,.9,1.2,1.5].map(h=>({s:[[-1.3,h,.05],[1.3,h,.05]],c:'#15100b'}));
-  return prop(Z,X,[
-    {p:[[-1.3,-.05],[1.3,-.05],[1.3,1.8],[-1.3,1.8]],c:'#2a2118'},...logs,
-    {p:[[-1.3,1.8],[0,2.72],[1.3,1.8]],c:'#231a12'},
-    {p:[[.6,2.1],[.95,2.1],[.95,3.05],[.6,3.05]],c:'#2c2a26'},
-    {s:[[-1.62,1.68,.14],[0,2.86,.14],[1.62,1.68,.14]],c:'#120e0a'},
-    {p:[[-.95,-.05],[-.4,-.05],[-.4,1.3],[-.95,1.3]],c:'#0c0a08'},
-    {s:[[-1.05,.05,.1],[-.3,.05,.1]],c:'#1e1812'},
-  ],[
-    {p:[[.15,.65],[.85,.65],[.85,1.3],[.15,1.3]],c:'#ffc766'},
-    {e:[.62,1.07,.09,.11],c:'#3a2410'},{p:[[.44,.65],[.8,.65],[.76,.9],[.62,.96],[.48,.9]],c:'#3a2410'},
-    {s:[[.5,.65,.06],[.5,1.3,.06]],c:'#2a1a0c'},{s:[[.15,.97,.06],[.85,.97,.06]],c:'#2a1a0c'},
-  ],{zr,flick:1,glows:[{x:.5,h:1.0,r:1.25,c:'#ffb050',a:.3},{x:.5,h:.02,r:1.4,c:'#ffb050',a:.2,sy:.25}]});
-}
 // station 12 — PASS = "a crooked wooden signpost with a skull on it"
 function signpost(Z,X){
   const b='#5a4530',dk='#241a10';
@@ -687,43 +921,6 @@ function rootPlate(Z,X){
     {s:[[-.75,1.55,.05],[-.3,1.25,.045],[.1,1.3,.04]],c:'#120e0a'},{s:[[.55,1.45,.05],[.2,.95,.045],[.35,.5,.04]],c:'#120e0a'},{s:[[-.6,.6,.045],[-.2,.85,.04]],c:'#120e0a'},
   ].map(sh=>flipX(sh,-sd)),[],{glows:[{x:0,h:1.15,r:1.9,c:'#7a88a2',a:.22,back:1}]});
 }
-// PASS = "a ruined stone chapel wall with a pointed window, a candle on the sill"
-function chapelRuin(Z,X){
-  const sd=Math.sign(X)||1,stone='#2b2a28',jt='#121110';
-  const win=[[-.65,1.15],[.05,1.15],[.05,2.2],[.0,2.42],[-.12,2.62],[-.3,2.76],[-.48,2.62],[-.6,2.42],[-.65,2.2]];
-  const wall=[[-1.6,-.1],[1.7,-.1],[1.72,1.6],[1.55,1.86],[1.4,1.7],[1.16,2.06],[.92,1.98],[.74,2.42],[.52,2.3],[.32,2.88],[.12,3.02],[-.2,3.26],[-.5,3.4],[-.76,3.3],[-1.0,3.66],[-1.26,3.55],[-1.45,3.72],[-1.6,3.5]];
-  const joints=[[-1.55,.5,-.7],[.1,.5,1.68],[-1.55,1.0,-.7],[.1,1.02,1.66],[-1.55,1.55,1.5],[-1.5,2.95,-.75],[.2,2.1,1.0]].map(([a,h,b])=>({s:[[a,h,.035],[b,h+.02,.035]],c:jt}));
-  const vj=[[-1.1,.0,.5],[.7,.5,1.0],[-.9,1.0,1.55],[1.2,1.02,1.55],[-1.2,1.55,2.95]].map(([x,a,b])=>({s:[[x,a,.03],[x,b,.03]],c:jt}));
-  return prop(Z,X,[
-    {p:wall,hole:win,c:stone},...joints,...vj,
-    {p:[[-1.88,-.1],[-1.45,-.1],[-1.45,2.62],[-1.66,2.84],[-1.88,2.6]],c:'#222120'},
-    {p:[[.95,1.5],[1.72,1.45],[1.72,.3],[1.3,.0],[1.0,.6]],c:'#151a13',o:.85},
-    {p:[[1.75,-.1],[2.25,-.1],[2.15,.18],[1.9,.26]],c:'#222120'},{p:[[-2.3,-.1],[-1.95,-.1],[-2.05,.16]],c:'#222120'},
-    {p:[[-.68,1.09],[.08,1.09],[.08,1.16],[-.68,1.16]],c:'#363431'},
-    {p:[[-.33,1.16],[-.27,1.16],[-.27,1.28],[-.33,1.28]],c:'#b9ae94'},
-  ].map(sh=>flipX(sh,sd)),[
-    flipX({p:[[-.335,1.28],[-.265,1.28],[-.3,1.4]],c:'#ffd27a'},sd),
-  ],{flick:1,glows:[{x:-.3*sd,h:1.33,r:.42,c:'#ffc070',a:.45},{x:-.3*sd,h:2.0,r:1.25,c:'#8ea2c4',a:.34,back:1}]});
-}
-// PASS = "a ruined windmill on the skyline with broken sails" (stands far off the path, seen across many metres)
-function windmill(Z,X,zr){
-  const r=rngFor(Math.round(Z*10),67,SEED),a0=rr(r,0,Math.PI/2),hub=[0,6.55],sl='#191512',arms=[];
-  const at=(a,d)=>[hub[0]+Math.cos(a)*d,hub[1]+Math.sin(a)*d];
-  const sail=(a,d0,d1,frame)=>{const[x0,h0]=at(a,d0),[x1,h1]=at(a,d1);arms.push({s:[[hub[0],hub[1],.13],[x1,h1,.1]],c:sl});if(!frame)return;
-    const n=[-Math.sin(a)*.55,Math.cos(a)*.55],q=(x,h)=>[x+n[0],h+n[1]];const[xa,ha]=q(x0,h0),[xb,hb]=q(x1,h1);
-    arms.push({s:[[xa,ha,.05],[xb,hb,.05]],c:sl});for(let i=0;i<=3;i++){const t=i/3,[cx,ch]=[x0+(x1-x0)*t,h0+(h1-h0)*t];if(frame===2&&i>1)break;arms.push({s:[[cx,ch,.045],[cx+n[0],ch+n[1],.045]],c:sl})}};
-  sail(a0,.6,3.4,1);sail(a0+Math.PI,.6,3.3,2);
-  {const a=a0+Math.PI/2,[x,h]=at(a,1.5);arms.push({s:[[hub[0],hub[1],.13],[x,h,.1]],c:sl},{p:[[x-.08,h-.06],[x+.1,h],[x+.02,h+.14]],c:sl})}
-  {const a=a0+Math.PI*1.5,[bx,bh]=at(a,1.0);arms.push({s:[[hub[0],hub[1],.13],[bx,bh,.11]],c:sl},{s:[[bx,bh,.1],[bx+.25,bh-2.2,.09]],c:sl},{s:[[bx+.08,bh-.5,.05],[bx+.62,bh-.42,.05],[bx+.8,bh-2.1,.05],[bx+.3,bh-2.2,.05]],c:sl})}
-  return prop(Z,X,[
-    {p:[[-1.25,-.1],[1.25,-.1],[.72,6.2],[-.72,6.2]],c:'#2a2622'},
-    {p:[[-.28,-.1],[.28,-.1],[.28,1.1],[0,1.4],[-.28,1.1]],c:'#0b0a09'},
-    {p:[[-.46,2.5],[-.2,2.52],[-.22,2.9],[-.44,2.86]],c:'#0d0c0b'},
-    {p:[[-.98,6.1],[.98,6.1],[.76,6.9],[.3,7.2],[.1,7.0],[-.1,7.32],[-.76,6.9]],c:'#171412'},
-    ...arms,{e:[hub[0],hub[1],.18,.18,12],c:'#100e0c'},
-  ],[{p:[[.02,4.2],[.26,4.2],[.26,4.52],[.02,4.52]],c:'#c9934e'}],
-  {zr,glows:[{x:.14,h:4.36,r:.65,c:'#ffb060',a:.26},{x:0,h:5.2,r:4.6,c:'#7d8ba6',a:.2,back:1}]});
-}
 // PASS = "eyes watching from the dark under the trees"
 function watchEyes(Z,X){
   const r=rngFor(Math.round(Z*10),71,SEED),ec=r()<.5?'#e6ef8c':'#ff6a3c',pairs=[[-1.15,.52],[.25,.86],[1.05,.4]],lit=[],glows=[];
@@ -752,16 +949,116 @@ function crowTree(Z,X){
   [[1.0,2.36],[1.38,2.42],[-.55,2.95],[.48,3.42],[.0,3.38]].forEach(([x,h])=>crow(x,h+.02,r()<.5?-1:1));
   return prop(Z,X,b.map(sh=>flipX(sh,sd)),[],{glows:[{x:.2*sd,h:2.6,r:2.0,c:'#8090a8',a:.26,back:1}]});
 }
-// PASS = "a coffin standing up against a dug grave, lid ajar, a shovel in the dirt"
-function coffin(Z,X){
-  const sd=Math.sign(X)||1,cf=[[-.19,-.05],[.19,-.05],[.3,1.42],[.18,1.92],[-.18,1.92],[-.3,1.42]],T=sh=>rotS(sh,-.14,0,0);
-  const lid=rot(cf.map(([x,h])=>[x*1.02+.07,h+.02]),-.05,.3,1.42);
-  return prop(Z,X,[
-    {e:[.75,.0,.75,.22],c:'#1b1712'},{p:[[.25,-.05],[1.25,-.05],[1.1,.3],[.8,.42],[.45,.32]],c:'#231d16'},
-    {s:[[.95,.0,.05],[1.12,1.15,.045]],c:'#2a2018'},{p:[[1.03,1.12],[1.21,1.16],[1.2,1.28],[1.04,1.25]],c:'#2a2018'},{p:[[.88,-.05],[1.06,-.04],[1.02,.24],[.9,.22]],c:'#3a3a38'},
-    T({p:cf,c:'#0a0807'}),T({p:lid,c:'#2c2219'}),T({s:[[-.1,1.55,.04],[.22,1.58,.04]],c:'#171210'}),T({s:[[.05,.3,.035],[.06,1.75,.035]],c:'#171210'}),
-  ].map(sh=>flipX(sh,sd)),[],{glows:[{x:.3*sd,h:1.1,r:1.6,c:'#7a88a2',a:.24,back:1}]});
-}
+// ---------- woodland landmark kit (FOREST FIRST): natural finds first, silhouettes that read at 30 ft ----------
+// PASS = "a shaft of moonlight falling into a small clearing, ferns in the light"
+function glade(Z,X,v){
+  const r=rngFor(Math.round(Z*10),81,SEED,v),body=[],sd=Math.sign(X)||1;
+  for(let i=0;i<7;i++){const x=rr(r,-1.6,1.6),s=rr(r,.6,1);for(let j=0;j<5;j++){const a=-.9+j*.45+rr(r,-.1,.1);body.push({s:[[x,0,.05],[x+Math.sin(a)*.3*s,.32*s,.05],[x+Math.sin(a)*.6*s,.36*s*(1-Math.abs(a)*.4),.03]],c:j%2?'#2e3a22':'#3a4a2a'})}}
+  const tilt=[-.25,.0,.25][v]*sd;
+  return prop(Z,X,body,[{p:[[-.6+tilt*14,13],[.7+tilt*14,13],[1.7,0],[-1.6,0]],c:'#a8bcd8',o:'.085'},{p:[[-.25+tilt*14,13],[.3+tilt*14,13],[.8,0],[-.7,0]],c:'#c8d6ea',o:'.07'}],
+    {glows:[{x:0,h:.03,r:2.6,c:'#a8bcd8',a:.26,sy:.28},{x:0,h:1.4,r:2.2,c:'#8a9cb8',a:.12,back:1}]})}
+// PASS = "an old gnarled apple tree standing alone" (an orchard tree gone wild)
+function loneApple(Z,X,v){return treeItem(Z,X,.3,rngFor(Math.round(Z*10),83,SEED,v),'apple',{big:1.45+v*.1,dead:v===2})}
+// PASS = "a big hollow log lying in the ferns, dark inside" (v1: with pale shelf fungus, v2: with glowing mushrooms)
+function hollowLog(Z,X,v){
+  if(v===2)return logShrooms(Z,X);
+  const sd=Math.sign(X)||1,body=[{s:[[-1.6,.42,.8],[0,.46,.84],[1.5,.4,.74]],c:'#2a2118'},{s:[[-1.5,.8,.06],[0,.86,.06],[1.4,.76,.05]],c:'#3a3020'},
+    {e:[-1.62,.42,.42,.42],c:'#3a2c1e'},{e:[-1.62,.42,.3,.3],c:'#050404'},{s:[[.3,.85,.06],[.45,1.25,.05],[.4,1.5,.035]],c:'#2a2118'},
+    {s:[[1.2,.1,.05],[1.6,-.02,.04]],c:'#1e1812'},{s:[[-.4,.06,.05],[-.6,-.03,.04]],c:'#1e1812'}];
+  if(v===1)for(const [x,h] of[[.3,.62],[.6,.5],[.9,.66],[-.5,.58]])body.push({p:[[x-.17,h],[x+.17,h],[x+.11,h+.07],[x-.11,h+.07]],c:'#8a7a5c'});
+  return prop(Z,X,body.map(sh=>flipX(sh,sd)),[],{glows:[{x:0,h:.7,r:1.8,c:'#7a88a2',a:.2,back:1}]})}
+// PASS = "a ring of pale mushrooms on the forest floor" (a fairy ring, faintly glowing)
+function mushroomRing(Z,X,v){
+  const r=rngFor(Math.round(Z*10),85,SEED,v),lit=[],body=[],glows=[],cap=['#d8ccb0','#c8d8c0','#e0b8a0'][v],n=11+v*2;
+  for(let i=0;i<n;i++){const a=i/n*TAU,x=Math.cos(a)*1.2,h=-Math.sin(a)*.1,s=rr(r,.7,1.2);body.push({s:[[x,h,.035*s],[x,h+.12*s,.03*s]],c:'#b8ae98'});lit.push({p:[[x-.08*s,h+.12*s],[x-.05*s,h+.17*s],[x,h+.19*s],[x+.05*s,h+.17*s],[x+.08*s,h+.12*s]],c:cap})}
+  for(let i=0;i<5;i++)body.push({s:[[rr(r,-1.4,1.4),0,.05],[rr(r,-1.4,1.4),.04,.04]],c:'#2a2a1e'});
+  glows.push({x:0,h:.08,r:1.7,c:'#a8e0c8',a:.12,sy:.25});
+  return prop(Z,X,body,lit,{glows})}
+// PASS = "big mossy boulders half sunk in the forest floor"
+function boulders(Z,X,v){
+  const r=rngFor(Math.round(Z*10),87,SEED,v),body=[],sd=Math.sign(X)||1;
+  const rock=(x0,w,h)=>{const pts=[];for(let i=0;i<=12;i++){const t=i/12*Math.PI;pts.push([x0-Math.cos(t)*w/2,Math.sin(t)*h*(.85+r()*.25)])}body.push({p:pts,c:'#2c2b28'},{p:pts.slice(4,10).concat(pts.slice(4,10).reverse().map(([x,y])=>[x,y*.78])),c:mix('#3a4428','#2c3420',r())},{p:[[x0-w*.45,0],[x0+w*.45,0],[x0+w*.2,h*.25],[x0-w*.3,h*.2]],c:'#1a1916'})};
+  const sets=[[[-.9,1.5,1.1],[.6,1.1,.7],[1.4,.6,.35]],[[0,2.0,1.4],[-1.4,.7,.45]],[[-1.1,.9,.6],[.1,1.2,.9],[1.2,1.0,.75],[.6,.5,.3]]][v];
+  for(const [x,w,h] of sets)rock(x,w,h);
+  for(let i=0;i<4;i++){const x=rr(r,-1.6,1.6);for(let j=0;j<4;j++){const a=-.8+j*.5;body.push({s:[[x,0,.04],[x+Math.sin(a)*.32,.3,.04],[x+Math.sin(a)*.55,.3,.03]],c:'#2e3a22'})}}
+  return prop(Z,X,body.map(sh=>flipX(sh,sd)),[],{glows:[{x:0,h:.9,r:1.9,c:'#7a88a2',a:.22,back:1}]})}
+// PASS = "a deer standing among the trees, looking at you, its eyes catching the light" (v0 a stag, v1 a doe, v2 a doe and fawn)
+function deer(Z,X,v){
+  const sd=Math.sign(X)||1,c='#14110d',body=[],lit=[],glows=[];
+  const one=(x0,s,stag)=>{const P2=(x,h)=>[x0+x*s,h*s];
+    body.push({p:[P2(-.62,.95),P2(-.5,1.2),P2(.1,1.25),P2(.45,1.2),P2(.62,1.05),P2(.55,.86),P2(.1,.82),P2(-.5,.84)],c});
+    body.push({p:[P2(.42,1.12),P2(.6,1.2),P2(.68,1.55),P2(.62,1.66),P2(.5,1.6),P2(.4,1.3)],c});
+    body.push({p:[P2(.56,1.6),P2(.72,1.68),P2(.86,1.58),P2(.84,1.52),P2(.66,1.5)],c});
+    body.push({p:[P2(.6,1.68),P2(.55,1.85),P2(.65,1.72)],c},{p:[P2(.7,1.7),P2(.78,1.86),P2(.74,1.68)],c});
+    for(const x of[-.5,-.36,.38,.5])body.push({s:[[x0+x*s,.86*s,.06*s],[x0+(x+.02)*s,.45*s,.045*s],[x0+(x+.01)*s,0,.04*s]],c});
+    body.push({p:[P2(-.62,1.05),P2(-.72,1.12),P2(-.66,.95)],c:'#3a3026'});
+    if(stag)for(const f of[-1,1])body.push({s:[[x0+.66*s,1.7*s,.04],[x0+(.62+f*.12)*s,2.05*s,.035],[x0+(.6+f*.25)*s,2.25*s,.03]],c:'#2a221a'},{s:[[x0+(.63+f*.1)*s,1.98*s,.03],[x0+(.75+f*.12)*s,2.1*s,.025]],c:'#2a221a'});
+    lit.push({e:[x0+.7*s,1.61*s,.025,.02,8],c:'#d8e8a0'});glows.push({x:x0+.7*s,h:1.61*s,r:.18,c:'#d8e8a0',a:.35})};
+  if(v===0)one(0,1.1,true);else if(v===1)one(0,1,false);else{one(-.5,1,false);one(.7,.62,false)}
+  return prop(Z,X,body.map(sh=>flipX(sh,-sd)),lit.map(sh=>flipX(sh,-sd)),{glows:[...glows.map(g=>({...g,x:-g.x*sd})),{x:0,h:1.2,r:1.8,c:'#8090a8',a:.24,back:1}]})}
+// PASS = "an owl sitting on top of a broken dead tree, eyes glowing"
+function owlSnag(Z,X,v){
+  const sd=Math.sign(X)||1,tr='#1e1a15',H=[3.2,2.6,3.6][v],ow='#2a241c';
+  const body=[{s:[[0,-.05,.42],[.04,1.4,.36],[-.04,H-.4,.3],[0,H,.28]],c:tr},{p:[[-.16,H],[-.08,H+.25],[.0,H+.05],[.06,H+.32],[.15,H]],c:tr},{s:[[.02,H*.55,.12],[.6,H*.62,.08],[.85,H*.7,.05]],c:tr},
+    {s:[[-.02,H*.35,.1],[-.5,H*.42,.06]],c:tr},{p:[[-.12,H*.3],[.08,H*.3],[.06,H*.3+.35],[-.1,H*.3+.32]],c:'#060505'},
+    {e:[0,H+.33,.2,.27],c:ow},{e:[0,H+.62,.17,.15],c:ow},{p:[[-.15,H+.7],[-.12,H+.86],[-.04,H+.74]],c:ow},{p:[[.15,H+.7],[.12,H+.86],[.04,H+.74]],c:ow},{s:[[-.12,H+.2,.04],[0,H+.08,.04],[.12,H+.2,.04]],c:'#3a3226'}];
+  return prop(Z,X,body.map(sh=>flipX(sh,sd)),[{e:[-.065,H+.63,.04,.04,10],c:'#ffc040'},{e:[.065,H+.63,.04,.04,10],c:'#ffc040'}],
+    {glows:[{x:0,h:H+.63,r:.3,c:'#ffb030',a:.4},{x:0,h:H*.7,r:2,c:'#8090a8',a:.24,back:1}]})}
+// PASS = "a charcoal burner's clearing: a smouldering earth mound with embers, cut stumps around it"
+function charcoal(Z,X,v){
+  const r=rngFor(Math.round(Z*10),89,SEED,v),body=[],lit=[],sd=Math.sign(X)||1;
+  const mound=[];for(let i=0;i<=14;i++){const t=i/14*Math.PI;mound.push([-Math.cos(t)*1.4,Math.sin(t)*1.05*(.92+r()*.1)])}
+  body.push({p:mound,c:'#1c1814'},{p:mound.slice(3,12).concat(mound.slice(3,12).reverse().map(([x,y])=>[x*.9,y*.82])),c:'#2a241c'});
+  for(const x of[-.5,.1,.6])lit.push({p:[[x-.1,rr(r,.35,.7)],[x+.1,rr(r,.35,.7)+.03],[x+.06,rr(r,.75,.85)],[x-.07,.8]],c:'#ff7a28'});
+  for(let i=0;i<4;i++){const x=(i%2?1:-1)*rr(r,1.7,2.6),w=rr(r,.2,.32);body.push({p:[[x-w,-.04],[x+w,-.04],[x+w*.9,.4],[x-w*.9,.42]],c:'#2c2218'},{e:[x,.41,w*.9,.06],c:'#5a4832'})}
+  body.push({s:[[.2,1.0,.06],[.35,1.7,.05],[.2,2.4,.04]],c:'#3a3a3e',o:.5});
+  if(v===1)body.push({s:[[-2.4,0,.05],[-2.1,1.5,.05]],c:'#3a2a1a'},{s:[[-2.15,1.45,.04],[-1.8,1.6,.04]],c:'#5a5650'});
+  if(v===2)body.push(...logEnds(1.9,2.9,.7,r,4));
+  return prop(Z,X,body.map(sh=>flipX(sh,sd)),lit.map(sh=>flipX(sh,sd)),{flick:1,glows:[{x:0,h:.6,r:1.2,c:'#ff6a20',a:.3},{x:0,h:.02,r:2.4,c:'#ff7a28',a:.12,sy:.3}]})}
+// PASS = "an old dry-stone wall running through the woods, broken, mossy, a sapling growing through it"
+function stoneWall(Z,X,v){
+  const r=rngFor(Math.round(Z*10),91,SEED,v),body=[],sd=Math.sign(X)||1,gap=[[.1,.7],[-.6,.2],[.6,1.3]][v];
+  for(let row=0;row<3;row++)for(let x=-2.4;x<2.4;){const w=rr(r,.35,.6),h0=row*.3,top=h0+rr(r,.24,.32);if(row>0&&x+w/2>gap[0]&&x<gap[1]){x+=w;continue}if(row===2&&r()<.3){x+=w;continue}
+    body.push({p:[[x+.02,h0],[x+w-.02,h0],[x+w-.05,top],[x+.04,top-.02]],c:mix('#3a3936','#2a2926',r())});x+=w}
+  body.push({p:[[-2.4,.88],[gap[0],.9],[gap[0],.96],[-2.4,.95]],c:'#2e3a22'},{p:[[gap[1],.88],[2.4,.86],[2.4,.94],[gap[1],.95]],c:'#2e3a22'});
+  for(let i=0;i<3;i++){const x=rr(r,gap[0],gap[1]);body.push({e:[x,.12,.2,.12],c:'#33322f'})}
+  body.push({s:[[gap[1]+.2,0,.1],[gap[1]+.3,1.5,.07],[gap[1]+.2,2.6,.04]],c:'#24201a'},{s:[[gap[1]+.28,1.4,.04],[gap[1]+.8,2.0,.03]],c:'#24201a'});
+  if(v===1)body.push({p:[[-2.6,-.05],[-2.3,-.05],[-2.32,1.4],[-2.58,1.42]],c:'#3a3936'});
+  return prop(Z,X,body.map(sh=>flipX(sh,sd)),[],{glows:[{x:0,h:.8,r:2.4,c:'#7a88a2',a:.2,back:1}]})}
+// PASS = "a long stack of cut firewood (cordwood) between two trees"
+function cordwood(Z,X,v){const r=rngFor(Math.round(Z*10),93,SEED,v),L2=[1.6,2.2,1.2][v];
+  const body=[...logEnds(-L2,L2,[1.1,1.3,1.5][v],r,[6,7,8][v]),{s:[[-L2-.1,0,.12],[-L2-.12,1.5,.1]],c:'#2a2016'},{s:[[L2+.1,0,.12],[L2+.12,1.5,.1]],c:'#2a2016'}];
+  if(v===2)body.push({p:[[-L2-.2,1.55],[L2+.2,1.55],[L2+.1,1.68],[-L2-.1,1.7]],c:'#1c1a18'});
+  return prop(Z,X,body,[],{glows:[{x:0,h:.8,r:2,c:'#7a88a2',a:.18,back:1}]})}
+// PASS = "a hunter's deer stand: a ladder up a tree to a small wooden platform"
+function deerStand(Z,X,v){const sd=Math.sign(X)||1,tr='#1c1813',H=[3.2,3.8,2.8][v],body=[{s:[[0,-.05,.38],[.05,2.5,.3],[-.03,5.2,.2]],c:tr},{s:[[.02,3.6,.1],[.8,4.4,.07]],c:tr}];
+  body.push({p:[[-.75,H],[.55,H],[.55,H+.1],[-.75,H+.1]],c:'#3a2c1e'},{s:[[-.72,H+.1,.05],[-.72,H+.75,.05]],c:'#3a2c1e'},{s:[[.5,H+.1,.05],[.5,H+.75,.05]],c:'#3a2c1e'},{s:[[-.74,H+.72,.05],[.52,H+.72,.05]],c:'#3a2c1e'},
+    {s:[[-.65,0,.06],[-.45,H,.06]],c:'#4a3826'},{s:[[-.2,0,.06],[-.15,H,.06]],c:'#4a3826'});
+  for(let h=.35;h<H;h+=.4)body.push({s:[[-.64+h*.06,h,.045],[-.2+h*.02,h,.045]],c:'#4a3826'});
+  if(v===1)body.push({p:[[-.6,H+.1],[.45,H+.1],[.45,H+.45],[-.6,H+.45]],c:'#2a3020'});
+  return prop(Z,X,body.map(sh=>flipX(sh,sd)),[],{glows:[{x:0,h:2.5,r:2.2,c:'#8090a8',a:.22,back:1}]})}
+// PASS = "an old rope swing hanging from a big oak limb"
+function ropeSwing(Z,X,v){const sd=Math.sign(X)||1,tr='#1a1611',H=[3.6,4.0,3.3][v],sx=1.3;
+  const body=[{s:[[0,-.05,.55],[.05,1.6,.45],[0,H-.3,.38],[-.1,H+1.5,.3]],c:tr},{s:[[.05,H-.4,.3],[1.0,H-.1,.22],[2.0,H+.05,.15],[2.8,H+.3,.08]],c:tr},{s:[[-.05,H+.6,.2],[-.9,H+1.4,.12]],c:tr}];
+  const seat=v===2?.0:.6;
+  body.push({s:[[sx-.25,H-.05,.035],[sx-.25+(v===1?.15:0),seat+.06,.03]],c:'#6a5a40'},{s:[[sx+.25,H-.02,.035],[sx+.25+(v===1?.15:0),seat+.06,.03]],c:'#6a5a40'});
+  body.push(v===2?{p:[[sx-.4,0],[sx+.35,0],[sx+.3,.06],[sx-.36,.08]],c:'#3a2c1e'}:{p:[[sx-.33+(v===1?.15:0),seat],[sx+.33+(v===1?.15:0),seat],[sx+.33+(v===1?.15:0),seat+.07],[sx-.33+(v===1?.15:0),seat+.07]],c:'#3a2c1e'});
+  return prop(Z,X,body.map(sh=>flipX(sh,sd)),[],{glows:[{x:1,h:2,r:2.2,c:'#8090a8',a:.24,back:1}]})}
+// PASS = "a little wooden footbridge over a creek" (the water is on the floor, see creekSvg; the rails, reeds and the
+// moonlit sheen stand up so the crossing reads at 30 ft). v0 plank bridge with two rails, v1 felled log with one rail,
+// v2 stepping stones and a leaning post. You walk across: the prop is centred on the path and passes either side.
+function bridge(Z,v){
+  const w='#4a3a28',dk='#2a2016',body=[],lit=[];
+  const rail=sd=>body.push({s:[[sd*.95,-.05,.1],[sd*.95,.95,.09]],c:dk},{s:[[sd*.95,.9,.08],[sd*1.6,.6,.08]],c:w},{s:[[sd*1.6,-.05,.09],[sd*1.6,.65,.08]],c:dk});
+  if(v===0){rail(-1);rail(1)}else if(v===1){rail(-1);body.push({s:[[-.6,.05,.32],[.7,.08,.3]],c:'#2e2418'})}else body.push({s:[[1.1,-.05,.1],[1.25,1.05,.08]],c:dk},{e:[-.3,.03,.28,.08],c:'#3a3834'},{e:[.35,.03,.25,.07],c:'#33312e'});
+  for(const sd of[-1,1])for(let i=0;i<5;i++){const x=sd*(2+i*.45);body.push({s:[[x,0,.035],[x+sd*.08,.55+(i%2)*.25,.025]],c:'#26301c'})}
+  lit.push({p:[[-3.2,.02],[3.2,.02],[2.6,.06],[-2.6,.06]],c:MOON('#7a8898'),o:'.55'});
+  return prop(Z,0,body.filter(Boolean),lit,{thru:1,zr:REST+2,glows:[{x:0,h:.05,r:3,c:MOON('#8a9cb4'),a:.16,sy:.18}]})}
+// PASS = "a big clump of tall ferns" (the marker of a fern drift; the floor around it is drifted with ferns)
+function fernClump(Z,X,v){const r=rngFor(Math.round(Z*10),95,SEED,v),body=[];
+  for(let k=0;k<[3,4,5][v];k++){const x0=rr(r,-1.2,1.2),s=rr(r,.8,1.3);for(let j=0;j<9;j++){const a=-1.2+j*.3+rr(r,-.06,.06),l=s*(1-Math.abs(a)*.25);
+    body.push({s:[[x0,0,.05],[x0+Math.sin(a)*l*.45,Math.cos(a*.8)*l*.62,.06],[x0+Math.sin(a)*l*.9,Math.cos(a*.8)*l*.55-.12,.035]],c:j%3?'#2a3620':'#3a4a2a'})}}
+  return prop(Z,X,body,[],{glows:[{x:0,h:.6,r:1.8,c:'#7a88a2',a:.18,back:1}]})}
 // ---------- planar homography: 4 point pairs -> 3x3 (h33 = 1), as a CSS matrix3d about the screen origin ----------
 function homog(src,dst){
   const A=[],b=[];
@@ -867,66 +1164,83 @@ function motes(Z,X,r){const lit=[];for(let i=0;i<9;i++){const s=rr(r,.008,.014);
 // insets: [u0,u1,v0,v1,colour] quads drawn on the panel (u along the walk, v across); front: drawn above the panels
 // of the same stretch (a portrait on a wall)
 function planeItem(Zn,Z,X0,h0,X1,h1,fill,lines,o={}){return{grp:'w',kind:'plane',Zn,Z,X:0,X0,h0,X1,h1,fill,lines,insets:o.insets||[],front:o.front||0}}
-// ---------- house pieces ----------
-// the house front: clapboard facade, crooked shutters, two lit windows, an open doorway with a porch lamp
-function houseFront(Z,b,r){
-  const{fw,fh,fpk,dF,dh}=b,wall=b.wall,dark='#141316',trim='#5f594f',sg=rr(r,-.05,.05);
-  // side pieces run square up to the eave (v4 sloped them from eave to door head, leaving a triangle on each side
-  // through which the hall showed)
-  const body=[{p:[[-fw,-.1],[-dF,-.1],[-dF,fh],[-fw,fh]],c:wall},{p:[[dF,-.1],[fw,-.1],[fw,fh],[dF,fh]],c:wall},
-    {p:[[-dF-.01,dh-.05],[dF+.01,dh-.05],[dF+.01,fh],[-dF-.01,fh]],c:wall}];
-  for(let h=.35;h<fh-.1;h+=.32){for(const sd of[-1,1]){const xa=sd*fw,xb=sd*(h<dh?dF:0);body.push({s:[[xa,h,.035],[xb,h+sd*sg*.2,.035]],c:'#1c1b1f'})}}
-  body.push({p:[[-fw-.45,fh-.15],[0,fpk],[fw+.45,fh-.15],[fw+.45,fh+.12],[0,fpk+.3],[-fw-.45,fh+.12]],c:'#151317'});
-  body.push({p:[[-fw+.2,fh],[0,fpk-.25],[fw-.2,fh]],c:mix(wall,'#000000',.12)});
-  body.push({p:[[fw*.45,fpk-1.1],[fw*.45+.45,fpk-1.1],[fw*.45+.45,fpk+.5],[fw*.45,fpk+.45]],c:'#1a1414'});   // chimney
-  for(const sd of[-1,1])body.push({s:[[sd*(dF+.07),0,.14],[sd*(dF+.07),dh+.07,.14]],c:trim});
-  body.push({s:[[-dF-.14,dh+.07,.14],[dF+.14,dh+.07,.14]],c:trim});
-  body.push({s:[[-dF-.25,0,.18],[dF+.25,0,.18]],c:'#3b352e'});
-  const lit=[],glows=[{x:0,h:dh+.35,r:.7,c:'#ffc070',a:.45},{x:0,h:.02,r:2,c:'#ffa850',a:.12,sy:.3}];
-  for(const sd of[-1,1]){const cx=sd*(dF+(fw-dF)/2),w=Math.min(.42,(fw-dF)/2-.25);if(w<.2)continue;
-    lit.push({p:[[cx-w,1.15],[cx+w,1.15],[cx+w,2.05],[cx-w,2.05]],c:sd<0?'#d89a50':'#c48440'});
-    lit.push({s:[[cx,1.15,.05],[cx,2.05,.05]],c:'#2a1a0c'},{s:[[cx-w,1.6,.05],[cx+w,1.6,.05]],c:'#2a1a0c'});
-    body.push({p:[[cx-w-.32,1.1],[cx-w-.05,1.12],[cx-w-.06,2.1+sg],[cx-w-.33,2.08]],c:'#201e22'});
-    body.push({p:[[cx+w+.05,1.1],[cx+w+.3,1.05-sg*2],[cx+w+.36,2.0],[cx+w+.07,2.1]],c:'#201e22'});
-    glows.push({x:cx,h:1.6,r:1.1,c:'#ffb050',a:.22})}
-  lit.push({p:[[-.08,dh+.25],[.08,dh+.25],[.07,dh+.45],[-.07,dh+.45]],c:'#ffd890'});
-  return prop(Z,0,body,lit,{zr:BDOOR,thru:1,flick:1,glows})}
-// the far wall seen from inside the house: wallpaper, a door frame open onto the moonlit forest
-function houseBack(Z,b){
-  const{w,wh,dB,dh}=b,c=b.paper,trim='#4e4438';
-  return prop(Z,0,[
-    {p:[[-w,-.1],[-dB,-.1],[-dB,dh],[-w,wh]],c},{p:[[dB,-.1],[w,-.1],[w,wh],[dB,dh]],c},{p:[[-dB-.01,dh-.05],[dB+.01,dh-.05],[dB+.01,wh],[-dB-.01,wh]],c},
-    {s:[[-w,.06,.12],[-dB,.06,.12]],c:'#120c09'},{s:[[dB,.06,.12],[w,.06,.12]],c:'#120c09'},
-    {s:[[-w,.95,.05],[-dB,.95,.05]],c:trim},{s:[[dB,.95,.05],[w,.95,.05]],c:trim},
-    {s:[[-dB-.07,0,.13],[-dB-.07,dh+.07,.13]],c:trim},{s:[[dB+.07,0,.13],[dB+.07,dh+.07,.13]],c:trim},{s:[[-dB-.13,dh+.07,.13],[dB+.13,dh+.07,.13]],c:trim},
-  ],[],{zr:BLEN,thru:1,glows:[{x:0,h:1.2,r:1.6,c:'#8094b4',a:.22,back:1}]})}
-// a staircase rising along one wall, seen from the hall: treads stacked up and back, a banister with spindles
-function stairs(Z,X,sd){
-  const body=[],n=9;
-  for(let i=0;i<n;i++){const h=i*.24,x0=-.55+i*.03,x1=.55-i*.03;body.push({p:[[x0,h],[x1,h],[x1,h+.24],[x0,h+.24]],c:i%2?'#22170f':'#1a120c'});body.push({s:[[x0,h+.24,.03],[x1,h+.24,.03]],c:'#4a3a28'})}
-  const rx=-sd*.62;body.push({s:[[rx,.9,.07],[rx+sd*.25,n*.24+.9,.06]],c:'#3a2a1a'});
-  for(let i=0;i<n;i+=2)body.push({s:[[rx+sd*.25*i/n,i*.24,.03],[rx+sd*.25*i/n,i*.24+.88,.03]],c:'#2e2216'});
-  body.push({s:[[rx,0,.1],[rx,1.1,.1]],c:'#3e2e1e'},{e:[rx,1.14,.07,.06],c:'#4a3826'});
+// ---------- shack pieces (a one-room woodland shack: v0 trapper's shack, v1 woodcutter's hut, v2 collapsed lean-to) ----------
+const SPAINT=[{wall:'#2a1f16',bd:'#120c08',trim:'#4a3a2a',roof:'#1c1612'},{wall:'#2a2724',bd:'#131210',trim:'#56504a',roof:'#1d1c1a'},{wall:'#2c2218',bd:'#120d08',trim:'#4e4030',roof:'#1e1810'}];
+// a gable wall around a doorway in three pieces (each leaves the frame on its own as you walk through)
+function shWall(fw,fh,fpk,dw,dh,c){const top=x=>fh+(fpk-fh)*(1-Math.abs(x)/fw);
+  return[{p:[[-fw,-.1],[-dw,-.1],[-dw,top(dw)],[-fw,fh]],c},{p:[[dw,-.1],[fw,-.1],[fw,fh],[dw,top(dw)]],c},
+    {p:[[-dw-.01,dh-.04],[dw+.01,dh-.04],[dw+.01,top(dw)],[0,fpk],[-dw-.01,top(dw)]],c}]}
+const logEnds=(x0,x1,h1,r,rows)=>{const b=[];for(let i=0;i<rows;i++){const h=.1+i*(h1-.1)/Math.max(1,rows-1);for(let x=x0+(i%2)*.09;x<x1;x+=.18)b.push({e:[x+rr(r,-.02,.02),h,.085,.08,9],c:mix('#5e4a34','#3a2c1e',r())},{e:[x,h,.03,.03,6],c:'#2a1e12'})}return b};
+function shackFront(Z,b,r){
+  const{fw,fh,fpk,dF,dh,v}=b,pt=b.pt,top=x=>fh+(fpk-fh)*(1-Math.abs(x)/fw),body=[...shWall(fw,fh,fpk,dF,dh,pt.wall)];
+  // rough boards: v0 trapper's shack is log built (horizontal logs, chinked), the others are vertical planks
+  if(v===0)for(let h=.18;h<fh;h+=.26){for(const sd of[-1,1]){const xb=sd*(h<dh?dF:0);body.push({s:[[sd*(fw+.12),h,.11],[xb,h+rr(r,-.02,.02),.11]],c:mix(pt.wall,'#000000',.35)})}}
+  else for(let x=-fw+.14;x<fw;x+=.27){if(Math.abs(x)<dF+.05)continue;body.push({s:[[x,-.05,.04],[x+rr(r,-.02,.02),top(x)-.05,.04]],c:pt.bd})}
+  for(let i=0;i<3;i++){const x=(r()<.5?-1:1)*rr(r,dF+.2,fw-.2),h=rr(r,.3,1.6);body.push({p:[[x-.07,h],[x+.07,h+.03],[x+.06,h+.38],[x-.06,h+.35]],c:'#080605'})}   // gaps between boards
+  for(const sd of[-1,1])body.push({s:[[sd*(dF+.05),0,.1],[sd*(dF+.05),dh+.05,.1]],c:pt.trim});body.push({s:[[-dF-.12,dh+.05,.1],[dF+.12,dh+.05,.1]],c:pt.trim});
+  // the door hangs open off its hinge, swung out toward the path side
+  const hs=r()<.5?-1:1,leaf=[[hs*dF,0],[hs*(dF+.5),-.06],[hs*(dF+.5),dh-.08],[hs*dF,dh]];body.push({p:leaf,c:mix(pt.wall,'#000000',.2)},{s:[[hs*(dF+.04),.25,.06],[hs*(dF+.46),.25,.06]],c:pt.trim},{s:[[hs*(dF+.04),dh-.3,.06],[hs*(dF+.46),dh-.35,.06]],c:pt.trim},{s:[[hs*(dF+.04),.28,.05],[hs*(dF+.46),dh-.35,.05]],c:pt.trim});
+  // roof: sagging rakes with an overhang (v2: one side caved in)
+  const sag=v===2?.55:.12;
+  body.push({s:[[-fw-.45,fh-.2-(v===2&&hs<0?.5:0),.2],[-fw/2,(fh+fpk)/2-sag,.2],[0,fpk+.15,.2],[fw/2,(fh+fpk)/2-sag*.4,.2],[fw+.45,fh-.2-(v===2&&hs>0?.5:0),.2]],c:pt.roof});
+  if(v!==2){const cxp=-hs*fw*.5;body.push({p:[[cxp-.08,top(cxp)-.1],[cxp+.08,top(cxp)-.1],[cxp+.08,fpk+.75],[cxp-.08,fpk+.75]],c:'#141210'},{p:[[cxp-.14,fpk+.72],[cxp+.14,fpk+.72],[cxp+.1,fpk+.82],[cxp-.1,fpk+.82]],c:'#141210'})}
+  else body.push({s:[[-hs*fw*.5,top(fw*.5)-.1,.13],[-hs*fw*.5-hs*.35,fpk+.35,.12]],c:'#141210'});
+  // a small window on the side away from the door leaf: lit in the trapper's shack, dim in the hut, broken in the lean-to
+  const wx=-hs*(dF+(fw-dF)/2),lit=[],glows=[];
+  if(v===2)body.push({p:[[wx-.24,1.05],[wx+.24,1.05],[wx+.24,1.5],[wx-.24,1.5]],c:'#06070a'},{p:[[wx-.24,1.5],[wx-.05,1.5],[wx-.16,1.3]],c:'#3a4250'},{p:[[wx+.24,1.05],[wx+.24,1.3],[wx+.08,1.05]],c:'#2c323c'});
+  else{lit.push({p:[[wx-.24,1.05],[wx+.24,1.05],[wx+.24,1.5],[wx-.24,1.5]],c:v===0?'#d8954a':'#8a5a2a'});lit.push({s:[[wx,1.05,.05],[wx,1.5,.05]],c:'#20140a'},{s:[[wx-.24,1.28,.05],[wx+.24,1.28,.05]],c:'#20140a'});glows.push({x:wx,h:1.27,r:.85,c:'#ffb050',a:v===0?.24:.12})}
+  // around it: firewood stacked against the wall (v0, v1), antlers over the door (v0), an axe in a block (v1), creeping vines (v2)
+  const wx0=hs>0?fw+.12:-fw-1.07;if(v!==2)body.push(...logEnds(wx0,wx0+.95,v===0?1.1:1.4,r,v===0?6:8));
+  if(v===0)body.push({s:[[0,dh+.32,.05],[-.32,dh+.62,.04],[-.42,dh+.85,.03]],c:'#a89c84'},{s:[[0,dh+.32,.05],[.32,dh+.62,.04],[.42,dh+.85,.03]],c:'#a89c84'},{s:[[-.2,dh+.5,.03],[-.12,dh+.72,.025]],c:'#a89c84'},{s:[[.2,dh+.5,.03],[.12,dh+.72,.025]],c:'#a89c84'});
+  if(v===1){const x=hs*(dF+.95);body.push({p:[[x-.3,-.05],[x+.3,-.05],[x+.27,.5],[x-.27,.5]],c:'#3a2c1e'},{e:[x,.5,.27,.06],c:'#5a4630'},{s:[[x-.05,.5,.05],[x+.35,1.15,.045]],c:'#4a3a28'},{p:[[x-.12,.46],[x+.1,.46],[x+.08,.62],[x-.12,.66]],c:'#5a5650'})}
+  if(v===2)for(let i=0;i<4;i++){const x=(i%2?1:-1)*rr(r,dF+.15,fw);body.push({s:[[x,0,.04],[x+rr(r,-.2,.2),rr(r,.8,1.8),.035],[x+rr(r,-.3,.3),rr(r,1.6,2.2),.03]],c:'#1c2416'})}
+  return doorSplit(Z,dF,body,lit,{zr:BDOOR,thru:1,flick:v===0?1:0,glows:[...glows,{x:0,h:.3,r:1.5,c:v===2?'#8094b4':'#ffa850',a:v===2?.1:.1,sy:.35}]})}
+// a shack's door is small, so its wall stays in the frame until the camera is almost in the doorway: as ONE item the
+// last depth band was rastered at the whole facade's size (60+ Mpx). Split into the wall left of the door, right of it
+// and above it, each item's layer is only as big as its own piece (each still leaves the frame on its own)
+function doorSplit(Z,dw,body,lit,opts,dh=2.18){
+  const cx=sh=>{const pts=sh.s?sh.s.map(q=>[q[0],q[1]]):sh.e?[[sh.e[0],sh.e[1]]]:sh.p;let x=0,y=0;for(const q of pts){x+=q[0];y+=q[1]}return[x/pts.length,y/pts.length]};
+  const part=sh=>{const pts=sh.s?sh.s:sh.e?[[sh.e[0],sh.e[1]-sh.e[3]]]:sh.p;if(Math.min(...pts.map(q=>q[1]))>dh+.2)return 3;const[x]=cx(sh);return Math.abs(x)<dw+.03?1:x<0?0:2};
+  return [0,1,2,3].map(i=>prop(Z,0,body.filter(sh=>part(sh)===i),lit.filter(sh=>part(sh)===i),{...opts,glows:i===1?opts.glows:[],flick:i===1?0:opts.flick}))}
+// the back wall seen from inside: the doorway open onto the moonlit forest
+function shackBack(Z,b){
+  const{w,wh,pk,dB,dh}=b,pt=b.pt,c=mix(pt.wall,'#000000',.15),body=[...shWall(w,wh,pk,dB,dh,c)];
+  for(let x=-w+.14;x<w;x+=.27){if(Math.abs(x)<dB+.05)continue;body.push({s:[[x,-.05,.04],[x,wh+(pk-wh)*(1-Math.abs(x)/w)-.05,.04]],c:pt.bd})}
+  for(const sd of[-1,1])body.push({s:[[sd*(dB+.05),0,.1],[sd*(dB+.05),dh+.05,.1]],c:pt.trim});body.push({s:[[-dB-.12,dh+.05,.1],[dB+.12,dh+.05,.1]],c:pt.trim});
+  return doorSplit(Z,dB,body,[],{zr:b.len,thru:1,glows:[{x:0,h:1.1,r:1.4,c:'#8094b4',a:.22,back:1}]})}
+function shRafter(Z,b,broken){const{w,wh,pk}=b,c='#2e2016';
+  const body=[{s:[[-w,wh-.08,.13],[w,wh-.08,.13]],c},{s:[[-w-.05,wh,.13],[0,pk,.12]],c:'#26180f'}];
+  body.push(broken?{s:[[w+.05,wh,.13],[w*.7,wh+.3,.12],[w*.62,wh-.55,.1]],c:'#26180f'}:{s:[[w+.05,wh,.13],[0,pk,.12]],c:'#26180f'});
+  return prop(Z,0,body,[],{})}
+function shLantern(Z,X,top,flick){const h=top-.55;
+  return prop(Z,X,[{s:[[0,top,.03],[0,h+.36,.03]],c:'#120c08'},{p:[[-.13,h+.28],[.13,h+.28],[.07,h+.4],[-.07,h+.4]],c:'#1c140c'},{p:[[-.15,h-.04],[.15,h-.04],[.12,h+.02],[-.12,h+.02]],c:'#1c140c'}],
+    [{p:[[-.1,h+.02],[.1,h+.02],[.11,h+.28],[-.11,h+.28]],c:'#ffd08a'}],{flick:flick?1:0,glows:[{x:0,h:h+.15,r:.45,c:'#ffc070',a:.5},{x:0,h:h,r:1.7,c:'#ff9a40',a:.12}]})}
+function stove(Z,X,cold,b){const top=b.wh+(b.pk-b.wh)*(1-Math.abs(X)/b.w);
+  const body=[{p:[[-.32,.12],[.32,.12],[.32,.72],[-.32,.72]],c:'#1a1a1c'},{p:[[-.36,.72],[.36,.72],[.36,.78],[-.36,.78]],c:'#242426'},{s:[[-.26,0,.05],[-.26,.14,.05]],c:'#141416'},{s:[[.26,0,.05],[.26,.14,.05]],c:'#141416'},
+    cold?{s:[[.05,.78,.12],[.1,1.4,.12],[.4,1.62,.11]],c:'#1c1c1e'}:{s:[[.05,.78,.12],[.05,top,.12]],c:'#1c1c1e'},{p:[[-.22,.25],[.18,.25],[.18,.55],[-.22,.55]],c:'#0c0c0e'}];
+  return prop(Z,X,body,cold?[]:[{p:[[-.18,.3],[.14,.3],[.14,.36],[-.18,.36]],c:'#ff8a30'},{p:[[-.18,.42],[.14,.42],[.14,.47],[-.18,.47]],c:'#ffb050'}],cold?{}:{flick:1,glows:[{x:-.02,h:.4,r:.6,c:'#ff7a20',a:.35},{x:0,h:.02,r:1.3,c:'#ff8a30',a:.12,sy:.3}]})}
+function bunk(Z,X,two){const c='#2c2016',body=[];
+  for(const x of[-.45,.45])body.push({s:[[x,0,.08],[x,two?1.75:.62,.08]],c});
+  for(const h of two?[.45,1.4]:[.45]){body.push({p:[[-.5,h],[.5,h],[.5,h+.12],[-.5,h+.12]],c:'#1e150e'},{p:[[-.46,h+.12],[.46,h+.12],[.42,h+.3],[-.4,h+.28]],c:'#3a1c14'},{e:[.3,h+.28,.14,.09],c:'#5a4a38'})}
   return prop(Z,X,body,[],{})}
-function sconce(Z,X,h){
-  return prop(Z,X,[{s:[[0,h-.25,.05],[0,h,.04]],c:'#2a2018'},{s:[[-.12,h-.2,.035],[.12,h-.2,.035]],c:'#3a2c1e'},{p:[[-.035,h],[.035,h],[.035,h+.16],[-.035,h+.16]],c:'#d8ccb0'}],
-    [{p:[[-.03,h+.16],[.03,h+.16],[0,h+.27]],c:'#ffd27a'}],{flick:1,glows:[{x:0,h:h+.2,r:.42,c:'#ffc070',a:.5},{x:0,h:h,r:1.5,c:'#ff9a40',a:.12}]})}
-function hallLamp(Z,X,top){
-  return prop(Z,X,[{s:[[0,top,.03],[0,top-.45,.03]],c:'#120c08'},{p:[[-.28,top-.45],[.28,top-.45],[.16,top-.62],[-.16,top-.62]],c:'#2a1e14'}],
-    [{p:[[-.22,top-.62],[.22,top-.62],[.15,top-.72],[-.15,top-.72]],c:'#ffd08a'}],{glows:[{x:0,h:top-.68,r:.5,c:'#ffc070',a:.45},{x:0,h:top-.9,r:1.9,c:'#ff9a40',a:.12}]})}
-function clock(Z,X){
-  return prop(Z,X,[{p:[[-.25,0],[.25,0],[.25,1.55],[.3,1.6],[.3,2.15],[0,2.3],[-.3,2.15],[-.3,1.6],[-.25,1.55]],c:'#1e140e'},
-    {e:[0,1.9,.19,.19],c:'#9a9078'},{s:[[0,1.9,.025],[.07,2.02,.025]],c:'#141010'},{s:[[0,1.9,.025],[-.1,1.86,.025]],c:'#141010'},
-    {p:[[-.13,.45],[.13,.45],[.13,1.35],[-.13,1.35]],c:'#0e0907'},{s:[[0,1.3,.02],[0,.8,.02]],c:'#6a5a3a'},{e:[0,.78,.06,.06],c:'#8a7448'}],[],{})}
-function fireplace(Z,X,sd){
-  return prop(Z,X,[{p:[[-.85,0],[.85,0],[.85,1.15],[-.85,1.15]],c:'#3a3430'},{p:[[-.95,1.15],[.95,1.15],[.95,1.27],[-.95,1.27]],c:'#2a1e16'},
-    {p:[[-.5,0],[.5,0],[.5,.75],[-.5,.75]],c:'#0a0605'},{s:[[-.4,1.27,.05],[-.4,1.5,.05]],c:'#c8bca0'},{s:[[.35,1.27,.05],[.35,1.42,.05]],c:'#c8bca0'},
-    {p:[[-.25,1.35],[.25,1.35],[.25,1.95],[-.25,1.95]],c:'#4a3a24'},{p:[[-.19,1.41],[.19,1.41],[.19,1.89],[-.19,1.89]],c:'#151110'}],
-    [{p:[[-.38,0],[.38,0],[.3,.18],[.12,.32],[0,.2],[-.14,.34],[-.3,.16]],c:'#ff8a30'},{p:[[-.2,0],[.2,0],[.06,.14],[-.08,.12]],c:'#ffd070'}],
-    {flick:1,glows:[{x:0,h:.25,r:1.1,c:'#ff7a20',a:.45},{x:0,h:.02,r:2.2,c:'#ff8a30',a:.18,sy:.3}]})}
-function armchair(Z,X){
-  return prop(Z,X,[{p:[[-.45,0],[.45,0],[.45,.45],[.52,.5],[.52,.72],[.4,.75],[.38,1.25],[.2,1.35],[-.2,1.35],[-.38,1.25],[-.4,.75],[-.52,.72],[-.52,.5],[-.45,.45]],c:'#2c1418'},
-    {s:[[-.3,.5,.05],[.3,.5,.05]],c:'#1a0a0c'}],[],{})}
+function table(Z,X,lamp){const c='#3a2a1c',body=[{p:[[-.5,.72],[.5,.72],[.5,.8],[-.5,.8]],c},{s:[[-.42,0,.06],[-.42,.72,.06]],c},{s:[[.42,0,.06],[.42,.72,.06]],c},{p:[[.12,.8],[.24,.8],[.23,.9],[.13,.9]],c:'#4a4440'},{p:[[-.3,.8],[-.08,.8],[-.08,.84],[-.3,.84]],c:'#2a1c12'}];
+  return prop(Z,X,body,lamp?[{p:[[-.08,.8],[.04,.8],[.04,1.0],[-.08,1.0]],c:'#ffd08a'}]:[],lamp?{flick:1,glows:[{x:-.02,h:.92,r:.4,c:'#ffc070',a:.5},{x:0,h:.82,r:1.4,c:'#ff9a40',a:.12}]}:{})}
+function pelts(Z,X,r){const body=[{s:[[-.55,1.95,.05],[.55,1.95,.05]],c:'#2a1e14'}];
+  for(const x of[-.35,.05,.4]){const l=rr(r,.5,.8),c=mix('#4a3626','#2e2218',r());body.push({p:[[x-.12,1.93],[x+.12,1.93],[x+.17,1.93-l*.4],[x+.12,1.93-l],[x+.03,1.93-l*.85],[x-.05,1.93-l],[x-.15,1.93-l*.4]],c},{s:[[x+.03,1.93-l*.9,.03],[x+.05,1.93-l-.18,.025]],c})}
+  return prop(Z,X,body,[],{})}
+function traps(Z,X){const body=[];for(const [x,h] of[[-.3,1.55],[.25,1.45]]){body.push({s:[[x,1.85,.025],[x,h+.12,.02]],c:'#1a1a1a'},...[0,1].map(i=>({p:ell(x,h,.16,.1,14).slice(i*7,i*7+8),c:'#3a3836'})),{e:[x,h,.06,.04],c:'#2a2826'})}
+  body.push({p:[[.55,1.0],[.8,1.0],[.85,1.7],[.68,1.85],[.5,1.7]],c:'#2a2016'},{s:[[.67,1.0,.03],[.67,1.8,.03]],c:'#1a120c'});
+  return prop(Z,X,body,[],{})}
+function sawhorse(Z,X){const c='#3e2e1e';return prop(Z,X,[{s:[[-.5,0,.06],[-.3,.8,.06]],c},{s:[[-.1,0,.06],[-.3,.8,.06]],c},{s:[[.5,0,.06],[.3,.8,.06]],c},{s:[[.1,0,.06],[.3,.8,.06]],c},
+  {s:[[-.75,.92,.22],[.75,.95,.22]],c:'#4a3826'},{e:[.76,.95,.1,.1],c:'#6a5438'},{e:[.76,.95,.04,.04],c:'#3a2a1a'},{s:[[-.2,1.05,.035],[.35,1.4,.03]],c:'#5a5a58'},{s:[[-.2,1.05,.03],[-.35,1.3,.03],[.2,1.65,.03],[.35,1.4,.03]],c:'#3a2a1a'}],[],{})}
+function hangTools(Z,X){return prop(Z,X,[{s:[[-.5,1.9,.04],[.5,1.9,.04]],c:'#2a1e14'},{s:[[-.35,1.88,.04],[-.35,1.1,.04]],c:'#4a3a28'},{p:[[-.45,1.1],[-.2,1.1],[-.22,1.25],[-.45,1.2]],c:'#5a5650'},
+  {s:[[.05,1.88,.03],[.35,1.5,.03],[-.2,1.3,.03],[.05,1.88,.03]],c:'#3a2a1a'},{s:[[.35,1.5,.02],[-.2,1.3,.02]],c:'#6a6866'},{s:[[.45,1.88,.04],[.48,1.2,.04]],c:'#3a2a1a'}],[],{})}
+function coat(Z,X){return prop(Z,X,[{s:[[0,1.95,.04],[0,1.88,.04]],c:'#2a1e14'},{p:[[-.12,1.88],[.12,1.88],[.24,1.75],[.27,1.1],[.15,1.05],[0,1.12],[-.15,1.05],[-.27,1.1],[-.24,1.75]],c:'#241a14'},{p:[[-.1,1.86],[.1,1.86],[.12,2.02],[0,2.08],[-.12,2.02]],c:'#2c2018'}],[],{})}
+function moonShaft(Z,X,b){return prop(Z,X,[{p:[[-.9,0],[.9,0],[.75,.04],[-.75,.04]],c:'#2a2c30',o:.5}],[],{glows:[{x:.1,h:1.3,r:.4,c:'#a8bcd8',a:.14,sy:3},{x:.1,h:.02,r:1.4,c:'#9fb4d0',a:.24,sy:.3}]})}
+function sapling(Z,X){return prop(Z,X,[{s:[[0,0,.12],[.05,1.5,.09],[-.04,2.4,.06],[.06,3.1,.04]],c:'#5e5a52'},{s:[[.03,1.9,.04],[.5,2.5,.03]],c:'#5e5a52'},{s:[[-.02,2.4,.035],[-.45,2.9,.025]],c:'#5e5a52'},
+  ...[[.0,1.2],[.02,2.0],[-.02,2.9]].map(([x,h])=>({s:[[x-.05,h,.03],[x+.05,h+.01,.03]],c:'#1a1816'}))],[],{})}
+function fallenPlanks(Z,X,r){const b=[];for(let i=0;i<3;i++){const x=rr(r,-.6,.6),a=rr(r,.6,1.1)*(r()<.5?-1:1);b.push({p:rot([[x-.1,0],[x+.1,0],[x+.1,1.8],[x-.1,1.8]],a*.5,x,0),c:mix('#2a2016','#3a2c1e',r())})}return prop(Z,X,b,[],{})}
+function vines(Z,b){return [-1.5,-1.1,1.2,1.6].map(X=>prop(Z+Math.abs(X)*.4,X,[{s:[[0,b.wh-.05,.035],[.05,b.wh-.6,.03],[-.04,b.wh-1.1,.02]],c:'#1c2618'}],[],{}))}
 // ---------- barn layout extras ----------
 function ladder(Z,X){const body=[{s:[[-.22,0,.07],[-.15,3.4,.06]],c:'#3a2a1a'},{s:[[.22,0,.07],[.15,3.4,.06]],c:'#3a2a1a'}];
   for(let h=.3;h<3.3;h+=.35)body.push({s:[[-.21+h*.02,h,.05],[.21-h*.02,h,.05]],c:'#4a3826'});return prop(Z,X,body,[],{})}
@@ -938,8 +1252,8 @@ function roostCrows(Z,X){const b=[];for(const [x,f] of[[-.6,1],[.1,-1],[.9,1]])b
 const ITEMS=[], OCC=[], EXCL=[], BARNS=[], LMLIST=[];
 (function buildWorld(){
   const lm=(it,box)=>{ITEMS.push(it);if(box)EXCL.push(box)};
-  for(let k=1;k<NS;k++)if(INNER(ROUTE[k].kind)){const A=S[k-1]+BDOOR,kind=ROUTE[k].kind,v=ROUTE[k].variant;BARNS.push({k,A,B:A+BLEN,v,kind,...SHELL[kind](v)})}
-  const inBarn=(Z,pad=2)=>BARNS.some(b=>((Z-b.A+pad)%L+L)%L<BLEN+2*pad);
+  for(let k=1;k<NS;k++)if(INNER(ROUTE[k].kind)){const A=S[k-1]+BDOOR,kind=ROUTE[k].kind,v=ROUTE[k].variant;BARNS.push({k,A,B:A+ILEN[kind],len:ILEN[kind],v,kind,...SHELL[kind](v)})}
+  const inBarn=(Z,pad=2)=>BARNS.some(b=>((Z-b.A+pad)%L+L)%L<b.len+2*pad);
   const lmOff=s=>BARNS.some(b=>s===b.k||s===b.k-1);   // that landmark would stand on the barn's facade or inside it
   // a landmark is moved sideways until its body (half width hw) clears the text box, tucking at most 40 px under its
   // edge, over the camera arcs around its station's rest view where it is near and lit: wander drifts on past the
@@ -952,36 +1266,31 @@ const ITEMS=[], OCC=[], EXCL=[], BARNS=[], LMLIST=[];
     return sg*Math.min(Math.abs(X),X0+3.5)};
   const R=s=>S[s]+REST;
   const occ=(s,X,hw,zr=REST)=>{const q=toCam(S[s],S[s]+zr,X);OCC.push({c:S[s],zr,xa:VX+(q.x-hw)*F/q.z-30,xb:VX+(q.x+hw)*F/q.z+30})};
-  // per-seed landmark SET and ORDER: the gate is one of three; the side landmarks are shuffled over the free stations,
-  // two stations stay bare forest, each landmark picks its side and leans a little its own way
+  // the gate (station 0) is one of three, by seed; every other station's landmark or set piece comes from the drawn
+  // route (forestRoute.js): its kind, its variant (different arrangement, light, side), its side of the path and lean
   const rl=rngFor(31,SEED*13+5);for(let i=0;i<4;i++)rl();const GV=Math.floor(rl()*3);
-  // the arch stands nearer: station 1 must not rest right under its beam. When station 1 is an interior the gate
-  // stands nearer too, so its leaf and rails do not hang across the front door 2.4 m behind it (seed 3)
-  lm(fenceItem(S[0]+(GV===1||INNER(ROUTE[1].kind)?4:6.6),GV));LMLIST.push(`0 ${['broken fence gate','timber arch with a sign','stone pillars, iron gate'][GV]}`);
-  // [name, fn, X, half width, height]; a kind that repeats something inside this route's interiors is left out (the
-  // cart in barn layout 0, crows in barn layout 2, a cabin when a house is on the route)
-  const has=(k,v)=>BARNS.some(b=>b.kind===k&&(v===undefined||b.v===v));
-  const POOL=[['lantern on a post'],['gravestone row'],['scarecrow',scarecrow,4.9,1.1,2.5],['jack-o\'-lanterns',jackRow,4.6,1.3,.8],['crows'],['stone well',well,4.8,1.0,2.4],
-    ['abandoned cart',cart,5.0,1.2,1.4],['log and mushrooms',logShrooms,4.6,1.6,1.1],['will-o\'-wisps',bogWisps,4.6,1.8,1.7],['skull signpost',signpost,4.8,.9,2.6],['cabin, lit window'],
-    ['fallen tree, roots up',rootPlate,5.6,1.1,2.2],['chapel ruin',chapelRuin,5.6,1.9,3.7],['windmill ruin'],['eyes in the dark',watchEyes,4.8,1.6,.9],['lantern tree',lanternTree,4.2,.4,4],
-    ['coffin by a dug grave',coffin,4.7,.9,2]].filter(([n])=>!(n==='abandoned cart'&&has('barn',0)||n==='crows'&&has('barn',2)||n==='cabin, lit window'&&has('house')));
-  for(let i=POOL.length-1;i>0;i--){const j=Math.floor(rl()*(i+1));[POOL[i],POOL[j]]=[POOL[j],POOL[i]]}
-  const slots=[1,2,3,4,5,6,7,8,9,11,12];for(let i=slots.length-1;i>0;i--){const j=Math.floor(rl()*(i+1));[slots[i],slots[j]]=[slots[j],slots[i]]}
-  // up to 9 landmarks on the stations an interior leaves free (the rest stay bare forest, a breather)
-  const plan=slots.filter(s=>!lmOff(s)).slice(0,9).map((s,i)=>[s,POOL[i],rl()<.5?-1:1,rr(rl,-.09,.09)]).sort((a,b)=>a[0]-b[0]);
-  plan.forEach((q,i)=>{if(i>1&&q[2]===plan[i-1][2]&&q[2]===plan[i-2][2])q[2]=-q[2]});   // never three on one side in a row
-  for(let [s,[name,fn,X0,hw,ht],sd,lean] of plan){LEAN=lean;
-    if(name==='crows'){const t=rl()<.5;name=t?'dead tree of crows':'crow on a stump';fn=t?crowTree:crowStump;X0=t?4.9:4.4;hw=t?1.2:.8;ht=t?3.6:1.8}
-    LMLIST.push(`${s} ${name}${sd<0?' (left)':' (right)'}`);
+  // the arch stands nearer: station 1 must not rest right under its beam. When station 1 approaches an interior the gate
+  // stands nearer too, so its leaf and rails do not hang across the front door 2.4 m behind it
+  lm(fenceItem(S[0]+(GV===1||ROUTE[1].role==='approach'?4:6.6),GV));LMLIST.push(`0 ${['broken fence gate','timber arch with a sign','stone pillars, iron gate'][GV]}`);
+  // [fn(Z,X,variant), X, half width, height]; stands (tree mixes), the creek (on the floor) and the pins have no prop
+  const LMK={'fern drift':[fernClump,4.6,1.4,1.2],'mushroom ring':[mushroomRing,4.4,1.4,.4],'hollow log':[hollowLog,4.6,1.7,1.1],'fallen tree, roots up':[rootPlate,5.6,1.1,2.2],
+    'mossy boulders':[boulders,4.8,1.7,1.4],'will-o\'-wisps over a bog':[bogWisps,4.6,1.8,1.7],'moonlit glade':[glade,5.4,2.2,7],'lone apple tree':[loneApple,5.6,2.6,5],
+    'charcoal-burner clearing':[charcoal,5.4,2.6,1.4],'crow tree':[crowTree,4.9,1.2,3.6],'crow on a stump':[crowStump,4.4,.8,1.8],'deer in the trees':[deer,5.2,1.2,2.2],
+    'owl on a snag':[owlSnag,4.6,.9,4.4],'eyes in the dark':[watchEyes,4.8,1.6,.9],'crooked signpost':[signpost,4.8,.9,2.6],'stone well':[well,4.8,1.0,2.4],'rusted cart':[cart,5.0,1.2,1.4],
+    'lantern tree':[lanternTree,4.2,.4,4],'stone wall ruin':[stoneWall,4.8,2.6,1.2],'scarecrow':[scarecrow,4.9,1.1,2.5],'jack-o\'-lanterns':[jackRow,4.6,1.3,.8],
+    'stacked cordwood':[cordwood,4.9,2.3,1.6],'deer-stand ladder':[deerStand,4.6,.9,4.8],'rope swing':[ropeSwing,4.6,1.4,4]};
+  const plan=[];for(let s=1;s<NS;s++){const r=ROUTE[s];if(r.role==='approach'||r.interior||r.lm==='moonrise'||lmOff(s))continue;plan.push([s,r.lm,r.variant,rl()<.5?-1:1,rr(rl,-.09,.09)])}
+  plan.forEach((q,i)=>{if(i>1&&q[3]===plan[i-1][3]&&q[3]===plan[i-2][3])q[3]=-q[3]});   // never three on one side in a row
+  for(const [s,name,v,sd,lean] of plan){LEAN=lean;LMLIST.push(`${s} ${name}${sd<0?' (left)':' (right)'}`);
     if(name==='lantern on a post'){const X=side(s,sd*5.7,REST,.9,3.2);lm(lanternPool(R(s)+0.05,X-sd*1.6));lm(lanternItem(R(s),X),sd<0?[X-1.9,X+3.1,R(s)-2.5,R(s)+2.5]:[X-3.1,X+1.9,R(s)-2.5,R(s)+2.5]);occ(s,X-sd*.4,.9)}
-    else if(name==='gravestone row'){const dX=side(s,sd*4.7,11)-sd*4.7,rgv=rngFor(s,55,SEED),k0=Math.floor(rgv()*6);[[2.3,9],[3.1,9.8],[4.0,10.5],[5.0,11.3],[6.1,12],[7.2,12.7]].forEach(([X,o],i)=>ITEMS.push(graveItem(S[s]+o,sd*X+dX,rgv,(k0+i)%6)));
+    else if(name==='gravestones'){const dX=side(s,sd*4.7,11)-sd*4.7,rgv=rngFor(s,55,SEED),k0=Math.floor(rgv()*6),n=[6,4,5][v];[[2.3,9],[3.1,9.8],[4.0,10.5],[5.0,11.3],[6.1,12],[7.2,12.7]].slice(0,n).forEach(([X,o],i)=>ITEMS.push(graveItem(S[s]+o,sd*X+dX,rgv,(k0+i)%6)));
       EXCL.push(sd<0?[-8.5+dX,-1.6+dX,S[s]+7,S[s]+14]:[1.6+dX,8.5+dX,S[s]+7,S[s]+14]);lm(moonPool(S[s]+11,sd*4.6+dX));occ(s,sd*4.7+dX,2.6,11)}
-    else if(name==='cabin, lit window'){const X=side(s,sd*7.1,REST+4,1.7,3.1);lm(cabin(R(s)+4,X,REST+4),keep(X,R(s)+4,3));occ(s,X,1.7,13)}
-    else if(name==='windmill ruin'){const zr=REST+9,X=side(s,sd*11.5,zr,2.4,8);lm(windmill(R(s)+9,X,zr),keep(X,R(s)+9,3.5,4));occ(s,X,2.4,zr)}
-    else{const X=side(s,sd*X0,REST,hw,ht);lm(fn(R(s),X),keep(X,R(s),name==='abandoned cart'?3:2.6));occ(s,X,hw)}}
+    else if(name==='creek and plank bridge'){CREEKS.push({Zc:S[s]+10.5,v,ph:rr(rl,0,TAU),w:rr(rl,1.3,1.8)});ITEMS.push(bridge(S[s]+10.5,v));EXCL.push([-30,30,S[s]+8.3,S[s]+12.7])}
+    else if(LMK[name]){const[fn,X0,hw,ht]=LMK[name],X=side(s,sd*X0,REST,hw,ht);lm(fn(R(s),X,v),keep(X,R(s),name==='moonlit glade'||name==='charcoal-burner clearing'?4.2:name==='rusted cart'?3:2.6,name==='moonlit glade'?4.5:3));occ(s,X,hw)}
+  }
   LEAN=0;
   // the interiors. Everything belonging to one is GATED (GATE): it fades in through the fog only once its front door
-  // is within 14.5 m, so a barn or house shows up as the next stop, never early
+  // is within 14.5 m, so a barn or shack shows up as the next stop, never early
   const rb=rngFor(9,SEED);
   for(const b of BARNS){const{A,B}=b,mr=rb()<.5?-1:1,its=[];const add=it=>{its.push(it);return it};
     const P2=(Zn,Z1,X0,h0,X1,h1,fill,lines,o)=>add(planeItem(Zn,Z1,X0,h0,X1,h1,fill,lines,o)),BAY=BLEN/4;
@@ -1003,56 +1312,89 @@ const ITEMS=[], OCC=[], EXCL=[], BARNS=[], LMLIST=[];
         add(roostCrows(A+8,.4*mr));add(hangLantern(A+9.5,3.55*mr,true));add(lanternPool(A+9.5,3.0*mr));add(pitchfork(A+9,-2.2*mr));add(motes(A+9.5,2.1*mr,rb))}
       b.hay=[...Array(36)].map(()=>[A+rr(rb,.5,BLEN-.5),(rb()<.5?-1:1)*rr(rb,1.2,3.8),rr(rb,0,Math.PI),rr(rb,.25,.5)]);
     }else{
-      // house: v0 narrow hall with a staircase, v1 parlour with a fireplace, v2 long hall of portraits and a clock
-      {const rp=rngFor(93,SEED,b.k),pk=a=>a[Math.floor(rp()*a.length)];   // seeded siding and wallpaper (each layout keeps its own family)
-        b.wall=pk(['#2a292d','#252a27','#2d2925','#2b2628']);b.paper=pk([['#2a1e26','#2a2230','#26202a'],['#1c2a24','#1e2630','#232a1e'],['#30251b','#2e1e1e','#2a2a20']][b.v])}
-      b.hay=[];const w=b.w,wh=b.wh;
-      add(houseFront(A,b,rb));add(houseBack(B,b));
-      for(let z=A;z<B-.01;z+=BAY){const z1=Math.min(z+BAY,B);
-        for(const sd of[-1,1])P2(z,z1,sd*w,0,sd*w,wh,b.paper,[[.02,.06,'#0e0a08'],[.33,.03,'#4a3c2c'],[.87,.025,'#3a2e22']],{insets:[[0,1,0,.33,'#21180f']]});
-        P2(z,z1,-w,wh,w,wh,'#241e1a',[[.2,.05,'#0f0c0a'],[.5,.05,'#0f0c0a'],[.8,.05,'#0f0c0a']])}
-      const pz=b.v===2?[A+1.6,A+4.9,A+8.1,A+11.4]:[A+4.9,A+8.1];
-      pz.forEach((z,i)=>{const sd=(i%2?1:-1)*mr,len=rr(rb,.55,.8),h0=rr(rb,1.25,1.45),h1=h0+rr(rb,.6,.85);
-        P2(z-len/2,z+len/2,sd*(w-.03),h0,sd*(w-.03),h1,'#5a4326',[],{front:1,insets:[[.1,.9,.1,.9,'#16110e'],[.36,.64,.38,.74,'#57503f'],[.42,.58,.3,.4,'#1e1814']]})});
-      add(hallLamp(A+6.5,0,wh));add(motes(A+6.5,(b.w-.9)*mr,rb));
-      if(b.v===0){add(stairs(A+10.5,-(w-.65)*mr,mr));add(sconce(A+4,(w-.12)*mr,1.75));add(sconce(A+9,-(w-.12)*mr,1.75))}
-      else if(b.v===1){add(fireplace(A+8,(w-.35)*mr,mr));add(armchair(A+9.5,-(w-.8)*mr));add(armchair(A+6.8,(w-1.1)*mr));add(sconce(A+4.5,-(w-.12)*mr,1.8));add(motes(A+8.5,-(w-1)*mr,rb))}
-      else{add(clock(A+10.8,(w-.4)*mr));add(sconce(A+3.5,(w-.12)*mr,1.75));add(sconce(A+6.8,-(w-.12)*mr,1.75));add(sconce(A+10,-(w-.12)*mr,1.75))}
+      // shack: v0 trapper's shack (log walls, stove, bunks, pelts, traps, a lantern), v1 woodcutter's hut (planks, a sawhorse,
+      // hanging saws and axes, firewood, a coat on a peg), v2 collapsed lean-to (one side of the roof caved in, moonlight
+      // falling through onto a sapling, a cold stove, a broken cot, fallen planks, vines). One room, low ceiling.
+      b.pt=SPAINT[b.v];const{w,wh,pk,len}=b,SB=len/2,second=z=>z>A+.1;
+      b.hay=b.v===2?[...Array(30)].map(()=>[A+rr(rb,.4,len-.4),rr(rb,-w+.2,w-.2),rr(rb,0,Math.PI),rr(rb,.15,.3)]):[];
+      shackFront(A,b,rngFor(97,SEED,b.k)).forEach(add);shackBack(B,b).forEach(add);
+      for(const z of[A+1.3,A+3.5,A+5.7])add(shRafter(z,b,b.v===2&&z>A+3));
+      for(let z=A;z<B-.01;z+=SB){const z1=Math.min(z+SB,B);
+        for(const sd of[-1,1]){
+          const lines=b.v===0?[...Array(8)].map((_,i)=>[(i+1)/9,.06,'#120c08']):[];
+          const ins=b.v===0?[]:[...Array(11)].map((_,i)=>{const u=(i+.5)/11;return[u,u+.014,0,1,b.v===2&&second(z)&&sd===mr&&i%3===0?'#3a4250':'#120c08']});
+          if(sd===-mr&&second(z)&&b.v!==2)ins.push([.4,.62,.5,.74,'#3a4658']);   // a small window with moonlight in it
+          P2(z,z1,sd*w,0,sd*w,wh,b.pt.wall,lines,{insets:ins});
+          if(!(b.v===2&&second(z)&&sd===mr))P2(z,z1,sd*w,wh,0,pk,b.pt.roof,[[.33,.06,'#0e0a07'],[.66,.06,'#0e0a07']])}}
+      if(b.v===0){add(stove(A+6.2,-1.42*mr,false,b));add(bunk(A+4.6,-1.45*mr,true));add(table(A+5.5,1.12*mr,true));add(pelts(A+5.9,1.62*mr,rb));add(traps(A+6.85,.8*mr));
+        add(shLantern(A+4.6,1.62*mr,wh-.05,true));add(motes(A+5,1.0*mr,rb))}
+      else if(b.v===1){add(sawhorse(A+5.4,-.95*mr));add(hangTools(A+6.3,-1.62*mr));add(coat(A+4.8,1.66*mr));add(shLantern(A+4.6,-1.62*mr,wh-.05,true));
+        add(prop(A+6.5,1.25*mr,logEnds(-.55,.55,1.3,rb,7),[],{}));add(prop(A+6.0,.55*mr,[{p:[[-.28,-.05],[.28,-.05],[.25,.55],[-.25,.55]],c:'#3a2c1e'},{e:[0,.55,.25,.06],c:'#5a4630'},{s:[[-.05,.55,.05],[.3,1.15,.045]],c:'#4a3a28'},{p:[[-.12,.5],[.1,.5],[.08,.66],[-.12,.7]],c:'#5a5650'}],[],{}));add(motes(A+5,-1.0*mr,rb))}
+      else{add(moonShaft(A+5,1.05*mr,b));add(sapling(A+5.3,1.3*mr));add(stove(A+6.4,-1.45*mr,true,b));add(bunk(A+5.8,-1.3*mr,false));add(fallenPlanks(A+4.6,1.4*mr,rb));vines(A+3.6,b).forEach(add);add(motes(A+5,.6*mr,rb))}
     }
     for(const it of its){const dA=(it.kind==='plane'?it.Z:it.Z)-A;it.dA=dA;
       if(it.kind!=='plane'){const o=it.op;it.op=z=>o(z)*GATE(z-dA)}ITEMS.push(it)}
   }
   const clear=(X,Z,w=1)=>!EXCL.some(e=>X>e[0]&&X<e[1]&&Z>e[2]&&Z<e[3])&&!(inBarn(Z)&&Math.abs(X)<9)&&
     !OCC.some(o=>{const q=toCam(o.c,Z,X);if(!q||q.z<=0.3||q.z>=o.zr)return false;const x=VX+q.x*F/q.z,hw=w*0.8*F/q.z;return x+hw>o.xa&&x-hw<o.xb});
-  // keep the harvest moon visible from station 10 (screen rect of the moon)
+  // keep the harvest moon visible from the moonrise stations (screen rect of the moon)
   const moonHole=bb=>bb&&bb[2]>1480&&bb[0]<1840&&bb[1]<290;
-  const inMoon=(X,Z)=>{const q=toCam(S[10],Z,X);if(!q||q.z<0.5||q.z>ZFAR)return false;const x=VX+q.x*F/q.z;return x>1500&&x<1800};
+  const inMoon=(X,Z)=>PINS.some(p=>{const q=toCam(S[p],Z,X);if(!q||q.z<0.5||q.z>ZFAR)return false;const x=VX+q.x*F/q.z;return x>1500&&x<1800});
+  // the woods: per stretch a woodland type (forestStretches) sets the tree mix, density and undergrowth; a stand set
+  // piece takes over its own stretch; where the type changes the mix blends across the stretch (trees come out of the
+  // far fog, so the change shows gradually, never as a pop)
+  const MIX={pine:{pine:7,dec:.6,snag:.8,birch:.2},birch:{birch:5,dec:1.4,snag:1.2,pine:.4},oak:{oak:4,dec:2.5,snag:.7,birch:.3},deadwood:{snag:5,dec:2,birch:.35,pine:.6},bog:{snag:3,dec:2.5,birch:.8,pine:.5},ridge:{pine:3,oak:1.5,snag:1.5,dec:1,birch:.2}};
+  const STAND={'pine stand':{pine:1},'birch grove':{birch:1},'dead snag field':{snag:1},'gnarled oaks':{oak:1},'hanging moss':{oak:2,dec:1}};
+  const DENS={pine:1,birch:.8,oak:.9,deadwood:.85,bog:.7,ridge:.85};
+  const pickW=(wt,r)=>{let t=0;for(const k in wt)t+=wt[k];let x=r()*t;for(const k in wt){x-=wt[k];if(x<=0)return k}return 'dec'};
   for(let seg=0;seg<NS;seg++){
-    const Z0=S[seg],len=segLen((seg+1)%NS),f=len/D,r=rngFor(seg,11,SEED);
-    const add=(X,off,w)=>{X=Math.sign(X)*Math.max(Math.abs(X),2.3+w*0.6);const Z=Z0+off;if(clear(X,Z,w)&&!inMoon(X,Z))ITEMS.push(treeItem(Z,X,w,rngFor(seg,Math.round(off*97),Math.round(X*131),SEED)))};
+    const Z0=S[seg],len=segLen((seg+1)%NS),f=len/D,r=rngFor(seg,11,SEED),bA=BIOME[seg],bB=BIOME[(seg+1)%NS];
+    const stand=STAND[ROUTE[seg].lm]||null,standN=STAND[ROUTE[(seg+1)%NS].lm]||null,moss=ROUTE[seg].lm==='hanging moss'||ROUTE[(seg+1)%NS].lm==='hanging moss';
+    const orchard=ROUTE[seg].lm==='old orchard'||ROUTE[(seg+1)%NS].lm==='old orchard';
+    const spAt=(off,rs)=>{const t=off/len;if(stand&&(t<.75||!standN))return pickW(stand,rs);if(standN&&t>.4)return pickW(standN,rs);
+      const wa=MIX[bA],wb=MIX[bB],m={};for(const k in wa)m[k]=(m[k]||0)+wa[k]*(1-t);for(const k in wb)m[k]=(m[k]||0)+wb[k]*t;return pickW(m,rs)};
+    const add=(X,off,w,near)=>{X=Math.sign(X)*Math.max(Math.abs(X),2.3+w*0.6);const Z=Z0+off;if(!clear(X,Z,w)||inMoon(X,Z))return;const tr=rngFor(seg,Math.round(off*97),Math.round(X*131),SEED);
+      // no pale birch within 16 m past an interior: seen through a doorway (the shell shows outside items only once they
+      // overlap the door) a pale trunk would switch on as a visible pop where a dark one does not
+      let sp=spAt(off,tr);if(sp==='birch'&&BARNS.some(b=>((Z-b.A)%L+L)%L<b.len+16))sp='dec';const o={moss:moss||(bA==='bog'&&tr()<.3)};
+      if(sp==='snag'&&!near&&tr()<.3)o.stump=1;if(!near&&tr()<.1)o.lean=Math.sign(X)*rr(tr,.1,.2);
+      ITEMS.push(treeItem(Z,X,w,tr,sp,o))};
+    const dens=DENS[bA]*(1-0)+0,pinSeg=PINS.includes(seg);
     for(let rep=0;rep<Math.round(f);rep++){const o0=rep*D;
+      if(orchard){   // an old orchard: rows of gnarled apple trees, some dead, the woods standing back beyond them
+        for(const sd of[-1,1])for(const dz of[1.2,4.6])for(let j=0;j<2;j++){if(r()<.12)continue;const X=sd*(3.9+3.4*j+rr(r,-.25,.25)),Z=Z0+o0+dz+rr(r,-.3,.3);
+          if(clear(X,Z,.4)&&!inMoon(X,Z))ITEMS.push(treeItem(Z,X,.27,rngFor(seg,rep,j,Math.round(dz*10),sd,SEED),'apple',{dead:r()<.15}))}
+        for(let i=0;i<2;i++){const sd=r()<.5?-1:1;add(sd*rr(r,12,17),o0+rr(r,0,D),rr(r,0.4,0.75))}
+        continue}
       for(const sd of[-1,1]){
-        const off=o0+rr(r,3.0,5.4); let k=rr(r,0.5,0.72); if(seg===10&&sd>0)k=0.8;
-        add(sd*Math.max(2.1,(off-o0)*k),off,rr(r,0.7,1.1));                         // near frame trunk
+        const off=o0+rr(r,3.0,5.4); let k=rr(r,0.5,0.72); if(pinSeg&&sd>0)k=0.8;
+        add(sd*Math.max(2.1,(off-o0)*k),off,rr(r,0.7,1.1),true);                         // near frame trunk
         const n2=1+Math.floor(r()*2);for(let i=0;i<n2;i++)add(sd*rr(r,3.8,9),o0+rr(r,1.5,6),rr(r,0.45,0.9));
       }
-      const nf=3+Math.floor(r()*3);for(let i=0;i<nf;i++){const sd=r()<.5?-1:1;add(sd*rr(r,2.4,16),o0+rr(r,0,D),rr(r,0.35,0.75))}
+      const nf=Math.round((3+Math.floor(r()*3))*dens);for(let i=0;i<nf;i++){const sd=r()<.5?-1:1;add(sd*rr(r,2.4,16),o0+rr(r,0,D),rr(r,0.35,0.75))}
     }
     const rl=rngFor(seg,77,SEED);
-    for(const sd of[-1,1]){if(rl()<.3)continue;const Z=Z0+rr(rl,0,len);const it=limbItem(Z,sd,rl);if(inBarn(Z,6))continue;
-      const q=toCam(S[10],Z,0);if(q&&q.z>4&&q.z<ZFAR){XOFF=q.x;const hole=moonHole(it.geom(q.z,'x').bb);XOFF=0;if(hole)continue}ITEMS.push(it)}
+    for(const sd of[-1,1]){if(rl()<.3||orchard)continue;const Z=Z0+rr(rl,0,len);const it=limbItem(Z,sd,rl);if(inBarn(Z,6))continue;
+      if(PINS.some(p=>{const q=toCam(S[p],Z,0);if(q&&q.z>4&&q.z<ZFAR){XOFF=q.x;const hole=moonHole(it.geom(q.z,'x').bb);XOFF=0;return hole}return false}))continue;ITEMS.push(it)}
     const rf=rngFor(seg,23,SEED);
     for(let i=0;i<Math.round(f);i++){const sd=rf()<.5?-1:1,Z=Z0+rr(rf,0,len);const it=fogShaft(Z,sd*rr(rf,2.6,9),rr(rf,1.3,2.8),rf);if(!inBarn(Z))ITEMS.push(it)}
     {const Z=Z0+rr(rf,0,len),it=groundFog(Z,rr(rf,-6,6),rr(rf,5,10),rf);if(!inBarn(Z,4))ITEMS.push(it)}
-    const rg=rngFor(seg,37,SEED);const gok=(Z,X)=>!BARNS.some(b=>((Z-b.A+0.3)%L+L)%L<BLEN+0.6&&Math.abs(X)<b.w+0.4);
-    const n=Math.round(f);
+    // the floor (drawn into the ground tiles, no animation of its own): leaves, roots, stones, grass, path patches, and per
+    // woodland type ferns (drifts at a fern-drift station), moss, mushrooms, twigs, bog pools, ridge rocks
+    const rg=rngFor(seg,37,SEED);const gok=(Z,X)=>!BARNS.some(b=>((Z-b.A+0.3)%L+L)%L<b.len+0.6&&Math.abs(X)<b.w+0.4)&&!CREEKS.some(c=>Math.abs(Z-c.Zc)<c.w+.4);
+    const n=Math.round(f),fernK=(ROUTE[seg].lm==='fern drift'||ROUTE[(seg+1)%NS].lm==='fern drift'?4:{pine:1.2,birch:1.4,oak:1,deadwood:.5,bog:.8,ridge:.6}[bA])*(orchard?.4:1);
     for(let i=0;i<12*n;i++){const onPath=rg()<.55,Z=Z0+rr(rg,0,len),X=onPath?rr(rg,-1.3,1.3):(rg()<.5?-1:1)*rr(rg,1.5,3.6);if(gok(Z,X))leaf(Z,X,rg);else{rg();rg();rg()}}
     for(let i=0;i<2*n;i++){const sd=rg()<.5?-1:1,Z=Z0+rr(rg,0,len),X=sd*rr(rg,1.5,2.6);if(gok(Z,X))root(Z,X,sd,rg);else rg()}
-    for(let i=0;i<2*n;i++){const Z=Z0+rr(rg,0,len),X=rr(rg,-2,2);if(gok(Z,X))stone(Z,X,rg);else rg()}
-    for(let i=0;i<3*n;i++){const sd=rg()<.5?-1:1,Z=Z0+rr(rg,0,len),X=sd*rr(rg,1.5,2.4);if(gok(Z,X))tuft(Z,X,rg);else rg()}
+    for(let i=0;i<(bA==='ridge'?5:2)*n;i++){const Z=Z0+rr(rg,0,len),X=bA==='ridge'?(rg()<.5?-1:1)*rr(rg,1.4,4.2):rr(rg,-2,2);if(gok(Z,X))stone(Z,X,rg);else rg()}
+    for(let i=0;i<(orchard?7:3)*n;i++){const sd=rg()<.5?-1:1,Z=Z0+rr(rg,0,len),X=sd*rr(rg,1.5,orchard?4.2:2.4);if(gok(Z,X))tuft(Z,X,rg);else rg()}
     for(let i=0;i<2*n;i++){const Z=Z0+rr(rg,0,len),X=pathC(Z)+rr(rg,-0.6,0.6);if(gok(Z,X))patch(Z,X,rg);else rg()}
+    for(let i=0;i<Math.round(5*n*fernK);i++){const sd=rg()<.5?-1:1,Z=Z0+rr(rg,0,len),X=sd*rr(rg,1.6,4.4);if(gok(Z,X))fern(Z,X,rg);else rg()}
+    for(let i=0;i<(bA==='bog'?4:1.5)*n;i++){const sd=rg()<.5?-1:1,Z=Z0+rr(rg,0,len),X=sd*rr(rg,1.5,4.2);if(gok(Z,X))mossPatch(Z,X,rg);else rg()}
+    for(let i=0;i<n;i++){const sd=rg()<.5?-1:1,Z=Z0+rr(rg,0,len),X=sd*rr(rg,1.5,3.8);if(gok(Z,X))(rg()<.5?shrooms:twig)(Z,X,rg);else rg()}
+    if(bA==='bog')for(let i=0;i<n;i++){const sd=rg()<.5?-1:1,Z=Z0+rr(rg,0,len),X=sd*rr(rg,1.9,4.3);if(gok(Z,X))pool(Z,X,rg);else rg()}
   }
 })();
+
 
 // ---------- screen-fixed layers ----------
 const $=id=>document.getElementById(id);
@@ -1067,12 +1409,13 @@ stage.style.setProperty('--walk',DUR+'ms');
   beam.style.background=`radial-gradient(ellipse 250px 330px at ${1040+B}px ${1010+B}px,rgba(255,240,205,.22),rgba(255,214,160,.08) 50%,transparent 100%),radial-gradient(ellipse 560px 560px at ${1080+B}px ${1180+B}px,rgba(255,236,200,.07),transparent 100%)`;
   gm.after(beam);
   sky.innerHTML=`<div class="bleed" style="background:linear-gradient(to bottom,${FOG('#121417')} 48px,${FOG('#191b1f')} 288px,${FOG('#24262a')} 468px,${FOG('#34363b')} 658px,${FOG('#44464c')} 738px,${FOG('#44464c')} 752px,${FOG('#2e2f33')} 808px)"></div>
+   ${['pine','birch','oak','deadwood','bog','ridge'].map(b=>`<div class="bleed sl" data-st="bio:${b}" style="background:linear-gradient(to bottom,${RGBA(TINT[b],0)} 0px,${RGBA(TINT[b],.16)} 260px,${RGBA(TINT[b],.3)} 600px,${RGBA(TINT[b],.22)} 760px,${RGBA(TINT[b],0)} 860px)"></div>`).join('')}
    <div class="bleed sl" data-st="0" style="background:radial-gradient(ellipse 1150px 150px at 1008px 753px,${RGBA(MOON('#965628'),.32)},${RGBA(MOON('#783c1e'),.09)} 60%,transparent 100%)"></div>
    <div class="bleed" style="background:radial-gradient(ellipse 620px 300px at 1008px 48px,${RGBA(MOON('#5a6474'),.42)},${RGBA(FOG('#282c34'),.16)} 55%,transparent 100%)"></div>
-   <div class="fill sl" data-st="10"><svg width="1920" height="1080" viewBox="0 0 1920 1080" style="position:absolute;inset:0">${moonSvg()}</svg></div>`;
+   <div class="fill sl" data-st="pins"><svg width="1920" height="1080" viewBox="0 0 1920 1080" style="position:absolute;inset:0">${moonSvg()}</svg></div>`;
   { const tm=[95,-20],bm=[390,990],ux=bm[0]-tm[0],uy=bm[1]-tm[1],ul=Math.hypot(ux,uy),nx=-uy/ul,ny=ux/ul,hw=165,c=[(tm[0]+bm[0])/2,(tm[1]+bm[1])/2];
-    $('lightsTop').innerHTML=`<div class="fill sl" data-st="3" style="opacity:0"><svg width="1920" height="1080" viewBox="0 0 1920 1080" style="position:absolute;inset:0"><defs>${lgrad('msa',c[0]-nx*hw,c[1]-ny*hw,c[0]+nx*hw,c[1]+ny*hw,[[0,'#a8bcd8',0],[.5,'#b4c6de',.21],[1,'#a8bcd8',0]])}${lgrad('msv',0,-20,0,990,[[0,'#fff',.45],[.7,'#fff',1],[1,'#fff',.2]])}<mask id="msk"><rect x="0" y="-20" width="900" height="1030" fill="url(#msv)"/></mask></defs><path mask="url(#msk)" d="M${tm[0]-hw} -20L${tm[0]+hw} -20L${bm[0]+hw} 990L${bm[0]-hw} 990Z" fill="url(#msa)"/></svg></div>`; }
-  $('topdark').style.background='linear-gradient(to bottom,rgba(8,8,10,.5) 48px,rgba(8,8,10,.3) 120px,rgba(8,8,10,0) 250px)';
+    $('lightsTop').innerHTML=`<div class="fill sl" data-st="glade" style="opacity:0"><svg width="1920" height="1080" viewBox="0 0 1920 1080" style="position:absolute;inset:0"><defs>${lgrad('msa',c[0]-nx*hw,c[1]-ny*hw,c[0]+nx*hw,c[1]+ny*hw,[[0,'#a8bcd8',0],[.5,'#b4c6de',.21],[1,'#a8bcd8',0]])}${lgrad('msv',0,-20,0,990,[[0,'#fff',.45],[.7,'#fff',1],[1,'#fff',.2]])}<mask id="msk"><rect x="0" y="-20" width="900" height="1030" fill="url(#msv)"/></mask></defs><path mask="url(#msk)" d="M${tm[0]-hw} -20L${tm[0]+hw} -20L${bm[0]+hw} 990L${bm[0]-hw} 990Z" fill="url(#msa)"/></svg></div>`; }
+  $('topdark').style.background='linear-gradient(to bottom,rgba(8,8,10,.38) 48px,rgba(8,8,10,.22) 120px,rgba(8,8,10,0) 250px)';
   // the question box stays dark and calm (>= 7:1 for cream text even over a lit doorway); the frame around it is lifted
   $('hush').style.background='radial-gradient(ellipse 900px 400px at 960px 540px,rgba(4,4,5,.56),rgba(4,4,5,.5) 50%,rgba(4,4,5,.28) 75%,rgba(4,4,5,0) 100%)';
   $('vig').style.background='radial-gradient(ellipse 80% 76% at 50% 50%,transparent 50%,rgba(4,4,6,.3) 78%,rgba(4,4,6,.62) 100%)';
@@ -1121,14 +1464,14 @@ function refArc(ue,Zabs,zAt){for(let u=ue;u<Zabs+3;u+=0.25){const z=zAt(u);if(z!
 // covers the rest); from inside, the outside shows only through the far door. A band or plane that is hidden for its
 // whole life is never mounted (it costs a layer and an animation for nothing); hidden samples do not count as "on".
 function shellCut(u){
-  let sh=null;for(const b of BARNS){const d=((u-b.A)%L+L)%L;if(d>0.3&&d<BLEN-0.3){sh={b,mode:'in',Zd:u+BLEN-d};break}}
+  let sh=null;for(const b of BARNS){const d=((u-b.A)%L+L)%L;if(d>0.3&&d<b.len-0.3){sh={b,mode:'in',Zd:u+b.len-d};break}}
   if(!sh)for(const b of BARNS){const d=((b.A-u)%L+L)%L;if(d>0.3&&d<ZIN+4){sh={b,mode:'out',Zd:u+d};break}}
   if(!sh)return null;const cf=camAt(u),scr=(X,h)=>{const q=pathPt(cf,sh.Zd,X);return q&&q.z>0.3?PC(q.x,h,q.z):null};
   const b=sh.b,hw=sh.mode==='in'?b.dB:b.dF,door=[[-hw,0],[hw,0],[hw,b.dh],[-hw,b.dh]].map(([X,h])=>scr(X,h));if(door.some(p=>!p))return null;
   sh.door=bbox([door]);
   if(sh.mode==='out'){const t=b.fw;sh.face=[[-t,-.1],[t,-.1],[t,b.fh],[0,b.fpk],[-t,b.fh]].map(([X,h])=>scr(X,h));if(sh.face.some(p=>!p))return null}
   return sh}
-const insideB=(b,Z,X)=>{const d=((Z-b.A)%L+L)%L;return d>0.05&&d<BLEN-0.05&&Math.abs(X)<b.w+0.3};
+const insideB=(b,Z,X)=>{const d=((Z-b.A)%L+L)%L;return d>0.05&&d<b.len-0.05&&Math.abs(X)<b.w+0.3};
 const ovl=(r,q)=>r[0]<q[2]&&r[2]>q[0]&&r[1]<q[3]&&r[3]>q[1];
 const inConvex=(poly,[x,y])=>{let sg=0;for(let i=0;i<poly.length;i++){const a=poly[i],b=poly[(i+1)%poly.length],c=(b[0]-a[0])*(y-a[1])-(b[1]-a[1])*(x-a[0]);if(c){if(sg&&Math.sign(c)!==sg)return false;sg=Math.sign(c)}}return true};
 function hiddenBy(u,Z,X,r){const c=shellCut(u);if(!c)return false;const ins=insideB(c.b,Z,X);
@@ -1160,7 +1503,7 @@ function lifeBB(it,Zabs,cutU){
     const seg=raw.slice(i0,i2+1),rz=Math.max(ZMIN,raw[i1].z),rs=raw[i1];
     const id='i'+(uid++);XOFF=rs.x-it.X;const g=it.geom(rz,id),pbs=g.pb||[g.bb];
     const ks=seg.map(s=>{const zz=Math.max(s.z,ZMIN),k=rz/zz,tx=(s.x-rs.x*zz/zz)*F/zz-(rs.x*F/rz)*k+rs.x*F/zz,gone=bx=>offBox(bx,k,tx);
-      const t2=(s.x-rs.x)*F/zz,bb=g.bb,on=!(pbs.every(bx=>offBox(bx,k,t2))&&(g.pg||[]).every(([bx,li])=>offBox(bx,k,t2)||(it.lops[li]?it.lops[li](zz):1)<0.01));
+      const t2=(s.x-rs.x)*F/zz,bb=g.bb,on=it.op(zz)>0.002&&!(pbs.every(bx=>offBox(bx,k,t2))&&(g.pg||[]).every(([bx,li])=>offBox(bx,k,t2)||(it.lops[li]?it.lops[li](zz):1)<0.01));
       const hid=on&&hiddenBy(s.u,it.Z,it.X,[VX+(bb[0]-VX)*k+t2,VY+(bb[1]-VY)*k,VX+(bb[2]-VX)*k+t2,VY+(bb[3]-VY)*k]);
       return{u:s.u,k,zz,tx:t2,hid,on:on&&!hid}});
     ks.forEach((s,j)=>{if(s.on&&j<=i1-i0){lastOn=out.length;lastOnBand=out.length}});
@@ -1255,26 +1598,26 @@ function lifeTile(j,lap){
   for(const b of BARNS){const z0=Math.max(a,b.A),z1=Math.min(hi,b.B);if(z0>=z1)continue;
     const sideL=(Za,Zb,X)=>[...Array(5)].map((_,i)=>{const q=pathPt(cr,Za+(Zb-Za)*i/4+lap*L,X);return q?[q.x,0,q.z]:null}).filter(Boolean);
     const quad=(xa,xb,col)=>{const q=clipZ([...sideL(z0,z1,xa),...sideL(z1,z0,xb)],0.3).map(([x,h,z])=>PC(x,h,z));return q.length>2?`<path d="${dPoly(q)}" fill="${col}"/>`:''};
-    if(b.kind==='house'){s+=quad(-b.w,b.w,'#2c1c12');
-      for(let X=-b.w+.22;X<b.w;X+=.22){const sp=sideL(z0,z1,X).filter(p=>p[2]>0.3).map(([x,,z])=>{const p=PC(x,0,z);return[p[0],p[1],Math.max(.02*F/z,7)]});if(sp.length>1)s+=`<path d="${dPoly(ribbon(sp))}" fill="#26180f"/>`}
-      const rw=b.v===1?1.3:.55,ra=Math.max(z0,b.A+(b.v===1?4:.8)),rb2=Math.min(z1,b.B-(b.v===1?3:.8));
-      if(ra<rb2){const q2=(xa,xb,col)=>{const q=clipZ([...sideL(ra,rb2,xa),...sideL(rb2,ra,xb)],0.3).map(([x,h,z])=>PC(x,h,z));return q.length>2?`<path d="${dPoly(q)}" fill="${col}"/>`:''};
-        s+=q2(-rw,rw,'#5a3a22')+q2(-rw+.1,rw-.1,'#3c1414')+q2(-rw+.3,rw-.3,'#4a1c18')}
+    if(b.kind==='shack'){s+=quad(-b.w,b.w,b.v===2?'#1e1912':'#2a1c12');
+      if(b.v!==2)for(let X=-b.w+.25;X<b.w;X+=.25){const sp=sideL(z0,z1,X).filter(p=>p[2]>0.3).map(([x,,z])=>{const p=PC(x,0,z);return[p[0],p[1],Math.max(.02*F/z,7)]});if(sp.length>1)s+=`<path d="${dPoly(ribbon(sp))}" fill="#1c130c"/>`}
+      for(const [Z,X,an,l] of b.hay){if(Z<z0||Z>=z1)continue;const p=pathPt(cr,Z+lap*L,X),q=pathPt(cr,Z+Math.cos(an)*l+lap*L,X+Math.sin(an)*l);if(p&&q&&p.z>0.3&&q.z>0.3){const A2=PC(p.x,0,p.z),B2=PC(q.x,0,q.z);s+=`<path d="${dPoly(ribbon([[A2[0],A2[1],Math.max(.06*F/p.z,7)],[B2[0],B2[1],Math.max(.06*F/q.z,7)]]))}" fill="${LEAFC[Math.floor(Math.abs(Math.sin(Z*7))*LEAFC.length)]}"/>`}}
       continue}
     s+=`<path d="${dPoly(clipZ([...sideL(z0,z1,-BW),...sideL(z1,z0,BW)],0.3).map(([x,h,z])=>PC(x,h,z)))}" fill="#33241a"/>`;
     for(let X=-3.6;X<3.61;X+=.6){const sp=sideL(z0,z1,X).filter(p=>p[2]>0.3).map(([x,,z])=>{const p=PC(x,0,z);return[p[0],p[1],Math.max(.03*F/z,7)]});if(sp.length>1)s+=`<path d="${dPoly(ribbon(sp))}" fill="#1a110a"/>`}
     for(const [Z,X,an,l] of b.hay){if(Z<z0||Z>=z1)continue;const p=pathPt(cr,Z+lap*L,X),q=pathPt(cr,Z+Math.cos(an)*l+lap*L,X+Math.sin(an)*l);if(p&&q&&p.z>0.3&&q.z>0.3){const A2=PC(p.x,0,p.z),B2=PC(q.x,0,q.z);s+=`<path d="${dPoly(ribbon([[A2[0],A2[1],Math.max(.04*F/p.z,7)],[B2[0],B2[1],Math.max(.04*F/q.z,7)]]))}" fill="#6a5a30" opacity=".55"/>`}}}
   for(const g of GITEMS){if(g.Z<a||g.Z>=a+TILE)continue;const q=pathPt(cr,g.Z+lap*L,g.X);if(!q||q.z<0.3)continue;XOFF=q.x-g.X;s+=g.draw(q.z)}XOFF=0;
+  let TW=4.6;for(const c of CREEKS){if(c.Zc+c.w/2+1<a||c.Zc-c.w/2-1>=hi)continue;s+=creekSvg(c,P,a,hi);TW=11.5}
   const ref=[[-4,0,0],[4,0,0],[-4,0,15],[4,0,15]].map(([x,h,dz])=>{const q=pathPt(cr,Zabs+TILE+10+dz,x);return[q.x,0,q.z]});
   const smp=sampleLife(ue,Zabs,s=>s.zn,u=>{const c=corners(u);if(c.some(p=>!p))return null;const zs=c.map(p=>p.z);
     return{u,m:homRef(ref,cr,camAt(u,cr.base)),zn:Math.max(1,Math.min(...zs)),op:clamp((46-Math.min(...zs))/6),stop:Math.max(...zs)<5.3}},0.02);
   if(!smp.length)return{skip:true};
   // the layer is only as big as the tile's own patch of floor at the reference view (all content is within +-4.5 m)
-  const cb=bbox([[[Zabs,-4.6],[Zabs,4.6],[Zabs+TILE+0.15,-4.6],[Zabs+TILE+0.15,4.6]].map(([Z,X])=>{const q=pathPt(cr,Z,X);return PC(q.x,0,Math.max(q.z,0.3))})]);
+  const cb=bbox([[[Zabs,-TW],[Zabs,TW],[Zabs+TILE+0.15,-TW],[Zabs+TILE+0.15,TW]].map(([Z,X])=>{const q=pathPt(cr,Z,X);return PC(q.x,0,Math.max(q.z,0.3))})]);
   return{kind:'pl',org:PC(...ref[0]),svg:s,ks:smp,ops:smp.map(x=>x.op),box:[Math.max(-2200,Math.floor(cb[0]-40)),Math.max(VY+2,Math.floor(cb[1]-40)),Math.min(W+2200,Math.ceil(cb[2]+40)),Math.min(H+2600,Math.ceil(cb[3]+40))],ue:smp[0].u,ux:smp[smp.length-1].u};
 }
 // screen-fixed station lights (sky glow at 0, moon shaft at 3, harvest moon at 10): opacity keyed to the arc too
-function slOpacity(st,uu){const a=((S[st]-3)%L+L)%L,b=((S[(st+1)%NS]-2)%L+L)%L,len=((b-a)%L+L)%L,d=((uu-a)%L+L)%L;return d>len?0:Math.min(sstep(d/4),sstep((len-d)/4))}
+function slOpacity(sts,uu){if(typeof sts==='string'){let k=0;for(let i=0;i<NS;i++)if(S[i]<=uu)k=i;const uk=((uu-S[k])%L+L)%L,n=(k+1)%NS,t=sstep(uk/segLen(n));return (BIOME[k]===sts?1-t:0)+(BIOME[n]===sts?t:0)}return Math.max(0,...sts.map(st=>slOp1(st,uu)))}
+function slOp1(st,uu){const a=((S[st]-3)%L+L)%L,b=((S[(st+1)%NS]-2)%L+L)%L,len=((b-a)%L+L)%L,d=((uu-a)%L+L)%L;return d>len?0:Math.min(sstep(d/4),sstep((len-d)/4))}
 
 // ---------- live elements ----------
 const LIVE=new Map(), LIFE=new Map();
@@ -1361,14 +1704,16 @@ function updateWindow(){
   // station lights: one animated copy per lap of each screen-fixed light
   for(const tpl of SLT){const key=`s${tpl.dataset.st}_${lap}`;if(LIVE.has(key))continue;
     for(const k of[...LIVE.keys()])if(k.startsWith(`s${tpl.dataset.st}_`))retire(k);
-    const name='a'+(uid++),st=+tpl.dataset.st,el=tpl.cloneNode(true);el.style.opacity='0';
+    const name='a'+(uid++),st=SLST[tpl.dataset.st],el=tpl.cloneNode(true);el.style.opacity='0';
     const kf=[];for(let i=0;i<=Math.ceil(L);i++){const uu=Math.min(i,L);kf.push(`${pc(uu/L)}%{opacity:${fm4(slOpacity(st,uu))}}`)}
     el.style.animation=`${name} ${Math.round(L*1000)}ms linear forwards`;mount(key,el,[`@keyframes ${name}{${kf.join('')}}`],lap*L,lap*L+L,tpl.home,-1)}
 }
 
 const rig=$('rig');
 // ---------- stations, quicken, cuts ----------
-const SLT=[...cam.querySelectorAll('.sl')];SLT.forEach(e=>{e.home=e.parentNode;e.remove()});
+const SLST={0:[0],pins:PINS,glade:ROUTE.map((r,i)=>r.lm==='moonlit glade'?i:-1).filter(i=>i>=0)};
+for(const b of ['pine','birch','oak','deadwood','bog','ridge'])SLST['bio:'+b]=b;
+const SLT=[...cam.querySelectorAll('.sl')].filter(e=>{const s=SLST[e.dataset.st];if(typeof s==='string'&&!BIOME.includes(s)){e.remove();return false}return true});SLT.forEach(e=>{e.home=e.parentNode;e.remove()});
 const rmOn=()=>$('cRm').checked||matchMedia('(prefers-reduced-motion: reduce)').matches;
 const stationAt=u=>{const uu=((u%L)+L)%L;let k=0;for(let i=0;i<NS;i++)if(S[i]<=uu+0.5)k=i;return k};
 // the next station boundary at least 1 m ahead (absolute arc)
@@ -1435,9 +1780,9 @@ let hidT=null;
 document.addEventListener('visibilitychange',()=>{const now=performance.now();   // the timeline does not tick while hidden
   if(document.hidden){if(hidT===null){hidT=now;clearTimeout(tickT)}}
   else if(hidT!==null){if(!frozen)lost+=Math.max(0,now-hidT);hidT=null;applied=-1;kick()}});
-const LABEL={straight:'straight',bendL:'bend left',bendR:'bend right',barn:'barn, in',house:'house, in'};
-const LAYOUT={barn:['hay and cart','stalls','hay loft'],house:['hall and stair','parlour','portrait hall']};
-const kindOf=k=>isExit(k)?ROUTE[(k+NS-1)%NS].kind+', out':LABEL[ROUTE[k].kind]+(INNER(ROUTE[k].kind)?` (${LAYOUT[ROUTE[k].kind][ROUTE[k].variant]})`:'')+(k===10?' (calm)':'');
+const LABEL={straight:'forest',bendL:'bend left',bendR:'bend right',barn:'barn, in',shack:'shack, in'};
+const LAYOUT={barn:['hay and cart','stalls','hay loft'],shack:['trapper\'s shack','woodcutter\'s hut','collapsed lean-to']};
+const kindOf=k=>{const r=ROUTE[k];if(INNER(r.kind))return `${r.kind}: ${LAYOUT[r.kind][r.variant]}`;const t=r.role==='approach'?`${ROUTE[k+1].kind} ahead`:r.lm==='moonrise'?'moonrise (calm)':r.lm;return t+(isExit(k)?', out':'')+(r.kind==='bendL'?' ↰':r.kind==='bendR'?' ↱':'')};
 function ui(){
   $('stLabel').textContent=`seed ${SEED} · station ${station} / 12 · ${kindOf(station)}`;
   $('hud').innerHTML=ROUTE.map((r,i)=>`<span data-s="${i}" class="k-${isExit(i)?ROUTE[(i+NS-1)%NS].kind:r.kind}${i===station?' cur':''}">${i} ${kindOf(i)}</span>`).join('');
@@ -1461,7 +1806,7 @@ fit();ui();tick();
 // sampling handle (scripts/forest-blob-check.mjs, with Playwright's fake clock): freeze() pins every animation to the
 // page clock's current time and pauses it; clock.runFor() then moves time on and the next freeze() shows it
 const anims=()=>stage.getAnimations({subtree:true});
-window.__route={route:ROUTE,seed:SEED,S,L,palette:{fog:PAL.fog[2],trunk:PAL.trunk[2],ground:PAL.ground[2],moon:PAL.moon[2],
+window.__route={route:ROUTE,seed:SEED,stations:NS,biome:BIOME,S,L,palette:{forest:BIOME[0],fog:PAL.fog[2],trunk:PAL.trunk[2],ground:PAL.ground[2],moon:PAL.moon[2],
     swatch:{fog:FOG('#62666e'),trunk:TRK('#6e5436'),ground:GRD('#4c3f30'),moon:MOON('#e3813a')}},landmarks:LMLIST,advance,back,jump,get goal(){return goal===null?null:stationAt(goal)},get station(){return station},walkDur,clk,u:()=>uAt(clk()),v:()=>vAt(clk()),
   freeze(){frozen=true;updateWindow();syncAll()},unfreeze(){frozen=false;syncAll()},
   internals:{ITEMS,LIVE,LIFE,camAt,pathPt,lifePlane,uAt,clk},
