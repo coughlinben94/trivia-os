@@ -40,13 +40,13 @@ export const SHINY_EXPLAINERS = Object.freeze([
     inputType: 'bendle',
     mode: 'rules',
     rendererKey: 'bendle',
-    action: 'The mix adds a layer each step; write the song title down when you know it.',
-    // Owner rule, 2026-10-02: ONE guess per team. The step a team guesses
-    // on sets its points if right (30 / 20 / 10). No penalty and no way of
-    // marking the step is defined in code, so the card states neither.
+    action: 'Search the song on your phone and lock in your one guess.',
+    // Owner rule, 2026-10-02: ONE guess per team. The step that is live when
+    // a team locks sets its points if right (30 / 20 / 10). Graded on title
+    // plus artist (title alone when either side has no artist).
     scoring: [
       `One guess per team. Right on step 1: ${BENDLE_STEP_POINTS[0]}. Step 2: ${BENDLE_STEP_POINTS[1]}. Step 3: ${BENDLE_STEP_POINTS[2]}.`,
-      'No phone entry. The host checks answers by hand.',
+      'Right song and artist. The step you lock on sets your points.',
     ],
     assets: [],
   }),
