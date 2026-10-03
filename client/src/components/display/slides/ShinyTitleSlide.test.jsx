@@ -163,14 +163,16 @@ describe('<ShinyTitleSlide> rules cards', () => {
     expect(el.textContent).toContain('B beat 3 of 4 but wagered Fly Close To The Sun, which needs 4.')
   })
 
-  it('bendle card: one guess per team, one answer line, step values from the scorer, never "Ben"', async () => {
+  it('bendle card: phone search + one locked guess, step values from the scorer, never "Ben"', async () => {
     const { BENDLE_STEP_POINTS } = await import('../../../lib/bendleScoring.js')
     render(cardFor('bendle'))
     const text = container.querySelector('[data-testid="shiny-explainer"]').textContent
     expect(text).toContain(`One guess per team. Right on step 1: ${BENDLE_STEP_POINTS[0]}. Step 2: ${BENDLE_STEP_POINTS[1]}. Step 3: ${BENDLE_STEP_POINTS[2]}.`)
-    expect(text).toContain('No phone entry. The host checks answers by hand.')
-    expect(text).toContain('Your one guess')
-    expect(text).toContain(`Guess on step 1: ${BENDLE_STEP_POINTS[0]} · step 2: ${BENDLE_STEP_POINTS[1]} · step 3: ${BENDLE_STEP_POINTS[2]}`)
+    expect(text).toContain('Search the song on your phone and lock in your one guess.')
+    expect(text).toContain('Right song and artist.')
+    expect(text).toContain('Lock in')
+    BENDLE_STEP_POINTS.forEach(points => expect(text).toContain(`Lock here: ${points}`))
+    expect(text).not.toMatch(/No phone entry|by hand|Your one guess/)
     expect(text).not.toMatch(/\bBen\b|first right answer|pts/)
   })
 
