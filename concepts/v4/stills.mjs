@@ -19,7 +19,7 @@ for (const seed of seeds) {
   await p.goto(opt('--url', pathToFileURL(path.join(ROOT, 'concepts/haunted-forest-route-v4.html')).href) + `?seed=${seed}&bare&noq&wander=0`)
   await p.waitForFunction(() => window.__route)
   meta[seed] = await p.evaluate(() => ({ route: window.__route.route.map(r => r.kind + r.variant), pal: window.__route.palette, lms: window.__route.landmarks }))
-  for (const k of stations) {
+  for (const k of (args.includes('--stations') ? stations : [...Array(await p.evaluate(() => window.__route.stations)).keys()])) {
     await p.evaluate(k => window.__route.jump(k), k); await p.waitForTimeout(1800)
     await p.screenshot({ path: path.join(OUT, `s${seed}_${String(k).padStart(2, '0')}.png`) })
   }

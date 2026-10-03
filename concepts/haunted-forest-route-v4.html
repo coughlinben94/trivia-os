@@ -478,8 +478,8 @@ function treeShape(r,w,hmin,sp='dec',o={}){
     for(let b=0;b<nb;b++){const h0=rr(r,Math.max(2.6,Math.min(hmin,6)-1),Math.max(Math.min(hmin,6.5),4)),side=b%2?bias:-bias;const len=rr(r,4,8)*Math.sqrt(w/1),bw=Math.max(.25,at(h0)[1]*rr(r,.4,.55));
       const s=limb(h0,side,rr(r,.95,1.45),len,bw,4,.55);for(const q of[s[1],s[2],s[3]])if(r()<.7)twig(q,side,rr(r,-.2,.7),len*.35,bw*.4)}}
   else if(sp==='apple'){const big=o.big||1,nb=3+Math.floor(r()*2);
-    for(let b=0;b<nb;b++){const side=b%2?1:-1,h0=rr(r,1.3,1.9)*big;const s=limb(h0,side,rr(r,.35,.95),rr(r,1.8,2.8)*big,.12*big,3,.6);
-      for(const q of s.slice(1)){twig(q,side,rr(r,-.4,.9),rr(r,.7,1.3)*big,.05*big);if(r()<.6)twig(q,-side,rr(r,0,.6),rr(r,.5,1)*big,.04*big)}
+    for(let b=0;b<nb;b++){const side=b%2?1:-1,h0=rr(r,1.3,1.9)*big;const s=limb(h0,side,rr(r,.35,.95),rr(r,1.2,1.9)*big,.09*big,3,.6);
+      for(const q of s.slice(1))if(r()<.6)twig(q,side,rr(r,-.4,.9),rr(r,.5,.9)*big,.035*big)
       if(!o.dead)for(let i=0;i<3;i++){const q=s[1+Math.floor(r()*3)];const fx=q[0]+rr(r,-.4,.4),fh=q[1]-rr(r,.1,.4);fruit.push([fx,fh])}}}
   if(o.moss)for(const s of branches.slice(0,6)){if(s[0][2]<.08)continue;for(const q of s.slice(1)){if(r()<.45)continue;const l=rr(r,.8,2.4);branches.push([[q[0],q[1],.08],[q[0]+rr(r,-.1,.1),q[1]-l*.5,.06],[q[0]+rr(r,-.15,.15),q[1]-l,.04]])}}
   return {trunk,branches,polys,marks,fruit,cx,ww,HS,sp};
@@ -508,7 +508,7 @@ function treeItem(Z,X,w,r,sp='dec',o={}){
       const warm=clamp(1.25-z/9)*(X>0?1:0.75),c0=mix(TRK('#4A4035'),TRK('#6e5436'),warm),c1=mix(TRK('#3d342b'),TRK('#523e2a'),warm);
       const furs=w*F/z>=70?fur.map(sp=>`<path d="${dPoly(wRib(sp,X,z))}" fill="${TRK('#1c160f')}" opacity=".6"/>`).join(''):'';
       const mk=sh.marks.length&&w*F/z>=26?`<path d="${sh.marks.map(m=>dPoly(wRib(m,X,z))).join('')}" fill="#1a1816"/>`:'';
-      const fr=sh.fruit.length&&F/z>=60?`<path d="${sh.fruit.map(([x,h])=>dPoly(ell(x,h,.06,.06,8).map(pr))).join('')}" fill="${'#3a1610'}"/>`:'';
+      const fr=sh.fruit.length&&F/z>=60?`<path d="${sh.fruit.map(([x,h])=>dPoly(ell(x,h,.045,.045,8).map(pr))).join('')}" fill="#3a1a10"/>`:'';
       const secs=sh.HS.slice(0,-1).map((h,i)=>[[sh.cx[i]-sh.ww[i]/2,h],[sh.cx[i]+sh.ww[i]/2,h],[sh.cx[i+1]+sh.ww[i+1]/2,sh.HS[i+1]],[sh.cx[i+1]-sh.ww[i+1]/2,sh.HS[i+1]]].map(pr));
       const base=pale?`<path d="${dPoly(tr)}" fill="${pale}"/><path d="${br.map(dPoly).join('')+pl.map(dPoly).join('')}" fill="${mix(pale,'#000000',.35)}"/>${mk}`:`<path d="${all}" fill="${bark}"/>${fr}`;
       return {bb:bbox([tr,...br,...pl]),pb:[...secs,...br,...pl].map(l=>bbox([l])),lbb:[null,null,lb],layers:[
@@ -606,8 +606,8 @@ function creekSvg(c,Pw,z0,z1){
   const zc=X=>c.Zc+.55*Math.sin(X*.33+c.ph)+.22*Math.sin(X*.9+c.ph*2);
   const strip=(off0,off1,col)=>{const A=[],B=[];for(let X=-11;X<=11.01;X+=.5){const a=zc(X)+off0,b=zc(X)+off1;const za=Math.min(Math.max(a,z0),z1),zb=Math.min(Math.max(b,z0),z1);if(zb-za<.01)continue;const p=Pw(za,X),q=Pw(zb,X);if(p&&q){A.push(p);B.push(q)}}
     return A.length>1?`<path d="${dPoly(A.concat(B.reverse()))}" fill="${col}"/>`:''};
-  let s=strip(-c.w/2-.35,c.w/2+.35,GRD('#1e1a14'))+strip(-c.w/2,c.w/2,FOG('#0c1013'));
-  for(let i=0;i<14;i++){const X=-9+i*1.4+Math.sin(i*7.1)*.4,dz=Math.sin(i*3.3+c.ph)*c.w*.3,Z=zc(X)+dz;if(Z<z0||Z>=z1)continue;const p=Pw(Z,X-.35),q=Pw(Z,X+.35);if(p&&q)s+=`<path d="${dPoly(ribbon([[p[0],p[1],5],[q[0],q[1],5]]))}" fill="${MOON('#6a7888')}"/>`}
+  let s=strip(-c.w/2-.35,c.w/2+.35,GRD('#1e1a14'))+strip(-c.w/2,c.w/2,FOG('#10161b'))+strip(-c.w*.18,c.w*.12,FOG('#1e2730'));
+  for(let i=0;i<14;i++){const X=-9+i*1.4+Math.sin(i*7.1)*.4,dz=Math.sin(i*3.3+c.ph)*c.w*.3,Z=zc(X)+dz;if(Z<z0||Z>=z1)continue;const p=Pw(Z,X-.35),q=Pw(Z,X+.35);if(p&&q)s+=`<path d="${dPoly(ribbon([[p[0],p[1],6],[q[0],q[1],6]]))}" fill="${MOON('#8a9aaa')}"/>`}
   const pc=pathC(c.Zc),wpx=(Z,X,h)=>{const a=Pw(Z,X-h),b=Pw(Z,X+h);return a&&b?Math.max(5,Math.hypot(b[0]-a[0],b[1]-a[1])/2):6};
   if(c.v===0){for(const sx of[-.75,.75]){const a=Pw(Math.max(z0,c.Zc-c.w/2-.5),pc+sx),b=Pw(Math.min(z1,c.Zc+c.w/2+.5),pc+sx);if(a&&b&&z1>c.Zc-c.w/2-.5&&z0<c.Zc+c.w/2+.5)s+=`<path d="${dPoly(ribbon([[a[0],a[1],7],[b[0],b[1],7]]))}" fill="${GRD('#1c150e')}"/>`}
     for(let Z=c.Zc-c.w/2-.4,i=0;Z<c.Zc+c.w/2+.4;Z+=.3,i++){if(i===3||Z<z0||Z+.24>z1)continue;const sk=i===5?.12:0;const q=[Pw(Z,pc-.85),Pw(Z+sk,pc+.85),Pw(Z+.24+sk,pc+.85),Pw(Z+.24,pc-.85)];if(q.every(Boolean))s+=`<path d="${dPoly(q)}" fill="${GRD(i%2?'#5a4a36':'#4e4030')}"/>`}}
@@ -1039,6 +1039,16 @@ function ropeSwing(Z,X,v){const sd=Math.sign(X)||1,tr='#1a1611',H=[3.6,4.0,3.3][
   body.push({s:[[sx-.25,H-.05,.035],[sx-.25+(v===1?.15:0),seat+.06,.03]],c:'#6a5a40'},{s:[[sx+.25,H-.02,.035],[sx+.25+(v===1?.15:0),seat+.06,.03]],c:'#6a5a40'});
   body.push(v===2?{p:[[sx-.4,0],[sx+.35,0],[sx+.3,.06],[sx-.36,.08]],c:'#3a2c1e'}:{p:[[sx-.33+(v===1?.15:0),seat],[sx+.33+(v===1?.15:0),seat],[sx+.33+(v===1?.15:0),seat+.07],[sx-.33+(v===1?.15:0),seat+.07]],c:'#3a2c1e'});
   return prop(Z,X,body.map(sh=>flipX(sh,sd)),[],{glows:[{x:1,h:2,r:2.2,c:'#8090a8',a:.24,back:1}]})}
+// PASS = "a little wooden footbridge over a creek" (the water is on the floor, see creekSvg; the rails, reeds and the
+// moonlit sheen stand up so the crossing reads at 30 ft). v0 plank bridge with two rails, v1 felled log with one rail,
+// v2 stepping stones and a leaning post. You walk across: the prop is centred on the path and passes either side.
+function bridge(Z,v){
+  const w='#4a3a28',dk='#2a2016',body=[],lit=[];
+  const rail=sd=>body.push({s:[[sd*.95,-.05,.1],[sd*.95,.95,.09]],c:dk},{s:[[sd*.95,.9,.08],[sd*1.6,.6,.08]],c:w},{s:[[sd*1.6,-.05,.09],[sd*1.6,.65,.08]],c:dk});
+  if(v===0){rail(-1);rail(1)}else if(v===1){rail(-1);body.push({s:[[-.6,.05,.32],[.7,.08,.3]],c:'#2e2418'})}else body.push({s:[[1.1,-.05,.1],[1.25,1.05,.08]],c:dk},{e:[-.3,.03,.28,.08],c:'#3a3834'},{e:[.35,.03,.25,.07],c:'#33312e'});
+  for(const sd of[-1,1])for(let i=0;i<5;i++){const x=sd*(2+i*.45);body.push({s:[[x,0,.035],[x+sd*.08,.55+(i%2)*.25,.025]],c:'#26301c'})}
+  lit.push({p:[[-3.2,.02],[3.2,.02],[2.6,.06],[-2.6,.06]],c:MOON('#7a8898'),o:'.55'});
+  return prop(Z,0,body.filter(Boolean),lit,{thru:1,zr:REST+2,glows:[{x:0,h:.05,r:3,c:MOON('#8a9cb4'),a:.16,sy:.18}]})}
 // PASS = "a big clump of tall ferns" (the marker of a fern drift; the floor around it is drifted with ferns)
 function fernClump(Z,X,v){const r=rngFor(Math.round(Z*10),95,SEED,v),body=[];
   for(let k=0;k<[3,4,5][v];k++){const x0=rr(r,-1.2,1.2),s=rr(r,.8,1.3);for(let j=0;j<9;j++){const a=-1.2+j*.3+rr(r,-.06,.06),l=s*(1-Math.abs(a)*.25);
@@ -1188,7 +1198,7 @@ function shackBack(Z,b){
   return prop(Z,0,body,[],{zr:b.len,thru:1,glows:[{x:0,h:1.1,r:1.4,c:'#8094b4',a:.22,back:1}]})}
 function shRafter(Z,b,broken){const{w,wh,pk}=b,c='#2e2016';
   const body=[{s:[[-w,wh-.08,.13],[w,wh-.08,.13]],c},{s:[[-w-.05,wh,.13],[0,pk,.12]],c:'#26180f'}];
-  body.push(broken?{s:[[w+.05,wh,.13],[w*.45,wh+.5,.12],[w*.2,wh-.7,.1]],c:'#26180f'}:{s:[[w+.05,wh,.13],[0,pk,.12]],c:'#26180f'});
+  body.push(broken?{s:[[w+.05,wh,.13],[w*.7,wh+.3,.12],[w*.62,wh-.55,.1]],c:'#26180f'}:{s:[[w+.05,wh,.13],[0,pk,.12]],c:'#26180f'});
   return prop(Z,0,body,[],{})}
 function shLantern(Z,X,top,flick){const h=top-.55;
   return prop(Z,X,[{s:[[0,top,.03],[0,h+.36,.03]],c:'#120c08'},{p:[[-.13,h+.28],[.13,h+.28],[.07,h+.4],[-.07,h+.4]],c:'#1c140c'},{p:[[-.15,h-.04],[.15,h-.04],[.12,h+.02],[-.12,h+.02]],c:'#1c140c'}],
@@ -1263,7 +1273,7 @@ const ITEMS=[], OCC=[], EXCL=[], BARNS=[], LMLIST=[];
     if(name==='lantern on a post'){const X=side(s,sd*5.7,REST,.9,3.2);lm(lanternPool(R(s)+0.05,X-sd*1.6));lm(lanternItem(R(s),X),sd<0?[X-1.9,X+3.1,R(s)-2.5,R(s)+2.5]:[X-3.1,X+1.9,R(s)-2.5,R(s)+2.5]);occ(s,X-sd*.4,.9)}
     else if(name==='gravestones'){const dX=side(s,sd*4.7,11)-sd*4.7,rgv=rngFor(s,55,SEED),k0=Math.floor(rgv()*6),n=[6,4,5][v];[[2.3,9],[3.1,9.8],[4.0,10.5],[5.0,11.3],[6.1,12],[7.2,12.7]].slice(0,n).forEach(([X,o],i)=>ITEMS.push(graveItem(S[s]+o,sd*X+dX,rgv,(k0+i)%6)));
       EXCL.push(sd<0?[-8.5+dX,-1.6+dX,S[s]+7,S[s]+14]:[1.6+dX,8.5+dX,S[s]+7,S[s]+14]);lm(moonPool(S[s]+11,sd*4.6+dX));occ(s,sd*4.7+dX,2.6,11)}
-    else if(name==='creek and plank bridge'){CREEKS.push({Zc:S[s]+7.6,v,ph:rr(rl,0,TAU),w:rr(rl,1.3,1.8)});EXCL.push([-30,30,S[s]+5.6,S[s]+9.6])}
+    else if(name==='creek and plank bridge'){CREEKS.push({Zc:S[s]+10.5,v,ph:rr(rl,0,TAU),w:rr(rl,1.3,1.8)});ITEMS.push(bridge(S[s]+10.5,v));EXCL.push([-30,30,S[s]+8.3,S[s]+12.7])}
     else if(LMK[name]){const[fn,X0,hw,ht]=LMK[name],X=side(s,sd*X0,REST,hw,ht);lm(fn(R(s),X,v),keep(X,R(s),name==='moonlit glade'||name==='charcoal-burner clearing'?4.2:name==='rusted cart'?3:2.6,name==='moonlit glade'?4.5:3));occ(s,X,hw)}
   }
   LEAN=0;
