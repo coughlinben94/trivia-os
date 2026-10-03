@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { gunzipSync, gzipSync } from 'node:zlib'
-import { sparqlFor, userAgent, buildRows, catalogFile, checkCatalog, versionModule, main, ITEM_TYPES, MIN_ROWS } from './build-bendle-catalog.mjs'
+import { sparqlFor, userAgent, buildRows, catalogFile, checkCatalog, versionModule, runQuery, main, ITEM_TYPES, SITELINK_BANDS, MIN_ROWS } from './build-bendle-catalog.mjs'
 
+const ok = body => ({ ok: true, text: async () => JSON.stringify(body) })
 const b = (qid, title, artist, l) => ({ s: { value: `http://www.wikidata.org/entity/${qid}` }, title: { value: title }, artist: { value: artist }, l: { value: String(l) } })
 
 describe('build-bendle-catalog', () => {
@@ -17,6 +18,19 @@ describe('build-bendle-catalog', () => {
     expect(q).toContain('FILTER(?l >= 3)')
     expect(q).toContain('LANG(?title) = "en"')
     expect(ITEM_TYPES).toEqual(['Q7366', 'Q134556', 'Q105543609', 'Q55850593'])
+  })
+  it('a band limits sitelinks to [lo, hi) so each query stays small enough for Wikidata\'s timeout', () => {
+    const q = sparqlFor('Q134556', [4, 5])
+    expect(q).toContain('FILTER(?l >= 4)')
+    expect(q).toContain('FILTER(?l < 5)')
+    const top = sparqlFor('Q134556', [10, null])
+    expect(top).toContain('FILTER(?l >= 10)')
+    expect(top).not.toContain('?l <')
+  })
+  it('bands start at MIN_SITELINKS, touch end to end and leave the top open', () => {
+    expect(SITELINK_BANDS[0][0]).toBe(3)
+    for (let i = 1; i < SITELINK_BANDS.length; i++) expect(SITELINK_BANDS[i][0]).toBe(SITELINK_BANDS[i - 1][1])
+    expect(SITELINK_BANDS.at(-1)[1]).toBe(null)
   })
   it('refuses to run without contact info for the User-Agent', () => {
     expect(() => userAgent('')).toThrow(/BENDLE_CATALOG_CONTACT/)
@@ -52,11 +66,14 @@ describe('build-bendle-catalog', () => {
       inFlight++; maxInFlight = Math.max(maxInFlight, inFlight)
       await new Promise(r => setTimeout(r, 1)); inFlight--
       expect(init.headers['User-Agent']).toBe('TriviaOS-BendleCatalog/1.0 (me@example.com)')
-      const type = new URLSearchParams(init.body).get('query').match(/wd:(Q\d+)/)[1]
-      return { ok: true, json: async () => ({ results: { bindings: type === 'Q7366' ? many : [] } }) }
+      const q = new URLSearchParams(init.body).get('query')
+      const type = q.match(/wd:(Q\d+)/)[1]
+      const lo = Number(q.match(/\?l >= (\d+)/)[1])
+      // Q7366's rows are split across bands; main must merge them all.
+      return ok({ results: { bindings: type === 'Q7366' ? many.filter((_, i) => i % SITELINK_BANDS.length === SITELINK_BANDS.findIndex(([l]) => l === lo)) : [] } })
     })
     const file = await main({ argv: ['--dry-run'], env: { BENDLE_CATALOG_CONTACT: 'me@example.com' }, fetcher })
-    expect(fetcher).toHaveBeenCalledTimes(4)
+    expect(fetcher).toHaveBeenCalledTimes(ITEM_TYPES.length * SITELINK_BANDS.length)
     expect(maxInFlight).toBe(1)
     expect(JSON.parse(file.json).rows).toHaveLength(MIN_ROWS)
   })
@@ -64,7 +81,7 @@ describe('build-bendle-catalog', () => {
   describe('write path (temp dir, never the real public/)', () => {
     const env = { BENDLE_CATALOG_CONTACT: 'me@example.com' }
     const many = Array.from({ length: MIN_ROWS }, (_, i) => b(`Q${i + 10}`, `Song ${i}`, `Artist ${i}`, 3 + (i % 50)))
-    const okFetcher = async () => ({ ok: true, json: async () => ({ results: { bindings: many } }) })
+    const okFetcher = async () => ok({ results: { bindings: many } })
     const setup = () => {
       const root = realFs.mkdtempSync(join(tmpdir(), 'bendle-'))
       const publicDir = pathToFileURL(join(root, 'public') + '/')
@@ -115,8 +132,27 @@ describe('build-bendle-catalog', () => {
     })
     it('clear error when a 200 response has no results.bindings', async () => {
       const { publicDir, versionFile } = setup()
-      const fetcher = async () => ({ ok: true, json: async () => ({}) })
+      const fetcher = async () => ok({})
       await expect(main({ argv: ['--dry-run'], env, fetcher, publicDir, versionFile })).rejects.toThrow(/no results\.bindings/)
+    })
+    it('retries when a 200 body arrives corrupted (seen live: Wikidata big responses fail JSON.parse at random)', async () => {
+      let calls = 0
+      const fetcher = async () => ({ ok: true, text: async () => ++calls < 3 ? '{"results":{"bindings":[{"x":' : '{"results":{"bindings":[{"x":1}]}}' })
+      expect(await runQuery('Q7366', [3, 4], 'ua', fetcher, 0)).toEqual([{ x: 1 }])
+      expect(calls).toBe(3)
+    })
+    it('retries when Wikidata splices its timeout error into a 200 body, even if the JSON part looks whole', async () => {
+      let calls = 0
+      const spliced = '{"results":{"bindings":[]}}\nSPARQL-QUERY: queryStr=SELECT ?s ?title\njava.util.concurrent.TimeoutException'
+      const fetcher = async () => ({ ok: true, text: async () => ++calls < 4 ? spliced : '{"results":{"bindings":[{"x":1}]}}' })
+      expect(await runQuery('Q134556', [3, 4], 'ua', fetcher, 0)).toEqual([{ x: 1 }])
+      expect(calls).toBe(4)
+    })
+    it('gives up with a clear error after four corrupted bodies', async () => {
+      let calls = 0
+      const fetcher = async () => ({ ok: true, text: async () => { calls++; return 'SPARQL-QUERY: queryStr=SELECT' } })
+      await expect(runQuery('Q7366', [3, 4], 'ua', fetcher, 0)).rejects.toThrow(/Q7366.*\[3, 4\).*unreadable/)
+      expect(calls).toBe(4)
     })
   })
 })
